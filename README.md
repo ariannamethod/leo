@@ -1,1 +1,1 @@
-# leo - landguage engine organism
+# leo - language echo organism
