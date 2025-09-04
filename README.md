@@ -130,3 +130,79 @@ Perplexity PP is 2ᴴ, representing the effective branching factor of the reply 
 
 Resonance R is |charged| / |tokens|, a simple ratio capturing semantic intensity.
 
+## Detailed Module Breakdown
+
+### Subjectivity
+Handles the full conversational loop.  It scores incoming text with entropy,
+perplexity, and resonance, then crafts candidate replies from Wikipedia
+snippets and local memory.  Pronouns invert when the user invokes them, giving
+mirrored perspective without any pre-trained weights.
+
+### Objectivity
+Retrieves compact context through Wikidata sitelinks before touching
+Wikipedia.  The selector scans multiple languages, favoring English yet
+falling back through a priority list, all within a one‑kilobyte budget.  This
+module is intentionally weightless and depends only on HTTP requests and a few
+regex heuristics.
+
+### Curiosity
+Commits every interaction to SQLite with timestamps and computed metrics.
+These traces become a minimal training stream, allowing the system to adjust
+itself on the fly without external datasets.
+
+### Infinity
+Stores generated replies in an FTS5 table when available, or a plain table as
+fallback.  Past phrases can later be retrieved and re‑woven into new
+responses, forming a tiny retrieval‑augmented generator.
+
+### Connections
+Scans the log for tokens that recur across conversations.  When a new response
+matches a frequently seen token, the module proposes it as an extra phrase to
+keep the thread resonant.
+
+### Pitomadom
+Wraps all modules in a persona and applies a ritual prompt.  The prompt in
+`pitomadom.py` is deliberately ceremonial for now; as the model learns to speak
+more, the invocation will gain richer interpretation and steer behavior.
+
+### Telegram Interface
+The optional `tg.py` bridge exposes the system through Telegram webhooks or
+polling.  It keeps API tokens external via environment variables.
+
+## Linguistic Agnosticism
+
+Subjectivity operates on token statistics and simple heuristics, so it adapts
+to whichever language appears in the conversation.  Objectivity further
+reinforces this neutrality by seeking Wikipedia excerpts in many languages.
+The model rebalances its internal counts at every turn, effectively
+retraining mid-dialogue regardless of the script or grammar.
+
+## Physics, Resonance, and the Future of AI
+
+Small heuristic engines echo physical systems where resonance, not sheer
+amplitude, sets the tone.  A whisper can trigger a bridge if the frequency is
+right; likewise, minimal code can surface surprising patterns when feedback is
+tuned.
+
+Scaling compute resembles increasing energy in a particle collider, yet even a
+tiny laser can carve steel when focused.  These modules suggest that focusing
+architecture and feedback may rival brute-force parameter growth.
+
+Resonant loops treat memory like a standing wave.  Each token that repeats in
+context strengthens the pattern, hinting at a conservation law of meaning
+instead of raw power consumption.
+
+If such lightweight systems can re-train on a conversation's rhythm, perhaps
+we glimpse an alternative path for AI evolution.  Rather than stacking more
+layers, we might shape the oscillations that already exist.
+
+The principle of learning-as-resonance may mirror physical self-organization,
+where simple components synchronize into complex behavior without a central
+controller.  This project probes that frontier in miniature.
+
+## Data and Weights
+
+No pretrained weights or datasets are included in this repository.  Every
+interaction starts from scratch, with state accumulating only inside the
+SQLite memory files created at runtime.
+
