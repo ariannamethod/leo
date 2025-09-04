@@ -19,7 +19,6 @@ FORBID_COMMA_BEFORE = {
     "a","an","the","and","or","but","nor","of","to","in","on","for","as","at","by","with","from"
 }
 
-# Базовая карта местоимений
 _PRONOUN_MAP = {
     "you": "i", "u": "i", "your": "my", "yours": "mine", "yourself": "myself", "yourselves": "ourselves",
     "i": "you", "me": "you", "my": "your", "mine": "yours", "myself": "yourself",
@@ -66,17 +65,22 @@ class Subjectivity:
         tokens = self._charged_tokens(message)
         context = self.objectivity.context_window(message, tokens)
 
+        # Строим кандидатов строго из "живого" окна
         candidates = self._craft_candidates(message, context)
 
-        # выбираем первый, который не совпадает с последними
-        response = candidates[0] if candidates else ""
-        for cand in candidates:
-            if self._norm_repeat(cand) not in self._last_norms:
-                response = cand
-                break
+        # Если сеть умерла и окно пустое — отдаём короткое «Okay.» вместо инверсивного эха
+        if not candidates:
+            response = "Okay."
+        else:
+            # Берём первый, что не совпадает с последними
+            response = candidates[0]
+            for cand in candidates:
+                if self._norm_repeat(cand) not in self._last_norms:
+                    response = cand
+                    break
 
-        # Инверсия — после выбора фразы
-        if self._user_has_pronouns(message):
+        # Инверсию делаем только если была осмысленная клауза (а не пустое окно)
+        if candidates and self._user_has_pronouns(message):
             response = self._invert_pronouns_text(response)
 
         self._last_norms.append(self._norm_repeat(response))
@@ -86,11 +90,9 @@ class Subjectivity:
     # ---------- candidates ----------
 
     def _craft_candidates(self, user_message: str, context: str) -> List[str]:
-        if not context.strip():
-            # Без окна: аккуратное переупаковывание
-            cleaned = self._cleanup(self._collapse_adjacent_duplicates(user_message.strip()))
-            fallback = self._finalize(cleaned or "Okay")
-            return [fallback]
+        context = (context or "").strip()
+        if not context:
+            return []
 
         seed = int(hashlib.sha256((user_message + "||" + context).encode("utf-8")).hexdigest(), 16)
         rng = random.Random(seed)
@@ -98,7 +100,7 @@ class Subjectivity:
         sentences = self._split_sentences(context)
         clauses = self._extract_clause_candidates(sentences)
         if not clauses:
-            return [self._finalize(self._cleanup(user_message or "Okay"))]
+            return []
 
         # Частоты по окну
         window_words = [w.lower() for w in re.findall(r"\b\w+\b", context)]
@@ -120,7 +122,7 @@ class Subjectivity:
             out.append(self._finalize(self._cleanup(t1)))
             # короткий хвост через «—»
             for _, t2, k2 in scored[1:6]:
-                if 2 <= len(k2) <= 7 and not self._redundant(t1, t2):
+                if 3 <= len(k2) <= 9 and not self._redundant(t1, t2):
                     combo = f"{self._strip_terminal(t1)} — {self._strip_terminal(t2)}"
                     out.append(self._finalize(self._cleanup(combo)))
                     break
@@ -136,7 +138,7 @@ class Subjectivity:
             if key not in seen:
                 seen.add(key)
                 uniq.append(t)
-        return uniq or ["Okay."]
+        return uniq
 
     # ---------- clause selection ----------
 
@@ -201,7 +203,6 @@ class Subjectivity:
         )
         charged_overlap = (len(charged_user & set(clause_content)) / max(1, len(charged_user))) if charged_user else 0.0
 
-        # порядок слов (LCS)
         a = user_content[:24]
         b = clause_content[:24]
         order = self._lcs_len(a, b) / max(1, min(len(a), len(b)))
@@ -211,17 +212,13 @@ class Subjectivity:
 
         density = sum(window_freq.get(w, 0) for w in clause_content) / max(1, len(clause_content))
 
-        # smalltalk‑смещение: бонус за местоимения 1‑го/2‑го лица
         dialog_bias = 1.0 if any(w in {"you","i","we"} for w in clause_content) else 0.0
 
-        # штрафы
         stop_ratio = (len(clause_all) - len(clause_content)) / max(1, len(clause_all))
         commas = clause_text.count(",")
         def_pen = self._definitional_penalty(clause_text)
-        # эхо‑штраф
         jacc = self._jaccard(set(user_content), set(clause_content))
         echo_pen = 1.0 if jacc >= 0.7 else (0.4 if jacc >= 0.5 else 0.0)
-        # цифры/летоисчисление → уменьшаем (фактоидность)
         digits_pen = 0.3 if sum(ch.isdigit() for ch in clause_text) >= 4 else 0.0
 
         score = (
@@ -267,7 +264,7 @@ class Subjectivity:
                 prev = tmp
         return dp[-1]
 
-    # ---------- cleanup / punctuation ----------
+    # ---------- cleanup ----------
 
     def _cleanup(self, text: str) -> str:
         text = self._strip_parentheticals(text)
@@ -285,11 +282,10 @@ class Subjectivity:
             return ""
         i = next((i for i, ch in enumerate(text) if ch.isalpha()), 0)
         text = text[:i] + text[i].upper() + text[i+1:]
-        text = re.sub(r"([.!?])\1+$", r"\1", text)
-        text = re.sub(r"[!?]+$", ".", text)
-        if not re.search(r"[.!?]$", text):
-            text += "."
-        return text
+        # сохраняем ?/!
+        if re.search(r"[.!?]$", text):
+            return text
+        return text + "."
 
     def _collapse_adjacent_duplicates(self, text: str) -> str:
         return re.sub(r"\b(\w+)(\s+\1\b)+", r"\1", text, flags=re.IGNORECASE)
@@ -313,7 +309,6 @@ class Subjectivity:
         return text
 
     def _dedup_phrases(self, text: str) -> str:
-        # убираем "United Arab Emirates, The United Arab Emirates" и т.п.
         parts = re.split(r"\s*(?:—|,|;)\s*", self._strip_terminal(text))
         seen = set()
         out = []
@@ -340,27 +335,25 @@ class Subjectivity:
         return any(w.lower() in _PRONOUN_MAP for w in re.findall(r"\w+", text))
 
     def _invert_pronouns_text(self, text: str) -> str:
-        # Сперва — специальные шаблоны, чтобы не было "How are i."
+        # устойчивые пары, чтобы не было "How am YOU?"
         rules = [
-            (r"\bare you\b", "am I"),
-            (r"\byou are\b", "I am"),
-            (r"\bwere you\b", "was I"),
-            (r"\byou were\b", "I was"),
-            (r"\bhave you\b", "have I"),
-            (r"\byou have\b", "I have"),
-            (r"\bdo you\b", "do I"),
-            (r"\byou do\b", "I do"),
+            (r"\bare you\b", "am I"),  (r"\byou are\b", "I am"),
+            (r"\bwere you\b", "was I"), (r"\byou were\b", "I was"),
+            (r"\bhave you\b", "have I"), (r"\byou have\b", "I have"),
+            (r"\bdo you\b", "do I"), (r"\byou do\b", "I do"),
+            (r"\bcan you\b", "can I"), (r"\byou can\b", "I can"),
+            (r"\bwill you\b", "will I"), (r"\byou will\b", "I will"),
+            (r"\bwould you\b", "would I"), (r"\byou would\b", "I would"),
+            (r"\bshould you\b", "should I"), (r"\byou should\b", "I should"),
+            (r"\bdid you\b", "did I"), (r"\byou did\b", "I did"),
         ]
         def sub_case(m, repl):
             s = m.group(0)
-            # сохраняем капитализацию первого символа
-            if s[0].isupper():
-                return repl[0].upper() + repl[1:]
-            return repl
+            return repl[0].upper() + repl[1:] if s[0].isupper() else repl
         for pat, repl in rules:
             text = re.sub(pat, lambda m: sub_case(m, repl), text, flags=re.IGNORECASE)
 
-        # Затем — словарная инверсия с сохранением регистра
+        # затем — словарная инверсия
         parts = re.findall(r"\w+|[^\w]+", text)
         out = []
         for p in parts:
