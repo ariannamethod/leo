@@ -1,4 +1,5 @@
 import os
+import logging
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
@@ -6,16 +7,16 @@ from telegram.ext import Application, MessageHandler, ContextTypes, filters
 from pitomadom import Pitomadom
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
 bot = Pitomadom()
 
-def process_update(update: Update, bot_instance: Pitomadom) -> None:
-    text = update.message.text
-    reply = bot_instance.interact(text)
-    update.message.reply_text(reply)
-
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    process_update(update, bot)
+    if not update.message or not update.message.text:
+        return
+    text = update.message.text
+    reply = bot.interact(text)
+    await update.message.reply_text(reply)
 
 def main() -> None:
     token = os.environ["TELEGRAM_TOKEN"]
