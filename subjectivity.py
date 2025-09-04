@@ -535,4 +535,3 @@ def _preserve_case(self, original: str, replacement: str) -> str:
 def _norm_repeat(self, text: str) -> str:
     """Normalize text for repetition detection."""
     return re.sub(r"[\W_]+", "", text).lower()
-```
