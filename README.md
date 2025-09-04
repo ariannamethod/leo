@@ -1,1 +1,1 @@
-# leo - language echo organism
+# subjectivity
