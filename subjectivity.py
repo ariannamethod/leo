@@ -61,10 +61,10 @@ class Subjectivity:
 
     # ---------- public ----------
 
-    def reply(self, message: str) -> str:
+    async def reply(self, message: str) -> str:
         metrics = self._metrics(message)
         tokens = self._charged_tokens(message)
-        context = self.objectivity.context_window(message, tokens)
+        context = await self.objectivity.context_window(message, tokens)
 
         candidates = self._craft_candidates(message, context)
 

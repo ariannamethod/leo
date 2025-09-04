@@ -1,3 +1,4 @@
+import asyncio
 from connections import Connections
 from infinity import Infinity
 from subjectivity import Subjectivity
@@ -81,8 +82,8 @@ class Pitomadom:
         self.connections = Connections()
         self.infinity = Infinity()
 
-    def interact(self, message: str) -> str:
-        response = self.subjectivity.reply(message)
+    async def interact(self, message: str) -> str:
+        response = await self.subjectivity.reply(message)
         self.infinity.add(response)
         related = self.connections.related_tokens(response)
         extras = [t for t in related if t.lower() not in response.lower()]
@@ -95,6 +96,6 @@ if __name__ == "__main__":
     try:
         while True:
             user = input("> ")
-            print(bot.interact(user))
+            print(asyncio.run(bot.interact(user)))
     except EOFError:
         pass

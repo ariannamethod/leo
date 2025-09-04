@@ -1,4 +1,5 @@
-from unittest.mock import Mock
+import asyncio
+from unittest.mock import Mock, AsyncMock
 
 from pitomadom import Pitomadom
 
@@ -6,11 +7,11 @@ from pitomadom import Pitomadom
 def test_interact_flow():
     bot = Pitomadom()
 
-    bot.subjectivity.reply = Mock(return_value="hello world")
+    bot.subjectivity.reply = AsyncMock(return_value="hello world")
     bot.infinity.add = Mock()
     bot.connections.related_tokens = Mock(return_value=["foo", "hello"])
 
-    result = bot.interact("hi")
+    result = asyncio.run(bot.interact("hi"))
 
     bot.subjectivity.reply.assert_called_once_with("hi")
     bot.infinity.add.assert_called_once_with("hello world")

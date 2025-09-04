@@ -1,3 +1,4 @@
+import asyncio
 import re
 import requests
 from urllib.parse import quote
@@ -58,16 +59,18 @@ def _looks_conversational(text: str) -> bool:
         
     return False
 
-def _ddg_json(query: str) -> List[str]:
-    """Fetch conversational snippets from DuckDuckGo API."""
+async def _ddg_json(query: str) -> List[str]:
+    """Fetch conversational snippets from DuckDuckGo API asynchronously."""
     url = f"https://api.duckduckgo.com/?q={quote(query)}&format=json&no_html=1&no_redirect=1"
     snippets: List[str] = []
-    
+
     try:
-        response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=4)
+        response = await asyncio.to_thread(
+            requests.get, url, headers={"User-Agent": USER_AGENT}, timeout=4
+        )
         if response.status_code != 200:
             return snippets
-            
+
         data = response.json()
     except Exception:
         return snippets
@@ -182,14 +185,14 @@ def _build_conversation_queries(message: str) -> List[str]:
 
 class Objectivity:
     """Retrieves conversational context from web sources only."""
-    
-    def context_window(self, message: str, _tokens_ignored: List[str]) -> str:
+
+    async def context_window(self, message: str, _tokens_ignored: List[str]) -> str:
         """
         Fetch ONLY conversational web snippets for smalltalk.
         NO Wikipedia. NO definitions. NO glossary content.
         """
         conversational_snippets: List[str] = []
-        
+
         # Build conversation-focused queries
         queries = _build_conversation_queries(message)
 
@@ -205,24 +208,26 @@ class Objectivity:
         # Fetch snippets from each query
         for query in queries:
             try:
-                snippets = _ddg_json(query)
+                snippets = await _ddg_json(query)
                 for snippet in snippets:
                     # Double-check it's conversational
-                    if (_looks_conversational(snippet) and 
-                        not _looks_like_glossary(snippet) and
-                        len(snippet.split()) >= 4):  # Minimum substance
-                        
+                    if (
+                        _looks_conversational(snippet)
+                        and not _looks_like_glossary(snippet)
+                        and len(snippet.split()) >= 4
+                    ):  # Minimum substance
+
                         conversational_snippets.append(snippet)
-                        
+
                         # Stop when we have enough good material
                         if len(conversational_snippets) >= 6:
                             break
-                            
+
             except Exception:
                 continue  # Skip failed queries
-                
+
             if len(conversational_snippets) >= 6:
                 break
-        
+
         # Return joined snippets, each on its own line
         return "\n".join(conversational_snippets).strip()
