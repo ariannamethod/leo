@@ -65,29 +65,120 @@ class Subjectivity:
         tokens = self._charged_tokens(message)
         context = self.objectivity.context_window(message, tokens)
 
-        # Строим кандидатов строго из "живого" окна
         candidates = self._craft_candidates(message, context)
 
-        # Если сеть умерла и окно пустое — отдаём короткое «Okay.» вместо инверсивного эха
+        seed = int(hashlib.sha256((message + "||" + context).encode("utf-8")).hexdigest(), 16)
+
+        # Никаких шаблонов: если окно пустое/кандидатов нет — строим фразу из токенов пользователя (как в me)
         if not candidates:
-            response = "Okay."
+            response = self._compose_from_user(message, seed=seed)
         else:
-            # Берём первый, что не совпадает с последними
+            # Берём первый, который не совпадает с последними
             response = candidates[0]
             for cand in candidates:
                 if self._norm_repeat(cand) not in self._last_norms:
                     response = cand
                     break
 
-        # Инверсию делаем только если была осмысленная клауза (а не пустое окно)
-        if candidates and self._user_has_pronouns(message):
+        # Инверсия — только поверх уже собранной фразы
+        if self._user_has_pronouns(message) and response:
             response = self._invert_pronouns_text(response)
 
         self._last_norms.append(self._norm_repeat(response))
         self.curiosity.remember(message, context, response, metrics)
         return response
 
-    # ---------- candidates ----------
+    # ---------- “me”-style composition when window is empty ----------
+
+    def _compose_from_user(self, message: str, seed: int) -> str:
+        rng = random.Random(seed)
+        orig = message
+        words = re.findall(r"\b\w+\b", orig)
+        lower = [w.lower() for w in words]
+
+        # преференция инвертированных местоимений (как в me.Engine._invert_pronouns)
+        pref = [ _PRONOUN_MAP.get(w, w) for w in [w.lower() for w in words] ]
+        pref = [p for p in pref if p not in {"the","a","an"}]
+
+        # кандидаты: содержательные токены без стоп-слов, сначала «заряженные»
+        charged_mask = [ (any(c.isupper() for c in w) and len(w)>1) or len(w)>7 for w in words ]
+        content = [w.lower() for w in words if w.lower() not in STOPWORDS and len(w)>1]
+        content_uniques = []
+        seen = set()
+        for i, w in enumerate(content):
+            if w not in seen:
+                seen.add(w)
+                content_uniques.append((w, 2 if w in [lw for (lw, m) in zip([w for w in words], charged_mask) if m] else 1))
+        # сортируем: заряженные выше, иначе по длине
+        content_sorted = sorted(set(w for w,_ in content_uniques), key=lambda w: (-any(w==cw for cw,_ in content_uniques if _==2), -len(w)))
+
+        # целевая длина (приближение той логики, что в me._lengths)
+        target = self._target_len_from_metrics(orig)
+
+        sent: List[str] = []
+        used = set()
+
+        # 1) добавим инвертированное местоимение, если уместно
+        pronouns_core = {"i","you","we"}
+        for p in pref:
+            if p in pronouns_core and p not in used:
+                sent.append(p)
+                used.add(p)
+                break
+
+        # 2) добавим 1–2 заряженных токена
+        for w in content_sorted:
+            if len(sent) >= max(2, target//2):
+                break
+            if w not in used:
+                sent.append(w)
+                used.add(w)
+
+        # 3) добираем случайной подвыборкой из контента
+        pool = [w for w in content_sorted if w not in used]
+        rng.shuffle(pool)
+        for w in pool:
+            if len(sent) >= target:
+                break
+            if w not in used and len(w) > 1:
+                sent.append(w)
+                used.add(w)
+
+        # минимальные фильтры из me: без односимвольного конца, без подряд однобуквенных
+        if sent and len(sent[-1]) == 1:
+            sent = sent[:-1]
+        clean: List[str] = []
+        for w in sent:
+            if clean and len(clean[-1]) == 1 and len(w) == 1:
+                continue
+            clean.append(w)
+
+        if not clean:
+            clean = [w.lower() for w in re.findall(r"\b\w+\b", orig)[:3]] or ["okay"]  # не шаблонный паттерн, это запасной источник токенов
+        # финализация: капитализация и сохранение знака вопроса/восклицания из оригинала
+        text = " ".join(clean).strip()
+        if text:
+            text = text[0].upper() + text[1:]
+        end = "?"
+        if "?" in orig:
+            end = "?"
+        elif "!" in orig:
+            end = "!"
+        else:
+            end = "."
+        text = self._cleanup(text)
+        return self._finalize(text[:-1] if text.endswith(".") else text) if end in {"?","!"} else self._finalize(text)
+
+    def _target_len_from_metrics(self, message: str) -> int:
+        m = self._metrics(message)
+        # 5..9 слов, слегка двигаем по перплексии/энтропии
+        base = 7.0
+        base += (m["perplexity"] - 5.0) * 0.1
+        base += (m["entropy"] - 2.0) * 0.2
+        n = int(round(max(5.0, min(9.0, base))))
+        return n
+
+    # ---------- candidates from window ----------
 
     def _craft_candidates(self, user_message: str, context: str) -> List[str]:
         context = (context or "").strip()
@@ -102,7 +193,6 @@ class Subjectivity:
         if not clauses:
             return []
 
-        # Частоты по окну
         window_words = [w.lower() for w in re.findall(r"\b\w+\b", context)]
         window_content = [w for w in window_words if w not in STOPWORDS]
         freq = {}
@@ -120,7 +210,6 @@ class Subjectivity:
         if scored:
             t1 = scored[0][1]
             out.append(self._finalize(self._cleanup(t1)))
-            # короткий хвост через «—»
             for _, t2, k2 in scored[1:6]:
                 if 3 <= len(k2) <= 9 and not self._redundant(t1, t2):
                     combo = f"{self._strip_terminal(t1)} — {self._strip_terminal(t2)}"
@@ -130,7 +219,6 @@ class Subjectivity:
         for _, t, _ in scored[1:5]:
             out.append(self._finalize(self._cleanup(t)))
 
-        # уникализация
         seen = set()
         uniq = []
         for t in out:
@@ -159,7 +247,6 @@ class Subjectivity:
                 pw = len(ptoks)
                 if 5 <= pw <= 14 and not self._is_title_like(p):
                     out.append((self._strip_terminal(p), ptoks))
-        # дедуп
         seen = set()
         uniq = []
         for t, toks in out:
@@ -282,7 +369,7 @@ class Subjectivity:
             return ""
         i = next((i for i, ch in enumerate(text) if ch.isalpha()), 0)
         text = text[:i] + text[i].upper() + text[i+1:]
-        # сохраняем ?/!
+        # если уже оканчивается на . ! ? — не трогаем
         if re.search(r"[.!?]$", text):
             return text
         return text + "."
@@ -353,7 +440,6 @@ class Subjectivity:
         for pat, repl in rules:
             text = re.sub(pat, lambda m: sub_case(m, repl), text, flags=re.IGNORECASE)
 
-        # затем — словарная инверсия
         parts = re.findall(r"\w+|[^\w]+", text)
         out = []
         for p in parts:
