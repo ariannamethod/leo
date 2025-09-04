@@ -1,0 +1,4 @@
+python-telegram-bot>=20,<21
+requests>=2.0
+pytest
+flake8
