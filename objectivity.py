@@ -192,7 +192,16 @@ class Objectivity:
         
         # Build conversation-focused queries
         queries = _build_conversation_queries(message)
-        
+
+        # Filter out queries containing any ignored tokens
+        ignored = {t.lower() for t in _tokens_ignored}
+        queries = [
+            q for q in queries
+            if not any(token in q.lower() for token in ignored)
+        ]
+        if not queries:
+            return ""
+
         # Fetch snippets from each query
         for query in queries:
             try:
