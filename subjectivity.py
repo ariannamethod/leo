@@ -2,32 +2,29 @@ import math
 import re
 import hashlib
 import random
+from collections import deque
 from typing import List, Tuple
 
 from objectivity import Objectivity
 from curiosity import Curiosity
 
-# Стоп-слова для контентного пересечения
 STOPWORDS = {
     "the","a","an","of","and","or","to","in","on","for","as","at","by","with","from",
     "is","are","was","were","be","been","being","this","that","it","its","into","than",
     "then","so","but","nor","if","because","while","when","where","which","who","whom"
 }
 
-# Запятая не должна стоять перед этими словами
 FORBID_COMMA_BEFORE = {
     "is","are","was","were","am","be","been","being",
     "a","an","the","and","or","but","nor","of","to","in","on","for","as","at","by","with","from"
 }
 
-# Инверсия местоимений (как в me), регистр сохраняем
 _PRONOUN_MAP = {
     "you": "i", "u": "i", "your": "my", "yours": "mine", "yourself": "myself", "yourselves": "ourselves",
     "i": "you", "me": "you", "my": "your", "mine": "yours", "myself": "yourself",
     "we": "you", "us": "you", "our": "your", "ours": "yours", "ourselves": "yourselves",
 }
 
-# Маркеры «справочности», которые нужно понижать
 _DEF_MARKERS_SUBSTR = [
     " is a ", " is an ", " is the ",
     "notable people", "notable persons",
@@ -43,7 +40,7 @@ class Subjectivity:
     def __init__(self):
         self.objectivity = Objectivity()
         self.curiosity = Curiosity()
-        self._last_norm: str = ""  # для анти‑повтора между репликами
+        self._last_norms = deque(maxlen=3)  # анти‑повтор нескольких последних ответов
 
     # ---------- metrics ----------
 
@@ -68,45 +65,40 @@ class Subjectivity:
         tokens = self._charged_tokens(message)
         context = self.objectivity.context_window(message, tokens)
 
-        # Кандидаты (уже очищенные и с пунктуацией), отсортированы по убыванию score
         candidates = self._craft_candidates(message, context)
 
-        # Выбираем первый, который не совпадает с прошлым выводом
+        # берём первый, который не совпадает с последними ответами
         response = candidates[0] if candidates else ""
         for cand in candidates:
-            if self._norm_repeat(cand) != self._last_norm:
+            if self._norm_repeat(cand) not in self._last_norms:
                 response = cand
                 break
 
-        # Инверсия местоимений — только если юзер их использовал
         if self._user_has_pronouns(message):
             response = self._invert_pronouns_text(response)
 
-        # Обновляем анти‑повтор
-        self._last_norm = self._norm_repeat(response)
-
+        self._last_norms.append(self._norm_repeat(response))
         self.curiosity.remember(message, context, response, metrics)
         return response
 
-    # ---------- core: build ranked candidates from the whole context window ----------
+    # ---------- core ----------
 
     def _craft_candidates(self, user_message: str, context: str) -> List[str]:
+        # Если контекста нет (Вики не сработала) — не молчим: аккуратно переупакуем юзерский текст
         if not context.strip():
-            fallback = self._format_sentence(self._collapse_adjacent_duplicates(user_message.strip()) or "Okay")
-            return [fallback]
+            cleaned = self._cleanup(self._collapse_adjacent_duplicates(user_message.strip()))
+            return [self._finalize(cleaned or "Okay")]
 
         seed = int(hashlib.sha256((user_message + "||" + context).encode("utf-8")).hexdigest(), 16)
         rng = random.Random(seed)
 
         sentences = self._split_sentences(context)
-        # Клаузные кандидаты: целые предложения и под‑клаузы из запятых/тире
         clauses = self._extract_clause_candidates(sentences)
-
         if not clauses:
-            fallback = self._format_sentence(self._cleanup(" ".join(re.findall(r"\w+", context))[:120]))
+            fallback = self._finalize(self._cleanup(" ".join(re.findall(r"\w+", context))[:120]))
             return [fallback]
 
-        # Частоты контент‑слов по ОКНУ для «дообучаемости» на лету
+        # Частоты контент‑слов по окну
         window_words = [w.lower() for w in re.findall(r"\b\w+\b", context)]
         window_content = [w for w in window_words if w not in STOPWORDS]
         freq = {}
@@ -116,33 +108,30 @@ class Subjectivity:
         scored = []
         for text, toks in clauses:
             s = self._score_clause(user_message, text, toks, freq)
-            s += rng.uniform(0.0, 0.01)  # детерминированный tie‑break
+            s += rng.uniform(0.0, 0.01)
             scored.append((s, text, toks))
-
         scored.sort(key=lambda x: x[0], reverse=True)
 
-        # Соберём финальные варианты:
-        # 1) топ‑клаузу как отдельное предложение
-        # 2) если есть короткая — сцепим топ1 — топ2
         out: List[str] = []
-
         if scored:
-            top1_text, top1_toks = scored[0][1], scored[0][2]
-            out.append(self._finalize(self._cleanup(top1_text)))
+            t1, k1 = scored[0][1], scored[0][2]
+            c1 = self._finalize(self._cleanup(t1))
+            out.append(c1)
 
-            # ищем короткий хвост для «—»
-            tail = next((t for _, t, toks in scored[1:6] if 2 <= len(toks) <= 7 and not self._redundant(top1_text, t)), None)
-            if tail:
-                combo = f"{top1_text} — {self._strip_terminal(tail)}"
-                out.append(self._finalize(self._cleanup(combo)))
+            # короткий хвост через «—» если найдётся и не дублирует фразу
+            for _, t2, k2 in scored[1:6]:
+                if 2 <= len(k2) <= 7 and not self._redundant(t1, t2):
+                    combo = self._finalize(self._cleanup(f"{self._strip_terminal(t1)} — {self._strip_terminal(t2)}"))
+                    out.append(combo)
+                    break
 
-        # Добавим ещё 1‑2 одиночных альтернативы (без сочетания), чтобы анти‑повтору было из чего выбирать
-        for _, t, _ in scored[1:4]:
+        # Добавим ещё 1–2 одиночных альтернативы
+        for _, t, _ in scored[1:5]:
             out.append(self._finalize(self._cleanup(t)))
 
-        # Уникализируем и вернём
+        # Уникализация
         seen = set()
-        uniq: List[str] = []
+        uniq = []
         for t in out:
             key = t.lower()
             if key not in seen:
@@ -150,26 +139,27 @@ class Subjectivity:
                 uniq.append(t)
         return uniq or ["Okay."]
 
-    # ---------- clause selection helpers ----------
+    # ---------- clause selection ----------
 
     def _split_sentences(self, text: str) -> List[str]:
-        return [p.strip() for p in re.split(r"(?<=[.!?])\s+", text.strip()) if p.strip()]
+        # Разбивка, учитывающая возможные переводы строк из Вики
+        parts = re.split(r"(?<=[.!?])\s+|\n+", text.strip())
+        return [p.strip() for p in parts if p.strip()]
 
     def _extract_clause_candidates(self, sentences: List[str]) -> List[Tuple[str, List[str]]]:
         out: List[Tuple[str, List[str]]] = []
         for s in sentences:
             toks = re.findall(r"\b\w+\b", s)
             wc = len(toks)
-            if 6 <= wc <= 28:
+            if 7 <= wc <= 28 and not self._is_title_like(s):
                 out.append((self._strip_terminal(s), toks))
-            # под‑клаузы через запятые/тире
             parts = re.split(r"\s*[,—–-]\s*", s)
             for p in parts:
                 ptoks = re.findall(r"\b\w+\b", p)
                 pw = len(ptoks)
-                if 4 <= pw <= 14:
+                if 5 <= pw <= 14 and not self._is_title_like(p):
                     out.append((self._strip_terminal(p), ptoks))
-        # Дедуп по lcase
+        # Дедуп по lc
         seen = set()
         uniq = []
         for t, toks in out:
@@ -179,67 +169,81 @@ class Subjectivity:
                 uniq.append((t, toks))
         return uniq
 
+    def _is_title_like(self, text: str) -> bool:
+        # Заголовок/титл: коротко и все слова с большой буквы, без глаголов
+        words = re.findall(r"\b\w+\b", text)
+        if not words:
+            return True
+        if len(words) <= 4 and sum(w[0].isupper() for w in words) >= len(words) - 1:
+            if not any(w.lower() in {"is","are","was","were","has","have"} for w in words):
+                return True
+        return False
+
     def _strip_terminal(self, s: str) -> str:
         return re.sub(r"[.!?]+$", "", s.strip())
 
     def _redundant(self, a: str, b: str) -> bool:
-        wa = set(re.findall(r"\w+", a.lower()))
-        wb = set(re.findall(r"\w+", b.lower()))
+        def norm(x: str) -> List[str]:
+            return [w for w in re.findall(r"\w+", x.lower()) if w not in {"the","a","an"}]
+        wa, wb = set(norm(a)), set(norm(b))
         inter = wa & wb
         return len(inter) >= max(2, min(len(wa), len(wb)) // 2)
 
     def _score_clause(self, user_message: str, clause_text: str, clause_tokens: List[str], window_freq: dict) -> float:
-        # Подготовка множеств
         user_all = re.findall(r"\b\w+\b", user_message.lower())
         clause_all = [w.lower() for w in clause_tokens]
         user_content = [w for w in user_all if w not in STOPWORDS]
         clause_content = [w for w in clause_all if w not in STOPWORDS]
 
-        # Пересечение содержательных токенов
         overlap = len(set(user_content) & set(clause_content))
         overlap_norm = overlap / max(1, len(set(user_content)))
 
-        # «Заряженные» токены из пользовательского текста (капс/длина)
         charged_user = set(
             w.lower() for w in re.findall(r"\b\w+\b", user_message)
             if (any(c.isupper() for c in w) and len(w) > 1) or len(w) > 7
         )
         charged_overlap = (len(charged_user & set(clause_content)) / max(1, len(charged_user))) if charged_user else 0.0
 
-        # Порядок (LCS) по контент‑словам
         a = user_content[:24]
         b = clause_content[:24]
         order = self._lcs_len(a, b) / max(1, min(len(a), len(b)))
 
-        # Длина (sweet spot ~12 слов)
         n = len(clause_tokens)
         length_score = max(0.0, 1.0 - (abs(12 - n) / 12.0))
 
-        # Плотность по окну (дообучаемость): суммарные частоты контент‑слов этой клаузы
         density = sum(window_freq.get(w, 0) for w in clause_content) / max(1, len(clause_content))
 
-        # Штрафы
         stop_ratio = (len(clause_all) - len(clause_content)) / max(1, len(clause_all))
         commas = clause_text.count(",")
         def_pen = self._definitional_penalty(clause_text)
 
-        # Итог
+        # Пенальти за эхо: если клауза слишком похожа на пользовательский текст
+        jacc = self._jaccard(set(user_content), set(clause_content))
+        echo_pen = 1.0 if jacc >= 0.7 else (0.4 if jacc >= 0.5 else 0.0)
+
         score = (
-            2.4 * overlap_norm +     # сильнее тянемся к словам юзера
-            1.2 * charged_overlap +
-            0.8 * order +
+            2.6 * overlap_norm +
+            1.3 * charged_overlap +
+            0.8  * order +
             0.35 * length_score +
-            0.30 * density -
-            0.35 * commas -
-            0.50 * stop_ratio -
-            1.10 * def_pen          # жестко давим «справочник»
+            0.35 * density -
+            0.40 * commas -
+            0.55 * stop_ratio -
+            1.20 * def_pen -
+            0.90 * echo_pen
         )
         return score
+
+    def _jaccard(self, a: set, b: set) -> float:
+        if not a and not b:
+            return 0.0
+        inter = len(a & b)
+        union = len(a | b) or 1
+        return inter / union
 
     def _definitional_penalty(self, text: str) -> float:
         t = " " + text.lower() + " "
         hits = sum(1 for m in _DEF_MARKERS_SUBSTR if m in t)
-        # Усиливаем, если начинается с «ProperNoun is a/an/the …»
         starts_def = bool(re.match(r"^[A-Z][a-zA-Z\-]+(?: [A-Z][a-zA-Z\-]+)?\s+is\s+(?:a|an|the)\b", text))
         return hits * (1.0 if not starts_def else 1.6)
 
@@ -265,6 +269,7 @@ class Subjectivity:
         text = self._collapse_adjacent_duplicates(text)
         text = self._normalize_dashes(text)
         text = self._clean_commas(text)
+        text = self._dedup_phrases(text)
         text = self._limit_commas(text, 1)
         text = re.sub(r"\s{2,}", " ", text).strip()
         return text
@@ -273,10 +278,8 @@ class Subjectivity:
         text = text.strip()
         if not text:
             return ""
-        # Капитализация первой буквы
         i = next((i for i, ch in enumerate(text) if ch.isalpha()), 0)
         text = text[:i] + text[i].upper() + text[i+1:]
-        # Терминатор
         text = re.sub(r"([.!?])\1+$", r"\1", text)
         text = re.sub(r"[!?]+$", ".", text)
         if not re.search(r"[.!?]$", text):
@@ -304,6 +307,18 @@ class Subjectivity:
         text = re.sub(r",\s*,+", ", ", text)
         return text
 
+    def _dedup_phrases(self, text: str) -> str:
+        # Убираем дубли фраз типа "United Arab Emirates, The United Arab Emirates"
+        parts = re.split(r"\s*(?:—|,|;)\s*", self._strip_terminal(text))
+        seen = set()
+        out = []
+        for p in parts:
+            key = re.sub(r"^(the|a|an)\s+", "", p.strip(), flags=re.IGNORECASE).lower()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(p.strip())
+        return ", ".join(out)
+
     def _limit_commas(self, text: str, k: int = 1) -> str:
         parts = text.split(",")
         if len(parts) - 1 <= k:
@@ -314,7 +329,7 @@ class Subjectivity:
         text = re.sub(r"\s*\([^)]*\)", "", text)
         return re.sub(r"\s{2,}", " ", text).strip()
 
-    # ---------- pronouns and anti-repeat ----------
+    # ---------- pronouns / repeat ----------
 
     def _user_has_pronouns(self, text: str) -> bool:
         return any(w.lower() in _PRONOUN_MAP for w in re.findall(r"\w+", text))
@@ -342,5 +357,4 @@ class Subjectivity:
         return repl.lower()
 
     def _norm_repeat(self, s: str) -> str:
-        # Нормализуем для сравнения повторов между репликами
         return re.sub(r"[\W_]+", "", s).lower()
