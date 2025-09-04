@@ -64,3 +64,69 @@ Perplexity reformulates entropy into an effective vocabulary guiding response di
 
 Resonance gauges alignment between recurring tokens and context, integrating entropy and perplexity into a cohesive evaluative loop.
 
+Subjectivity begins by ingesting a user message as raw text.
+
+Input sanitation removes extraneous whitespace and non textual artifacts.
+
+Tokenization splits the message into lowercased units for statistical scrutiny.
+
+Charged tokens are detected by length or capitalization to highlight salient cues.
+
+These tokens guide selective retrieval from the Objectivity module's knowledge base.
+
+Objectivity queries Wikipedia to supply grounded context segments.
+
+Curiosity logs the interaction in SQLite for cumulative memory.
+
+Infinity indexes crafted responses for full text search and recall.
+
+Connections mines existing logs to surface related tokens for continuity.
+
+Pitomadom orchestrates the modules under a unified persona.
+
+The reply method fuses external snippets with internal heuristics to craft text.
+
+Crafted sentences avoid duplicate bigrams to maintain variation.
+
+Responses are appended with auxiliary terms from Connections when relevant.
+
+Every interaction updates the memory store to reinforce recurring patterns.
+
+Normalization scales token frequencies so metrics remain comparable.
+
+Entropy quantifies uncertainty across the token distribution.
+
+Perplexity transforms entropy into an effective vocabulary size.
+
+Resonance gauges alignment between charged tokens and overall message density.
+
+Metrics feed back into the system to modulate future responses.
+
+SQLite transactions ensure atomic writes and consistent state.
+
+The system favors modular components to reduce interdependencies.
+
+Loose coupling allows individual modules to evolve independently.
+
+The Telegram interface bridges user messages with Pitomadom via webhooks or polling.
+
+Environment variables expose tokens without embedding secrets in code.
+
+The Procfile defines a worker process for cloud deployment.
+
+Docker containers encapsulate dependencies for reproducible execution.
+
+Testing employs mocks to simulate telegram updates without network calls.
+
+The design targets small footprint and minimal CPU usage.
+
+Algorithmic flow can be extended with additional retrieval strategies.
+
+Future models could incorporate transformer backends for richer semantics.
+
+Entropy H is computed as -Σ p log₂ p over observed token frequencies.
+
+Perplexity PP is 2ᴴ, representing the effective branching factor of the reply space.
+
+Resonance R is |charged| / |tokens|, a simple ratio capturing semantic intensity.
+
