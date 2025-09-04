@@ -49,8 +49,7 @@ class Subjectivity:
         words = re.findall(r"\w+", text.lower())
         total = len(words) or 1
         counts = Counter(words)
-        freq = {w: c / total for w, c in counts.items()}
-        entropy = -sum(p * math.log(p, 2) for p in freq.values())
+        entropy = -sum((c / total) * math.log(c / total, 2) for c in counts.values())
         perplexity = 2 ** entropy
         resonance = sum(c for w, c in counts.items() if w.isalpha()) / total
         return {"perplexity": perplexity, "entropy": entropy, "resonance": resonance}
@@ -96,7 +95,6 @@ class Subjectivity:
         rng = random.Random(seed)
         orig = message
         words = re.findall(r"\b\w+\b", orig)
-        lower = [w.lower() for w in words]
 
         # преференция инвертированных местоимений (как в me.Engine._invert_pronouns)
         pref = [ _PRONOUN_MAP.get(w, w) for w in [w.lower() for w in words] ]

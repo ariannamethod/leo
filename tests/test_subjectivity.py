@@ -36,15 +36,19 @@ def _old_metrics(text: str):
     return {"perplexity": perplexity, "entropy": entropy, "resonance": resonance}
 
 
-def test_metrics_invariance():
-    s = Subjectivity()
-    texts = [
+@pytest.mark.parametrize(
+    "text",
+    [
         "Hello hello world 123",
         "Numbers 1 2 3 and letters abc ABC",
-    ]
-    for text in texts:
-        metrics = s._metrics(text)
-        expected = _old_metrics(text)
-        assert metrics["entropy"] == pytest.approx(expected["entropy"])
-        assert metrics["perplexity"] == pytest.approx(expected["perplexity"])
-        assert metrics["resonance"] == pytest.approx(expected["resonance"])
+        "",
+        "Repeat repeat repeat word",
+    ],
+)
+def test_metrics_invariance(text):
+    s = Subjectivity()
+    metrics = s._metrics(text)
+    expected = _old_metrics(text)
+    assert metrics["entropy"] == pytest.approx(expected["entropy"])
+    assert metrics["perplexity"] == pytest.approx(expected["perplexity"])
+    assert metrics["resonance"] == pytest.approx(expected["resonance"])
