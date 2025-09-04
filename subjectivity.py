@@ -1,165 +1,109 @@
+import math
 import re
-import requests
-from urllib.parse import quote
-from typing import Dict, List, Optional, Tuple
+import hashlib
+from typing import List, Tuple
 
-USER_AGENT = "subjectivity/1.0 (+github.com/ariannamethod/subjectivity)"
+from objectivity import Objectivity
+from curiosity import Curiosity
 
-class Objectivity:
-    """Language-agnostic context window generator.
+class Subjectivity:
+    """Main module evaluating messages and crafting responses."""
 
-    Retrieves concise context from Wikipedia via Wikidata sitelinks:
-      term -> Wikidata Q-id -> sitelinks -> best *wiki -> REST /page/summary
-    Returns only plain text (title + extract), no links.
-    Designed for CPU-only environments with strict byte budget.
-    """
+    def __init__(self):
+        self.objectivity = Objectivity()
+        self.curiosity = Curiosity()
 
-    def __init__(self, max_kb: int = 1, max_terms: int = 3, timeout_s: float = 6.0):
-        self.max_bytes = max_kb * 1024
-        self.max_terms = max_terms
-        self.timeout_s = timeout_s
-        self.lang_priority = [
-            "en","ru","es","de","fr","it","pt","zh","ja","uk","pl","nl",
-            "sv","cs","tr","ar","ko","he","fi","no","da","ro","hu","el","bg",
-            "fa","hi","id","th"
-        ]
-        self._session = requests.Session()
-        self._session.headers.update({"User-Agent": USER_AGENT})
+    def _metrics(self, text: str):
+        words = re.findall(r"\w+", text.lower())
+        total = len(words) or 1
+        freq = {w: words.count(w) / total for w in set(words)}
+        entropy = -sum(p * math.log(p, 2) for p in freq.values())
+        perplexity = 2 ** entropy
+        resonance = sum(1 for w in words if w.isalpha()) / total
+        return {"perplexity": perplexity, "entropy": entropy, "resonance": resonance}
 
-    def context_window(self, message: str, tokens: List[str]) -> str:
-        terms = self._prepare_terms(message, tokens)
-        segments: List[str] = []
-        seen_titles = set()
+    def _charged_tokens(self, text: str) -> List[str]:
+        tokens = re.findall(r"\b\w+\b", text)
+        charged = [t for t in tokens if (t[:1].isupper() and len(t) > 1) or len(t) > 7]
+        return charged or tokens[:3]
 
-        for term in terms[: self.max_terms]:
-            item = self._fetch_summary_via_wikidata(term)
-            if not item:
-                continue
-            title, extract = item
-            key = title.strip().lower()
-            if key in seen_titles:
-                continue
-            seen_titles.add(key)
-            seg = f"{title}\n{extract}" if title else extract
-            if not seg:
-                continue
-            segments.append(seg)
-            if self._encoded_len(segments) >= self.max_bytes:
-                break
+    def reply(self, message: str) -> str:
+        metrics = self._metrics(message)
+        tokens = self._charged_tokens(message)
+        context = self.objectivity.context_window(message, tokens)
+        response = self._craft_response(context)
+        self.curiosity.remember(message, context, response, metrics)
+        return response
 
-        context = "\n\n".join(segments).strip() or message
-        return self._truncate_bytes(context, self.max_bytes)
+    # ---------- Phrase Composer with punctuation ----------
 
-    # ---------- term prep ----------
+    def _craft_response(self, context: str) -> str:
+        words = re.findall(r"\b\w+\b", context)
+        if not words:
+            return ""
 
-    def _prepare_terms(self, message: str, tokens: List[str]) -> List[str]:
-        terms: List[str] = []
-        terms += re.findall(r"\b[A-ZА-Я][a-zа-я]+\b", " ".join(tokens))
-        terms += re.findall(r"\b[A-ZА-Я]{2,}\b", " ".join(tokens))
+        bigrams = self._unique_bigrams(words)
+        if not bigrams:
+            sent = self._format_sentence(" ".join(words[:6]))
+            return sent
+
+        seed = int(hashlib.sha256(context.encode("utf-8")).hexdigest(), 16)
+
+        clauses = []
+        idx = 0
+        step = max(1, seed % 5)  # 1..4
+        while idx < len(bigrams) and len(clauses) < 3:
+            a, b = bigrams[idx]
+            clause = f"{a} {b}"
+            if not clauses or clauses[-1].split()[-1].lower() != a.lower():
+                clauses.append(clause)
+            idx += step
+
+        if not clauses:
+            clauses = [f"{a} {b}" for a, b in bigrams[:2]]
+
+        sentence = self._join_clauses_with_punct(clauses, seed)
+        return self._format_sentence(sentence)
+
+    def _unique_bigrams(self, words: List[str]) -> List[Tuple[str, str]]:
+        pairs = []
         seen = set()
-        ordered: List[str] = []
-        for t in terms or tokens or [message.strip()[:64]]:
-            tt = t.strip()
-            if not tt:
+        for i in range(len(words) - 1):
+            a, b = words[i], words[i + 1]
+            if len(a) < 2 or len(b) < 2:
                 continue
-            if tt not in seen:
-                seen.add(tt)
-                ordered.append(tt)
-        return ordered or [message.strip()[:64]]
+            if {a.lower(), b.lower()} <= {"a", "the", "and", "of"}:
+                continue
+            key = (a.lower(), b.lower())
+            if key not in seen:
+                seen.add(key)
+                pairs.append((a, b))
+        return pairs
 
-    # ---------- Wikidata -> Wikipedia ----------
+    def _join_clauses_with_punct(self, clauses: List[str], seed: int) -> str:
+        punct_schemes = [
+            [", ", " — ", "."],
+            ["; ", ", ", "."],
+            [" — ", ", ", "."],
+            [", ", ", ", "."],
+        ]
+        scheme = punct_schemes[seed % len(punct_schemes)]
+        out = []
+        for i, c in enumerate(clauses):
+            out.append(c)
+            if i < len(clauses) - 1:
+                out.append(scheme[i % (len(scheme) - 1)])
+        out.append(".")
+        text = "".join(out)
+        text = re.sub(r"\s{2,}", " ", text)
+        text = re.sub(r"([.!?])\.+$", r"\1", text)
+        return text.strip()
 
-    def _fetch_summary_via_wikidata(self, term: str) -> Optional[Tuple[str, str]]:
-        qid = self._wikidata_search(term)
-        if not qid:
-            return None
-        ent = self._wikidata_entity(qid)
-        if not ent:
-            return None
-        sitelinks = (ent.get("entities", {}).get(qid, {}).get("sitelinks", {}) or {})
-        lang, title = self._pick_sitelink(sitelinks)
-        if not lang or not title:
-            return None
-        return self._wikipedia_summary(lang, title)
-
-    def _wikidata_search(self, term: str) -> Optional[str]:
-        try:
-            r = self._session.get(
-                "https://www.wikidata.org/w/api.php",
-                params={
-                    "action": "wbsearchentities",
-                    "format": "json",
-                    "language": "en",
-                    "type": "item",
-                    "search": term,
-                    "limit": 1,
-                },
-                timeout=self.timeout_s,
-            )
-            if r.status_code != 200:
-                return None
-            data = r.json()
-            hits = data.get("search") or []
-            return hits[0].get("id") if hits else None
-        except Exception:
-            return None
-
-    def _wikidata_entity(self, qid: str) -> Optional[Dict]:
-        try:
-            r = self._session.get(
-                f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json",
-                timeout=self.timeout_s,
-            )
-            if r.status_code != 200:
-                return None
-            return r.json()
-        except Exception:
-            return None
-
-    def _pick_sitelink(self, sitelinks: Dict) -> Tuple[Optional[str], Optional[str]]:
-        for lang in self.lang_priority:
-            key = f"{lang}wiki"
-            if key in sitelinks:
-                title = sitelinks[key].get("title") or ""
-                if title:
-                    return lang, title
-        for k, v in sitelinks.items():
-            if k.endswith("wiki"):
-                lang = k[:-4]
-                title = v.get("title") or ""
-                if lang and title:
-                    return lang, title
-        return None, None
-
-    def _wikipedia_summary(self, lang: str, title: str) -> Optional[Tuple[str, str]]:
-        try:
-            url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}"
-            r = self._session.get(url, timeout=self.timeout_s)
-            if r.status_code != 200:
-                return None
-            d = r.json()
-            t = (d.get("title") or title).strip()
-            extract = (d.get("extract") or "").strip()
-            if not extract:
-                return None
-            return t, extract[:900]
-        except Exception:
-            return None
-
-    # ---------- byte helpers ----------
-
-    @staticmethod
-    def _encoded_len(parts: List[str]) -> int:
-        return len("\n\n".join(parts).encode("utf-8"))
-
-    @staticmethod
-    def _truncate_bytes(text: str, max_bytes: int) -> str:
-        b = text.encode("utf-8")
-        if len(b) <= max_bytes:
-            return text
-        cut = b[:max_bytes]
-        while True:
-            try:
-                return cut.decode("utf-8", errors="ignore")
-            except Exception:
-                cut = cut[:-1]
+    def _format_sentence(self, text: str) -> str:
+        text = text.strip()
+        if not text:
+            return ""
+        text = text[0].upper() + text[1:]
+        if not re.search(r"[.!?]$", text):
+            text += "."
+        return text
