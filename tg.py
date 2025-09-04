@@ -12,17 +12,17 @@ logging.basicConfig(level=logging.INFO)
 bot = Pitomadom()
 
 
-def process_update(update, bot_instance=None) -> None:
+async def process_update(update, bot_instance=None) -> None:
     """Handle a single Telegram update using the provided bot instance."""
     if not update or not getattr(update, "message", None) or not update.message.text:
         return
     bot_obj = bot_instance or bot
-    reply = bot_obj.interact(update.message.text)
-    update.message.reply_text(reply)
+    reply = await bot_obj.interact(update.message.text)
+    await update.message.reply_text(reply)
 
 
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    process_update(update, bot)
+    await process_update(update, bot)
 
 def main() -> None:
     token = os.environ["TELEGRAM_TOKEN"]
