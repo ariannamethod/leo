@@ -2,7 +2,7 @@ import math
 import re
 import hashlib
 import random
-from collections import deque
+from collections import Counter, deque
 from typing import List, Tuple
 
 from objectivity import Objectivity
@@ -48,10 +48,11 @@ class Subjectivity:
     def _metrics(self, text: str):
         words = re.findall(r"\w+", text.lower())
         total = len(words) or 1
-        freq = {w: words.count(w) / total for w in set(words)}
+        counts = Counter(words)
+        freq = {w: c / total for w, c in counts.items()}
         entropy = -sum(p * math.log(p, 2) for p in freq.values())
         perplexity = 2 ** entropy
-        resonance = sum(1 for w in words if w.isalpha()) / total
+        resonance = sum(c for w, c in counts.items() if w.isalpha()) / total
         return {"perplexity": perplexity, "entropy": entropy, "resonance": resonance}
 
     def _charged_tokens(self, text: str) -> List[str]:
