@@ -18,7 +18,6 @@ class Objectivity:
         self.max_bytes = max_kb * 1024
         self.max_terms = max_terms
         self.timeout_s = timeout_s
-        # Prefer common languages but fall back to any *wiki
         self.lang_priority = [
             "en","ru","es","de","fr","it","pt","zh","ja","uk","pl","nl",
             "sv","cs","tr","ar","ko","he","fi","no","da","ro","hu","el","bg",
@@ -49,18 +48,14 @@ class Objectivity:
                 break
 
         context = "\n\n".join(segments).strip() or message
-        # enforce byte budget
         return self._truncate_bytes(context, self.max_bytes)
 
-    # ---------- Internal: term prep ----------
+    # ---------- term prep ----------
 
     def _prepare_terms(self, message: str, tokens: List[str]) -> List[str]:
-        # Prefer provided tokens; fall back to message chunks
         terms: List[str] = []
-        # Proper nouns / ALLCAPS
         terms += re.findall(r"\b[A-ZА-Я][a-zа-я]+\b", " ".join(tokens))
         terms += re.findall(r"\b[A-ZА-Я]{2,}\b", " ".join(tokens))
-        # Unique while preserving order
         seen = set()
         ordered: List[str] = []
         for t in terms or tokens or [message.strip()[:64]]:
@@ -72,7 +67,7 @@ class Objectivity:
                 ordered.append(tt)
         return ordered or [message.strip()[:64]]
 
-    # ---------- Internal: Wikidata -> Wikipedia ----------
+    # ---------- Wikidata -> Wikipedia ----------
 
     def _fetch_summary_via_wikidata(self, term: str) -> Optional[Tuple[str, str]]:
         qid = self._wikidata_search(term)
@@ -81,11 +76,7 @@ class Objectivity:
         ent = self._wikidata_entity(qid)
         if not ent:
             return None
-        sitelinks = (
-            ent.get("entities", {})
-               .get(qid, {})
-               .get("sitelinks", {}) or {}
-        )
+        sitelinks = (ent.get("entities", {}).get(qid, {}).get("sitelinks", {}) or {})
         lang, title = self._pick_sitelink(sitelinks)
         if not lang or not title:
             return None
@@ -126,14 +117,12 @@ class Objectivity:
             return None
 
     def _pick_sitelink(self, sitelinks: Dict) -> Tuple[Optional[str], Optional[str]]:
-        # Try prioritized languages first
         for lang in self.lang_priority:
             key = f"{lang}wiki"
             if key in sitelinks:
                 title = sitelinks[key].get("title") or ""
                 if title:
                     return lang, title
-        # Otherwise pick any *wiki entry
         for k, v in sitelinks.items():
             if k.endswith("wiki"):
                 lang = k[:-4]
@@ -157,7 +146,7 @@ class Objectivity:
         except Exception:
             return None
 
-    # ---------- Internal: byte helpers ----------
+    # ---------- byte helpers ----------
 
     @staticmethod
     def _encoded_len(parts: List[str]) -> int:
@@ -168,9 +157,7 @@ class Objectivity:
         b = text.encode("utf-8")
         if len(b) <= max_bytes:
             return text
-        # cut at boundary
         cut = b[:max_bytes]
-        # ensure valid utf-8
         while True:
             try:
                 return cut.decode("utf-8", errors="ignore")
