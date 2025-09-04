@@ -145,6 +145,13 @@ falling back through a priority list, all within a one‑kilobyte budget.  This
 module is intentionally weightless and depends only on HTTP requests and a few
 regex heuristics.
 
+#### DuckDuckGo API
+The module calls the DuckDuckGo Instant Answer API with a 4‑second timeout.
+Responses are expected to return JSON containing `AbstractText` and
+`RelatedTopics`. Any non‑200 status or exception yields an empty result.  For
+testing or custom transports, `_ddg_request` accepts either a `requests.Session`
+or a fetch function mirroring `requests.get`.
+
 ### Curiosity
 Commits every interaction to SQLite with timestamps and computed metrics.
 These traces become a minimal training stream, allowing the system to adjust

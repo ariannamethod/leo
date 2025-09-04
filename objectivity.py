@@ -1,7 +1,7 @@
 import re
 import requests
 from urllib.parse import quote
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 USER_AGENT = "subjectivity/1.0 (+github.com/ariannamethod/subjectivity)"
 
@@ -58,19 +58,42 @@ def _looks_conversational(text: str) -> bool:
         
     return False
 
-def _ddg_json(query: str) -> List[str]:
-    """Fetch conversational snippets from DuckDuckGo API."""
+def _ddg_request(query: str, fetch: Optional[Callable] = None, session: Optional[requests.Session] = None) -> dict:
+    """Call the DuckDuckGo API and return JSON data.
+
+    Parameters
+    ----------
+    query:
+        Search string to send to DuckDuckGo.
+    fetch:
+        Optional callable replacing ``requests.get``.  It should accept the
+        same parameters and return an object with ``status_code`` and
+        ``json`` methods.  Useful for testing.
+    session:
+        Optional ``requests.Session``.  If provided, ``session.get`` is used.
+
+    Returns
+    -------
+    dict
+        Parsed JSON data or an empty dict on error.
+    """
+
     url = f"https://api.duckduckgo.com/?q={quote(query)}&format=json&no_html=1&no_redirect=1"
-    snippets: List[str] = []
-    
+    fetch_fn: Callable = fetch or (session.get if session else requests.get)
+
     try:
-        response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=4)
-        if response.status_code != 200:
-            return snippets
-            
-        data = response.json()
+        response = fetch_fn(url, headers={"User-Agent": USER_AGENT}, timeout=4)
+        if getattr(response, "status_code", 200) != 200:
+            return {}
+        return response.json()
     except Exception:
-        return snippets
+        return {}
+
+
+def _ddg_json(query: str, fetch: Optional[Callable] = None, session: Optional[requests.Session] = None) -> List[str]:
+    """Fetch conversational snippets from DuckDuckGo API."""
+    data = _ddg_request(query, fetch=fetch, session=session)
+    snippets: List[str] = []
 
     def add_snippet(text: Optional[str]):
         if not text:
