@@ -189,12 +189,23 @@ class Objectivity:
         NO Wikipedia. NO definitions. NO glossary content.
         """
         conversational_snippets: List[str] = []
-        
+
+        # Prepare ignored tokens set
+        ignored = {t.lower() for t in _tokens_ignored}
+
+        # Remove ignored tokens from the message before building queries
+        if ignored:
+            pattern = r"\b(?:" + "|".join(re.escape(t) for t in ignored) + r")\b"
+            message = re.sub(pattern, "", message, flags=re.IGNORECASE)
+
+        message = re.sub(r"\s+", " ", message).strip()
+        if not message:
+            return ""
+
         # Build conversation-focused queries
         queries = _build_conversation_queries(message)
 
         # Filter out queries containing any ignored tokens
-        ignored = {t.lower() for t in _tokens_ignored}
         queries = [
             q for q in queries
             if not any(token in q.lower() for token in ignored)
@@ -207,8 +218,10 @@ class Objectivity:
             try:
                 snippets = _ddg_json(query)
                 for snippet in snippets:
+                    if any(token in snippet.lower() for token in ignored):
+                        continue
                     # Double-check it's conversational
-                    if (_looks_conversational(snippet) and 
+                    if (_looks_conversational(snippet) and
                         not _looks_like_glossary(snippet) and
                         len(snippet.split()) >= 4):  # Minimum substance
                         
