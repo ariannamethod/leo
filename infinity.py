@@ -14,7 +14,6 @@ class Infinity:
             cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS rag USING FTS5(text)")
             self._fts = True
         except sqlite3.OperationalError:
-            # FTS5 not available: fallback to a normal table
             cur.execute("CREATE TABLE IF NOT EXISTS rag (text TEXT)")
             self._fts = False
         self.conn.commit()
