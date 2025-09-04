@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from telegram_interface import process_update
+from tg import process_update
 
 
 def test_process_update_calls_bot_and_replies():
