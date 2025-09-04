@@ -5,122 +5,215 @@ from typing import List, Optional
 
 USER_AGENT = "subjectivity/1.0 (+github.com/ariannamethod/subjectivity)"
 
-# Вики не включаем в окно ответа. Оставлено как глубокий бэкап — но мы больше не используем его здесь.
-# Всё «живое» окно собирается только из веб‑сниппетов.
-
 def _looks_like_glossary(text: str) -> bool:
-    t = " " + text.lower() + " "
-    bad = [
-        " is a ", " is an ", " is the ", " was a ", " was an ",
-        "notable people", "family name", "given name", "surname",
-        "capital is", "is the capital", "programming language",
-        "population", "metropolitan areas",
+    """Detect glossary/definition-style text to filter out."""
+    text_padded = " " + text.lower() + " "
+    
+    # Definition markers
+    definition_markers = [
+        " is a ", " is an ", " is the ", " was a ", " was an ", " are a ", " are an ",
+        "notable people", "notable persons", "family name", "given name", "surname",
+        "capital is", "is the capital", "capital of", "programming language",
+        "population", "metropolitan areas", "disambiguation", "may refer to",
+        "born in", "died in", "known for", "famous for", "best known",
     ]
-    if any(b in t for b in bad):
+    
+    if any(marker in text_padded for marker in definition_markers):
         return True
+        
+    # Title-like patterns (mostly capitalized short phrases)
     words = re.findall(r"\b\w+\b", text)
-    if 1 <= len(words) <= 4 and sum(w[0].isupper() for w in words) >= len(words) - 1:
-        if not any(w.lower() in {"is", "are", "was", "were", "has", "have", "do", "does"} for w in words):
-            return True
+    if 1 <= len(words) <= 4:
+        caps_count = sum(1 for w in words if w[0].isupper())
+        if caps_count >= len(words) - 1:
+            # Avoid verb-less titles
+            if not any(w.lower() in {"is", "are", "was", "were", "has", "have", "do", "does", "can", "will"} for w in words):
+                return True
+                
     return False
 
+def _looks_conversational(text: str) -> bool:
+    """Check if text sounds like natural conversation."""
+    # Conversational markers
+    conversational_words = {
+        "you", "i", "we", "they", "how", "what", "why", "really", "actually",
+        "maybe", "probably", "think", "feel", "like", "love", "hate", "want",
+        "need", "should", "could", "would", "might", "seems", "sounds"
+    }
+    
+    words = [w.lower() for w in re.findall(r"\b\w+\b", text)]
+    conversational_count = sum(1 for w in words if w in conversational_words)
+    
+    # At least 1 conversational word in every 6 words
+    if len(words) > 0 and conversational_count / len(words) >= 0.15:
+        return True
+        
+    # Question forms
+    if any(text.lower().startswith(q) for q in ["how ", "what ", "why ", "when ", "where "]):
+        return True
+        
+    # Personal pronouns + verbs
+    if any(w in words for w in ["you", "i"]) and any(w in words for w in ["are", "do", "can", "will", "should"]):
+        return True
+        
+    return False
 
 def _ddg_json(query: str) -> List[str]:
-    """Лёгкий веб‑поиск через DuckDuckGo Instant Answer API (без ключей). Только разговорные сниппеты."""
+    """Fetch conversational snippets from DuckDuckGo API."""
     url = f"https://api.duckduckgo.com/?q={quote(query)}&format=json&no_html=1&no_redirect=1"
-    out: List[str] = []
+    snippets: List[str] = []
+    
     try:
-        r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=4)
-        if r.status_code != 200:
-            return out
-        data = r.json()
+        response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=4)
+        if response.status_code != 200:
+            return snippets
+            
+        data = response.json()
     except Exception:
-        return out
+        return snippets
 
-    def emit(s: Optional[str]):
-        if not s:
+    def add_snippet(text: Optional[str]):
+        if not text:
             return
-        s = re.sub(r"\s+", " ", s).strip()
-        if len(s) < 5:
+            
+        # Clean up text
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) < 10:  # Too short
             return
-        if _looks_like_glossary(s):
+            
+        # Filter out non-conversational content
+        if _looks_like_glossary(text):
             return
-        # убираем URL, мусорные хвосты
-        if re.search(r"https?://", s):
+            
+        # Remove URLs and technical jargon
+        if re.search(r"https?://", text):
             return
-        out.append(s)
+        if re.search(r"\b\d{4}-\d{2}-\d{2}\b", text):  # Dates
+            return
+        if text.count("(") + text.count(")") > 2:  # Too many parentheticals
+            return
+        if sum(ch.isdigit() for ch in text) > 8:  # Too many numbers
+            return
+            
+        # Take only first complete sentence for brevity
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        if sentences:
+            first_sentence = sentences[0].strip()
+            
+            # Must be conversational and reasonably sized
+            if (3 <= len(first_sentence.split()) <= 20 and 
+                _looks_conversational(first_sentence) and
+                first_sentence not in snippets):
+                snippets.append(first_sentence)
 
-    # AbstractText
-    emit(data.get("AbstractText"))
+    # Extract from AbstractText
+    add_snippet(data.get("AbstractText"))
 
-    # RelatedTopics (в т.ч. вложенные)
-    def walk(items):
-        for it in items or []:
-            if isinstance(it, dict):
-                if "Text" in it:
-                    emit(it.get("Text"))
-                if isinstance(it.get("Topics"), list):
-                    walk(it["Topics"])
-    walk(data.get("RelatedTopics"))
+    # Extract from RelatedTopics recursively
+    def extract_from_topics(topics):
+        for topic in topics or []:
+            if isinstance(topic, dict):
+                if "Text" in topic:
+                    add_snippet(topic.get("Text"))
+                if isinstance(topic.get("Topics"), list):
+                    extract_from_topics(topic["Topics"])
+                    
+    extract_from_topics(data.get("RelatedTopics"))
 
-    # Уникализируем, ограничиваем 6
-    uniq, seen = [], set()
-    for s in out:
-        k = s.lower()
-        if k not in seen:
-            seen.add(k)
-            uniq.append(s)
-    return uniq[:6]
+    # Deduplicate and limit results
+    unique_snippets = []
+    seen = set()
+    for snippet in snippets:
+        key = snippet.lower()
+        if key not in seen:
+            seen.add(key)
+            unique_snippets.append(snippet)
+            
+    return unique_snippets[:4]  # Limit to 4 best snippets
 
 
-def _build_queries(message: str) -> List[str]:
-    msg = re.sub(r"\s+", " ", message.strip())
-    base = [
-        f"{msg} meaning in conversation",
-        f"reply examples to \"{msg}\"",
-        f"small talk lines about \"{msg}\"",
-        f"how to respond to \"{msg}\"",
+def _build_conversation_queries(message: str) -> List[str]:
+    """Build queries focused on conversational responses."""
+    message_clean = re.sub(r"\s+", " ", message.strip())
+    
+    # Base conversational queries
+    queries = [
+        f"how to respond to \"{message_clean}\"",
+        f"what to say when someone says \"{message_clean}\"",
+        f"conversation about {message_clean}",
+        f"talking about {message_clean}",
     ]
-    # Если есть сущности с заглавной — добавим «мягкие» запросы
-    caps = re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b", message)
-    caps += re.findall(r"\b([A-Z]{2,})\b", message)
-    caps = [c for c in caps if c not in {"I", "A", "The", "And", "Or"}]
-    for c in caps[:2]:
-        base += [f"{c} what to say short", f"{c} small talk quotes"]
-    # Уникализируем/режем длину
-    seen, out = set(), []
-    for q in base:
-        q = q[:128]
-        if q not in seen:
-            seen.add(q)
-            out.append(q)
-    return out[:6]
+    
+    # Extract key entities for targeted queries
+    # Capitalized words (proper nouns, names, places)
+    entities = re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b", message)
+    # Acronyms
+    entities += re.findall(r"\b([A-Z]{2,})\b", message)
+    
+    # Filter out common words
+    entities = [e for e in entities if e not in {"I", "A", "The", "And", "Or", "But"}]
+    
+    # Add entity-specific conversational queries
+    for entity in entities[:2]:  # Limit to avoid too many requests
+        queries.extend([
+            f"talking about {entity}",
+            f"{entity} conversation topics",
+            f"what to say about {entity}",
+        ])
+    
+    # Extract question words for appropriate responses
+    question_words = ["how", "what", "why", "when", "where", "who"]
+    for qword in question_words:
+        if qword in message.lower():
+            queries.append(f"responding to {qword} questions")
+            break
+    
+    # Deduplicate and truncate
+    seen = set()
+    unique_queries = []
+    for query in queries:
+        query_short = query[:100]  # Reasonable length limit
+        if query_short not in seen:
+            seen.add(query_short)
+            unique_queries.append(query_short)
+            
+    return unique_queries[:6]  # Limit total queries
 
 
 class Objectivity:
+    """Retrieves conversational context from web sources only."""
+    
     def context_window(self, message: str, _tokens_ignored: List[str]) -> str:
         """
-        Только веб‑сниппеты (DDG). Вики не включаем.
-        Гарантируем, что если есть сеть — будет хотя бы 1 фраза.
+        Fetch ONLY conversational web snippets for smalltalk.
+        NO Wikipedia. NO definitions. NO glossary content.
         """
-        snippets: List[str] = []
-        for q in _build_queries(message):
-            items = _ddg_json(q)
-            for s in items:
-                # Берём только первую законченную фразу
-                parts = re.split(r"(?<=[.!?])\s+", s)
-                if not parts:
-                    continue
-                phr = parts[0].strip()
-                # фильтры: слишком коротко/цифропомои/URL
-                if len(phr.split()) < 3:
-                    continue
-                if sum(ch.isdigit() for ch in phr) > 6:
-                    continue
-                if phr and phr not in snippets:
-                    snippets.append(phr)
-                if len(snippets) >= 6:
-                    break
-            if len(snippets) >= 6:
+        conversational_snippets: List[str] = []
+        
+        # Build conversation-focused queries
+        queries = _build_conversation_queries(message)
+        
+        # Fetch snippets from each query
+        for query in queries:
+            try:
+                snippets = _ddg_json(query)
+                for snippet in snippets:
+                    # Double-check it's conversational
+                    if (_looks_conversational(snippet) and 
+                        not _looks_like_glossary(snippet) and
+                        len(snippet.split()) >= 4):  # Minimum substance
+                        
+                        conversational_snippets.append(snippet)
+                        
+                        # Stop when we have enough good material
+                        if len(conversational_snippets) >= 6:
+                            break
+                            
+            except Exception:
+                continue  # Skip failed queries
+                
+            if len(conversational_snippets) >= 6:
                 break
-        return "\n".join(snippets).strip()
+        
+        # Return joined snippets, each on its own line
+        return "\n".join(conversational_snippets).strip()
