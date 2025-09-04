@@ -9,10 +9,14 @@ class Connections:
         self.conn = sqlite3.connect(path)
 
     def related_tokens(self, context: str):
-        cur = self.conn.cursor()
-        cur.execute("SELECT context || ' ' || response FROM log")
-        text = " ".join(row[0] for row in cur.fetchall())
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT context || ' ' || response FROM log")
+            text = " ".join(row[0] for row in cur.fetchall())
+        except sqlite3.OperationalError:
+            # log table may not exist yet
+            return []
         words = re.findall(r"\w+", text.lower())
         counts = collections.Counter(words)
         tokens = re.findall(r"\w+", context.lower())
-        return [t for t in tokens if counts[t] > 1]
+        return [t for t in tokens if counts.get(t, 0) > 1]
