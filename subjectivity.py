@@ -2,31 +2,40 @@ import math
 import re
 import hashlib
 import random
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 from objectivity import Objectivity
 from curiosity import Curiosity
 
-
+# Стоп-слова для контентного пересечения
 STOPWORDS = {
     "the","a","an","of","and","or","to","in","on","for","as","at","by","with","from",
     "is","are","was","were","be","been","being","this","that","it","its","into","than",
     "then","so","but","nor","if","because","while","when","where","which","who","whom"
 }
 
-# Forbid comma before these words (", is", ", the", ", and" -> fix)
+# Запятая не должна стоять перед этими словами
 FORBID_COMMA_BEFORE = {
     "is","are","was","were","am","be","been","being",
     "a","an","the","and","or","but","nor","of","to","in","on","for","as","at","by","with","from"
 }
 
-# Pronoun inversion map (like in `me`), expanded a bit; case preserved at runtime
+# Инверсия местоимений (как в me), регистр сохраняем
 _PRONOUN_MAP = {
     "you": "i", "u": "i", "your": "my", "yours": "mine", "yourself": "myself", "yourselves": "ourselves",
     "i": "you", "me": "you", "my": "your", "mine": "yours", "myself": "yourself",
     "we": "you", "us": "you", "our": "your", "ours": "yours", "ourselves": "yourselves",
 }
 
+# Маркеры «справочности», которые нужно понижать
+_DEF_MARKERS_SUBSTR = [
+    " is a ", " is an ", " is the ",
+    "notable people", "notable persons",
+    "surname", "family name", "given name",
+    "capital is", "is the capital",
+    "programming language", "metropolitan areas",
+    "population densities", "was born", "born in", "died in",
+]
 
 class Subjectivity:
     """Main module evaluating messages and crafting responses."""
@@ -34,6 +43,7 @@ class Subjectivity:
     def __init__(self):
         self.objectivity = Objectivity()
         self.curiosity = Curiosity()
+        self._last_norm: str = ""  # для анти‑повтора между репликами
 
     # ---------- metrics ----------
 
@@ -58,64 +68,89 @@ class Subjectivity:
         tokens = self._charged_tokens(message)
         context = self.objectivity.context_window(message, tokens)
 
-        response = self._craft_response(message, context)
+        # Кандидаты (уже очищенные и с пунктуацией), отсортированы по убыванию score
+        candidates = self._craft_candidates(message, context)
 
-        # Optional pronoun inversion (as in `me`) only if user used pronouns
+        # Выбираем первый, который не совпадает с прошлым выводом
+        response = candidates[0] if candidates else ""
+        for cand in candidates:
+            if self._norm_repeat(cand) != self._last_norm:
+                response = cand
+                break
+
+        # Инверсия местоимений — только если юзер их использовал
         if self._user_has_pronouns(message):
             response = self._invert_pronouns_text(response)
+
+        # Обновляем анти‑повтор
+        self._last_norm = self._norm_repeat(response)
 
         self.curiosity.remember(message, context, response, metrics)
         return response
 
-    # ---------- core composer (anchor- and metric-based) ----------
+    # ---------- core: build ranked candidates from the whole context window ----------
 
-    def _craft_response(self, user_message: str, context: str) -> str:
-        # Fallbacks
+    def _craft_candidates(self, user_message: str, context: str) -> List[str]:
         if not context.strip():
-            return self._format_sentence(self._collapse_adjacent_duplicates(user_message.strip()) or "Okay")
+            fallback = self._format_sentence(self._collapse_adjacent_duplicates(user_message.strip()) or "Okay")
+            return [fallback]
 
         seed = int(hashlib.sha256((user_message + "||" + context).encode("utf-8")).hexdigest(), 16)
         rng = random.Random(seed)
 
         sentences = self._split_sentences(context)
-        candidates = self._extract_clause_candidates(sentences)
+        # Клаузные кандидаты: целые предложения и под‑клаузы из запятых/тире
+        clauses = self._extract_clause_candidates(sentences)
 
-        if not candidates:
-            # As a last resort, short echo from context cleaned
-            return self._format_sentence(self._cleanup(" ".join(re.findall(r"\w+", context))[:120]))
+        if not clauses:
+            fallback = self._format_sentence(self._cleanup(" ".join(re.findall(r"\w+", context))[:120]))
+            return [fallback]
+
+        # Частоты контент‑слов по ОКНУ для «дообучаемости» на лету
+        window_words = [w.lower() for w in re.findall(r"\b\w+\b", context)]
+        window_content = [w for w in window_words if w not in STOPWORDS]
+        freq = {}
+        for w in window_content:
+            freq[w] = freq.get(w, 0) + 1
 
         scored = []
-        for text, tokens in candidates:
-            s = self._score_clause(user_message, text, tokens)
-            # slightly break ties deterministically
-            s += rng.uniform(0.0, 0.01)
-            scored.append((s, text, tokens))
+        for text, toks in clauses:
+            s = self._score_clause(user_message, text, toks, freq)
+            s += rng.uniform(0.0, 0.01)  # детерминированный tie‑break
+            scored.append((s, text, toks))
+
         scored.sort(key=lambda x: x[0], reverse=True)
 
-        # Pick top 1–2 clauses, join with dash/comma depending on length
-        chosen_texts: List[str] = []
-        total_words = 0
-        for _, t, toks in scored:
-            w = len(toks)
-            if not chosen_texts:
-                chosen_texts.append(t)
-                total_words += w
-            else:
-                # Only add a second tiny clause if short and not redundant
-                if 2 <= w <= 7 and total_words + w <= 22 and not self._redundant(chosen_texts[0], t):
-                    chosen_texts.append(t)
-                    break
-            if total_words >= 20:
-                break
+        # Соберём финальные варианты:
+        # 1) топ‑клаузу как отдельное предложение
+        # 2) если есть короткая — сцепим топ1 — топ2
+        out: List[str] = []
 
-        if not chosen_texts:
-            chosen_texts = [scored[0][1]]
+        if scored:
+            top1_text, top1_toks = scored[0][1], scored[0][2]
+            out.append(self._finalize(self._cleanup(top1_text)))
 
-        text = self._join_with_punct(chosen_texts)
-        text = self._cleanup(text)
-        return self._format_sentence(text)
+            # ищем короткий хвост для «—»
+            tail = next((t for _, t, toks in scored[1:6] if 2 <= len(toks) <= 7 and not self._redundant(top1_text, t)), None)
+            if tail:
+                combo = f"{top1_text} — {self._strip_terminal(tail)}"
+                out.append(self._finalize(self._cleanup(combo)))
 
-    # ---------- clause selection ----------
+        # Добавим ещё 1‑2 одиночных альтернативы (без сочетания), чтобы анти‑повтору было из чего выбирать
+        for _, t, _ in scored[1:4]:
+            out.append(self._finalize(self._cleanup(t)))
+
+        # Уникализируем и вернём
+        seen = set()
+        uniq: List[str] = []
+        for t in out:
+            key = t.lower()
+            if key not in seen:
+                seen.add(key)
+                uniq.append(t)
+        return uniq or ["Okay."]
+
+    # ---------- clause selection helpers ----------
 
     def _split_sentences(self, text: str) -> List[str]:
         return [p.strip() for p in re.split(r"(?<=[.!?])\s+", text.strip()) if p.strip()]
@@ -123,19 +158,18 @@ class Subjectivity:
     def _extract_clause_candidates(self, sentences: List[str]) -> List[Tuple[str, List[str]]]:
         out: List[Tuple[str, List[str]]] = []
         for s in sentences:
-            # produce the sentence itself if reasonable
             toks = re.findall(r"\b\w+\b", s)
             wc = len(toks)
             if 6 <= wc <= 28:
                 out.append((self._strip_terminal(s), toks))
-            # split by commas and dashes into sub-clauses
+            # под‑клаузы через запятые/тире
             parts = re.split(r"\s*[,—–-]\s*", s)
             for p in parts:
                 ptoks = re.findall(r"\b\w+\b", p)
                 pw = len(ptoks)
                 if 4 <= pw <= 14:
                     out.append((self._strip_terminal(p), ptoks))
-        # Deduplicate by lowercase text
+        # Дедуп по lcase
         seen = set()
         uniq = []
         for t, toks in out:
@@ -154,50 +188,60 @@ class Subjectivity:
         inter = wa & wb
         return len(inter) >= max(2, min(len(wa), len(wb)) // 2)
 
-    def _score_clause(self, user_message: str, clause_text: str, clause_tokens: List[str]) -> float:
-        # Token sets
-        user_words_all = re.findall(r"\b\w+\b", user_message.lower())
-        clause_words_all = [w.lower() for w in clause_tokens]
-        user_content = [w for w in user_words_all if w not in STOPWORDS]
-        clause_content = [w for w in clause_words_all if w not in STOPWORDS]
+    def _score_clause(self, user_message: str, clause_text: str, clause_tokens: List[str], window_freq: dict) -> float:
+        # Подготовка множеств
+        user_all = re.findall(r"\b\w+\b", user_message.lower())
+        clause_all = [w.lower() for w in clause_tokens]
+        user_content = [w for w in user_all if w not in STOPWORDS]
+        clause_content = [w for w in clause_all if w not in STOPWORDS]
 
-        # Overlap
+        # Пересечение содержательных токенов
         overlap = len(set(user_content) & set(clause_content))
         overlap_norm = overlap / max(1, len(set(user_content)))
 
-        # Charged overlap (upper/long) from original user text
+        # «Заряженные» токены из пользовательского текста (капс/длина)
         charged_user = set(
             w.lower() for w in re.findall(r"\b\w+\b", user_message)
             if (any(c.isupper() for c in w) and len(w) > 1) or len(w) > 7
         )
-        charged_overlap = len(charged_user & set(clause_content)) / max(1, len(charged_user)) if charged_user else 0.0
+        charged_overlap = (len(charged_user & set(clause_content)) / max(1, len(charged_user))) if charged_user else 0.0
 
-        # Order coherence via LCS on content words (cap length to keep O(n*m) small)
+        # Порядок (LCS) по контент‑словам
         a = user_content[:24]
         b = clause_content[:24]
-        lcs = self._lcs_len(a, b)
-        order = lcs / max(1, min(len(a), len(b)))
+        order = self._lcs_len(a, b) / max(1, min(len(a), len(b)))
 
-        # Length preference (sweet spot around 12 words)
+        # Длина (sweet spot ~12 слов)
         n = len(clause_tokens)
-        length_score = 1.0 - (abs(12 - n) / 12.0)
-        length_score = max(0.0, length_score)
+        length_score = max(0.0, 1.0 - (abs(12 - n) / 12.0))
 
-        # Stopword ratio penalty
-        stop_ratio = (len(clause_words_all) - len(clause_content)) / max(1, len(clause_words_all))
+        # Плотность по окну (дообучаемость): суммарные частоты контент‑слов этой клаузы
+        density = sum(window_freq.get(w, 0) for w in clause_content) / max(1, len(clause_content))
 
-        # Comma penalty
-        comma_pen = clause_text.count(",")
+        # Штрафы
+        stop_ratio = (len(clause_all) - len(clause_content)) / max(1, len(clause_all))
+        commas = clause_text.count(",")
+        def_pen = self._definitional_penalty(clause_text)
 
+        # Итог
         score = (
-            2.0 * overlap_norm +
-            1.0 * charged_overlap +
+            2.4 * overlap_norm +     # сильнее тянемся к словам юзера
+            1.2 * charged_overlap +
             0.8 * order +
-            0.3 * length_score -
-            0.5 * stop_ratio -
-            0.2 * comma_pen
+            0.35 * length_score +
+            0.30 * density -
+            0.35 * commas -
+            0.50 * stop_ratio -
+            1.10 * def_pen          # жестко давим «справочник»
         )
         return score
+
+    def _definitional_penalty(self, text: str) -> float:
+        t = " " + text.lower() + " "
+        hits = sum(1 for m in _DEF_MARKERS_SUBSTR if m in t)
+        # Усиливаем, если начинается с «ProperNoun is a/an/the …»
+        starts_def = bool(re.match(r"^[A-Z][a-zA-Z\-]+(?: [A-Z][a-zA-Z\-]+)?\s+is\s+(?:a|an|the)\b", text))
+        return hits * (1.0 if not starts_def else 1.6)
 
     def _lcs_len(self, a: List[str], b: List[str]) -> int:
         if not a or not b:
@@ -214,18 +258,7 @@ class Subjectivity:
                 prev = tmp
         return dp[-1]
 
-    def _join_with_punct(self, clauses: List[str]) -> str:
-        if not clauses:
-            return ""
-        if len(clauses) == 1:
-            return clauses[0]
-        # Two clauses: prefer em dash if second is short, else comma
-        second_words = len(re.findall(r"\w+", clauses[1]))
-        if second_words <= 6:
-            return f"{clauses[0]} — {clauses[1]}"
-        return f"{clauses[0]}, {clauses[1]}"
-
-    # ---------- cleanup and punctuation ----------
+    # ---------- cleanup / punctuation ----------
 
     def _cleanup(self, text: str) -> str:
         text = self._strip_parentheticals(text)
@@ -236,14 +269,14 @@ class Subjectivity:
         text = re.sub(r"\s{2,}", " ", text).strip()
         return text
 
-    def _format_sentence(self, text: str) -> str:
+    def _finalize(self, text: str) -> str:
         text = text.strip()
         if not text:
             return ""
-        # Capitalize first alpha char
+        # Капитализация первой буквы
         i = next((i for i, ch in enumerate(text) if ch.isalpha()), 0)
         text = text[:i] + text[i].upper() + text[i+1:]
-        # Remove duplicate terminal punctuation and force period
+        # Терминатор
         text = re.sub(r"([.!?])\1+$", r"\1", text)
         text = re.sub(r"[!?]+$", ".", text)
         if not re.search(r"[.!?]$", text):
@@ -281,7 +314,7 @@ class Subjectivity:
         text = re.sub(r"\s*\([^)]*\)", "", text)
         return re.sub(r"\s{2,}", " ", text).strip()
 
-    # ---------- pronoun inversion ----------
+    # ---------- pronouns and anti-repeat ----------
 
     def _user_has_pronouns(self, text: str) -> bool:
         return any(w.lower() in _PRONOUN_MAP for w in re.findall(r"\w+", text))
@@ -307,3 +340,7 @@ class Subjectivity:
         if src[0].isupper():
             return repl.capitalize()
         return repl.lower()
+
+    def _norm_repeat(self, s: str) -> str:
+        # Нормализуем для сравнения повторов между репликами
+        return re.sub(r"[\W_]+", "", s).lower()
