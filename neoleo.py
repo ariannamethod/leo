@@ -74,6 +74,17 @@ def init_db() -> sqlite3.Connection:
         )
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trigrams (
+            first_id INTEGER,
+            second_id INTEGER,
+            third_id INTEGER,
+            count INTEGER,
+            PRIMARY KEY (first_id, second_id, third_id)
+        )
+        """
+    )
     conn.commit()
     return conn
 
@@ -89,24 +100,38 @@ def get_token_id(cur: sqlite3.Cursor, token: str) -> int:
 
 
 def ingest_tokens(conn: sqlite3.Connection, tokens: List[str]) -> None:
-    """Update bigram counts from a token sequence."""
+    """Update bigram and trigram counts from a token sequence."""
     if not tokens:
         return
     cur = conn.cursor()
-    prev_id: Optional[int] = None
-    for tok in tokens:
-        tok_id = get_token_id(cur, tok)
-        if prev_id is not None:
-            cur.execute(
-                """
-                INSERT INTO bigrams (src_id, dst_id, count)
-                VALUES (?, ?, 1)
-                ON CONFLICT(src_id, dst_id)
-                DO UPDATE SET count = count + 1
-                """,
-                (prev_id, tok_id),
-            )
-        prev_id = tok_id
+
+    # Convert tokens to IDs
+    token_ids = [get_token_id(cur, tok) for tok in tokens]
+
+    # Build bigrams
+    for i in range(len(token_ids) - 1):
+        cur.execute(
+            """
+            INSERT INTO bigrams (src_id, dst_id, count)
+            VALUES (?, ?, 1)
+            ON CONFLICT(src_id, dst_id)
+            DO UPDATE SET count = count + 1
+            """,
+            (token_ids[i], token_ids[i + 1]),
+        )
+
+    # Build trigrams
+    for i in range(len(token_ids) - 2):
+        cur.execute(
+            """
+            INSERT INTO trigrams (first_id, second_id, third_id, count)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(first_id, second_id, third_id)
+            DO UPDATE SET count = count + 1
+            """,
+            (token_ids[i], token_ids[i + 1], token_ids[i + 2]),
+        )
+
     conn.commit()
 
 
@@ -153,8 +178,50 @@ def load_bigrams(conn: sqlite3.Connection) -> Tuple[Dict[str, Dict[str, int]], L
     return bigrams, vocab
 
 
+def load_trigrams(conn: sqlite3.Connection) -> Dict[Tuple[str, str], Dict[str, int]]:
+    """
+    Load trigram graph into memory.
+
+    Returns:
+        trigrams: (first_token, second_token) -> {third_token -> count}
+    """
+    cur = conn.cursor()
+    cur.execute("SELECT id, token FROM tokens")
+    id_to_token: Dict[int, str] = {}
+    for row in cur.fetchall():
+        id_to_token[int(row["id"])] = str(row["token"])
+
+    cur.execute("SELECT first_id, second_id, third_id, count FROM trigrams")
+    trigrams: Dict[Tuple[str, str], Dict[str, int]] = {}
+    for row in cur.fetchall():
+        first_id = int(row["first_id"])
+        second_id = int(row["second_id"])
+        third_id = int(row["third_id"])
+        count = int(row["count"])
+
+        first = id_to_token.get(first_id)
+        second = id_to_token.get(second_id)
+        third = id_to_token.get(third_id)
+
+        if first is None or second is None or third is None:
+            continue
+
+        key = (first, second)
+        row_map = trigrams.setdefault(key, {})
+        row_map[third] = row_map.get(third, 0) + count
+
+    return trigrams
+
+
+
 def compute_centers(conn: sqlite3.Connection, k: int = 7) -> List[str]:
-    """Pick tokens with highest out-degree as centers of gravity."""
+    """
+    Pick tokens with highest out-degree as centers of gravity.
+
+    Skip pure punctuation to focus on content words.
+    """
+    PUNCT = {".", ",", "!", "?", ";", ":", "—", "-"}
+
     cur = conn.cursor()
     cur.execute(
         """
@@ -162,9 +229,7 @@ def compute_centers(conn: sqlite3.Connection, k: int = 7) -> List[str]:
         FROM bigrams
         GROUP BY src_id
         ORDER BY w DESC
-        LIMIT ?
         """,
-        (k,),
     )
     rows = cur.fetchall()
     if not rows:
@@ -176,8 +241,12 @@ def compute_centers(conn: sqlite3.Connection, k: int = 7) -> List[str]:
     centers: List[str] = []
     for row in rows:
         tok = id_to_token.get(int(row["src_id"]))
-        if tok:
+        # Skip punctuation, prefer content words
+        if tok and tok not in PUNCT:
             centers.append(tok)
+            if len(centers) >= k:
+                break
+
     return centers
 
 
@@ -316,31 +385,47 @@ def step_token(
     centers: List[str],
     bias: Dict[str, int],
     temperature: float = 1.0,
+    trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
+    prev_token: Optional[str] = None,
 ) -> str:
     """
-    Single step in bigram graph.
+    Single step in bigram/trigram graph.
 
-    temperature < 1.0 => sharper, more deterministic
-    temperature > 1.0 => softer, more exploratory
+    If trigrams and prev_token provided, use trigram context for better grammar.
+    Otherwise fall back to bigrams.
     """
+    # Try trigram first if available
+    if trigrams is not None and prev_token is not None:
+        key = (prev_token, current)
+        row = trigrams.get(key)
+        if row:
+            tokens = list(row.keys())
+            counts = [row[t] for t in tokens]
+            temperature = max(min(temperature, 100.0), 1e-3)
+            if temperature != 1.0:
+                counts = [math.pow(float(c), 1.0 / float(temperature)) for c in counts]
+            total = sum(counts)
+            if total > 0:
+                r = random.uniform(0.0, total)
+                acc = 0.0
+                for t, c in zip(tokens, counts):
+                    acc += c
+                    if r <= acc:
+                        return t
+                return tokens[-1]
+
+    # Fallback to bigram
     row = bigrams.get(current)
     if not row:
         return choose_start_token(vocab, centers, bias)
-
     tokens = list(row.keys())
     counts = [row[t] for t in tokens]
-
-    # Clamp temperature to safe range
     temperature = max(min(temperature, 100.0), 1e-3)
-
     if temperature != 1.0:
         counts = [math.pow(float(c), 1.0 / float(temperature)) for c in counts]
-
     total = sum(counts)
     if total <= 0:
-        # Uniform fallback
         return random.choice(tokens) if tokens else choose_start_token(vocab, centers, bias)
-
     r = random.uniform(0.0, total)
     acc = 0.0
     for t, c in zip(tokens, counts):
@@ -385,6 +470,7 @@ def generate_reply(
     max_tokens: int = 80,
     temperature: float = 1.0,
     echo: bool = False,
+    trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
 ) -> str:
     """Generate reply through NeoLeo's field."""
     if not vocab or not bigrams:
@@ -394,12 +480,15 @@ def generate_reply(
     if echo:
         tokens_in = tokenize(prompt)
         tokens_out: List[str] = []
+        prev_tok: Optional[str] = None
         for tok in tokens_in:
             if tok in bigrams:
-                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature)
+                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature, trigrams, prev_tok)
                 tokens_out.append(nxt)
+                prev_tok = tok
             else:
                 tokens_out.append(tok)
+                prev_tok = tok
         output = format_tokens(tokens_out)
         output = capitalize_sentences(output)
         return output
@@ -409,12 +498,23 @@ def generate_reply(
 
     tokens: List[str] = [start]
     current = start
+    prev: Optional[str] = None
 
     SENT_END = {".", "!", "?"}
     PUNCT = {".", ",", "!", "?", ";", ":"}
 
     for _ in range(max_tokens - 1):
-        nxt = step_token(bigrams, current, vocab, centers, bias, temperature)
+        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev)
+
+        # Loop detection: check if we're repeating a pattern
+        if len(tokens) >= 6:
+            # Check for 3-token loops
+            last_3 = tokens[-3:]
+            prev_3 = tokens[-6:-3]
+            if last_3 == prev_3:
+                # Break the loop by jumping to a random center
+                if centers:
+                    nxt = choose_start_token(vocab, centers, bias)
 
         # Anti "word. word" patch
         if tokens[-1] in SENT_END and len(tokens) >= 2:
@@ -431,6 +531,7 @@ def generate_reply(
                         break
 
         tokens.append(nxt)
+        prev = current
         current = nxt
 
     output = format_tokens(tokens)
@@ -454,6 +555,7 @@ class NeoLeo:
         self.db_path = db_path or DB_PATH
         self.conn = init_db()
         self.bigrams: Dict[str, Dict[str, int]] = {}
+        self.trigrams: Dict[Tuple[str, str], Dict[str, int]] = {}
         self.vocab: List[str] = []
         self.centers: List[str] = []
         self.bias: Dict[str, int] = {}
@@ -462,6 +564,7 @@ class NeoLeo:
     def refresh(self) -> None:
         """Reload field from database."""
         self.bigrams, self.vocab = load_bigrams(self.conn)
+        self.trigrams = load_trigrams(self.conn)
         self.centers = compute_centers(self.conn, k=7)
         self.bias = load_bin_bias()
         if self.centers:
@@ -499,6 +602,7 @@ class NeoLeo:
             max_tokens=max_tokens,
             temperature=temperature,
             echo=echo,
+            trigrams=self.trigrams,
         )
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
@@ -535,6 +639,7 @@ class NeoLeo:
             "vocab_size": len(self.vocab),
             "centers": len(self.centers),
             "bigrams": sum(len(r) for r in self.bigrams.values()),
+            "trigrams": sum(len(r) for r in self.trigrams.values()),
         }
 
     def __repr__(self) -> str:
