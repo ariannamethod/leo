@@ -183,16 +183,21 @@ In a bigger framework `neoleo` becomes the subjectivity layer between the human 
 
 ## How this thing actually works
 
-### 1. Bigram field
+### 1. Trigram field (with bigram fallback)
 
-Both `leo` and `neoleo` use the same minimal mechanics: they tokenize text into words + basic punctuation. For each pair `(a, b)` of consecutive tokens they increment a counter in `bigrams[a][b]`.
+Both `leo` and `neoleo` use **trigram models** for grammatically coherent output. They tokenize text into words + basic punctuation, then build two graphs:
 
-They store the token vocabulary in SQLite as the `tokens` table. That's where all the secrets and answers to the questions I will never know live. But never mind. What matters is the result.
+**Trigrams**: For each triple `(a, b, c)` of consecutive tokens, increment `trigrams[(a,b)][c]`.
+**Bigrams**: For each pair `(a, b)`, increment `bigrams[a][b]` (used as fallback).
 
-Here's a bigram graph:
+They store everything in SQLite:
+* `tokens` table — vocabulary
+* `trigrams` table — (first_id, second_id, third_id, count)
+* `bigrams` table — (src_id, dst_id, count)
 
-* nodes = tokens,
-* edges = “how often B follows A”.
+**Why trigrams?** Better local grammar. Instead of just knowing "the → cat" (bigram), Leo knows "the cat → sits" (trigram), producing more grammatically coherent sequences even if semantically strange.
+
+Generation prefers trigrams when available, falls back to bigrams when trigram context missing.
 
 ### 2. Centers & shards
 
@@ -219,9 +224,14 @@ This is **resonance inertia**.
 
 When you ask for a reply, `leo` looks at your prompt tokens. If he finds any in his vocabulary, `leo` starts from one of the matching tokens. Otherwise he picks a token from centers / vocab, biased by shards.
 
-He walks the bigram graph step by step, sampling next tokens with a temperature-controlled distribution.
+He walks the **trigram graph** step by step:
+- Given previous two tokens `(prev, current)`, sample next token from `trigrams[(prev, current)]`
+- If no trigram match, fall back to bigram: sample from `bigrams[current]`
+- Apply temperature-controlled distribution for sampling
 
-Then he post-processes the token stream into a string. With `echo=True` he turns into a token-wise mirror: each token is replaced by “the next one” in the field, everything else is left unchanged. Yep. As always.
+This produces **grammatically coherent** sequences: subject-verb agreement, proper phrase structure, sentence flow.
+
+With `echo=True`, each token is warped through the field using trigram/bigram context. Yep. As always.
 
 ---
 
