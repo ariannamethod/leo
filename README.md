@@ -1,10 +1,11 @@
    
-   ██╗     ███████╗ ██████╗                            
-   ██║     ██╔════╝██╔═══██╗                           
-   ██║     █████╗  ██║   ██║                           
-   ██║     ██╔══╝  ██║   ██║                           
-   ███████╗███████╗╚██████╔╝                           
-   ╚══════╝╚══════╝ ╚═════╝                            
+   ██╗     ███████╗ ██████╗                            ║", file=sys.stderr)
+    print("║   ██║     ██╔════╝██╔═══██╗                           ║", file=sys.stderr)
+    print("║   ██║     █████╗  ██║   ██║                           ║", file=sys.stderr)
+    print("║   ██║     ██╔══╝  ██║   ██║                           ║", file=sys.stderr)
+    print("║   ███████╗███████╗╚██████╔╝                           ║", file=sys.stderr)
+    print("║   ╚══════╝╚══════╝ ╚═════╝                            ║", file=sys.stderr)
+    print("║                                    
                                      
 
 # leo — language engine organism | by Arianna Method
