@@ -86,16 +86,21 @@ python leo.py
 ### Example session:
 
 ```text
-  ╔══════════════════════════════════════════════╗
-  ║                                              ║
-  ║                     LEO                      ║
-  ║            language · engine · organism      ║
-  ║                                              ║
-  ║           resonance > intention              ║
-  ║                                              ║
-  ║     /exit /quit /temp /echo /export /stats   ║
-  ║                                              ║
-  ╚══════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════╗
+║                                                       ║
+║   ██╗     ███████╗ ██████╗                           ║
+║   ██║     ██╔════╝██╔═══██╗                          ║
+║   ██║     █████╗  ██║   ██║                          ║
+║   ██║     ██╔══╝  ██║   ██║                          ║
+║   ███████╗███████╗╚██████╔╝                          ║
+║   ╚══════╝╚══════╝ ╚═════╝                           ║
+║                                                       ║
+║   language engine organism                           ║
+║   resonance > intention                              ║
+║                                                       ║
+║   /exit /quit /temp /echo /export /stats              ║
+║                                                       ║
+╚═══════════════════════════════════════════════════════╝
 
 leo> hello there
 hello there.

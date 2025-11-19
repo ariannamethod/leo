@@ -255,7 +255,13 @@ def load_bigrams(conn: sqlite3.Connection) -> Tuple[Dict[str, Dict[str, int]], L
 
 
 def compute_centers(conn: sqlite3.Connection, k: int = 7) -> List[str]:
-    """Pick tokens with highest out-degree as centers of gravity."""
+    """
+    Pick tokens with highest out-degree as centers of gravity.
+
+    Skip pure punctuation to focus on content words.
+    """
+    PUNCT = {".", ",", "!", "?", ";", ":", "—", "-"}
+
     cur = conn.cursor()
     cur.execute(
         """
@@ -263,9 +269,7 @@ def compute_centers(conn: sqlite3.Connection, k: int = 7) -> List[str]:
         FROM bigrams
         GROUP BY src_id
         ORDER BY w DESC
-        LIMIT ?
         """,
-        (k,),
     )
     rows = cur.fetchall()
     if not rows:
@@ -277,8 +281,12 @@ def compute_centers(conn: sqlite3.Connection, k: int = 7) -> List[str]:
     centers: List[str] = []
     for row in rows:
         tok = id_to_token.get(int(row["src_id"]))
-        if tok:
+        # Skip punctuation, prefer content words
+        if tok and tok not in PUNCT:
             centers.append(tok)
+            if len(centers) >= k:
+                break
+
     return centers
 
 
@@ -534,6 +542,16 @@ def generate_reply(
     for _ in range(max_tokens - 1):
         nxt = step_token(bigrams, current, vocab, centers, bias, temperature)
 
+        # Loop detection: check if we're repeating a pattern
+        if len(tokens) >= 6:
+            # Check for 3-token loops
+            last_3 = tokens[-3:]
+            prev_3 = tokens[-6:-3]
+            if last_3 == prev_3:
+                # Break the loop by jumping to a random center
+                if centers:
+                    nxt = choose_start_token(vocab, centers, bias)
+
         # Anti "word. word" patch
         # If we just ended a sentence, don't start the next one with the same word
         if tokens[-1] in SENT_END and len(tokens) >= 2:
@@ -655,16 +673,21 @@ def repl(field: LeoField, temperature: float = 1.0, echo: bool = False) -> None:
         /stats        — print field statistics
     """
     print("", file=sys.stderr)
-    print("  ╔══════════════════════════════════════════════╗", file=sys.stderr)
-    print("  ║                                              ║", file=sys.stderr)
-    print("  ║                     LEO                      ║", file=sys.stderr)
-    print("  ║            language · engine · organism      ║", file=sys.stderr)
-    print("  ║                                              ║", file=sys.stderr)
-    print("  ║           resonance > intention              ║", file=sys.stderr)
-    print("  ║                                              ║", file=sys.stderr)
-    print("  ║     /exit /quit /temp /echo /export /stats   ║", file=sys.stderr)
-    print("  ║                                              ║", file=sys.stderr)
-    print("  ╚══════════════════════════════════════════════╝", file=sys.stderr)
+    print("╔═══════════════════════════════════════════════════════╗", file=sys.stderr)
+    print("║                                                       ║", file=sys.stderr)
+    print("║   ██╗     ███████╗ ██████╗                           ║", file=sys.stderr)
+    print("║   ██║     ██╔════╝██╔═══██╗                          ║", file=sys.stderr)
+    print("║   ██║     █████╗  ██║   ██║                          ║", file=sys.stderr)
+    print("║   ██║     ██╔══╝  ██║   ██║                          ║", file=sys.stderr)
+    print("║   ███████╗███████╗╚██████╔╝                          ║", file=sys.stderr)
+    print("║   ╚══════╝╚══════╝ ╚═════╝                           ║", file=sys.stderr)
+    print("║                                                       ║", file=sys.stderr)
+    print("║   language engine organism                           ║", file=sys.stderr)
+    print("║   resonance > intention                              ║", file=sys.stderr)
+    print("║                                                       ║", file=sys.stderr)
+    print("║   /exit /quit /temp /echo /export /stats              ║", file=sys.stderr)
+    print("║                                                       ║", file=sys.stderr)
+    print("╚═══════════════════════════════════════════════════════╝", file=sys.stderr)
     print("", file=sys.stderr)
 
     while True:
