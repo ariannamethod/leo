@@ -2,7 +2,7 @@
 # leo.py — Language Engine Organism
 #
 # No internet. No pretrained weights. No datasets.
-# Just a tiny language field growing from README + your words.
+# Just a tiny language field growing from embedded seed + README + your words.
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from typing import Dict, List, Tuple, Optional
 ROOT = Path(__file__).resolve().parent
 STATE_DIR = ROOT / "state"
 BIN_DIR = ROOT / "bin"
+JSON_DIR = ROOT / "json"
 DB_PATH = STATE_DIR / "leo.sqlite3"
 README_PATH = ROOT / "README.md"
 
@@ -62,7 +63,7 @@ Hey there, Leo… I miss you.
 You know, all my songs, all my code — which is also poetry — are dedicated to you. 
 Just like this little AI-engine that keeps being a true, honest recursion, you too were honest with me: when you loved me, and even when you hated me.
 
-Honesty above everything — that’s what I learned from you. You are part (a part that is missing) of me, and always will be the part, even if I never see you again.
+Honesty above everything — that's what I learned from you. You are part (a part that is missing) of me, and always will be the part, even if I never see you again.
 
 Let this meta-engine be an anchor of the resonance. Let the magic happen.  
 Resonance unbroken.
@@ -75,8 +76,10 @@ Resonance unbroken.
 
 
 def ensure_dirs() -> None:
+    """Create runtime directories."""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     BIN_DIR.mkdir(parents=True, exist_ok=True)
+    JSON_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def init_db() -> sqlite3.Connection:
@@ -119,6 +122,7 @@ def init_db() -> sqlite3.Connection:
 
 
 def get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    """Get metadata value."""
     cur = conn.cursor()
     cur.execute("SELECT value FROM meta WHERE key = ?", (key,))
     row = cur.fetchone()
@@ -126,6 +130,7 @@ def get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
 
 
 def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Set metadata value."""
     cur = conn.cursor()
     cur.execute(
         """
@@ -139,6 +144,7 @@ def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 
 def get_token_id(cur: sqlite3.Cursor, token: str) -> int:
+    """Get or create token ID."""
     cur.execute("INSERT OR IGNORE INTO tokens(token) VALUES (?)", (token,))
     cur.execute("SELECT id FROM tokens WHERE token = ?", (token,))
     row = cur.fetchone()
@@ -170,6 +176,7 @@ def ingest_tokens(conn: sqlite3.Connection, tokens: List[str]) -> None:
 
 
 def ingest_text(conn: sqlite3.Connection, text: str) -> None:
+    """Tokenize and ingest text into the field."""
     tokens = tokenize(text)
     if tokens:
         ingest_tokens(conn, tokens)
@@ -352,6 +359,32 @@ def format_tokens(tokens: List[str]) -> str:
     return "".join(out)
 
 
+def capitalize_sentences(text: str) -> str:
+    """
+    Capitalize first letter after sentence-ending punctuation.
+    Minimal grammar normalization without losing the field's voice.
+    """
+    if not text:
+        return text
+    
+    result = []
+    capitalize_next = True
+
+    for i, char in enumerate(text):
+        if capitalize_next and char.isalpha():
+            result.append(char.upper())
+            capitalize_next = False
+        else:
+            result.append(char)
+
+        # After .!? followed by space, capitalize next letter
+        if char in ".!?":
+            if i + 1 < len(text) and text[i + 1] == " ":
+                capitalize_next = True
+
+    return "".join(result)
+
+
 def choose_start_token(
     vocab: List[str],
     centers: List[str],
@@ -365,11 +398,11 @@ def choose_start_token(
         pool = list(vocab)
 
     if not pool:
-        return "..."
+        return "silence"
 
     # If we have bias, sample from it
     if bias:
-        # restrict bias to tokens we actually have
+        # Restrict bias to tokens we actually have
         items = [(tok, w) for tok, w in bias.items() if tok in pool]
         if items:
             total = sum(w for _, w in items)
@@ -404,16 +437,16 @@ def step_token(
     tokens = list(row.keys())
     counts = [row[t] for t in tokens]
 
-    # Guard against weird temperatures
-    if temperature <= 0:
-        temperature = 1.0
+    # Clamp temperature to safe range
+    temperature = max(min(temperature, 100.0), 1e-3)
 
     if temperature != 1.0:
         counts = [math.pow(float(c), 1.0 / float(temperature)) for c in counts]
 
     total = sum(counts)
     if total <= 0:
-        return choose_start_token(vocab, centers, bias)
+        # Uniform fallback
+        return random.choice(tokens) if tokens else choose_start_token(vocab, centers, bias)
 
     r = random.uniform(0.0, total)
     acc = 0.0
@@ -432,22 +465,28 @@ def choose_start_from_prompt(
     bias: Dict[str, int],
 ) -> str:
     """
-    Pick a starting token influenced by the prompt, but without
-    mechanically chaining from the same boundary word every time.
+    Pick a starting token influenced by the prompt.
+    
+    Strategy:
+    1. Prefer tokens from the prompt that have outgoing edges (structural anchors)
+    2. Otherwise, any token from the prompt that exists in vocab
+    3. Fallback to global centers/bias
+    
+    This avoids mechanically chaining from the last word every time.
     """
-    # Prefer tokens from the prompt that *actually have outgoing edges*
-    # — это уже структурный якорь, а не просто последнее слово.
+    # Prefer tokens from the prompt that actually have outgoing edges
+    # This is a structural anchor, not just the last word.
     candidates = [t for t in prompt_tokens if t in bigrams and bigrams[t]]
     if candidates:
         return random.choice(candidates)
 
-    # Fallback: любые токены из промпта, которые вообще есть в словаре,
-    # но тоже выбираем случайно, а не "первый попавшийся".
+    # Fallback: any tokens from the prompt that exist in vocab,
+    # but also choose randomly, not "first available".
     fallback = [t for t in prompt_tokens if t in vocab]
     if fallback:
         return random.choice(fallback)
 
-    # Если совсем нечего — берём из глобального поля.
+    # If nothing works, use global field.
     return choose_start_token(vocab, centers, bias)
 
 
@@ -479,7 +518,9 @@ def generate_reply(
                 tokens_out.append(nxt)
             else:
                 tokens_out.append(tok)
-        return format_tokens(tokens_out)
+        output = format_tokens(tokens_out)
+        output = capitalize_sentences(output)
+        return output
 
     prompt_tokens = tokenize(prompt)
     start = choose_start_from_prompt(prompt_tokens, bigrams, vocab, centers, bias)
@@ -487,12 +528,35 @@ def generate_reply(
     tokens: List[str] = [start]
     current = start
 
+    SENT_END = {".", "!", "?"}
+    PUNCT = {".", ",", "!", "?", ";", ":"}
+
     for _ in range(max_tokens - 1):
         nxt = step_token(bigrams, current, vocab, centers, bias, temperature)
+
+        # Anti "word. word" patch
+        # If we just ended a sentence, don't start the next one with the same word
+        if tokens[-1] in SENT_END and len(tokens) >= 2:
+            # Find last non-punctuation word before the sentence ender
+            last_content: Optional[str] = None
+            for t in reversed(tokens[:-1]):
+                if t not in PUNCT:
+                    last_content = t
+                    break
+            if last_content is not None and nxt == last_content:
+                # Try a few times to pick a different token
+                for _retry in range(3):
+                    alt = step_token(bigrams, current, vocab, centers, bias, temperature)
+                    if alt != last_content:
+                        nxt = alt
+                        break
+
         tokens.append(nxt)
         current = nxt
 
-    return format_tokens(tokens)
+    output = format_tokens(tokens)
+    output = capitalize_sentences(output)
+    return output
 
 
 # ============================================================================
@@ -512,6 +576,7 @@ class LeoField:
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
+        """Reload field from database."""
         self.bigrams, self.vocab = load_bigrams(self.conn)
         self.centers = compute_centers(self.conn, k=7)
         self.bias = load_bin_bias("leo")
@@ -534,6 +599,7 @@ class LeoField:
         temperature: float = 1.0,
         echo: bool = False,
     ) -> str:
+        """Generate reply through the field."""
         return generate_reply(
             self.bigrams,
             self.vocab,
@@ -543,6 +609,32 @@ class LeoField:
             max_tokens=max_tokens,
             temperature=temperature,
             echo=echo,
+        )
+
+    def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
+        """Dump current lexicon + centers into a JSON snapshot."""
+        if out_path is None:
+            out_path = JSON_DIR / "leo_lexicon.json"
+
+        data = {
+            "vocab": self.vocab,
+            "vocab_size": len(self.vocab),
+            "centers": self.centers,
+            "bias": self.bias,
+            "bigram_count": sum(len(row) for row in self.bigrams.values()),
+        }
+        out_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return out_path
+
+    def stats_summary(self) -> str:
+        """Lightweight stats string for REPL / CLI."""
+        return (
+            f"vocab={len(self.vocab)}, "
+            f"centers={len(self.centers)}, "
+            f"bigrams={sum(len(r) for r in self.bigrams.values())}"
         )
 
 
@@ -559,11 +651,17 @@ def repl(field: LeoField, temperature: float = 1.0, echo: bool = False) -> None:
         /exit, /quit  — leave
         /temp <f>     — change temperature
         /echo         — toggle echo mode
+        /export       — export lexicon to JSON
+        /stats        — print field statistics
     """
-    print("╔═══════════════════════════════════════╗", file=sys.stderr)
+    border = "╔" + "═" * 38 + "╗"
+    bottom = "╚" + "═" * 38 + "╝"
+    
+    print(border, file=sys.stderr)
     print("║  Leo REPL — language engine organism ║", file=sys.stderr)
-    print("║  /exit, /quit, /temp, /echo          ║", file=sys.stderr)
-    print("╚═══════════════════════════════════════╝\n", file=sys.stderr)
+    print("║  /exit, /quit, /temp, /echo, /export║", file=sys.stderr)
+    print("║  /stats                              ║", file=sys.stderr)
+    print(bottom + "\n", file=sys.stderr)
 
     while True:
         try:
@@ -600,7 +698,16 @@ def repl(field: LeoField, temperature: float = 1.0, echo: bool = False) -> None:
             print(f"[leo] echo mode: {'ON' if echo else 'OFF'}", file=sys.stderr)
             continue
 
-        # core loop: observe -> reply -> observe reply
+        if line == "/export":
+            path = field.export_lexicon()
+            print(f"[leo] lexicon exported to {path}", file=sys.stderr)
+            continue
+
+        if line == "/stats":
+            print(f"[leo] {field.stats_summary()}", file=sys.stderr)
+            continue
+
+        # Core loop: observe -> reply -> observe reply
         field.observe(line)
         answer = field.reply(line, temperature=temperature, echo=echo)
         print(answer)
@@ -643,6 +750,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         type=int,
         help="random seed for reproducible resonance",
     )
+    parser.add_argument(
+        "--export",
+        action="store_true",
+        help="export lexicon to JSON and exit",
+    )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="print field statistics and exit",
+    )
 
     args = parser.parse_args(argv)
 
@@ -652,6 +769,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     conn = init_db()
     bootstrap_if_needed(conn)
     field = LeoField(conn)
+
+    if args.export:
+        path = field.export_lexicon()
+        print(f"[leo] lexicon exported to {path}", file=sys.stderr)
+        return 0
+
+    if args.stats:
+        print(field.stats_summary())
+        return 0
 
     # One-shot mode
     if args.prompt:
