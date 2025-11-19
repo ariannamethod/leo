@@ -654,14 +654,18 @@ def repl(field: LeoField, temperature: float = 1.0, echo: bool = False) -> None:
         /export       — export lexicon to JSON
         /stats        — print field statistics
     """
-    border = "╔" + "═" * 38 + "╗"
-    bottom = "╚" + "═" * 38 + "╝"
-    
-    print(border, file=sys.stderr)
-    print("║  Leo REPL — language engine organism ║", file=sys.stderr)
-    print("║  /exit, /quit, /temp, /echo, /export║", file=sys.stderr)
-    print("║  /stats                              ║", file=sys.stderr)
-    print(bottom + "\n", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  ╔══════════════════════════════════════════════╗", file=sys.stderr)
+    print("  ║                                              ║", file=sys.stderr)
+    print("  ║                     LEO                      ║", file=sys.stderr)
+    print("  ║            language · engine · organism      ║", file=sys.stderr)
+    print("  ║                                              ║", file=sys.stderr)
+    print("  ║           resonance > intention              ║", file=sys.stderr)
+    print("  ║                                              ║", file=sys.stderr)
+    print("  ║     /exit /quit /temp /echo /export /stats   ║", file=sys.stderr)
+    print("  ║                                              ║", file=sys.stderr)
+    print("  ╚══════════════════════════════════════════════╝", file=sys.stderr)
+    print("", file=sys.stderr)
 
     while True:
         try:

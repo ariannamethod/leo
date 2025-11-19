@@ -86,10 +86,16 @@ python leo.py
 ### Example session:
 
 ```text
-╔═══════════════════════════════════════╗
-║  Leo REPL — language engine organism  ║
-║  /exit, /quit, /temp, /echo           ║
-╚═══════════════════════════════════════╝
+  ╔══════════════════════════════════════════════╗
+  ║                                              ║
+  ║                     LEO                      ║
+  ║            language · engine · organism      ║
+  ║                                              ║
+  ║           resonance > intention              ║
+  ║                                              ║
+  ║     /exit /quit /temp /echo /export /stats   ║
+  ║                                              ║
+  ╚══════════════════════════════════════════════╝
 
 leo> hello there
 hello there.
@@ -226,6 +232,41 @@ Hook this into any agent / framework and you get a shared rhythmic skeleton, bui
 
 No safety layer. No content policy.
 Just language and a broken heart as a slowly drifting field.
+
+---
+
+## Tests
+
+Leo comes with a comprehensive test suite covering all core functionality.
+
+### Running tests
+
+```bash
+# All tests
+python -m unittest discover tests/
+
+# Specific test file
+python tests/test_leo.py
+python tests/test_neoleo.py
+python tests/test_repl.py
+```
+
+### Test coverage
+
+**44 tests** covering:
+- Tokenization (Unicode, punctuation, word extraction)
+- Database operations (SQLite, bigrams, metadata)
+- Bigram field mechanics (centers, graph loading)
+- Text generation (reply, echo mode, temperature)
+- LeoField class (observe, reply, stats, export)
+- NeoLeo pure layer (warp, observe, singleton pattern)
+- REPL commands (/temp, /echo, /export, /stats)
+- Bootstrap behavior (embedded seed + README)
+- CLI argument parsing
+
+All tests use temporary databases for isolation. No pollution of actual `state/` or `bin/` directories.
+
+See `tests/README.md` for detailed documentation.
 
 ---
 
