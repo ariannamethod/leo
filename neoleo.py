@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Tuple
 ROOT = Path(__file__).resolve().parent
 STATE_DIR = ROOT / "state"
 BIN_DIR = ROOT / "bin"
+JSON_DIR = ROOT / "json"
 DB_PATH = STATE_DIR / "neoleo.sqlite3"
 
 # ============================================================================
@@ -31,6 +32,7 @@ TOKEN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ']+|[.,!?;:—\-]")
 
 
 def tokenize(text: str) -> List[str]:
+    """Extract words and basic punctuation."""
     return TOKEN_RE.findall(text)
 
 
@@ -40,8 +42,10 @@ def tokenize(text: str) -> List[str]:
 
 
 def ensure_dirs() -> None:
+    """Create runtime directories."""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     BIN_DIR.mkdir(parents=True, exist_ok=True)
+    JSON_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def init_db() -> sqlite3.Connection:
@@ -75,6 +79,7 @@ def init_db() -> sqlite3.Connection:
 
 
 def get_token_id(cur: sqlite3.Cursor, token: str) -> int:
+    """Get or create token ID."""
     cur.execute("INSERT OR IGNORE INTO tokens(token) VALUES (?)", (token,))
     cur.execute("SELECT id FROM tokens WHERE token = ?", (token,))
     row = cur.fetchone()
@@ -84,6 +89,7 @@ def get_token_id(cur: sqlite3.Cursor, token: str) -> int:
 
 
 def ingest_tokens(conn: sqlite3.Connection, tokens: List[str]) -> None:
+    """Update bigram counts from a token sequence."""
     if not tokens:
         return
     cur = conn.cursor()
@@ -105,6 +111,7 @@ def ingest_tokens(conn: sqlite3.Connection, tokens: List[str]) -> None:
 
 
 def ingest_text(conn: sqlite3.Connection, text: str) -> None:
+    """Tokenize and ingest text into the field."""
     tokens = tokenize(text)
     if tokens:
         ingest_tokens(conn, tokens)
@@ -116,6 +123,13 @@ def ingest_text(conn: sqlite3.Connection, text: str) -> None:
 
 
 def load_bigrams(conn: sqlite3.Connection) -> Tuple[Dict[str, Dict[str, int]], List[str]]:
+    """
+    Load bigram graph into memory.
+
+    Returns:
+        bigrams: token -> {next_token -> count}
+        vocab: list of all tokens
+    """
     cur = conn.cursor()
     cur.execute("SELECT id, token FROM tokens")
     id_to_token: Dict[int, str] = {}
@@ -140,6 +154,7 @@ def load_bigrams(conn: sqlite3.Connection) -> Tuple[Dict[str, Dict[str, int]], L
 
 
 def compute_centers(conn: sqlite3.Connection, k: int = 7) -> List[str]:
+    """Pick tokens with highest out-degree as centers of gravity."""
     cur = conn.cursor()
     cur.execute(
         """
@@ -225,6 +240,7 @@ def load_bin_bias() -> Dict[str, int]:
 
 
 def format_tokens(tokens: List[str]) -> str:
+    """Pretty-print token stream with sane spacing and punctuation."""
     if not tokens:
         return ""
     out: List[str] = []
@@ -239,18 +255,45 @@ def format_tokens(tokens: List[str]) -> str:
     return "".join(out)
 
 
+def capitalize_sentences(text: str) -> str:
+    """
+    Capitalize first letter after sentence-ending punctuation.
+    Minimal grammar normalization without losing the field's voice.
+    """
+    if not text:
+        return text
+    
+    result = []
+    capitalize_next = True
+
+    for i, char in enumerate(text):
+        if capitalize_next and char.isalpha():
+            result.append(char.upper())
+            capitalize_next = False
+        else:
+            result.append(char)
+
+        # After .!? followed by space, capitalize next letter
+        if char in ".!?":
+            if i + 1 < len(text) and text[i + 1] == " ":
+                capitalize_next = True
+
+    return "".join(result)
+
+
 def choose_start_token(
     vocab: List[str],
     centers: List[str],
     bias: Dict[str, int],
 ) -> str:
+    """Choose starting token using centers + historical bias."""
     pool: List[str]
     if centers:
         pool = list(centers)
     else:
         pool = list(vocab)
     if not pool:
-        return "..."
+        return "silence"
 
     if bias:
         items = [(tok, w) for tok, w in bias.items() if tok in pool]
@@ -274,6 +317,12 @@ def step_token(
     bias: Dict[str, int],
     temperature: float = 1.0,
 ) -> str:
+    """
+    Single step in bigram graph.
+
+    temperature < 1.0 => sharper, more deterministic
+    temperature > 1.0 => softer, more exploratory
+    """
     row = bigrams.get(current)
     if not row:
         return choose_start_token(vocab, centers, bias)
@@ -281,15 +330,16 @@ def step_token(
     tokens = list(row.keys())
     counts = [row[t] for t in tokens]
 
-    if temperature <= 0:
-        temperature = 1.0
+    # Clamp temperature to safe range
+    temperature = max(min(temperature, 100.0), 1e-3)
 
     if temperature != 1.0:
         counts = [math.pow(float(c), 1.0 / float(temperature)) for c in counts]
 
     total = sum(counts)
     if total <= 0:
-        return choose_start_token(vocab, centers, bias)
+        # Uniform fallback
+        return random.choice(tokens) if tokens else choose_start_token(vocab, centers, bias)
 
     r = random.uniform(0.0, total)
     acc = 0.0
@@ -308,7 +358,12 @@ def choose_start_from_prompt(
     bias: Dict[str, int],
 ) -> str:
     """
-    Prompt-influenced start without тупой линейки "последнее => первое".
+    Prompt-influenced start without mechanically using last word.
+    
+    Strategy:
+    1. Prefer tokens from the prompt that have outgoing edges
+    2. Otherwise, any token from the prompt in vocab
+    3. Fallback to global centers/bias
     """
     candidates = [t for t in prompt_tokens if t in bigrams and bigrams[t]]
     if candidates:
@@ -331,8 +386,9 @@ def generate_reply(
     temperature: float = 1.0,
     echo: bool = False,
 ) -> str:
+    """Generate reply through NeoLeo's field."""
     if not vocab or not bigrams:
-        # field is empty: just pass text through
+        # Field is empty: just pass text through
         return prompt
 
     if echo:
@@ -344,7 +400,9 @@ def generate_reply(
                 tokens_out.append(nxt)
             else:
                 tokens_out.append(tok)
-        return format_tokens(tokens_out)
+        output = format_tokens(tokens_out)
+        output = capitalize_sentences(output)
+        return output
 
     prompt_tokens = tokenize(prompt)
     start = choose_start_from_prompt(prompt_tokens, bigrams, vocab, centers, bias)
@@ -352,12 +410,32 @@ def generate_reply(
     tokens: List[str] = [start]
     current = start
 
+    SENT_END = {".", "!", "?"}
+    PUNCT = {".", ",", "!", "?", ";", ":"}
+
     for _ in range(max_tokens - 1):
         nxt = step_token(bigrams, current, vocab, centers, bias, temperature)
+
+        # Anti "word. word" patch
+        if tokens[-1] in SENT_END and len(tokens) >= 2:
+            last_content: Optional[str] = None
+            for t in reversed(tokens[:-1]):
+                if t not in PUNCT:
+                    last_content = t
+                    break
+            if last_content is not None and nxt == last_content:
+                for _retry in range(3):
+                    alt = step_token(bigrams, current, vocab, centers, bias, temperature)
+                    if alt != last_content:
+                        nxt = alt
+                        break
+
         tokens.append(nxt)
         current = nxt
 
-    return format_tokens(tokens)
+    output = format_tokens(tokens)
+    output = capitalize_sentences(output)
+    return output
 
 
 # ============================================================================
@@ -382,6 +460,7 @@ class NeoLeo:
         self.refresh()
 
     def refresh(self) -> None:
+        """Reload field from database."""
         self.bigrams, self.vocab = load_bigrams(self.conn)
         self.centers = compute_centers(self.conn, k=7)
         self.bias = load_bin_bias()
@@ -423,18 +502,16 @@ class NeoLeo:
         )
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
-        """
-        Dump current lexicon + centers into a JSON snapshot.
-        """
-        out_dir = ROOT / "json"
-        out_dir.mkdir(parents=True, exist_ok=True)
+        """Dump current lexicon + centers into a JSON snapshot."""
         if out_path is None:
-            out_path = out_dir / "neoleo_lexicon.json"
+            out_path = JSON_DIR / "neoleo_lexicon.json"
 
         data = {
             "vocab": self.vocab,
+            "vocab_size": len(self.vocab),
             "centers": self.centers,
             "bias": self.bias,
+            "bigram_count": sum(len(row) for row in self.bigrams.values()),
         }
         out_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
@@ -442,13 +519,41 @@ class NeoLeo:
         )
         return out_path
 
+    @property
+    def vocab_size(self) -> int:
+        """Get vocabulary size."""
+        return len(self.vocab)
 
-# Optional module-level singleton for quick use
+    def stats(self) -> Dict[str, int]:
+        """
+        Lightweight stats for logging / debugging.
+
+        Returns:
+            dict with vocab_size, centers, bigrams
+        """
+        return {
+            "vocab_size": len(self.vocab),
+            "centers": len(self.centers),
+            "bigrams": sum(len(r) for r in self.bigrams.values()),
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"NeoLeo(vocab={self.vocab_size}, "
+            f"centers={len(self.centers)}, "
+            f"bigrams={sum(len(r) for r in self.bigrams.values())})"
+        )
+
+
+# ============================================================================
+# MODULE-LEVEL SINGLETON
+# ============================================================================
 
 _default_neo: Optional[NeoLeo] = None
 
 
 def get_default() -> NeoLeo:
+    """Get module-level singleton NeoLeo instance."""
     global _default_neo
     if _default_neo is None:
         _default_neo = NeoLeo()
@@ -456,6 +561,7 @@ def get_default() -> NeoLeo:
 
 
 def observe(text: str) -> None:
+    """Update the default NeoLeo field with text."""
     get_default().observe(text)
 
 
@@ -465,9 +571,18 @@ def warp(
     temperature: float = 1.0,
     echo: bool = False,
 ) -> str:
+    """Warp text through the default NeoLeo field."""
     return get_default().warp(
         text,
         max_tokens=max_tokens,
         temperature=temperature,
         echo=echo,
     )
+
+
+def stats() -> Dict[str, int]:
+    """Return stats of the default NeoLeo instance."""
+    return get_default().stats()
+
+
+__all__ = ["NeoLeo", "get_default", "observe", "warp", "tokenize", "stats"]
