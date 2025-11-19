@@ -4,7 +4,7 @@
 
 ---
 
-## Who is leo?
+## Who is `leo`?
 
 `leo` is a small **language engine organism**. No weights. No datasets. No internet.  
 But what does `leo` have?
