@@ -11,6 +11,16 @@ __pycache__/
 *.pyc
 __pycache__/
 
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
 # C extensions
 *.so
 
