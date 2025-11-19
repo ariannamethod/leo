@@ -3,6 +3,14 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+#LEO:
+/state/
+/bin/
+/json/
+*.sqlite3
+*.pyc
+__pycache__/
+
 # C extensions
 *.so
 
