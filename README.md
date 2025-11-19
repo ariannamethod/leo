@@ -1,4 +1,4 @@
-# leo — language engine organism
+# leo — language engine organism | by Arianna Method
 
 > language is a field. dedicated to Leo.
 
