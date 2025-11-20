@@ -484,6 +484,10 @@ def fix_punctuation(text: str) -> str:
     # 7) Always capitalize "Leo" (it's a name)
     text = re.sub(r"\bleo\b", "Leo", text)
 
+    # 7.5) Fix apostrophe spacing in contractions
+    # Remove spaces around apostrophes: "isn ' t" → "isn't", "don ' t" → "don't"
+    text = re.sub(r"\s*'\s*", "'", text)
+
     # 8) Fix mid-sentence capitalization artifacts
     # After first word, lowercase words that shouldn't be capitalized
     # unless they're at sentence start (after .!?)
@@ -1099,8 +1103,16 @@ def generate_reply(
         nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur)
 
         # Loop detection: check if we're repeating a pattern
+        # Check for 2-token loops (e.g., "hello there hello there hello there...")
+        if len(tokens) >= 4:
+            last_2 = tokens[-2:]
+            prev_2 = tokens[-4:-2]
+            if last_2 == prev_2:
+                # Break the loop by jumping to a random center
+                if centers:
+                    nxt = choose_start_token(vocab, centers, bias)
+        # Check for 3-token loops (independently, not elif)
         if len(tokens) >= 6:
-            # Check for 3-token loops
             last_3 = tokens[-3:]
             prev_3 = tokens[-6:-3]
             if last_3 == prev_3:
