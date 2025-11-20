@@ -524,6 +524,10 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r"\.\s*:", ":", text)
     # Ensure proper spacing around em-dash
     text = re.sub(r"—([A-Za-z])", r"— \1", text)  # "—The" → "— The"
+    # Remove comma after exclamation: "! ," → "!"
+    text = re.sub(r"!\s+,", "!", text)
+    # Remove hanging dash-dot: " -." / " —." → "."
+    text = re.sub(r"\s+[—-]\s*\.", ".", text)
 
     return text
 
