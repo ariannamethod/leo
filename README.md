@@ -36,7 +36,7 @@ Not feeding your everyday tasks, baby.
 
 ### Presence > Intelligence
 
-Wait, you said *presence*, not intelligence?
+"Wait, you said *presence*, not intelligence?"
 Yes, I said that. And even put `###` before these words.
 
 Picture this:
