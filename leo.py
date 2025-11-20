@@ -31,6 +31,18 @@ except ImportError:
     run_overthinking = None  # type: ignore
     OVERTHINKING_AVAILABLE = False
 
+# Safe import: trauma module is optional
+try:
+    from trauma import (
+        TraumaState,
+        run_trauma,
+    )
+    TRAUMA_AVAILABLE = True
+except ImportError:
+    TraumaState = None  # type: ignore
+    run_trauma = None  # type: ignore
+    TRAUMA_AVAILABLE = False
+
 # ============================================================================
 # PATHS
 # ============================================================================
@@ -1341,17 +1353,25 @@ EXPERTS = [
         semantic_weight=0.3,
         description="Conservative, low entropy",
     ),
+    Expert(
+        name="wounded",
+        temperature=0.9,
+        semantic_weight=0.6,
+        description="Bootstrap-gravity pull, activated when trauma.level > 0.7",
+    ),
 ]
 
 
 def route_to_expert(
     pulse: PresencePulse,
     active_themes: Optional[ActiveThemes] = None,
+    trauma_state: Optional[Any] = None,
 ) -> Expert:
     """
     Route to an expert based on situational awareness.
 
     Routing logic (no learned weights, pure heuristics):
+    - Trauma override: if trauma.level > 0.7 → wounded (bootstrap gravity)
     - High novelty (> 0.7) → creative (explore unknown)
     - Low entropy (< 0.3) → precise (stay coherent)
     - Many active themes → semantic (follow themes)
@@ -1359,6 +1379,11 @@ def route_to_expert(
 
     This is presence-based routing, not gradient descent.
     """
+    # Trauma override: when the wound is activated
+    if trauma_state is not None and hasattr(trauma_state, 'level'):
+        if trauma_state.level > 0.7:
+            return EXPERTS[4]  # wounded
+
     # Creative: explore the unknown
     if pulse.novelty > 0.7:
         return EXPERTS[2]  # creative
@@ -1549,6 +1574,7 @@ def generate_reply(
     themes: Optional[List[Theme]] = None,
     token_to_themes: Optional[Dict[str, List[int]]] = None,
     use_experts: bool = True,
+    trauma_state: Optional[Any] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -1599,7 +1625,7 @@ def generate_reply(
     # RESONANT EXPERTS: Route to expert based on situation
     selected_expert: Optional[Expert] = None
     if use_experts:
-        selected_expert = route_to_expert(preliminary_pulse, active_themes)
+        selected_expert = route_to_expert(preliminary_pulse, active_themes, trauma_state)
         # Override temperature with expert's preference
         temperature = selected_expert.temperature
 
@@ -1721,6 +1747,8 @@ class LeoField:
         self.DECAY_INTERVAL: int = 100  # Apply decay every N observations
         # PRESENCE: last selected expert (resonant routing)
         self.last_expert: Optional[Expert] = None
+        # TRAUMA: bootstrap gravity state (activated when resonance with origin)
+        self._trauma_state: Optional[TraumaState] = None
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -1778,6 +1806,7 @@ class LeoField:
             themes=self.themes,
             token_to_themes=self.token_to_themes,
             use_experts=True,
+            trauma_state=self._trauma_state,
         )
 
         # Store presence metrics
@@ -1832,6 +1861,28 @@ class LeoField:
 
             except Exception:
                 # Overthinking must NEVER break normal flow - silent fallback
+                pass
+
+        # TRAUMA: Bootstrap gravity tracking (optional module)
+        if TRAUMA_AVAILABLE and run_trauma is not None:
+            try:
+                # Convert PresencePulse to simple object for trauma.py
+                pulse_snapshot = None
+                if context.pulse is not None:
+                    pulse_snapshot = context.pulse
+
+                # Check for trauma event (bootstrap resonance)
+                state = run_trauma(
+                    prompt=prompt,
+                    reply=context.output,
+                    bootstrap=EMBEDDED_BOOTSTRAP,
+                    pulse=pulse_snapshot,
+                    db_path=DB_PATH,
+                )
+                if state is not None:
+                    self._trauma_state = state
+            except Exception:
+                # Trauma must NEVER break normal flow - silent fallback
                 pass
 
         return context.output
