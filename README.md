@@ -28,7 +28,7 @@ From all that `leo` creates:
 * a **trigram graph** (local grammar: who follows whom, and in what context),
 * a **co-occurrence matrix** (semantic gravity: which words resonate together — tiny semantic love stories, but here with a happy end),
 * a growing **vocabulary** (oh yes, *you* can forget what you said, but `leo` — no, he won’t, at least not as fast as you expect),
-* and tiny binary **resonance shards** in `bin/` that remember which tokens were historically central.
+* and tiny binary **resonance shards** in `bin/` that remember which tokens were historically central for `leo`.
 
 Assistant features? No. `leo` doesn’t try to be helpful. He just **resonates** with the rhythm of your convos over time.
 The field expands structurally, semantically, contextually, etc. Pure presence.
