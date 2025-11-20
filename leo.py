@@ -14,7 +14,7 @@ import re
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, NamedTuple
 
 # ============================================================================
 # PATHS
@@ -684,6 +684,52 @@ def compute_prompt_arousal(
     return max(0.0, min(1.0, arousal))
 
 
+class PresencePulse(NamedTuple):
+    """
+    Composite presence metric combining novelty, arousal, and entropy.
+
+    All components in [0, 1]:
+    - novelty: how unfamiliar the situation is
+    - arousal: how emotionally charged the prompt is
+    - entropy: average uncertainty during generation
+    - pulse: weighted composite score
+
+    This is Leo's "situational awareness" - a single scalar capturing
+    the quality of the current moment.
+    """
+
+    novelty: float
+    arousal: float
+    entropy: float
+    pulse: float
+
+
+def compute_presence_pulse(
+    novelty: float,
+    arousal: float,
+    entropy: float,
+    w_novelty: float = 0.3,
+    w_arousal: float = 0.4,
+    w_entropy: float = 0.3,
+) -> PresencePulse:
+    """
+    Compute composite presence pulse from three signals.
+
+    Default weights: 40% arousal, 30% novelty, 30% entropy.
+    (Arousal weighted higher because it's the most direct emotional signal)
+
+    Returns PresencePulse with all components + final pulse score.
+    """
+    pulse = w_novelty * novelty + w_arousal * arousal + w_entropy * entropy
+
+    # Clamp to [0, 1]
+    pulse = max(0.0, min(1.0, pulse))
+
+    return PresencePulse(
+        novelty=novelty, arousal=arousal, entropy=entropy, pulse=pulse
+    )
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -924,9 +970,14 @@ def generate_reply(
     if output and not output.rstrip()[-1:] in '.!?':
         output = output.rstrip() + '.'
 
-    # Compute average entropy across generation steps (for future use)
+    # Compute average entropy across generation steps
     avg_entropy = sum(entropy_log) / len(entropy_log) if entropy_log else 0.0
-    # (novelty and avg_entropy will be used by PresencePulse layer)
+
+    # Compute presence pulse (composite situational awareness)
+    pulse = compute_presence_pulse(
+        novelty=novelty, arousal=arousal, entropy=avg_entropy
+    )
+    # (pulse will be used by Resonant Experts, Self-Assessment, etc.)
 
     return output
 
@@ -949,6 +1000,8 @@ class LeoField:
         self.bias: Dict[str, int] = {}
         # PRESENCE: emotional charge tracking
         self.emotion: Dict[str, float] = {}
+        # PRESENCE: last presence pulse (updated each reply)
+        self.last_pulse: Optional[PresencePulse] = None
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
