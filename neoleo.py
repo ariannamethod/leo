@@ -463,6 +463,8 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r",\.", ".", text)  # ",." → "."
     text = re.sub(r",;", ";", text)   # ",;" → ";"
     text = re.sub(r"\.,", ".", text)  # ".," → "."
+    # Collapse spaced duplicates: ". ." → ".", "? ?" → "?", "! !" → "!"
+    text = re.sub(r"([.!?])\s+\1", r"\1", text)
 
     # 4) Normalize weird dashes and em-dashes
     text = re.sub(r"\s*—\s*—\s*—\s*", " — ", text)  # " — — — " → " — "
@@ -488,6 +490,12 @@ def fix_punctuation(text: str) -> str:
     # Remove spaces around apostrophes: "isn ' t" → "isn't", "don ' t" → "don't"
     text = re.sub(r"\s*'\s*", "'", text)
 
+    # 7.6) Restore missing apostrophes in common contractions
+    # Patterns like "isn t" → "isn't", "doesn t" → "doesn't"
+    text = re.sub(r"\b(isn|doesn|don|can|won|wouldn|couldn|shouldn|hasn|haven|hadn|aren|weren|wasn)\s+t\b", r"\1't", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(it|that|what|there)\s+s\b", r"\1's", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(I|you|we|they)\s+(ll|ve|re|d)\b", r"\1'\2", text, flags=re.IGNORECASE)
+
     # 8) Fix mid-sentence capitalization artifacts
     # After first word, lowercase words that shouldn't be capitalized
     # unless they're at sentence start (after .!?)
@@ -508,8 +516,18 @@ def fix_punctuation(text: str) -> str:
             fixed.append(word)
         text = " ".join(fixed)
 
-    # 9) Clean up double spaces
+    # 9) Clean up double spaces and final polish
     text = re.sub(r"\s{2,}", " ", text).strip()
+
+    # 10) Final punctuation polish (GPT-5.1 suggestion)
+    # Fix bad combinations like ". :" → ":"
+    text = re.sub(r"\.\s*:", ":", text)
+    # Ensure proper spacing around em-dash
+    text = re.sub(r"—([A-Za-z])", r"— \1", text)  # "—The" → "— The"
+    # Remove comma after exclamation: "! ," → "!"
+    text = re.sub(r"!\s+,", "!", text)
+    # Remove hanging dash-dot: " -." / " —." → "."
+    text = re.sub(r"\s+[—-]\s*\.", ".", text)
 
     return text
 

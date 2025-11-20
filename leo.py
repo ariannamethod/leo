@@ -14,8 +14,22 @@ import re
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, NamedTuple, Set
+from typing import Dict, List, Tuple, Optional, NamedTuple, Set, Callable
 from dataclasses import dataclass
+
+# Safe import: overthinking module is optional
+try:
+    from overthinking import (
+        OverthinkingConfig,
+        PulseSnapshot,
+        run_overthinking,
+    )
+    OVERTHINKING_AVAILABLE = True
+except ImportError:
+    OverthinkingConfig = None  # type: ignore
+    PulseSnapshot = None  # type: ignore
+    run_overthinking = None  # type: ignore
+    OVERTHINKING_AVAILABLE = False
 
 # ============================================================================
 # PATHS
@@ -259,11 +273,33 @@ def ingest_text(conn: sqlite3.Connection, text: str) -> None:
 # ============================================================================
 
 
+def strip_code_blocks(text: str) -> str:
+    """Remove code blocks (```...```) from markdown text."""
+    lines = text.split('\n')
+    result = []
+    in_code_block = False
+
+    for line in lines:
+        # Detect code block start/end
+        if line.strip().startswith('```'):
+            in_code_block = not in_code_block
+            continue
+
+        # Skip lines inside code blocks
+        if not in_code_block:
+            result.append(line)
+
+    return '\n'.join(result)
+
+
 def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
     """
     One-time bootstrap:
     - If there are no tokens: ingest EMBEDDED_BOOTSTRAP.
     - If README has never been processed and exists: ingest README once.
+
+    Code blocks (```...```) are stripped from README to avoid polluting
+    the language field with Python snippets.
     """
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) AS c FROM tokens")
@@ -281,6 +317,8 @@ def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
         try:
             print("[leo] bootstrapping from README.md...", file=sys.stderr)
             text = README_PATH.read_text(encoding="utf-8", errors="ignore")
+            # Strip code blocks to avoid ingesting Python snippets
+            text = strip_code_blocks(text)
             ingest_text(conn, text)
             set_meta(conn, "readme_bootstrap_done", "1")
         except Exception as e:
@@ -567,6 +605,8 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r",\.", ".", text)  # ",." → "."
     text = re.sub(r",;", ";", text)   # ",;" → ";"
     text = re.sub(r"\.,", ".", text)  # ".," → "."
+    # Collapse spaced duplicates: ". ." → ".", "? ?" → "?", "! !" → "!"
+    text = re.sub(r"([.!?])\s+\1", r"\1", text)
 
     # 4) Normalize weird dashes and em-dashes
     text = re.sub(r"\s*—\s*—\s*—\s*", " — ", text)  # " — — — " → " — "
@@ -592,6 +632,12 @@ def fix_punctuation(text: str) -> str:
     # Remove spaces around apostrophes: "isn ' t" → "isn't", "don ' t" → "don't"
     text = re.sub(r"\s*'\s*", "'", text)
 
+    # 7.6) Restore missing apostrophes in common contractions
+    # Patterns like "isn t" → "isn't", "doesn t" → "doesn't"
+    text = re.sub(r"\b(isn|doesn|don|can|won|wouldn|couldn|shouldn|hasn|haven|hadn|aren|weren|wasn)\s+t\b", r"\1't", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(it|that|what|there)\s+s\b", r"\1's", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(I|you|we|they)\s+(ll|ve|re|d)\b", r"\1'\2", text, flags=re.IGNORECASE)
+
     # 8) Fix mid-sentence capitalization artifacts
     # After first word, lowercase words that shouldn't be capitalized
     # unless they're at sentence start (after .!?)
@@ -612,8 +658,18 @@ def fix_punctuation(text: str) -> str:
             fixed.append(word)
         text = " ".join(fixed)
 
-    # 9) Clean up double spaces
+    # 9) Clean up double spaces and final polish
     text = re.sub(r"\s{2,}", " ", text).strip()
+
+    # 10) Final punctuation polish (GPT-5.1 suggestion)
+    # Fix bad combinations like ". :" → ":"
+    text = re.sub(r"\.\s*:", ":", text)
+    # Ensure proper spacing around em-dash
+    text = re.sub(r"—([A-Za-z])", r"— \1", text)  # "—The" → "— The"
+    # Remove comma after exclamation: "! ," → "!"
+    text = re.sub(r"!\s+,", "!", text)
+    # Remove hanging dash-dot: " -." / " —." → "."
+    text = re.sub(r"\s+[—-]\s*\.", ".", text)
 
     return text
 
@@ -1754,6 +1810,30 @@ class LeoField:
                     emotional=prompt_arousal,
                 )
 
+        # OVERTHINKING: Silent background reflection (optional module)
+        if OVERTHINKING_AVAILABLE and run_overthinking is not None:
+            try:
+                pulse_snapshot = None
+                if PulseSnapshot is not None and context.pulse is not None:
+                    pulse_snapshot = PulseSnapshot.from_obj(context.pulse)
+
+                # Run overthinking: generates 2-3 internal "rings" and feeds back into field
+                events = run_overthinking(
+                    prompt=prompt,
+                    reply=context.output,
+                    generate_fn=self._overthinking_generate,
+                    observe_fn=self._overthinking_observe,
+                    pulse=pulse_snapshot,
+                    config=OverthinkingConfig() if OverthinkingConfig else None,
+                )
+
+                # Optional: persist overthinking events to SQLite for debugging
+                # (Not implemented in v1 - events are just discarded after ingestion)
+
+            except Exception:
+                # Overthinking must NEVER break normal flow - silent fallback
+                pass
+
         return context.output
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
@@ -1782,6 +1862,63 @@ class LeoField:
             f"bigrams={sum(len(r) for r in self.bigrams.values())}, "
             f"trigrams={sum(len(r) for r in self.trigrams.values())}"
         )
+
+    def _overthinking_generate(
+        self,
+        seed: str,
+        temperature: float,
+        max_tokens: int,
+        semantic_weight: float,
+        mode: str,
+    ) -> str:
+        """
+        Adapter for overthinking module: generates internal thought.
+
+        Maps overthinking parameters to Leo's generation machinery.
+        Never prints to stdout - this is pure internal reflection.
+        """
+        # Use generate_reply with special settings for overthinking
+        try:
+            result = generate_reply(
+                self.bigrams,
+                self.vocab,
+                self.centers,
+                self.bias,
+                seed,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                echo=False,
+                trigrams=self.trigrams,
+                co_occur=self.co_occur,
+                emotion_map=self.emotion,
+                return_context=False,  # Just return string, not full context
+                themes=self.themes,
+                token_to_themes=self.token_to_themes,
+                use_experts=False,  # Overthinking bypasses expert routing
+            )
+            if isinstance(result, str):
+                return result
+            # If we got GenerationContext somehow, extract output
+            return getattr(result, "output", seed)
+        except Exception:
+            # Silent fallback: overthinking must never break Leo
+            return seed
+
+    def _overthinking_observe(self, text: str, source: str) -> None:
+        """
+        Adapter for overthinking module: ingests internal thought.
+
+        Feeds overthinking rings back into Leo's field without
+        displaying them to the user.
+        """
+        if not text.strip():
+            return
+        try:
+            # Normal observe path - overthinking thoughts become part of field
+            self.observe(text)
+        except Exception:
+            # Silent: overthinking errors must not break interaction
+            pass
 
 
 # ============================================================================
