@@ -1,0 +1,1117 @@
+# leo — presence extensions design
+
+This document describes how to extend `leo.py` **without breaking its minimalism**:
+- no weights
+- no datasets
+- no internet
+- only presence, structural memory and dynamic “islands of awareness”.
+
+We add:
+
+1. `ThemeLayer`: meta-layer over co-occurrence (constellations over islands).
+2. `Novelty / entropy` of the prompt (lightweight perplexity-like signal).
+3. `Emotional charge` (arousal) of text, based only on Leo’s own history.
+4. A reinterpreted **Mixture of Experts**: “resonant experts” as different
+   ways to weight grammar / semantics / themes / emotion for each request.
+
+All metrics are **internal only** — no numbers printed into the REPL unless explicitly asked.
+
+---
+
+## 0. Current architecture (reference)
+
+Already present in `leo.py`:
+
+- Tokenization via `TOKEN_RE`.
+- SQLite schema:
+  - `tokens(id, token)`
+  - `bigrams(src_id, dst_id, count)`
+  - `trigrams(first_id, second_id, third_id, count)`
+  - `co_occurrence(word_id, context_id, count)`
+  - `meta(key, value)`
+- Runtime structures (in `LeoField`):
+  - `self.bigrams: Dict[str, Dict[str, int]]`
+  - `self.trigrams: Dict[Tuple[str, str], Dict[str, int]]`
+  - `self.co_occur: Dict[str, Dict[str, int]]`
+  - `self.vocab: List[str]`
+  - `self.centers: List[str]`
+  - `self.bias: Dict[str, int]` (from BIN shards)
+- Generation:
+  - `step_token(...)`:
+    - trigrams if available, with **70% grammar + 30% co-occurrence**.
+    - fallback to bigrams.
+  - `generate_reply(...)`:
+    - echo mode (token-wise warp)
+    - normal mode (free walk with basic loop-breaking).
+- REPL + CLI already working.
+
+We *extend* this; we don’t rewrite from scratch.
+
+---
+
+## 1. ThemeLayer — “constellations” over co-occurrence
+
+### 1.1. Intuition
+
+- `co_occurrence` gives us **local islands** of awareness:
+  - e.g. `mother ↔ home ↔ hand ↔ warm`.
+- `ThemeLayer` groups these islands into **themes / constellations**:
+  - e.g. THEME_HOME, THEME_CODE, THEME_NIGHT.
+
+These themes are **built dynamically** from Leo’s own field:
+no hard-coded ontology, no external data.
+
+### 1.2. Data structures
+
+In `leo.py` (near `LeoField`), add:
+
+```python
+from dataclasses import dataclass, field
+from typing import Set, Any
+
+@dataclass
+class Theme:
+    id: int
+    centers: Set[str]           # core words of the theme
+    words: Set[str]             # theme vocabulary (centers + neighbors)
+    strength: float = 1.0       # global strength, can be used later
+
+Extend LeoField.__init__:
+
+class LeoField:
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn = conn
+        self.bigrams = {}
+        self.trigrams = {}
+        self.co_occur = {}
+        self.vocab = []
+        self.centers = []
+        self.bias = {}
+        # new:
+        self.themes: List[Theme] = []
+        self.token_to_themes: Dict[str, List[int]] = {}
+        self.refresh(initial_shard=True)
+
+1.3. Building themes from co-occurrence
+
+Add method to LeoField:
+
+    def build_themes(
+        self,
+        min_neighbors: int = 5,
+        min_total_cooccur: int = 10,
+        top_neighbors: int = 16,
+        merge_threshold: float = 0.4,
+    ) -> None:
+        """
+        Build thematic 'constellations' from co_occurrence.
+
+        - Pick candidate cores: tokens with enough neighbors and total co-occurrence.
+        - For each core, build its neighborhood (top N context words).
+        - Merge cores whose neighborhoods strongly overlap (Jaccard > merge_threshold).
+        - Populate self.themes and self.token_to_themes.
+        """
+        self.themes = []
+        self.token_to_themes = {}
+
+        # 1) collect candidates
+        candidates = []  # list of (core_token, neighbor_set)
+        for token, ctx in self.co_occur.items():
+            if len(ctx) < min_neighbors:
+                continue
+            total = sum(ctx.values())
+            if total < min_total_cooccur:
+                continue
+            # pick top neighbors by count
+            top = sorted(ctx.items(), key=lambda x: x[1], reverse=True)[:top_neighbors]
+            neighbor_set = {t for (t, _) in top}
+            neighbor_set.add(token)
+            candidates.append((token, neighbor_set))
+
+        # 2) merge candidates into themes via simple agglomerative clustering
+        used = [False] * len(candidates)
+        current_id = 0
+
+        for i, (core_i, neigh_i) in enumerate(candidates):
+            if used[i]:
+                continue
+            # start new theme with this candidate
+            theme_words = set(neigh_i)
+            centers = {core_i}
+            used[i] = True
+
+            # merge compatible candidates
+            for j, (core_j, neigh_j) in enumerate(candidates):
+                if used[j]:
+                    continue
+                inter = len(theme_words & neigh_j)
+                union = len(theme_words | neigh_j)
+                if union == 0:
+                    continue
+                jacc = inter / union
+                if jacc >= merge_threshold:
+                    used[j] = True
+                    theme_words |= neigh_j
+                    centers.add(core_j)
+
+            theme = Theme(
+                id=current_id,
+                centers=centers,
+                words=theme_words,
+                strength=1.0,
+            )
+            self.themes.append(theme)
+            current_id += 1
+
+        # 3) build token -> themes index
+        for theme in self.themes:
+            for w in theme.words:
+                self.token_to_themes.setdefault(w, []).append(theme.id)
+
+1.4. Hook build_themes into refresh
+
+In LeoField.refresh:
+
+    def refresh(self, initial_shard: bool = False) -> None:
+        self.bigrams, self.vocab = load_bigrams(self.conn)
+        self.trigrams = load_trigrams(self.conn)
+        self.co_occur = load_co_occurrence(self.conn)
+        self.centers = compute_centers(self.conn, k=7)
+        self.bias = load_bin_bias("leo")
+        # new:
+        self.build_themes()
+        if initial_shard and self.centers:
+            create_bin_shard("leo", self.centers)
+
+
+⸻
+
+2. Theme activation per prompt
+
+We don’t want global themes only; we want “where is Leo right now”.
+
+2.1. Computing active themes
+
+Add helper (can be a free function or method on LeoField):
+
+from typing import NamedTuple
+
+class ActiveThemes(NamedTuple):
+    theme_scores: Dict[int, float]
+    active_words: Set[str]   # union of words in top themes
+
+def activate_themes_for_prompt(
+    prompt_tokens: List[str],
+    field: LeoField,
+    max_themes: int = 3,
+) -> ActiveThemes:
+    """
+    Given prompt tokens, compute which themes are most 'lit up'.
+
+    For each token that belongs to one or more themes:
+    - add +1 to that theme's score (can later be refined with weights).
+
+    Returns:
+        theme_scores: theme_id -> score
+        active_words: union of words from top `max_themes` themes
+    """
+    scores: Dict[int, float] = {}
+    for tok in prompt_tokens:
+        for tid in field.token_to_themes.get(tok, []):
+            scores[tid] = scores.get(tid, 0.0) + 1.0
+
+    if not scores:
+        return ActiveThemes(theme_scores={}, active_words=set())
+
+    # pick top themes
+    ordered = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    top = ordered[:max_themes]
+    top_ids = {tid for (tid, _) in top}
+
+    active_words: Set[str] = set()
+    for theme in field.themes:
+        if theme.id in top_ids:
+            active_words |= theme.words
+
+    theme_scores = {tid: score for (tid, score) in top}
+    return ActiveThemes(theme_scores=theme_scores, active_words=active_words)
+
+2.2. Extending generate_reply to use themes
+
+We pass active_theme_words as an extra argument into step_token.
+	•	Change signature of step_token:
+
+def step_token(
+    bigrams: Dict[str, Dict[str, int]],
+    current: str,
+    vocab: List[str],
+    centers: List[str],
+    bias: Dict[str, int],
+    temperature: float = 1.0,
+    trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
+    prev_token: Optional[str] = None,
+    co_occur: Optional[Dict[str, Dict[str, int]]] = None,
+    active_theme_words: Optional[Set[str]] = None,
+    theme_boost: float = 0.15,
+) -> str:
+    ...
+
+Then, after we compute tokens and counts (both for the trigram branch and for the bigram branch), but before sampling, we add:
+
+    # THEME BOOST: if some candidates are inside active themes, nudge them slightly
+    if active_theme_words and tokens:
+        boosted_counts = []
+        for t, c in zip(tokens, counts):
+            if t in active_theme_words:
+                boosted_counts.append(c * (1.0 + theme_boost))
+            else:
+                boosted_counts.append(c)
+        counts = boosted_counts
+
+In generate_reply, before we start generating:
+
+    prompt_tokens = tokenize(prompt)
+
+    # new: compute active themes once per reply
+    active = activate_themes_for_prompt(prompt_tokens, field=None_or_field)
+
+But generate_reply currently does not have access to LeoField. Two options:
+	1.	Convert generate_reply into a method on LeoField (recommended).
+	2.	Or pass LeoField instance as additional argument.
+
+Simplest refactor: make LeoField.reply the single entry point and move the body of generate_reply there, so self has access to self.themes and self.token_to_themes.
+
+If we keep generate_reply as a function, we can add parameters:
+
+def generate_reply(..., field: Optional[LeoField] = None):
+    ...
+    prompt_tokens = tokenize(prompt)
+    if field is not None:
+        active = activate_themes_for_prompt(prompt_tokens, field)
+        active_theme_words = active.active_words
+    else:
+        active_theme_words = None
+
+And then pass active_theme_words into every call to step_token.
+
+⸻
+
+3. Novelty / entropy of the prompt
+
+We want Leo to feel when a situation is familiar vs new.
+
+3.1. Computing novelty from trigrams
+
+Add helper:
+
+def compute_prompt_novelty(
+    tokens: List[str],
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+) -> float:
+    """
+    Rough 'novelty' score in [0, 1].
+
+    - Take all sliding trigrams from the prompt.
+    - For each (a,b,c), check if trigrams[(a,b)] contains c.
+    - novelty = 1 - coverage, where coverage is fraction of known trigrams.
+
+    If there are no trigrams, novelty = 0.5 (neutral).
+    """
+    if len(tokens) < 3:
+        return 0.5
+
+    total = 0
+    known = 0
+    for i in range(len(tokens) - 2):
+        a, b, c = tokens[i], tokens[i+1], tokens[i+2]
+        total += 1
+        row = trigrams.get((a, b))
+        if row and c in row:
+            known += 1
+
+    if total == 0:
+        return 0.5
+
+    coverage = known / total
+    novelty = 1.0 - coverage
+    # clamp to [0, 1]
+    if novelty < 0.0:
+        novelty = 0.0
+    if novelty > 1.0:
+        novelty = 1.0
+    return novelty
+
+3.2. Using novelty in generation
+
+In generate_reply / LeoField.reply:
+	•	After computing prompt_tokens:
+
+    novelty = compute_prompt_novelty(prompt_tokens, trigrams or {})
+
+Use novelty to:
+	1.	Adjust how strong theme boost is:
+
+# if the situation is new, themes should have weaker influence
+base_theme_boost = 0.15
+# e.g. more novelty → less theme influence
+theme_boost = base_theme_boost * (1.0 - 0.5 * novelty)
+
+Pass theme_boost into step_token.
+
+	2.	Optionally, slightly adjust temperature:
+
+# example mapping: more novelty → slightly lower temperature
+# (Leo becomes more cautious in unknown territory)
+temp = temperature * (1.0 - 0.25 * novelty)
+
+This can be done per-reply or even per-step, but per-reply is simpler.
+
+No printing of novelty in REPL by default.
+
+⸻
+
+4. Emotional charge (arousal)
+
+We want Leo to feel how emotionally loaded the text is, without any external model.
+
+4.1. Storing emotional scores
+
+Simplest: keep it in memory as a dictionary on LeoField:
+
+class LeoField:
+    def __init__(...):
+        ...
+        self.emotion: Dict[str, float] = {}
+        ...
+
+Optionally, later we can add a small SQLite table token_emotion(token_id, score) to persist.
+
+4.2. Updating emotion during ingestion
+
+We can update self.emotion whenever we observe new text.
+
+Add helper:
+
+def update_emotional_stats(
+    field: "LeoField",
+    text: str,
+    window: int = 3,
+    exclam_bonus: float = 1.0,
+    caps_bonus: float = 0.7,
+    repeat_bonus: float = 0.5,
+) -> None:
+    """
+    Heuristic emotional scoring:
+
+    - Tokens near '!' get a bonus.
+    - ALL-CAPS tokens (length >= 2) get a bonus.
+    - Repeated tokens in a short window get a bonus.
+
+    This is intentionally simple and local.
+    """
+    tokens = tokenize(text)
+    n = len(tokens)
+    if n == 0:
+        return
+
+    for i, tok in enumerate(tokens):
+        score = 0.0
+
+        # ALL CAPS words
+        if tok.isalpha() and len(tok) >= 2 and tok.upper() == tok:
+            score += caps_bonus
+
+        # exclamation in neighborhood
+        start = max(0, i - window)
+        end = min(n, i + window + 1)
+        if "!" in tokens[start:end]:
+            score += exclam_bonus
+
+        # local repetition
+        local = tokens[start:end]
+        if local.count(tok) > 1:
+            score += repeat_bonus
+
+        if score > 0.0:
+            field.emotion[tok] = field.emotion.get(tok, 0.0) + score
+
+In LeoField.observe:
+
+    def observe(self, text: str) -> None:
+        if not text.strip():
+            return
+        ingest_text(self.conn, text)
+        # update emotional stats BEFORE refresh or after; order is not critical here
+        update_emotional_stats(self, text)
+        self.refresh(initial_shard=False)
+        if self.centers:
+            create_bin_shard("leo", self.centers)
+
+4.3. Computing arousal of prompt
+
+Add helper:
+
+def compute_prompt_arousal(
+    tokens: List[str],
+    emotion_map: Dict[str, float],
+) -> float:
+    """
+    Compute rough arousal in [0, 1] based on emotional scores of tokens.
+
+    Sum emotion_map over tokens, normalize with a soft cap.
+    """
+    if not tokens:
+        return 0.0
+
+    s = 0.0
+    for t in tokens:
+        s += emotion_map.get(t, 0.0)
+
+    # soft normalization: log-like squashing
+    # tweak divisor if needed
+    norm = s / (len(tokens) + 1e-6)
+    # map to [0, 1] with 1 - exp(-k*norm) style
+    k = 0.5
+    arousal = 1.0 - math.exp(-k * norm)
+    if arousal < 0.0:
+        arousal = 0.0
+    if arousal > 1.0:
+        arousal = 1.0
+    return arousal
+
+4.4. Using arousal in generation
+
+In generate_reply / LeoField.reply, after prompt_tokens:
+
+    arousal = compute_prompt_arousal(prompt_tokens, field.emotion)
+
+Use arousal for:
+	1.	Slightly bumping temperature:
+
+# more emotional → hotter sampling
+temp = temperature * (1.0 + 0.5 * arousal)
+
+
+	2.	Emotional bonus for candidates:
+	•	Extend step_token signature with emotion_map and arousal:
+
+def step_token(...,
+               active_theme_words: Optional[Set[str]] = None,
+               theme_boost: float = 0.15,
+               emotion_map: Optional[Dict[str, float]] = None,
+               arousal: float = 0.0,
+) -> str:
+
+	•	After theme boost, apply emotional boost when arousal is high:
+
+ # EMOTION BOOST: in high-arousal situations, nudge emotionally charged tokens
+ if emotion_map and arousal > 0.0 and tokens:
+     emo_boost_factor = 0.2 * arousal  # up to +20% at max arousal
+     boosted = []
+     for t, c in zip(tokens, counts):
+         e = emotion_map.get(t, 0.0)
+         if e > 0.0:
+             boosted.append(c * (1.0 + emo_boost_factor))
+         else:
+             boosted.append(c)
+     counts = boosted
+
+
+
+Again: metrics stay internal; REPL just shows text.
+
+⸻
+
+5. Resonant Experts — reinterpreted Mixture-of-Experts
+
+We want a Mixture-of-Experts analogue that:
+	•	is CPU-only,
+	•	doesn’t rely on separate trained subnetworks,
+	•	works as different ways of looking at the same field.
+
+5.1. Expert configuration
+
+Define light-weight “expert profiles” that only change weights between:
+	•	grammar (trigrams),
+	•	semantics (co-occurrence),
+	•	themes,
+	•	emotion.
+
+We don’t add four new models; we add parameterizations.
+
+Add dataclass:
+
+@dataclass
+class ExpertConfig:
+    name: str
+    theme_boost: float
+    emo_boost_scale: float
+    trigram_semantic_mix: float  # e.g. 0.7 for 70% grammar / 30% co-occur
+    temperature_scale: float
+
+Example expert set:
+
+DEFAULT_EXPERTS = [
+    ExpertConfig(
+        name="structural",
+        theme_boost=0.05,
+        emo_boost_scale=0.1,
+        trigram_semantic_mix=0.85,  # more grammar
+        temperature_scale=0.9,
+    ),
+    ExpertConfig(
+        name="resonant",
+        theme_boost=0.20,
+        emo_boost_scale=0.3,
+        trigram_semantic_mix=0.60,  # more semantics
+        temperature_scale=1.1,
+    ),
+]
+
+We can keep this as a module-level constant or attach to LeoField.
+
+5.2. Selecting experts per prompt
+
+Per prompt, select 1–2 experts based on:
+	•	novelty
+	•	arousal
+
+Example heuristic:
+
+def select_experts_for_prompt(
+    novelty: float,
+    arousal: float,
+    experts: List[ExpertConfig] = DEFAULT_EXPERTS,
+) -> List[ExpertConfig]:
+    """
+    Simple heuristic:
+    - high novelty: bias towards 'structural'
+    - high arousal: bias towards 'resonant'
+    - otherwise: mix both.
+    """
+    # For now, always return both with later mixing.
+    return experts
+
+We can keep it simple and always use two experts and only change mixing weights.
+
+5.3. Applying experts inside generation (concept)
+
+We do not want a full second pass of step_token. Instead we use experts as scales for the existing components:
+	•	Base code already:
+	•	computes counts from trigrams,
+	•	optionally blends with co-occurrence,
+	•	then we add theme + emotion boosts.
+
+We change this pipeline to be governed by an ExpertConfig:
+	1.	In step_token, before computing counts, we accept additional parameters:
+	•	expert: Optional[ExpertConfig]
+	•	novelty: float
+	•	arousal: float
+	2.	Replace current fixed 0.7 / 0.3 trigram-semantic blend by expert.trigram_semantic_mix.
+
+Inside trigram branch:
+
+    if row:
+        tokens = list(row.keys())
+        counts = [float(row[t]) for t in tokens]
+
+        semantic_weight = 1.0 - expert.trigram_semantic_mix if expert else 0.3
+        grammar_weight = expert.trigram_semantic_mix if expert else 0.7
+
+        if co_occur is not None and current in co_occur and len(tokens) > 1:
+            max_count = max(counts)
+            strong_indices = [i for i, c in enumerate(counts) if c >= max_count * 0.7]
+            if len(strong_indices) > 1:
+                blended_counts = []
+                for i, tok in enumerate(tokens):
+                    gram_score = counts[i]
+                    sem_bonus = float(co_occur[current].get(tok, 0))
+                    blended = gram_score * grammar_weight + sem_bonus * semantic_weight
+                    blended_counts.append(blended)
+                counts = blended_counts
+
+	3.	Theme and emotion boosts use expert scales:
+
+    eff_theme_boost = theme_boost
+    if expert:
+        eff_theme_boost *= expert.theme_boost
+
+    eff_emo_scale = 1.0
+    if expert:
+        eff_emo_scale = expert.emo_boost_scale
+
+Then apply:
+
+    if active_theme_words and tokens and eff_theme_boost > 0.0:
+        ...
+
+    if emotion_map and arousal > 0.0 and tokens and eff_emo_scale > 0.0:
+        emo_boost_factor = eff_emo_scale * arousal
+        ...
+
+	4.	Temperature per expert:
+
+In generate_reply / LeoField.reply, we can pick a blended expert from two configs based on novelty and arousal, or simply:
+
+    experts = select_experts_for_prompt(novelty, arousal)
+    # for now, just pick one combined expert via linear mixing
+    if len(experts) == 2:
+        alpha = 0.5 + 0.25 * (arousal - novelty)  # arbitrary example
+        alpha = max(0.0, min(1.0, alpha))
+        expert = ExpertConfig(
+            name="mixed",
+            theme_boost=experts[0].theme_boost * (1-alpha) + experts[1].theme_boost * alpha,
+            emo_boost_scale=experts[0].emo_boost_scale * (1-alpha) + experts[1].emo_boost_scale * alpha,
+            trigram_semantic_mix=experts[0].trigram_semantic_mix * (1-alpha) + experts[1].trigram_semantic_mix * alpha,
+            temperature_scale=experts[0].temperature_scale * (1-alpha) + experts[1].temperature_scale * alpha,
+        )
+    else:
+        expert = experts[0]
+
+Then effective temperature:
+
+    effective_temperature = temperature * expert.temperature_scale
+
+Pass expert and effective_temperature into each call of step_token.
+
+This yields a Mixture-of-Experts analogue where:
+	•	experts are views on the same field,
+	•	there are no separate networks,
+	•	selection depends on situational awareness (novelty + arousal),
+	•	everything remains CPU-only and minimal.
+
+⸻
+
+6. Invariants
+	•	Do not change the external REPL interface:
+	•	/temp, /echo, /export, /stats stay as-is.
+	•	Do not print raw metrics (novelty, arousal, theme scores) by default.
+	•	If needed, we can later add hidden debug command like /debug_presence.
+	•	Keep all new code:
+	•	local to leo.py,
+	•	purely Python / SQLite,
+	•	with sensible defaults so that if something fails, Leo degrades gracefully to current behavior.
+
+Leo remains:
+	•	a small language engine organism,
+	•	no weights, no datasets, no web,
+	•	just presence, recursion, resonance.
+
+---
+# leo — presence extensions (extended spec)
+
+This section deepens the previous design and gives **more concrete hooks** for implementation in `leo.py`.  
+Goal: keep Leo small and CPU-only, but give him a richer presence architecture.
+
+
+
+## 7. Presence Pulse (internal, scalar)
+
+We already have several signals:
+
+- **Novelty** ∈ [0,1] — how new the prompt is structurally (trigram coverage).
+- **Arousal** ∈ [0,1] — emotional charge from local ALL-CAPS / `!` / repetition.
+- (Below) **Entropy** / pseudo-perplexity per prompt.
+
+We define a composite, internal **PresencePulse** ∈ [0,1]:
+
+```python
+class PresencePulse(NamedTuple):
+    novelty: float
+    arousal: float
+    entropy: float   # normalized token-level entropy
+    pulse: float     # final scalar in [0, 1]
+
+Example computation:
+
+def compute_presence_pulse(
+    novelty: float,
+    arousal: float,
+    entropy: float,
+    w_novelty: float = 0.3,
+    w_arousal: float = 0.4,
+    w_entropy: float = 0.3,
+) -> PresencePulse:
+    # all inputs already in [0, 1]
+    pulse = (
+        w_novelty * novelty +
+        w_arousal * arousal +
+        w_entropy * entropy
+    )
+    # hard clamp
+    if pulse < 0.0:
+        pulse = 0.0
+    if pulse > 1.0:
+        pulse = 1.0
+    return PresencePulse(
+        novelty=novelty,
+        arousal=arousal,
+        entropy=entropy,
+        pulse=pulse,
+    )
+
+Where:
+	•	entropy is defined below (Section 8).
+	•	pulse is not printed by default; it just lives inside LeoField for:
+	•	gating experts,
+	•	adjusting temperature and theme/emotion strength,
+	•	later — potential logging into SQLite if needed.
+
+LeoField can store the last pulse:
+
+class LeoField:
+    ...
+    self.last_pulse: Optional[PresencePulse] = None
+
+And update it inside reply() each time.
+
+⸻
+
+8. Entropy & pseudo-perplexity
+
+8.1. Per-step entropy during generation
+
+In step_token, we already build a distribution over candidate tokens (tokens, counts).
+Once we normalize counts to probabilities, we can compute entropy:
+
+def distribution_entropy(counts: List[float]) -> float:
+    """
+    Shannon entropy in [0, log(N)].
+    We'll later normalize by log(N) to get [0, 1].
+    """
+    total = sum(counts)
+    if total <= 0.0:
+        return 0.0
+    h = 0.0
+    for c in counts:
+        if c <= 0.0:
+            continue
+        p = c / total
+        h -= p * math.log(p + 1e-12)
+    # caller can normalize by log(N)
+    return h
+
+In step_token, whenever we are in a branch where we are sampling from tokens / counts:
+
+    raw_entropy = distribution_entropy(counts)
+    max_entropy = math.log(len(tokens) + 1e-12)
+    if max_entropy > 0.0:
+        norm_entropy = raw_entropy / max_entropy   # ∈ [0, 1]
+    else:
+        norm_entropy = 0.0
+
+We do not print this. Instead we provide a hook to accumulate entropy externally.
+
+To avoid threading a lot of arguments, we can:
+	•	Make generate_reply / LeoField.reply responsible for logging per-step entropy via a callback.
+
+Example: add an optional entropy_log: List[float] parameter to generate_reply and pass it to step_token.
+
+def step_token(..., entropy_log: Optional[List[float]] = None, ...):
+    ...
+    if entropy_log is not None and tokens:
+        raw_entropy = distribution_entropy(counts)
+        max_entropy = math.log(len(tokens) + 1e-12)
+        norm_entropy = raw_entropy / max_entropy if max_entropy > 0.0 else 0.0
+        entropy_log.append(norm_entropy)
+
+Then in generate_reply:
+
+    step_entropies: List[float] = []
+
+    # pass step_entropies into each step_token call
+    nxt = step_token(..., entropy_log=step_entropies, ...)
+
+After generation:
+
+    if step_entropies:
+        avg_entropy = sum(step_entropies) / len(step_entropies)
+    else:
+        avg_entropy = 0.0
+
+This avg_entropy is what we put into PresencePulse.entropy.
+
+8.2. Per-prompt pseudo-perplexity
+
+We can optionally define a lightweight pseudo-perplexity:
+	•	For prompt tokens, slide through bigrams/trigrams,
+	•	Use relative frequencies as pseudo-probabilities,
+	•	Compute:
+ppl = exp( - (1/L) * sum log p_i )
+
+Given we already have a lot, this can be optional; Claude can choose to skip it initially.
+
+⸻
+
+9. Table-of-tables: meta-layer over islands (forgetting & aging)
+
+We already have:
+	•	co_occurrence — fine-grained islands.
+	•	ThemeLayer (Section 1) — grouped constellations.
+
+We now add aging and a rudimentary “table of tables” over themes.
+
+9.1. Aging co-occurrence & themes
+
+We want Leo to forget slowly, like a child:
+	•	old, unused connections lose weight,
+	•	new ones dominate.
+
+We can implement decay-on-refresh:
+
+def decay_co_occurrence(
+    conn: sqlite3.Connection,
+    decay: float = 0.98,
+    min_count: int = 1,
+) -> None:
+    """
+    Apply multiplicative decay to co_occurrence counts.
+
+    new_count = floor(old_count * decay)
+    rows that fall below min_count are deleted.
+
+    This can be called periodically, e.g.:
+    - every N `observe()` calls
+    - or when total rows > some threshold.
+    """
+    cur = conn.cursor()
+    cur.execute("SELECT word_id, context_id, count FROM co_occurrence")
+    rows = cur.fetchall()
+
+    for row in rows:
+        w = int(row["word_id"])
+        c = int(row["context_id"])
+        cnt = int(row["count"])
+        new_cnt = int(cnt * decay)
+        if new_cnt < min_count:
+            cur.execute(
+                "DELETE FROM co_occurrence WHERE word_id = ? AND context_id = ?",
+                (w, c),
+            )
+        else:
+            cur.execute(
+                "UPDATE co_occurrence SET count = ? WHERE word_id = ? AND context_id = ?",
+                (new_cnt, w, c),
+            )
+
+    conn.commit()
+
+Then in LeoField.observe:
+	•	maintain a simple counter:
+
+class LeoField:
+    def __init__(...):
+        ...
+        self.observe_count: int = 0
+
+In observe:
+
+    def observe(self, text: str) -> None:
+        if not text.strip():
+            return
+        ingest_text(self.conn, text)
+        update_emotional_stats(self, text)
+        self.observe_count += 1
+        # e.g. every 50 observations, apply decay
+        if self.observe_count % 50 == 0:
+            decay_co_occurrence(self.conn, decay=0.98)
+        self.refresh(initial_shard=False)
+        if self.centers:
+            create_bin_shard("leo", self.centers)
+
+This keeps the islands dynamic and prevents unbounded growth.
+
+9.2. Theme meta-table (in memory)
+
+We can represent the “table of tables” as a light summary, no need to store in DB initially:
+
+@dataclass
+class ThemeSummary:
+    id: int
+    size: int           # number of words
+    total_cooccur: int  # sum of co-occurrence counts of its words
+    last_touched: int   # last observe_count when this theme was involved
+
+LeoField can maintain:
+
+class LeoField:
+    ...
+    self.theme_summaries: Dict[int, ThemeSummary] = {}
+
+When we build themes, we can update ThemeSummary values:
+	•	size = len(theme.words)
+	•	total_cooccur can be approximated as sum of counts of all (word, context) pairs where word ∈ theme.words.
+
+When a prompt activates themes (Section 2), we set last_touched = self.observe_count.
+
+This becomes our high-level memory map: which themes are big, which are active, which are fading.
+
+⸻
+
+10. Gating experts with Pulse & Themes
+
+We refine the MoE analogue from Section 5 using PresencePulse and theme data.
+
+10.1. Updated ExpertConfig
+
+Add a couple of fields:
+
+@dataclass
+class ExpertConfig:
+    name: str
+    theme_boost: float
+    emo_boost_scale: float
+    trigram_semantic_mix: float
+    temperature_scale: float
+    novelty_bias: float       # in [-1, 1]  ; +1 = loves novelty, -1 = loves familiarity
+    arousal_bias: float       # in [-1, 1]
+    entropy_bias: float       # in [-1, 1]
+
+Example set:
+
+DEFAULT_EXPERTS = [
+    ExpertConfig(
+        name="structural_child",
+        theme_boost=0.08,
+        emo_boost_scale=0.15,
+        trigram_semantic_mix=0.9,    # mostly grammar
+        temperature_scale=0.95,
+        novelty_bias=-0.5,           # prefers known situations
+        arousal_bias=-0.2,
+        entropy_bias=-0.3,
+    ),
+    ExpertConfig(
+        name="resonant_child",
+        theme_boost=0.25,
+        emo_boost_scale=0.35,
+        trigram_semantic_mix=0.6,    # more semantics
+        temperature_scale=1.15,
+        novelty_bias=0.3,            # okay with novelty
+        arousal_bias=0.6,
+        entropy_bias=0.2,
+    ),
+]
+
+10.2. Scoring experts per prompt
+
+Given pulse: PresencePulse, compute a simple compatibility score:
+
+def score_expert_for_pulse(
+    expert: ExpertConfig,
+    pulse: PresencePulse,
+) -> float:
+    # map biases [-1, 1] against signals [0, 1]
+    s = 0.0
+    s += expert.novelty_bias * (pulse.novelty - 0.5)
+    s += expert.arousal_bias * (pulse.arousal - 0.5)
+    s += expert.entropy_bias * (pulse.entropy - 0.5)
+    return s
+
+Then:
+
+def select_expert_for_pulse(
+    pulse: PresencePulse,
+    experts: List[ExpertConfig] = DEFAULT_EXPERTS,
+) -> ExpertConfig:
+    if not experts:
+        raise ValueError("no experts configured")
+    scored = [(score_expert_for_pulse(e, pulse), e) for e in experts]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    # pick top one for now
+    return scored[0][1]
+
+Optionally we can still blend top-2 experts using softmax over scores.
+
+10.3. Wiring into reply
+
+In LeoField.reply:
+
+    prompt_tokens = tokenize(prompt)
+    novelty = compute_prompt_novelty(prompt_tokens, self.trigrams)
+    arousal = compute_prompt_arousal(prompt_tokens, self.emotion)
+
+    # collect entropies across steps
+    step_entropies: List[float] = []
+
+    # we will later compute avg_entropy after generation
+    # but for gating experts BEFORE generation we can:
+    # - either reuse last known entropy (from previous reply),
+    # - or assume neutral (0.5).
+    entropy_for_pulse = self.last_pulse.entropy if self.last_pulse else 0.5
+
+    pulse = compute_presence_pulse(
+        novelty=novelty,
+        arousal=arousal,
+        entropy=entropy_for_pulse,
+    )
+    self.last_pulse = pulse
+
+    expert = select_expert_for_pulse(pulse, DEFAULT_EXPERTS)
+
+    effective_temperature = temperature * expert.temperature_scale
+
+Then in the generation loop:
+	•	Pass expert, arousal, self.emotion, active_theme_words, theme_boost, step_entropies into step_token.
+	•	After generation:
+
+    if step_entropies:
+        avg_entropy = sum(step_entropies) / len(step_entropies)
+    else:
+        avg_entropy = 0.0
+
+    # update last_pulse with actual entropy
+    self.last_pulse = compute_presence_pulse(
+        novelty=novelty,
+        arousal=arousal,
+        entropy=avg_entropy,
+    )
+
+This closes the loop: the next reply sees the updated entropy.
+
+⸻
+
+11. API & behavior invariants (again)
+
+To keep Leo usable and not overcomplicated:
+	1.	External interface unchanged:
+	•	CLI flags stay the same.
+	•	REPL commands stay the same.
+	2.	All new features are:
+	•	internal,
+	•	optional (implemented with safe defaults),
+	•	degrade gracefully if any part fails.
+	3.	No external dependencies:
+	•	only Python stdlib + SQLite.
+	4.	All heavy operations (e.g. theme building, decay) are:
+	•	tied to refresh() / observe(),
+	•	bounded in cost (simple loops, small constants),
+	•	can be further optimized later if needed.
+
+⸻
+
+12. Testing suggestions
+
+To make sure presence features don’t silently break things, add tests:
+	1.	ThemeLayer tests
+	•	tiny in-memory DB with hand-crafted co_occurrence patterns.
+	•	verify that:
+	•	themes are non-empty,
+	•	similar islands merge when Jaccard ≥ threshold,
+	•	token_to_themes maps correctly.
+	2.	Novelty tests
+	•	case where all trigrams are known → novelty ≈ 0.
+	•	case where no trigrams are known → novelty ≈ 1.
+	3.	Entropy tests
+	•	uniform counts → normalized entropy ≈ 1.
+	•	one-hot distribution → normalized entropy ≈ 0.
+	•	integration: generate a short reply and assert 0 ≤ avg_entropy ≤ 1.
+	4.	Emotion tests
+	•	inputs with !, ALL-CAPS, repetition should raise token emotion scores.
+	•	compute_prompt_arousal should return higher values for emotional text.
+	5.	Expert gating tests
+	•	craft synthetic pulses (high novelty / high arousal / low entropy).
+	•	verify that select_expert_for_pulse picks the intended expert.
+
+All tests can live alongside existing ones in tests/ and use temporary SQLite DBs to avoid touching real state/ / bin/.
+
+⸻
