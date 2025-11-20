@@ -1105,6 +1105,49 @@ def should_save_snapshot(quality: QualityScore, arousal: float) -> bool:
     return False
 
 
+def apply_memory_decay(
+    conn: sqlite3.Connection,
+    decay_factor: float = 0.95,
+    min_threshold: int = 2,
+) -> int:
+    """
+    Apply natural forgetting to co-occurrence memories.
+
+    Multiplicative decay: count → count * decay_factor
+    Delete entries below min_threshold.
+
+    This is Leo forgetting like a child - things fade over time
+    unless reinforced. No perfect memory, just resonance over time.
+
+    Returns number of entries deleted.
+    """
+    cur = conn.cursor()
+
+    # Decay all co-occurrence counts
+    cur.execute(
+        """
+        UPDATE co_occurrence
+        SET count = CAST(count * ? AS INTEGER)
+        WHERE count > 0
+        """,
+        (decay_factor,),
+    )
+
+    # Delete weak memories (below threshold)
+    cur.execute(
+        """
+        DELETE FROM co_occurrence
+        WHERE count < ?
+        """,
+        (min_threshold,),
+    )
+
+    deleted = cur.rowcount
+
+    conn.commit()
+    return deleted
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -1410,6 +1453,9 @@ class LeoField:
         # PRESENCE: themes (constellations over co-occurrence islands)
         self.themes: List[Theme] = []
         self.token_to_themes: Dict[str, List[int]] = {}
+        # PRESENCE: memory decay tracking
+        self.observe_count: int = 0
+        self.DECAY_INTERVAL: int = 100  # Apply decay every N observations
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -1431,6 +1477,13 @@ class LeoField:
         ingest_text(self.conn, text)
         # PRESENCE: track emotional charge
         update_emotional_stats(self.emotion, text)
+
+        # PRESENCE: increment observe count and apply decay periodically
+        self.observe_count += 1
+        if self.observe_count % self.DECAY_INTERVAL == 0:
+            # Natural forgetting: decay weak co-occurrence memories
+            apply_memory_decay(self.conn)
+
         self.refresh(initial_shard=False)
         if self.centers:
             create_bin_shard("leo", self.centers)
