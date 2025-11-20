@@ -259,11 +259,33 @@ def ingest_text(conn: sqlite3.Connection, text: str) -> None:
 # ============================================================================
 
 
+def strip_code_blocks(text: str) -> str:
+    """Remove code blocks (```...```) from markdown text."""
+    lines = text.split('\n')
+    result = []
+    in_code_block = False
+
+    for line in lines:
+        # Detect code block start/end
+        if line.strip().startswith('```'):
+            in_code_block = not in_code_block
+            continue
+
+        # Skip lines inside code blocks
+        if not in_code_block:
+            result.append(line)
+
+    return '\n'.join(result)
+
+
 def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
     """
     One-time bootstrap:
     - If there are no tokens: ingest EMBEDDED_BOOTSTRAP.
     - If README has never been processed and exists: ingest README once.
+
+    Code blocks (```...```) are stripped from README to avoid polluting
+    the language field with Python snippets.
     """
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) AS c FROM tokens")
@@ -281,6 +303,8 @@ def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
         try:
             print("[leo] bootstrapping from README.md...", file=sys.stderr)
             text = README_PATH.read_text(encoding="utf-8", errors="ignore")
+            # Strip code blocks to avoid ingesting Python snippets
+            text = strip_code_blocks(text)
             ingest_text(conn, text)
             set_meta(conn, "readme_bootstrap_done", "1")
         except Exception as e:
