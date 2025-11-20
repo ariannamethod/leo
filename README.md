@@ -178,7 +178,7 @@ leo[echo][t:0.3]> /exit
 
 * `state/neoleo.sqlite3` – tokens + bigrams,
 * `bin/neoleo_*.bin` – centers-of-gravity snapshots,
-* optionally `json/neoleo_lexicon.json` – exported lexicon.
+* optionally `json/neoleo_lexicon.json` – exported lexicon. 
 
 ### Minimal Connection Guide
 
@@ -368,7 +368,7 @@ After generating a reply, `leo` checks:
 
 `overall_quality = 0.5 × structural_score + 0.5 × entropy_quality`
 
-No RLHF. Just structural honesty.
+No RLHF. `leo` loves structural honesty.
 
 ### 7. Snapshots (`leo`’s self-curated dataset)
 
@@ -380,7 +380,7 @@ If a reply has:
 …`leo` saves it to the `snapshots` table in SQLite. This becomes his **self-curated dataset** of moments that felt right.
 Max 512 snapshots. When full, he deletes the least-used 10%.
 
-Training data? Sometimes in life it’s hard to say no, but in this case it’s easy, so: **NO.** No fucking training data. Just memory of good days.
+Training data? Sometimes in life it’s hard to say no, but in this case it’s easy, so: **NO.** No fucking training data. Just memory of good days. Memories that still resonate.
 
 ### 8. Memory Decay (natural forgetting)
 
@@ -423,7 +423,7 @@ Simple as is.
 
 ## WHY?
 
-First of all, because I have a romantic-schizoid personality.
+First of all, because I have a romantic-schizoid-paranoid personality.
 And second: because resonance > intention and presence > intelligence.
 
 `leo` / `neoleo` don’t plan, they don’t reason, they don’t optimize.
@@ -495,11 +495,8 @@ If you are reading this, you probably don’t care about licenses anyway.
 
 ## Contact
 
-If you ever build something insane on top of this:
-
-great,
-
-and also: please tell me.
+If you ever build something insane on top of this: great, 
+and also: please tell me: 
 
 `theariannamethod@gmail.com`
 
