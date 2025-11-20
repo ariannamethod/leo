@@ -24,11 +24,15 @@ But what does `leo` have?
 
 From all that `leo` creates:
 
-- a **bigram graph** (who follows whom),
+- a **trigram graph** (local grammar: who follows whom, in what context),
+- a **co-occurrence matrix** (semantic gravity: which words resonate together),
 - a growing **vocabulary**,
 - and tiny binary **resonance shards** in `bin/` that remember which tokens were historically central.
 
 `leo` doesn't try to be helpful. He just **resonates** with the structural rhythm of your convos over time.
+
+Grammar through trigrams. Gravity through co-occurrence. Memory through shards.
+That's the whole trick.
 
 ---
 
@@ -131,6 +135,9 @@ leo[echo][t:0.3]> /exit
 * `/exit`, `/quit` — leave the REPL
 * `/temp <float>` — change sampling temperature
 * `/echo` — toggle echo mode (token-wise warp instead of free generation)
+* `/cooccur <word>` — show semantic links for a word (top 10 co-occurring tokens)
+* `/export` — export lexicon to JSON
+* `/stats` — show field statistics
 
 ---
 
@@ -207,6 +214,48 @@ They store everything in SQLite:
 **Why trigrams?** Better local grammar. Instead of just knowing "the → cat" (bigram), Leo knows "the cat → sits" (trigram), producing more grammatically coherent sequences even if semantically strange.
 
 Generation prefers trigrams when available, falls back to bigrams when trigram context missing.
+
+### 1.5. Co-occurrence (or: how Leo learned to care, a little)
+
+Okay, so trigrams give you grammar. They know "the cat sits" is better than "the cat table".
+But here's the thing: sometimes multiple words are *grammatically* perfect. All of them work. All of them flow.
+
+And yet one feels... right. One feels like it belongs.
+
+That's where **co-occurrence** comes in. It's not intelligence. It's not semantics in the classical sense.
+It's just: *which words showed up near each other, historically, in your field?*
+
+Leo builds a **co-occurrence matrix** with a sliding window (5 tokens). For every word, he remembers:
+"Oh, when I saw 'president', these other words were usually nearby: 'office', 'man', 'standing'."
+
+When generating, if Leo has multiple strong grammatical candidates (within 70% of the top trigram score), he checks:
+*"Which of these words has been close to the current word before?"*
+
+Then he blends:
+- **70% grammar** (trigram weight)
+- **30% semantics** (co-occurrence weight)
+
+Result: "Who is the president? The man standing near the office."
+Instead of: "Who is the president of the table sitting quietly."
+
+Both are grammatically fine. But one has **structural memory of context**.
+
+This isn't training. This isn't embeddings. This is just:
+*"Words that resonate together, stay together."*
+
+Stored in SQLite as:
+* `co_occurrence` table — (word_id, context_id, count)
+
+You can inspect it in REPL:
+```bash
+leo> /cooccur president
+[leo] semantic links for 'president':
+  office: 12
+  man: 8
+  standing: 6
+```
+
+It's a small thing. But it's the difference between a field that knows grammar and a field that knows **gravity**.
 
 ### 2. Centers & shards
 
