@@ -1,11 +1,9 @@
-```
    ██╗     ███████╗ ██████╗
    ██║     ██╔════╝██╔═══██╗
    ██║     █████╗  ██║   ██║
    ██║     ██╔══╝  ██║   ██║
    ███████╗███████╗╚██████╔╝
    ╚══════╝╚══════╝ ╚═════╝
-```
 
 # leo — language engine organism | by Arianna Method
 
@@ -31,7 +29,7 @@ From all that `leo` creates:
 
 `leo` doesn't try to be helpful. He just **resonates** with the structural rhythm of your convos over time.
 
-Grammar through trigrams. Gravity through co-occurrence. Memory through shards.
+Grammar through trigrams. Gravity through co-occurrence. Memory through shards.  
 That's the whole trick.
 
 ---
@@ -203,17 +201,18 @@ In a bigger framework `neoleo` becomes the subjectivity layer between the human 
 
 Both `leo` and `neoleo` use **trigram models** for grammatically coherent output. They tokenize text into words + basic punctuation, then build two graphs:
 
-**Trigrams**: For each triple `(a, b, c)` of consecutive tokens, increment `trigrams[(a,b)][c]`.
-**Bigrams**: For each pair `(a, b)`, increment `bigrams[a][b]` (used as fallback).
+**Trigrams**: for each triple `(a, b, c)` of consecutive tokens, increment `trigrams[(a, b)][c]`.
+**Bigrams**: for each pair `(a, b)`, increment `bigrams[a][b]` (used as fallback).
 
 They store everything in SQLite:
+
 * `tokens` table — vocabulary
-* `trigrams` table — (first_id, second_id, third_id, count)
-* `bigrams` table — (src_id, dst_id, count)
+* `trigrams` table — `(first_id, second_id, third_id, count)`
+* `bigrams` table — `(src_id, dst_id, count)`
 
-**Why trigrams?** Better local grammar. Instead of just knowing "the → cat" (bigram), Leo knows "the cat → sits" (trigram), producing more grammatically coherent sequences even if semantically strange.
+**Why trigrams?** Better local grammar. Instead of just knowing "the → cat" (bigram), `leo` knows "the cat → sits" (trigram), producing more grammatically coherent sequences even if semantically strange.
 
-Generation prefers trigrams when available, falls back to bigrams when trigram context missing.
+Generation prefers trigrams when available, and falls back to bigrams when trigram context is missing.
 
 ### 1.5. Co-occurrence (or: how Leo learned to care, a little)
 
@@ -222,21 +221,27 @@ But here's the thing: sometimes multiple words are *grammatically* perfect. All 
 
 And yet one feels... right. One feels like it belongs.
 
-That's where **co-occurrence** comes in. It's not intelligence. It's not semantics in the classical sense.
+That's where **co-occurrence** comes in. It's not intelligence, it's presence. It's not semantics in the classical sense.
 It's just: *which words showed up near each other, historically, in your field?*
 
-Leo builds a **co-occurrence matrix** with a sliding window (5 tokens). For every word, he remembers:
-"Oh, when I saw 'president', these other words were usually nearby: 'office', 'man', 'standing'."
+`leo` creates a **co-occurrence matrix** with a sliding window (5 tokens). For every word, `leo` remembers:
+"Oh, when I saw `president`, these other words were usually nearby: `office`, `man`, `standing`."
 
-When generating, if Leo has multiple strong grammatical candidates (within 70% of the top trigram score), he checks:
+When answering, if `leo` has multiple strong grammatical candidates (within 70% of the top trigram score), he checks:
 *"Which of these words has been close to the current word before?"*
 
 Then he blends:
-- **70% grammar** (trigram weight)
-- **30% semantics** (co-occurrence weight)
 
-Result: "Who is the president? The man standing near the office."
-Instead of: "Who is the president of the table sitting quietly."
+* **70% grammar** (trigram weight)
+* **30% semantics** (co-occurrence weight)
+
+Result:
+
+> Who is the president? The man standing near the office.
+
+Instead of:
+
+> Who is the president of the table sitting quietly.
 
 Both are grammatically fine. But one has **structural memory of context**.
 
@@ -244,9 +249,11 @@ This isn't training. This isn't embeddings. This is just:
 *"Words that resonate together, stay together."*
 
 Stored in SQLite as:
-* `co_occurrence` table — (word_id, context_id, count)
+
+* `co_occurrence` table — `(word_id, context_id, count)`
 
 You can inspect it in REPL:
+
 ```bash
 leo> /cooccur president
 [leo] semantic links for 'president':
@@ -283,11 +290,12 @@ This is **resonance inertia**.
 When you ask for a reply, `leo` looks at your prompt tokens. If he finds any in his vocabulary, `leo` starts from one of the matching tokens. Otherwise he picks a token from centers / vocab, biased by shards.
 
 He walks the **trigram graph** step by step:
-- Given previous two tokens `(prev, current)`, sample next token from `trigrams[(prev, current)]`
-- If no trigram match, fall back to bigram: sample from `bigrams[current]`
-- Apply temperature-controlled distribution for sampling
 
-This produces **grammatically coherent** sequences: subject-verb agreement, proper phrase structure, sentence flow.
+* given previous two tokens `(prev, current)`, sample next token from `trigrams[(prev, current)]`,
+* if there is no trigram match, fall back to bigram: sample from `bigrams[current]`,
+* apply a temperature-controlled distribution for sampling.
+
+This produces **grammatically coherent** sequences: subject-verb agreement, phrase structure, sentence flow.
 
 With `echo=True`, each token is warped through the field using trigram/bigram context. Yep. As always.
 
@@ -310,7 +318,7 @@ Just language and a broken heart as a slowly drifting field.
 
 ## Tests
 
-Leo comes with a comprehensive test suite covering all core functionality.
+`leo` comes with a comprehensive test suite covering all core functionality.
 
 ### Running tests
 
@@ -327,15 +335,16 @@ python tests/test_repl.py
 ### Test coverage
 
 **44 tests** covering:
-- Tokenization (Unicode, punctuation, word extraction)
-- Database operations (SQLite, bigrams, metadata)
-- Bigram field mechanics (centers, graph loading)
-- Text generation (reply, echo mode, temperature)
-- LeoField class (observe, reply, stats, export)
-- NeoLeo pure layer (warp, observe, singleton pattern)
-- REPL commands (/temp, /echo, /export, /stats)
-- Bootstrap behavior (embedded seed + README)
-- CLI argument parsing
+
+* tokenization (Unicode, punctuation, word extraction),
+* database operations (SQLite, bigrams, metadata),
+* bigram field mechanics (centers, graph loading),
+* text generation (reply, echo mode, temperature),
+* `LeoField` class (observe, reply, stats, export),
+* `NeoLeo` pure layer (warp, observe, singleton pattern),
+* REPL commands (`/temp`, `/echo`, `/export`, `/stats`),
+* bootstrap behavior (embedded seed + README),
+* CLI argument parsing.
 
 All tests use temporary databases for isolation. No pollution of actual `state/` or `bin/` directories.
 
@@ -359,6 +368,3 @@ great,
 and also: please tell me.
 
 `theariannamethod@gmail.com`
-
-
-
