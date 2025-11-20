@@ -459,10 +459,10 @@ class TestResonantExperts(unittest.TestCase):
         self.assertEqual(expert.name, "structural")
 
     def test_experts_defined(self):
-        """Test all 4 experts are defined."""
-        self.assertEqual(len(EXPERTS), 4)
+        """Test all 5 experts are defined (including trauma layer)."""
+        self.assertEqual(len(EXPERTS), 5)
         names = {e.name for e in EXPERTS}
-        self.assertEqual(names, {"structural", "semantic", "creative", "precise"})
+        self.assertEqual(names, {"structural", "semantic", "creative", "precise", "wounded"})
 
     def test_expert_temperatures(self):
         """Test expert temperature ranges."""
