@@ -439,6 +439,11 @@ def fix_punctuation(text: str) -> str:
     - Strange dashes: " - - - " → " — "
     - Artifacts like "t:." → "t."
     - Multiple spaces → single space
+    - Bad end punctuation: ",." → "."
+    - Repeated em-dashes: " — — — " → " — "
+    - Word repetitions: "Leo leo" → "Leo"
+    - Mid-sentence capitalization: "bigger In" → "bigger in"
+    - Always capitalize "Leo" (proper name)
 
     Pure string operations, zero impact on presence architecture.
     (Credit: GPT-5.1 suggestion for post-polish layer)
@@ -455,17 +460,51 @@ def fix_punctuation(text: str) -> str:
     # 3) Collapse repeated punctuation
     text = re.sub(r"([!?]){2,}", r"\1", text)
     text = re.sub(r"\.{2,}", ".", text)
+    text = re.sub(r",\.", ".", text)  # ",." → "."
+    text = re.sub(r",;", ";", text)   # ",;" → ";"
+    text = re.sub(r"\.,", ".", text)  # ".," → "."
 
-    # 4) Normalize weird dashes
+    # 4) Normalize weird dashes and em-dashes
+    text = re.sub(r"\s*—\s*—\s*—\s*", " — ", text)  # " — — — " → " — "
+    text = re.sub(r"\s*—\s*—\s*", " — ", text)      # " — — " → " — "
     text = re.sub(r"\s*-\s*-\s*-\s*", " — ", text)  # " - - - " → " — "
-    text = re.sub(r"\s*-\s*-\s*", " — ", text)        # " - - " → " — "
-    text = re.sub(r"\s+-\s+", "-", text)              # " - " → "-" (word-word)
+    text = re.sub(r"\s*-\s*-\s*", " — ", text)      # " - - " → " — "
+    text = re.sub(r"\s+-\s+", "-", text)            # " - " → "-" (word-word)
+    text = re.sub(r"—-", "—", text)                 # "—-" → "—"
+    text = re.sub(r"-—", "—", text)                 # "-—" → "—"
 
     # 5) Fix specific artifacts
     text = text.replace("t:.", "t.")
     text = text.replace("t:", "t")
 
-    # 6) Clean up double spaces
+    # 6) Fix repetition of words (case-insensitive consecutive duplicates)
+    # e.g., "Leo leo" → "Leo"
+    text = re.sub(r"\b(\w+)\s+\1\b", r"\1", text, flags=re.IGNORECASE)
+
+    # 7) Always capitalize "Leo" (it's a name)
+    text = re.sub(r"\bleo\b", "Leo", text)
+
+    # 8) Fix mid-sentence capitalization artifacts
+    # After first word, lowercase words that shouldn't be capitalized
+    # unless they're at sentence start (after .!?)
+    words = text.split()
+    if len(words) > 1:
+        fixed = [words[0]]  # Keep first word as-is
+        for i, word in enumerate(words[1:], 1):
+            # Check if previous word ended with sentence-ending punctuation
+            prev_ends_sentence = i > 0 and any(words[i-1].endswith(p) for p in ['.', '!', '?'])
+
+            # If not after sentence end and word is all-caps or starts with uppercase
+            # (but not all uppercase like acronyms), fix it
+            if not prev_ends_sentence and word and word[0].isupper() and not word.isupper():
+                # Exception: keep "Leo" capitalized always
+                if word.lower() != "leo" and len(word) > 1:
+                    word = word.lower()
+
+            fixed.append(word)
+        text = " ".join(fixed)
+
+    # 9) Clean up double spaces
     text = re.sub(r"\s{2,}", " ", text).strip()
 
     return text
