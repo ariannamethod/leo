@@ -560,9 +560,10 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r"([!?]){2,}", r"\1", text)
     text = re.sub(r"\.{2,}", ".", text)
 
-    # 4) Normalize weird dashes: " - - - " → " — "
-    text = re.sub(r"\s*-\s*-\s*-\s*", " — ", text)
-    text = re.sub(r"\s*-\s*-\s*", " — ", text)
+    # 4) Normalize weird dashes
+    text = re.sub(r"\s*-\s*-\s*-\s*", " — ", text)  # " - - - " → " — "
+    text = re.sub(r"\s*-\s*-\s*", " — ", text)        # " - - " → " — "
+    text = re.sub(r"\s+-\s+", "-", text)              # " - " → "-" (word-word)
 
     # 5) Fix specific artifacts
     text = text.replace("t:.", "t.")
@@ -625,9 +626,15 @@ def distribution_entropy(counts: List[float]) -> float:
         if c <= 0.0:
             continue
         p = c / total
-        h -= p * math.log(p + 1e-12)
+        # For numerical stability: only add epsilon if p is very small
+        # When p ≈ 1.0, log(p + epsilon) introduces floating point error
+        if p < 0.9999:
+            h -= p * math.log(p + 1e-12)
+        elif p < 1.0:
+            h -= p * math.log(p)  # No epsilon near 1.0
 
-    return h
+    # Clamp to [0, ∞) to handle floating point errors
+    return max(0.0, h)
 
 
 def compute_prompt_novelty(
