@@ -1148,6 +1148,85 @@ def apply_memory_decay(
     return deleted
 
 
+@dataclass
+class Expert:
+    """
+    A resonant expert - a perspective on the field.
+
+    No separate model. No learned weights. Just a different view:
+    - Different temperature (exploration vs precision)
+    - Different blend ratio (grammar vs semantics)
+    - Different sampling strategy
+
+    This is MoE as presence, not training.
+    """
+
+    name: str
+    temperature: float
+    semantic_weight: float  # 0.0 = pure grammar, 1.0 = pure semantics
+    description: str
+
+
+# Pre-defined expert perspectives
+EXPERTS = [
+    Expert(
+        name="structural",
+        temperature=0.8,
+        semantic_weight=0.2,
+        description="Grammar-focused, coherent structure",
+    ),
+    Expert(
+        name="semantic",
+        temperature=1.0,
+        semantic_weight=0.5,
+        description="Meaning-focused, thematic coherence",
+    ),
+    Expert(
+        name="creative",
+        temperature=1.3,
+        semantic_weight=0.4,
+        description="Exploratory, high entropy",
+    ),
+    Expert(
+        name="precise",
+        temperature=0.6,
+        semantic_weight=0.3,
+        description="Conservative, low entropy",
+    ),
+]
+
+
+def route_to_expert(
+    pulse: PresencePulse,
+    active_themes: Optional[ActiveThemes] = None,
+) -> Expert:
+    """
+    Route to an expert based on situational awareness.
+
+    Routing logic (no learned weights, pure heuristics):
+    - High novelty (> 0.7) → creative (explore unknown)
+    - Low entropy (< 0.3) → precise (stay coherent)
+    - Many active themes → semantic (follow themes)
+    - Default → structural (solid grammar)
+
+    This is presence-based routing, not gradient descent.
+    """
+    # Creative: explore the unknown
+    if pulse.novelty > 0.7:
+        return EXPERTS[2]  # creative
+
+    # Precise: stay coherent when entropy low
+    if pulse.entropy < 0.3:
+        return EXPERTS[3]  # precise
+
+    # Semantic: follow themes when context is rich
+    if active_themes and len(active_themes.theme_scores) >= 2:
+        return EXPERTS[1]  # semantic
+
+    # Structural: default, solid grammar
+    return EXPERTS[0]  # structural
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -1295,12 +1374,14 @@ class ReplyContext(NamedTuple):
     pulse: presence pulse metrics
     quality: self-assessment score
     arousal: emotional arousal of prompt
+    expert: which expert was selected (None if experts disabled)
     """
 
     output: str
     pulse: PresencePulse
     quality: QualityScore
     arousal: float
+    expert: Optional[Expert] = None
 
 
 def generate_reply(
@@ -1316,6 +1397,9 @@ def generate_reply(
     co_occur: Optional[Dict[str, Dict[str, int]]] = None,
     emotion_map: Optional[Dict[str, float]] = None,
     return_context: bool = False,
+    themes: Optional[List[Theme]] = None,
+    token_to_themes: Optional[Dict[str, List[int]]] = None,
+    use_experts: bool = True,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -1353,7 +1437,21 @@ def generate_reply(
     arousal = compute_prompt_arousal(prompt_tokens, emotion_map or {})
     # Collect entropy per-step during generation
     entropy_log: List[float] = []
-    # (These will be used by PresencePulse, Experts, etc. in future layers)
+
+    # PRESENCE: Activate themes and route to expert
+    active_themes: Optional[ActiveThemes] = None
+    if use_experts and themes and token_to_themes:
+        active_themes = activate_themes_for_prompt(prompt_tokens, themes, token_to_themes)
+
+    # Preliminary pulse (without entropy, since we haven't generated yet)
+    preliminary_pulse = compute_presence_pulse(novelty, arousal, entropy=0.5)
+
+    # RESONANT EXPERTS: Route to expert based on situation
+    selected_expert: Optional[Expert] = None
+    if use_experts:
+        selected_expert = route_to_expert(preliminary_pulse, active_themes)
+        # Override temperature with expert's preference
+        temperature = selected_expert.temperature
 
     start = choose_start_from_prompt(prompt_tokens, bigrams, vocab, centers, bias)
 
@@ -1421,7 +1519,11 @@ def generate_reply(
     # Return context if requested (for LeoField snapshot saving)
     if return_context:
         context = ReplyContext(
-            output=output, pulse=pulse, quality=quality, arousal=arousal
+            output=output,
+            pulse=pulse,
+            quality=quality,
+            arousal=arousal,
+            expert=selected_expert,
         )
         return context  # type: ignore
 
@@ -1456,6 +1558,8 @@ class LeoField:
         # PRESENCE: memory decay tracking
         self.observe_count: int = 0
         self.DECAY_INTERVAL: int = 100  # Apply decay every N observations
+        # PRESENCE: last selected expert (resonant routing)
+        self.last_expert: Optional[Expert] = None
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -1510,11 +1614,15 @@ class LeoField:
             co_occur=self.co_occur,
             emotion_map=self.emotion,
             return_context=True,
+            themes=self.themes,
+            token_to_themes=self.token_to_themes,
+            use_experts=True,
         )
 
         # Store presence metrics
         self.last_pulse = context.pulse
         self.last_quality = context.quality
+        self.last_expert = context.expert
 
         # PRESENCE: Save snapshot if this was a good moment
         if should_save_snapshot(context.quality, context.arousal):
