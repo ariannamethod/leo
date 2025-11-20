@@ -138,6 +138,21 @@ def init_db() -> sqlite3.Connection:
         )
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            origin TEXT,
+            quality REAL,
+            emotional REAL,
+            created_at INTEGER,
+            last_used_at INTEGER,
+            use_count INTEGER DEFAULT 0,
+            cluster_id INTEGER
+        )
+        """
+    )
 
     conn.commit()
     return conn
@@ -1017,6 +1032,79 @@ def compute_quality_score(
     )
 
 
+def save_snapshot(
+    conn: sqlite3.Connection,
+    text: str,
+    origin: str,
+    quality: float,
+    emotional: float,
+    max_snapshots: int = 512,
+) -> None:
+    """
+    Save a snapshot of text (Leo's self-curated dataset).
+
+    Only saves if quality is high enough. If over max_snapshots,
+    deletes oldest/least-used snapshots.
+
+    This is Leo building his own training set from good moments.
+    No external corpus. Just his best replies over time.
+    """
+    import time
+
+    cur = conn.cursor()
+
+    # Insert snapshot
+    cur.execute(
+        """
+        INSERT INTO snapshots (text, origin, quality, emotional, created_at, last_used_at, use_count)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
+        """,
+        (text, origin, quality, emotional, int(time.time()), int(time.time())),
+    )
+
+    # Check snapshot count and cleanup if needed
+    cur.execute("SELECT COUNT(*) FROM snapshots")
+    count = cur.fetchone()[0]
+
+    if count > max_snapshots:
+        # Delete oldest snapshots with low use_count
+        # Sort by: use_count ASC, created_at ASC (oldest first)
+        # Delete bottom 10%
+        to_delete = max(1, int(max_snapshots * 0.1))
+        cur.execute(
+            """
+            DELETE FROM snapshots
+            WHERE id IN (
+                SELECT id FROM snapshots
+                ORDER BY use_count ASC, created_at ASC
+                LIMIT ?
+            )
+            """,
+            (to_delete,),
+        )
+
+    conn.commit()
+
+
+def should_save_snapshot(quality: QualityScore, arousal: float) -> bool:
+    """
+    Decide whether to save this moment as a snapshot.
+
+    Criteria:
+    - High quality (overall > 0.6)
+    - OR interesting emotional charge (arousal > 0.5) + decent quality (overall > 0.4)
+
+    Leo saves his best moments, not everything.
+    """
+    if quality.overall > 0.6:
+        return True  # High quality always saved
+
+    if arousal > 0.5 and quality.overall > 0.4:
+        return True  # High emotion + decent quality
+
+    return False
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -1156,6 +1244,22 @@ def choose_start_from_prompt(
     return choose_start_token(vocab, centers, bias)
 
 
+class ReplyContext(NamedTuple):
+    """
+    Generation context for a reply (internal metrics).
+
+    output: the generated text
+    pulse: presence pulse metrics
+    quality: self-assessment score
+    arousal: emotional arousal of prompt
+    """
+
+    output: str
+    pulse: PresencePulse
+    quality: QualityScore
+    arousal: float
+
+
 def generate_reply(
     bigrams: Dict[str, Dict[str, int]],
     vocab: List[str],
@@ -1168,6 +1272,7 @@ def generate_reply(
     trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
     co_occur: Optional[Dict[str, Dict[str, int]]] = None,
     emotion_map: Optional[Dict[str, float]] = None,
+    return_context: bool = False,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -1269,7 +1374,13 @@ def generate_reply(
     quality = compute_quality_score(
         prompt=prompt, reply=output, avg_entropy=avg_entropy, trigrams=trigrams or {}
     )
-    # (pulse and quality will be used by Resonant Experts, Snapshots, etc.)
+
+    # Return context if requested (for LeoField snapshot saving)
+    if return_context:
+        context = ReplyContext(
+            output=output, pulse=pulse, quality=quality, arousal=arousal
+        )
+        return context  # type: ignore
 
     return output
 
@@ -1332,7 +1443,8 @@ class LeoField:
         echo: bool = False,
     ) -> str:
         """Generate reply through the field using trigram model."""
-        return generate_reply(
+        # Get reply with full context (pulse, quality, arousal)
+        context = generate_reply(
             self.bigrams,
             self.vocab,
             self.centers,
@@ -1344,7 +1456,39 @@ class LeoField:
             trigrams=self.trigrams,
             co_occur=self.co_occur,
             emotion_map=self.emotion,
+            return_context=True,
         )
+
+        # Store presence metrics
+        self.last_pulse = context.pulse
+        self.last_quality = context.quality
+
+        # PRESENCE: Save snapshot if this was a good moment
+        if should_save_snapshot(context.quality, context.arousal):
+            save_snapshot(
+                self.conn,
+                text=context.output,
+                origin="leo",
+                quality=context.quality.overall,
+                emotional=context.arousal,
+            )
+
+        # Also consider saving user prompt if it was clear/interesting
+        prompt_arousal = compute_prompt_arousal(tokenize(prompt), self.emotion)
+        if prompt_arousal > 0.6:  # High emotional charge
+            # Simple quality check for prompt: not too short, not just punctuation
+            prompt_tokens = tokenize(prompt)
+            if len(prompt_tokens) >= 3:
+                prompt_quality = 0.7  # Assume decent quality for interesting prompts
+                save_snapshot(
+                    self.conn,
+                    text=prompt,
+                    origin="user",
+                    quality=prompt_quality,
+                    emotional=prompt_arousal,
+                )
+
+        return context.output
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
         """Dump current lexicon + centers into a JSON snapshot."""
