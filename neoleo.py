@@ -488,6 +488,12 @@ def fix_punctuation(text: str) -> str:
     # Remove spaces around apostrophes: "isn ' t" → "isn't", "don ' t" → "don't"
     text = re.sub(r"\s*'\s*", "'", text)
 
+    # 7.6) Restore missing apostrophes in common contractions
+    # Patterns like "isn t" → "isn't", "doesn t" → "doesn't"
+    text = re.sub(r"\b(isn|doesn|don|can|won|wouldn|couldn|shouldn|hasn|haven|hadn|aren|weren|wasn)\s+t\b", r"\1't", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(it|that|what|there)\s+s\b", r"\1's", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(I|you|we|they)\s+(ll|ve|re|d)\b", r"\1'\2", text, flags=re.IGNORECASE)
+
     # 8) Fix mid-sentence capitalization artifacts
     # After first word, lowercase words that shouldn't be capitalized
     # unless they're at sentence start (after .!?)
