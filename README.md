@@ -72,7 +72,7 @@ leo/
 
 ## `leo` — organism (REPL + one-shot)
 
-– or let’s dive into the process.
+– or let’s dive into the process like psychologist dives into patient's trauma.
 
 ### Bootstrap logic
 
