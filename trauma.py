@@ -299,3 +299,42 @@ def _compute_state(
 
     level = max(0.0, min(level, 1.0))
     return TraumaState(level=level, last_event_ts=ts)
+
+
+# ────────────────────────────
+# Public query helpers
+# ────────────────────────────
+
+def get_top_trauma_tokens(db_path: Path, n: int = 10) -> list[tuple[str, float]]:
+    """
+    Get tokens with highest trauma weight (most wounded words).
+
+    Args:
+        db_path: Path to leo.sqlite3
+        n: Number of top tokens to return (default: 10)
+
+    Returns:
+        List of (token, weight) tuples, sorted by weight descending.
+        Empty list if no trauma data or connection fails.
+    """
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT token, weight FROM trauma_tokens
+            ORDER BY weight DESC
+            LIMIT ?
+            """,
+            (n,)
+        )
+        rows = cur.fetchall()
+        result = [(str(r["token"]), float(r["weight"])) for r in rows]
+        conn.close()
+        return result
+
+    except Exception:
+        # Silent: this is a debug helper, not critical path
+        return []
