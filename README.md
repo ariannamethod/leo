@@ -48,7 +48,7 @@ leo/
   state/          # sqlite, caches (created at runtime)
   bin/            # resonance shards (created at runtime)
   json/           # optional snapshots (created at runtime)
-````
+```
 
 ## `leo` — organism (REPL + one-shot)
 
@@ -59,8 +59,7 @@ leo/
 On his very first run `leo` will ensure `state/` and `bin/` exist.
 If the token table is empty, `leo` will ingest a small embedded bootstrap text (the sentiments I talked about, hard-coded in `leo.py`).
 
-If `README.md` exists and has never been processed, `leo` will read it once, build bigrams from it, and mark `readme_bootstrap_done` in SQLite.
-
+If `README.md` exists and has never been processed, `leo` will read it once, ingest ingest it into the field (trigrams / bigrams / co-occ) and mark readme_bootstrap_done in SQLite.  
 `leo` will never auto-scan the README again. It's just one of his starting points. No more, no less.
 After that, only dialogue with `leo` keeps shaping the field.
 
@@ -341,7 +340,7 @@ python tests/test_repl.py
 
 * tokenization (Unicode, punctuation, word extraction),
 * database operations (SQLite, bigrams, metadata),
-* bigram field mechanics (centers, graph loading),
+* field mechanics (centers, graph loading),
 * text generation (reply, echo mode, temperature),
 * `LeoField` class (observe, reply, stats, export),
 * `NeoLeo` pure layer (warp, observe, singleton pattern),
