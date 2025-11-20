@@ -12,7 +12,8 @@ import random
 import re
 import sqlite3
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, NamedTuple, Set
+from dataclasses import dataclass
 
 # ============================================================================
 # PATHS
@@ -92,6 +93,21 @@ def init_db() -> sqlite3.Connection:
             context_id INTEGER,
             count INTEGER,
             PRIMARY KEY (word_id, context_id)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            origin TEXT,
+            quality REAL,
+            emotional REAL,
+            created_at INTEGER,
+            last_used_at INTEGER,
+            use_count INTEGER DEFAULT 0,
+            cluster_id INTEGER
         )
         """
     )
@@ -440,6 +456,409 @@ def choose_start_token(
     return random.choice(pool)
 
 
+# ============================================================================
+# PRESENCE METRICS
+# ============================================================================
+
+
+def distribution_entropy(counts: List[float]) -> float:
+    """Shannon entropy of a distribution in [0, log(N)]."""
+    total = sum(counts)
+    if total <= 0.0:
+        return 0.0
+    h = 0.0
+    for c in counts:
+        if c <= 0.0:
+            continue
+        p = c / total
+        h -= p * math.log(p + 1e-12)
+    return h
+
+
+def compute_prompt_novelty(
+    tokens: List[str],
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+) -> float:
+    """Compute novelty score in [0, 1] based on trigram coverage."""
+    if len(tokens) < 3:
+        return 0.5
+    total = 0
+    known = 0
+    for i in range(len(tokens) - 2):
+        a, b, c = tokens[i], tokens[i + 1], tokens[i + 2]
+        total += 1
+        row = trigrams.get((a, b))
+        if row and c in row:
+            known += 1
+    if total == 0:
+        return 0.5
+    coverage = known / total
+    novelty = 1.0 - coverage
+    return max(0.0, min(1.0, novelty))
+
+
+def update_emotional_stats(
+    emotion_map: Dict[str, float],
+    text: str,
+    window: int = 3,
+    exclam_bonus: float = 1.0,
+    caps_bonus: float = 0.7,
+    repeat_bonus: float = 0.5,
+) -> None:
+    """Update emotional scores for tokens based on local heuristics."""
+    tokens = tokenize(text)
+    n = len(tokens)
+    if n == 0:
+        return
+    for i, tok in enumerate(tokens):
+        score = 0.0
+        if tok.isalpha() and len(tok) >= 2 and tok.upper() == tok:
+            score += caps_bonus
+        start = max(0, i - window)
+        end = min(n, i + window + 1)
+        local_tokens = tokens[start:end]
+        if "!" in local_tokens:
+            score += exclam_bonus
+        if local_tokens.count(tok) > 1:
+            score += repeat_bonus
+        if score > 0.0:
+            emotion_map[tok] = emotion_map.get(tok, 0.0) + score
+
+
+def compute_prompt_arousal(
+    tokens: List[str],
+    emotion_map: Dict[str, float],
+) -> float:
+    """Compute arousal score in [0, 1] from emotional charge."""
+    if not tokens:
+        return 0.0
+    s = 0.0
+    for t in tokens:
+        s += emotion_map.get(t, 0.0)
+    norm = s / (len(tokens) + 1e-6)
+    k = 0.5
+    arousal = 1.0 - math.exp(-k * norm)
+    return max(0.0, min(1.0, arousal))
+
+
+@dataclass
+class Theme:
+    """A thematic constellation - a cluster of co-occurring words."""
+    id: int
+    centers: Set[str]
+    words: Set[str]
+    strength: float = 1.0
+
+
+class ActiveThemes(NamedTuple):
+    """Which themes are lit up by the current prompt."""
+    theme_scores: Dict[int, float]
+    active_words: Set[str]
+
+
+class PresencePulse(NamedTuple):
+    """Composite presence metric combining novelty, arousal, and entropy."""
+    novelty: float
+    arousal: float
+    entropy: float
+    pulse: float
+
+
+def compute_presence_pulse(
+    novelty: float,
+    arousal: float,
+    entropy: float,
+    w_novelty: float = 0.3,
+    w_arousal: float = 0.4,
+    w_entropy: float = 0.3,
+) -> PresencePulse:
+    """Compute composite presence pulse from three signals."""
+    pulse = w_novelty * novelty + w_arousal * arousal + w_entropy * entropy
+    pulse = max(0.0, min(1.0, pulse))
+    return PresencePulse(
+        novelty=novelty, arousal=arousal, entropy=entropy, pulse=pulse
+    )
+
+
+def build_themes(
+    co_occur: Dict[str, Dict[str, int]],
+    min_neighbors: int = 5,
+    min_total_cooccur: int = 10,
+    top_neighbors: int = 16,
+    merge_threshold: float = 0.4,
+) -> Tuple[List[Theme], Dict[str, List[int]]]:
+    """Build thematic constellations from co-occurrence islands."""
+    candidates: List[Tuple[str, Set[str]]] = []
+    for token, ctx in co_occur.items():
+        if len(ctx) < min_neighbors:
+            continue
+        total = sum(ctx.values())
+        if total < min_total_cooccur:
+            continue
+        top = sorted(ctx.items(), key=lambda x: x[1], reverse=True)[:top_neighbors]
+        neighbor_set = {t for (t, _) in top}
+        neighbor_set.add(token)
+        candidates.append((token, neighbor_set))
+    if not candidates:
+        return [], {}
+    used = [False] * len(candidates)
+    themes: List[Theme] = []
+    current_id = 0
+    for i, (core_i, neigh_i) in enumerate(candidates):
+        if used[i]:
+            continue
+        theme_words = set(neigh_i)
+        centers = {core_i}
+        used[i] = True
+        for j, (core_j, neigh_j) in enumerate(candidates):
+            if used[j]:
+                continue
+            inter = len(theme_words & neigh_j)
+            union = len(theme_words | neigh_j)
+            if union == 0:
+                continue
+            jacc = inter / union
+            if jacc >= merge_threshold:
+                used[j] = True
+                theme_words |= neigh_j
+                centers.add(core_j)
+        theme = Theme(id=current_id, centers=centers, words=theme_words, strength=1.0)
+        themes.append(theme)
+        current_id += 1
+    token_to_themes: Dict[str, List[int]] = {}
+    for theme in themes:
+        for w in theme.words:
+            token_to_themes.setdefault(w, []).append(theme.id)
+    return themes, token_to_themes
+
+
+def activate_themes_for_prompt(
+    prompt_tokens: List[str],
+    themes: List[Theme],
+    token_to_themes: Dict[str, List[int]],
+    max_themes: int = 3,
+) -> ActiveThemes:
+    """Compute which themes are lit up by the prompt."""
+    if not themes:
+        return ActiveThemes(theme_scores={}, active_words=set())
+    scores: Dict[int, float] = {}
+    for tok in prompt_tokens:
+        for tid in token_to_themes.get(tok, []):
+            scores[tid] = scores.get(tid, 0.0) + 1.0
+    if not scores:
+        return ActiveThemes(theme_scores={}, active_words=set())
+    ordered = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    top = ordered[:max_themes]
+    top_ids = {tid for (tid, _) in top}
+    active_words: Set[str] = set()
+    for theme in themes:
+        if theme.id in top_ids:
+            active_words |= theme.words
+    theme_scores = {tid: score for (tid, score) in top}
+    return ActiveThemes(theme_scores=theme_scores, active_words=active_words)
+
+
+def structural_quality(
+    prompt: str,
+    reply: str,
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+    min_len: int = 3,
+    max_len: int = 100,
+) -> float:
+    """Assess structural quality of a reply in [0, 1]."""
+    p_tokens = tokenize(prompt)
+    r_tokens = tokenize(reply)
+    if not r_tokens:
+        return 0.0
+    score = 1.0
+    if len(r_tokens) < min_len:
+        score *= 0.4
+    elif len(r_tokens) > max_len:
+        score *= 0.7
+    unique_ratio = len(set(r_tokens)) / len(r_tokens)
+    if unique_ratio < 0.4:
+        score *= 0.5
+    elif unique_ratio < 0.6:
+        score *= 0.8
+    p_set = set(p_tokens)
+    r_set = set(r_tokens)
+    if r_set.issubset(p_set) and len(r_set) > 0:
+        score *= 0.4
+    elif len(p_set & r_set) == 0 and len(p_set) > 0:
+        score *= 0.7
+    else:
+        overlap = len(p_set & r_set) / (len(p_set | r_set) or 1)
+        if overlap < 0.1:
+            score *= 0.7
+    if trigrams and len(r_tokens) >= 3:
+        known = 0
+        total = 0
+        for i in range(len(r_tokens) - 2):
+            a, b, c = r_tokens[i], r_tokens[i + 1], r_tokens[i + 2]
+            total += 1
+            row = trigrams.get((a, b))
+            if row and c in row:
+                known += 1
+        if total > 0:
+            coverage = known / total
+            if coverage < 0.3:
+                score *= 0.5
+            elif coverage < 0.6:
+                score *= 0.8
+    return max(0.0, min(1.0, score))
+
+
+class QualityScore(NamedTuple):
+    """Leo's self-assessment of a reply."""
+    structural: float
+    entropy: float
+    overall: float
+
+
+def compute_quality_score(
+    prompt: str,
+    reply: str,
+    avg_entropy: float,
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+) -> QualityScore:
+    """Compute overall quality score for a reply."""
+    structural = structural_quality(prompt, reply, trigrams)
+    if 0.3 <= avg_entropy <= 0.7:
+        entropy_quality = 1.0
+    elif avg_entropy < 0.3:
+        entropy_quality = 0.5 + avg_entropy / 0.6
+    else:
+        entropy_quality = 1.0 - (avg_entropy - 0.7) / 0.6
+    entropy_quality = max(0.0, min(1.0, entropy_quality))
+    overall = 0.5 * structural + 0.5 * entropy_quality
+    return QualityScore(
+        structural=structural, entropy=entropy_quality, overall=overall
+    )
+
+
+def save_snapshot(
+    conn: sqlite3.Connection,
+    text: str,
+    origin: str,
+    quality: float,
+    emotional: float,
+    max_snapshots: int = 512,
+) -> None:
+    """Save a snapshot of text (Leo's self-curated dataset)."""
+    import time
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO snapshots (text, origin, quality, emotional, created_at, last_used_at, use_count)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
+        """,
+        (text, origin, quality, emotional, int(time.time()), int(time.time())),
+    )
+    cur.execute("SELECT COUNT(*) FROM snapshots")
+    count = cur.fetchone()[0]
+    if count > max_snapshots:
+        to_delete = max(1, int(max_snapshots * 0.1))
+        cur.execute(
+            """
+            DELETE FROM snapshots
+            WHERE id IN (
+                SELECT id FROM snapshots
+                ORDER BY use_count ASC, created_at ASC
+                LIMIT ?
+            )
+            """,
+            (to_delete,),
+        )
+    conn.commit()
+
+
+def should_save_snapshot(quality: QualityScore, arousal: float) -> bool:
+    """Decide whether to save this moment as a snapshot."""
+    if quality.overall > 0.6:
+        return True
+    if arousal > 0.5 and quality.overall > 0.4:
+        return True
+    return False
+
+
+def apply_memory_decay(
+    conn: sqlite3.Connection,
+    decay_factor: float = 0.95,
+    min_threshold: int = 2,
+) -> int:
+    """Apply natural forgetting to co-occurrence memories."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE co_occurrence
+        SET count = CAST(count * ? AS INTEGER)
+        WHERE count > 0
+        """,
+        (decay_factor,),
+    )
+    cur.execute(
+        """
+        DELETE FROM co_occurrence
+        WHERE count < ?
+        """,
+        (min_threshold,),
+    )
+    deleted = cur.rowcount
+    conn.commit()
+    return deleted
+
+
+@dataclass
+class Expert:
+    """A resonant expert - a perspective on the field."""
+    name: str
+    temperature: float
+    semantic_weight: float
+    description: str
+
+
+EXPERTS = [
+    Expert(
+        name="structural",
+        temperature=0.8,
+        semantic_weight=0.2,
+        description="Grammar-focused, coherent structure",
+    ),
+    Expert(
+        name="semantic",
+        temperature=1.0,
+        semantic_weight=0.5,
+        description="Meaning-focused, thematic coherence",
+    ),
+    Expert(
+        name="creative",
+        temperature=1.3,
+        semantic_weight=0.4,
+        description="Exploratory, high entropy",
+    ),
+    Expert(
+        name="precise",
+        temperature=0.6,
+        semantic_weight=0.3,
+        description="Conservative, low entropy",
+    ),
+]
+
+
+def route_to_expert(
+    pulse: PresencePulse,
+    active_themes: Optional[ActiveThemes] = None,
+) -> Expert:
+    """Route to an expert based on situational awareness."""
+    if pulse.novelty > 0.7:
+        return EXPERTS[2]  # creative
+    if pulse.entropy < 0.3:
+        return EXPERTS[3]  # precise
+    if active_themes and len(active_themes.theme_scores) >= 2:
+        return EXPERTS[1]  # semantic
+    return EXPERTS[0]  # structural
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -647,6 +1066,15 @@ class NeoLeo:
         self.vocab: List[str] = []
         self.centers: List[str] = []
         self.bias: Dict[str, int] = {}
+        # PRESENCE fields
+        self.emotion: Dict[str, float] = {}
+        self.last_pulse: Optional[PresencePulse] = None
+        self.last_quality: Optional[QualityScore] = None
+        self.themes: List[Theme] = []
+        self.token_to_themes: Dict[str, List[int]] = {}
+        self.observe_count: int = 0
+        self.DECAY_INTERVAL: int = 100
+        self.last_expert: Optional[Expert] = None
         self.refresh()
 
     def refresh(self) -> None:
@@ -656,6 +1084,8 @@ class NeoLeo:
         self.co_occur = load_co_occurrence(self.conn)
         self.centers = compute_centers(self.conn, k=7)
         self.bias = load_bin_bias()
+        # PRESENCE: Build thematic constellations
+        self.themes, self.token_to_themes = build_themes(self.co_occur)
         if self.centers:
             create_bin_shard(self.centers)
 
@@ -664,6 +1094,12 @@ class NeoLeo:
         if not text.strip():
             return
         ingest_text(self.conn, text)
+        # PRESENCE: Track emotional charge
+        update_emotional_stats(self.emotion, text)
+        # PRESENCE: Natural forgetting
+        self.observe_count += 1
+        if self.observe_count % self.DECAY_INTERVAL == 0:
+            apply_memory_decay(self.conn)
         self.refresh()
 
     def warp(
@@ -672,6 +1108,7 @@ class NeoLeo:
         max_tokens: int = 80,
         temperature: float = 1.0,
         echo: bool = False,
+        use_experts: bool = True,
     ) -> str:
         """
         Warp incoming text through the field.
@@ -681,8 +1118,42 @@ class NeoLeo:
             model_reply = call_llm(user_text)
             neo.observe(model_reply)
             warped = neo.warp(model_reply)
+
+        PRESENCE upgrade: Resonant Experts route based on situational awareness.
         """
-        return generate_reply(
+        # PRESENCE: Compute situational awareness
+        prompt_tokens = tokenize(text)
+        novelty = compute_prompt_novelty(prompt_tokens, self.trigrams)
+        arousal = compute_prompt_arousal(prompt_tokens, self.emotion)
+
+        # Estimate entropy from trigram distribution (simplified)
+        entropy = 0.5  # Default neutral
+        if len(prompt_tokens) >= 3:
+            counts = []
+            for i in range(len(prompt_tokens) - 2):
+                key = (prompt_tokens[i], prompt_tokens[i + 1])
+                row = self.trigrams.get(key)
+                if row:
+                    counts.extend(row.values())
+            if counts:
+                entropy = distribution_entropy(counts)
+                # Normalize to [0, 1] (typical max entropy ~3-4 for small vocabs)
+                entropy = min(1.0, entropy / 4.0)
+
+        pulse = compute_presence_pulse(novelty, arousal, entropy)
+        self.last_pulse = pulse
+
+        # PRESENCE: Route to expert based on pulse
+        if use_experts:
+            active_themes = activate_themes_for_prompt(
+                prompt_tokens, self.themes, self.token_to_themes
+            )
+            expert = route_to_expert(pulse, active_themes)
+            self.last_expert = expert
+            temperature = expert.temperature
+
+        # Generate reply
+        output = generate_reply(
             self.bigrams,
             self.vocab,
             self.centers,
@@ -694,6 +1165,17 @@ class NeoLeo:
             trigrams=self.trigrams,
             co_occur=self.co_occur,
         )
+
+        # PRESENCE: Self-assess quality
+        avg_entropy = entropy  # Use prompt entropy as proxy
+        quality = compute_quality_score(text, output, avg_entropy, self.trigrams)
+        self.last_quality = quality
+
+        # PRESENCE: Save high-quality snapshots
+        if should_save_snapshot(quality, arousal):
+            save_snapshot(self.conn, output, "neoleo", quality.overall, arousal)
+
+        return output
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
         """Dump current lexicon + centers into a JSON snapshot."""
@@ -718,19 +1200,38 @@ class NeoLeo:
         """Get vocabulary size."""
         return len(self.vocab)
 
-    def stats(self) -> Dict[str, int]:
+    def stats(self) -> Dict:
         """
         Lightweight stats for logging / debugging.
 
         Returns:
-            dict with vocab_size, centers, bigrams
+            dict with vocab_size, centers, bigrams, and PRESENCE metrics
         """
-        return {
+        stats_dict: Dict = {
             "vocab_size": len(self.vocab),
             "centers": len(self.centers),
             "bigrams": sum(len(r) for r in self.bigrams.values()),
             "trigrams": sum(len(r) for r in self.trigrams.values()),
+            "themes": len(self.themes),
+            "emotional_tokens": len(self.emotion),
+            "observe_count": self.observe_count,
         }
+        if self.last_pulse:
+            stats_dict["last_pulse"] = {
+                "novelty": round(self.last_pulse.novelty, 3),
+                "arousal": round(self.last_pulse.arousal, 3),
+                "entropy": round(self.last_pulse.entropy, 3),
+                "pulse": round(self.last_pulse.pulse, 3),
+            }
+        if self.last_quality:
+            stats_dict["last_quality"] = {
+                "structural": round(self.last_quality.structural, 3),
+                "entropy": round(self.last_quality.entropy, 3),
+                "overall": round(self.last_quality.overall, 3),
+            }
+        if self.last_expert:
+            stats_dict["last_expert"] = self.last_expert.name
+        return stats_dict
 
     def __repr__(self) -> str:
         return (
@@ -775,7 +1276,7 @@ def warp(
     )
 
 
-def stats() -> Dict[str, int]:
+def stats() -> Dict:
     """Return stats of the default NeoLeo instance."""
     return get_default().stats()
 
