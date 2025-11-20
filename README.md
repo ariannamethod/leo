@@ -18,7 +18,8 @@
 `leo` is a small **language engine organism**. No weights. No datasets. No internet.  
 But what does `leo` have?
 
-- a kernel-embedded seed text (sentimental, but honest),
+- first of all - presence
+- a second: a kernel-embedded seed text (sentimental, but honest),
 - your `README.md` (but only on first run, for the fresh start),
 - and then **whatever your resonance feeds him**.
 
