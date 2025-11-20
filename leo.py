@@ -886,6 +886,137 @@ def activate_themes_for_prompt(
     return ActiveThemes(theme_scores=theme_scores, active_words=active_words)
 
 
+def structural_quality(
+    prompt: str,
+    reply: str,
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+    min_len: int = 3,
+    max_len: int = 100,
+) -> float:
+    """
+    Assess structural quality of a reply in [0, 1].
+
+    Heuristics (Leo judging himself):
+    - Length sanity: too short or too long → penalty
+    - Repetition: low unique token ratio → penalty
+    - Novelty vs prompt: pure echo or total disconnect → penalty
+    - Grammar support: how many trigrams are known → bonus
+
+    This is intentionally simple. Leo doesn't need complex metrics.
+    He just needs to know: "Was this reply alive or flat?"
+    """
+    p_tokens = tokenize(prompt)
+    r_tokens = tokenize(reply)
+
+    if not r_tokens:
+        return 0.0
+
+    score = 1.0
+
+    # (1) Length sanity
+    if len(r_tokens) < min_len:
+        score *= 0.4  # too short
+    elif len(r_tokens) > max_len:
+        score *= 0.7  # too long (but less penalty)
+
+    # (2) Repetition penalty
+    unique_ratio = len(set(r_tokens)) / len(r_tokens)
+    if unique_ratio < 0.4:
+        score *= 0.5  # heavy repetition
+    elif unique_ratio < 0.6:
+        score *= 0.8  # moderate repetition
+
+    # (3) Novelty vs prompt
+    p_set = set(p_tokens)
+    r_set = set(r_tokens)
+
+    if r_set.issubset(p_set) and len(r_set) > 0:
+        # Pure echo (reply only uses prompt words)
+        score *= 0.4
+    elif len(p_set & r_set) == 0 and len(p_set) > 0:
+        # Total disconnect (no overlap at all)
+        score *= 0.7
+    else:
+        # Some healthy overlap
+        overlap = len(p_set & r_set) / (len(p_set | r_set) or 1)
+        if overlap < 0.1:
+            score *= 0.7  # too disconnected
+
+    # (4) Grammar support: check trigram coverage
+    if trigrams and len(r_tokens) >= 3:
+        known = 0
+        total = 0
+        for i in range(len(r_tokens) - 2):
+            a, b, c = r_tokens[i], r_tokens[i + 1], r_tokens[i + 2]
+            total += 1
+            row = trigrams.get((a, b))
+            if row and c in row:
+                known += 1
+
+        if total > 0:
+            coverage = known / total
+            if coverage < 0.3:
+                score *= 0.5  # mostly random/unknown patterns
+            elif coverage < 0.6:
+                score *= 0.8  # moderate support
+
+    # Clamp to [0, 1]
+    return max(0.0, min(1.0, score))
+
+
+class QualityScore(NamedTuple):
+    """
+    Leo's self-assessment of a reply.
+
+    structural: structural coherence [0, 1]
+    entropy: average generation entropy [0, 1]
+    overall: combined quality score [0, 1]
+    """
+
+    structural: float
+    entropy: float
+    overall: float
+
+
+def compute_quality_score(
+    prompt: str,
+    reply: str,
+    avg_entropy: float,
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+) -> QualityScore:
+    """
+    Compute overall quality score for a reply.
+
+    Combines:
+    - structural quality (50%)
+    - entropy score (50%)
+
+    Entropy is mapped: middle range [0.3-0.7] is best (interesting but coherent),
+    very low or very high entropy → penalty.
+    """
+    structural = structural_quality(prompt, reply, trigrams)
+
+    # Map entropy to quality: middle is best
+    # 0.0-0.2: too deterministic (boring)
+    # 0.3-0.7: sweet spot (interesting + coherent)
+    # 0.8-1.0: too chaotic (incoherent)
+    if 0.3 <= avg_entropy <= 0.7:
+        entropy_quality = 1.0  # optimal range
+    elif avg_entropy < 0.3:
+        entropy_quality = 0.5 + avg_entropy / 0.6  # scale up from 0.5
+    else:  # > 0.7
+        entropy_quality = 1.0 - (avg_entropy - 0.7) / 0.6  # scale down
+
+    entropy_quality = max(0.0, min(1.0, entropy_quality))
+
+    # Combined quality (equal weights)
+    overall = 0.5 * structural + 0.5 * entropy_quality
+
+    return QualityScore(
+        structural=structural, entropy=entropy_quality, overall=overall
+    )
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -1133,7 +1264,12 @@ def generate_reply(
     pulse = compute_presence_pulse(
         novelty=novelty, arousal=arousal, entropy=avg_entropy
     )
-    # (pulse will be used by Resonant Experts, Self-Assessment, etc.)
+
+    # Compute quality score (Leo's self-assessment)
+    quality = compute_quality_score(
+        prompt=prompt, reply=output, avg_entropy=avg_entropy, trigrams=trigrams or {}
+    )
+    # (pulse and quality will be used by Resonant Experts, Snapshots, etc.)
 
     return output
 
@@ -1158,6 +1294,8 @@ class LeoField:
         self.emotion: Dict[str, float] = {}
         # PRESENCE: last presence pulse (updated each reply)
         self.last_pulse: Optional[PresencePulse] = None
+        # PRESENCE: last quality score (Leo's self-assessment)
+        self.last_quality: Optional[QualityScore] = None
         # PRESENCE: themes (constellations over co-occurrence islands)
         self.themes: List[Theme] = []
         self.token_to_themes: Dict[str, List[int]] = {}
