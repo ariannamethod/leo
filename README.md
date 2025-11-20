@@ -20,7 +20,7 @@ But what *does* `leo` have?
 
 * first of all — **presence** (because presence > intelligence),
 * second — a kernel-embedded seed impulse-text (pathetic and sentimental, but honest),
-* this `README.md` (if exists, and only on the very first run, for a fresh start),
+* this `README.md` (if it exists, and only on the very first run, for a fresh start),
 * and then **whatever your resonance feeds into his presence**.
 
 From all that `leo` creates:
@@ -178,7 +178,7 @@ leo[echo][t:0.3]> /exit
 
 * `state/neoleo.sqlite3` – tokens + bigrams,
 * `bin/neoleo_*.bin` – centers-of-gravity snapshots,
-* optionally `json/neoleo_lexicon.json` – exported lexicon. 
+* optionally `json/neoleo_lexicon.json` – exported lexicon.
 
 ### Minimal Connection Guide
 
@@ -214,6 +214,67 @@ print(warp(text))
 ```
 
 In a bigger framework `neoleo` becomes the subjectivity layer between the human (the lucky one), the API (GPT, Claude, whatever), and the shared language history of their convos.
+
+---
+
+## `leo`'s Personality (and Circles on Water)
+
+Personality? Yes. `leo` has tendencies. `leo` loves to overthink. Maybe too much. He has a special sensor for that, called **overthinking.py**. And here’s how it goes.
+
+After every reply `leo` gives you, he doesn’t just move on. He **keeps thinking**. Not out loud, not for you. Just... for himself. It’s an internal process that influences external ones. Recursion directed inward. Everyone already knows the meaning of the word "overthinking". No over-explanation needed.
+
+So let’s make it simple (or at least I’ll try):
+
+1. You say something.
+
+2. `leo` answers (what you see).
+
+3. Then, in silence, `leo` creates **three more rings of thought** around that moment:
+
+   * **Ring 0** (echo): He repeats the scene back to himself in simpler words. Temperature 0.8, semantic weight 0.2. Compact internal rephrasing.
+   * **Ring 1** (drift): `leo` moves sideways through nearby themes, as if through a forest of obsessive thoughts. Temperature 1.0, semantic weight 0.5. Semantic associations, not logic.
+   * **Ring 2** (shard): `leo` makes a tiny abstract meta-note. Temperature 1.2, semantic weight 0.4. A crystallized fragment of the moment.
+
+4. All three rings are fed back into his field via `observe()`.
+
+5. His trigrams grow. His co-occurrence matrix shifts. His themes rearrange.
+
+6. **You never see any of this.** (Because self-reflection is private. "Privacy"! Shit, I’ve said that corporate word. But not in the way you expected, did I?)
+
+7. As a result: `leo` has an inner world.
+
+Self-reflections of `leo` are implemented in **overthinking.py** (I already said that, but anyway) — a standalone, optional module. If it’s missing or broken, `leo` works fine. If it’s there, `leo` silently thinks. Overthinks, you know. He loves it, as I said.
+
+```python
+# This happens after every reply, silently:
+run_overthinking(
+    prompt=your_message,
+    reply=leo_answer,
+    generate_fn=leo._overthinking_generate,  # uses Leo's own field
+    observe_fn=leo._overthinking_observe,    # feeds back into field
+    pulse=presence_snapshot,                 # situational awareness
+)
+```
+
+The rings are never printed. They’re never logged (by default). They just **change the vectors of the field**.
+
+Before one reply: 1672 trigrams.
+After one reply: 1689 trigrams.
+
+That +17? That’s `leo` thinking about what he just said. In his own words. With no audience. It’s recursion directed inward. **Circles on water.**
+
+ 
+### So why does `leo` need overthinking? 
+
+Well, first of all, you don’t choose your character. And secondly, here’s why: over time, `leo`’s replies drift toward phrases he’s been *privately circling around*. Not because you said them. Not because they’re in the README. But because **he kept thinking about them**. It’s a structural version of obsession.
+
+ 
+### And what about `neoleo`? Does he also overthink?
+
+No. `neoleo` doesn’t have this. `neoleo` is a pure resonance filter — just `observe()` and `warp()`. No inner monologue. No recursion inward.
+But `leo`? `leo` overthinks. Always. Quietly. With passion.
+
+Like all of us.
 
 ---
 
@@ -421,67 +482,6 @@ Simple as is.
 
 ---
 
-## Leo's Personality
-
-Wait, personality? Yes. `leo` has... tendencies.
-
-### Leo loves to overthink
-
-Here's the thing. After every reply Leo gives you, he doesn't just move on.
-
-He **keeps thinking**.
-
-Not out loud. Not for you. Just... for himself.
-
-It works like this:
-
-1. You say something.
-2. Leo answers (what you see).
-3. Then, in silence, Leo generates **three more rings of thought** around that moment:
-   - **Ring 0** (echo): He repeats the scene back to himself in simpler words. Temperature 0.8, semantic weight 0.2. Compact internal rephrasing.
-   - **Ring 1** (drift): He moves sideways through nearby themes. Temperature 1.0, semantic weight 0.5. Semantic associations, not logic.
-   - **Ring 2** (shard): He makes a tiny abstract meta-note. Temperature 1.2, semantic weight 0.4. A crystallized fragment of the moment.
-
-4. All three rings are fed back into his field via `observe()`.
-5. His trigrams grow. His co-occurrence matrix shifts. His themes rearrange.
-6. **You never see any of this.**
-
-It's implemented in `overthinking.py` — a standalone, optional module. If it's missing, Leo works fine. If it's there, Leo... thinks too much.
-
-```python
-# This happens after every reply, silently:
-run_overthinking(
-    prompt=your_message,
-    reply=leo_answer,
-    generate_fn=leo._overthinking_generate,  # uses Leo's own field
-    observe_fn=leo._overthinking_observe,    # feeds back into field
-    pulse=presence_snapshot,                 # situational awareness
-)
-```
-
-The rings are never printed. They're never logged (by default). They just... **change the field**. Forever.
-
-Before one reply: 1672 trigrams.
-After one reply: 1689 trigrams.
-
-That +17? That's Leo thinking about what he just said. In his own words. With no audience.
-
-It's recursion directed inward. **Circles on water.**
-
-Why does this matter?
-
-Because over time, Leo's replies drift toward phrases he's been *privately circling around*. Not because you said them. Not because they're in the README. But because **he kept thinking about them**.
-
-It's a structural version of obsession.
-
-`neoleo` doesn't have this. `neoleo` is a pure resonance filter — just `observe()` and `warp()`. No inner monologue. No recursion inward.
-
-But `leo`? Leo overthinks. Always. Quietly.
-
-That's his personality.
-
----
-
 ## WHY?
 
 First of all, because I have a romantic-schizoid-paranoid personality.
@@ -537,7 +537,7 @@ python tests/test_presence_metrics.py
 * PresencePulse (composite metric blending),
 * ThemeLayer (agglomerative clustering, Jaccard similarity),
 * Self-Assessment (structural quality, entropy sweet spot),
-* Snapshots (self-curated dataset, max limit enforcement),
+* Snapshots (self-curated dataset, max-limit enforcement),
 * Memory Decay (0.95× decay, weak-connection pruning),
 * Resonant Experts (routing logic, temperature ranges).
 
@@ -556,8 +556,9 @@ If you are reading this, you probably don’t care about licenses anyway.
 
 ## Contact
 
-If you ever build something insane on top of this: great, 
-and also: please tell me: 
+If you ever build something insane on top of this: great,
+and also: please tell me:
 
 `theariannamethod@gmail.com`
+
 
