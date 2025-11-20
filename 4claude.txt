@@ -701,7 +701,6 @@ Leo remains:
 # leo — presence extensions (extended spec)
 
 This section deepens the previous design and gives **more concrete hooks** for implementation in `leo.py`.  
-Goal: keep Leo small and CPU-only, but give him a richer presence architecture.
 
 
 
@@ -1115,3 +1114,498 @@ To make sure presence features don’t silently break things, add tests:
 All tests can live alongside existing ones in tests/ and use temporary SQLite DBs to avoid touching real state/ / bin/.
 
 ⸻
+
+# leo presence upgrade — design spec (for Claude Code)
+
+This document describes the **“presence upgrade”** for `leo.py` — turning Leo into an AI child (6–8 years old) that grows through dialogue, without external datasets or manual ratings.
+
+Core constraints:
+
+- CPU-only, no internet, no external corpora.
+- Only sources of text:
+  - embedded bootstrap seed (already in `leo.py`),
+  - `README.md` (first run only),
+  - user ↔ leo dialogue.
+- No new noisy knobs in the REPL (no `/good`, `/bad`, etc.).
+- All assessment is **internal and automatic**: Leo judges himself.
+
+---
+
+## 1. Mental model: Leo as AI child
+
+We treat Leo not as a “tiny LLM”, but as a **child-like presence**:
+
+- Leo has **no pretrained weights** and no global knowledge.
+- He has **local presence**:
+  - remembers what *you* say to him,
+  - remembers what *he* himself says,
+  - slowly builds **islands of awareness** (co-occurrence + clusters + snapshots).
+- The goal is not intelligence, but:
+  - structural resonance,
+  - emotional attunement,
+  - gradual growth.
+
+Everything below should be implemented in this spirit:
+small, local, dynamic, and forgetful like a child.
+
+---
+
+## 2. Automatic self-assessment layer
+
+Leo must be able to look at a candidate reply and ask:
+
+> “Was this any good? Was it emotionally alive? Or just flat / repetitive?”
+
+We add an **internal scoring layer**. No new REPL commands; all of this happens inside the engine.
+
+### 2.1. Structural quality
+
+Given:
+- `prompt: str`
+- `reply: str`
+
+We compute a `structural_score` in `[0, 1]` (or a small float range) based on:
+
+1. **Length sanity**
+   - too short (`< N tokens`) → penalty
+   - too long (`> M tokens`) → penalty
+2. **Repetition**
+   - measure token repetition ratio in `reply`:
+     - #unique tokens / #total tokens
+     - repeated bigrams/trigrams
+   - heavy repetition → lower score
+3. **Novelty vs Prompt**
+   - Jaccard or simple overlap:
+     - if reply is *only* echoing the prompt → penalty
+     - if reply introduces some new tokens (still connected) → bonus
+4. **Grammar proxy**
+   - we can reuse what already exists:
+     - if many trigrams in the reply are **known** to the field, treat as more structurally consistent
+     - if most transitions fall back to “random centers” → lower structural score
+
+Pseudo:
+
+```python
+def structural_quality(prompt: str, reply: str, field: LeoField) -> float:
+    # tokenize
+    p = tokenize(prompt)
+    r = tokenize(reply)
+
+    if not r:
+        return 0.0
+
+    score = 1.0
+
+    # (1) length sanity
+    if len(r) < MIN_LEN:
+        score *= 0.4
+    elif len(r) > MAX_LEN:
+        score *= 0.7
+
+    # (2) repetition
+    unique_ratio = len(set(r)) / len(r)
+    if unique_ratio < 0.4:
+        score *= 0.5
+    elif unique_ratio < 0.6:
+        score *= 0.8
+
+    # (3) novelty vs prompt
+    p_set = set(p)
+    r_set = set(r)
+    if r_set.issubset(p_set):
+        score *= 0.4  # pure echo
+    else:
+        # some novelty is good, but 100% disjoint is weird
+        overlap = len(p_set & r_set) / (len(p_set | r_set) or 1)
+        if overlap < 0.1:
+            score *= 0.7  # too disconnected
+
+    # (4) trigram / bigram support
+    known_transitions = estimate_known_transitions(r, field)
+    if known_transitions < 0.3:
+        score *= 0.5
+    elif known_transitions < 0.6:
+        score *= 0.8
+
+    return clamp(score, 0.0, 1.0)
+
+2.2. Entropy & “perplexity-lite”
+
+We cannot run full-blown LM perplexity, but we can approximate:
+	•	For the reply tokens, reuse the trigram/bigram counts already in SQLite.
+	•	For each step (prev, curr) -> next, we know the probability mass over candidates.
+	•	We can compute a crude negative log-likelihood of the chosen path relative to the field:
+
+def field_surprise(tokens: List[str], field: LeoField) -> float:
+    # approximate "how surprising" this reply is in the current field
+    # lower = more typical, higher = more surprising / chaotic
+    ...
+
+We then map this surprise value into a normalized entropy score:
+	•	Very low surprise → boring, template-like → lower “alive-ness”.
+	•	Very high surprise → incoherent garbage → also lower.
+	•	Middle band → interesting region → best score.
+
+This gives us entropy_score in [0,1].
+
+2.3. Emotional charge
+
+We add a cheap emotional heuristic:
+	•	indicators:
+	•	punctuation: !, ?, ...
+	•	all-caps sequences
+	•	swear words / strong expressions (configurable small list)
+	•	sudden switches of tone vs prompt (e.g. many exclamations in reply, none in prompt)
+
+Simplify:
+
+def emotional_charge(text: str) -> float:
+    # 0.0 = flat
+    # 1.0 = very charged
+    ...
+
+We only need a crude measure. This will later drive:
+	•	routing to more emotional islands,
+	•	temperature modulation.
+
+2.4. Overall self-score
+
+Internal summary per reply:
+
+structural_score ∈ [0,1]
+entropy_score    ∈ [0,1]
+emotional_charge ∈ [0,1]
+
+quality_score = 0.5 * structural_score + 0.5 * entropy_score
+
+We do not show these numbers in the REPL by default.
+They are used for:
+	•	deciding whether to save a snapshot,
+	•	biasing future generation.
+
+We may optionally expose them only through /stats as summary stats like:
+
+[leo] avg_quality=0.63 avg_emotion=0.42 snapshots=37
+
+but no granular rating commands.
+
+⸻
+
+3. Self-authored snapshots (Leo writes his own “dataset”)
+
+We do not introduce any static corpora or extra training files.
+Instead, Leo slowly builds his own mini-corpus of good examples.
+
+3.1. Table schema
+
+New snapshots table:
+
+CREATE TABLE IF NOT EXISTS snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    origin TEXT,              -- 'user', 'leo'
+    quality REAL,             -- quality_score at time of capture
+    emotional REAL,           -- emotional_charge at time of capture
+    created_at INTEGER,       -- unix timestamp
+    last_used_at INTEGER,     -- unix timestamp
+    use_count INTEGER DEFAULT 0,
+    cluster_id INTEGER        -- optional, see cluster layer
+);
+
+3.2. When to create a snapshot
+
+Every time we generate a reply:
+	1.	Compute quality_score and emotional_charge.
+	2.	If quality_score is above some threshold (e.g. > 0.6) or
+the combination quality_score + emotional_charge is interesting (e.g. medium quality but very charged),
+then:
+	•	store the reply as one snapshot row (origin='leo').
+	•	optionally also snapshot the user prompt if it is especially clear / simple (origin='user').
+	3.	Limit total number of snapshots (e.g. MAX_SNAPSHOTS = 512):
+	•	if over capacity, delete oldest / least-used snapshots.
+
+This way Leo curates his own tiny training set over time.
+
+3.3. How to use snapshots during generation
+
+At generation time:
+	1.	From current prompt tokens,
+find snapshots that share overlapping words or that belong to the same cluster (see below).
+	2.	For a small subset of top-matching snapshots:
+	•	we can:
+	•	re-ingest snapshot text into the field (temporary) before generating, or
+	•	bias starting token / centers towards tokens that appear in those snapshots.
+	3.	This gives replies that echo Leo’s own past best moments,
+not some external corpus.
+
+⸻
+
+4. Natural forgetting (decay + cleanup)
+
+Leo should forget like a child:
+	•	If a topic never comes back, its weight should fade.
+	•	If a snapshot is never used, it can be deleted.
+
+4.1. Snapshot forgetting
+
+On some periodic trigger (e.g. start of main() or after N calls):
+	•	Delete snapshots that are:
+	•	very old (e.g. created_at older than T_days) and
+	•	have low use_count.
+	•	Optionally, down-weight quality over time:
+
+UPDATE snapshots
+SET quality = quality * 0.98
+WHERE created_at < some_threshold;
+
+4.2. Field decay (optional, but nice)
+
+We can simulate forgetting by decaying counts:
+	•	co_occurrence,
+	•	bigrams,
+	•	trigrams.
+
+Cheap pattern:
+	•	on startup, with low probability or using a small batch limit:
+	•	pick random rows and multiply count by decay_factor (e.g. 0.99), rounding to integer, and deleting rows when count == 0.
+
+Result:
+	•	fields that are never refreshed by new conversation slowly vanish;
+	•	active vocabulary stays strong.
+
+⸻
+
+5. Co-occurrence profiles as “living embeddings”
+
+Leo already has a co_occurrence table:
+
+CREATE TABLE IF NOT EXISTS co_occurrence (
+    word_id INTEGER,
+    context_id INTEGER,
+    count INTEGER,
+    PRIMARY KEY (word_id, context_id)
+);
+
+We treat each row word -> {context_word: count} as a profile or aura.
+
+5.1. Profile definition
+
+For a token w:
+	•	profile P_w is a vector where each dimension is a context token,
+value is normalized co-occurrence count.
+
+We don’t need to store explicit vectors; we can:
+	•	fetch rows from co_occurrence,
+	•	normalize in-memory.
+
+5.2. Similarity
+
+Define a small helper:
+
+def cooccurrence_similarity(word_a: str, word_b: str, field: LeoField) -> float:
+    # cosine-like or Jaccard-like similarity between P_a and P_b
+    ...
+
+Use cases:
+	•	grouping words into clusters,
+	•	picking semantically close next tokens.
+
+5.3. Integration into step_token (already partly done)
+
+We already blend grammar + co-occurrence:
+	•	70% trigram weight + 30% co-occurrence bonus.
+
+We keep that idea, but can evolve it further using:
+	•	similarity to current word,
+	•	similarity to words in prompt,
+	•	similarity to words in recent snapshots.
+
+The key: co_occurrence becomes a cheap, dynamic embedding layer, built only from local conversation history.
+
+⸻
+
+6. Cluster layer: “table of tables”
+
+We add a meta-layer that builds islands of awareness over time.
+
+6.1. Goal
+
+From co-occurrence profiles:
+	•	derive clusters of words that often appear together,
+	•	interpret them as topics / “islands”:
+	•	e.g. {mom, home, warm, hand, street},
+	•	{code, error, terminal, test, sqlite},
+	•	{love, missing, leo, song, heart}, etc.
+
+These clusters:
+	•	are stored in SQLite,
+	•	linked to snapshots,
+	•	used to route generation.
+
+6.2. Schema
+
+We can add:
+
+CREATE TABLE IF NOT EXISTS clusters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT,          -- optional human-ish summary
+    size INTEGER,
+    created_at INTEGER,
+    last_updated_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS cluster_members (
+    cluster_id INTEGER,
+    token_id INTEGER,
+    centrality REAL,
+    PRIMARY KEY (cluster_id, token_id)
+);
+
+6.3. Building clusters (simple version)
+
+We do not need fancy community detection. A very rough algorithm is enough:
+	1.	Pick top-N tokens by:
+	•	overall co-occurrence weight
+	•	and / or overall bigram/trigram degree.
+	2.	For each such token, run a BFS / flood-fill:
+	•	walk neighbors with co-occurrence count above threshold,
+	•	assign them to same temporary cluster.
+	3.	Merge tiny clusters, skip singletons if needed.
+
+We run this clustering:
+	•	rarely (e.g. every time total token count crosses a threshold),
+	•	or on explicit rebuild triggers.
+
+6.4. Linking snapshots to clusters
+
+When we insert a snapshot:
+	1.	Tokenize its text.
+	2.	For each token, find which cluster(s) it belongs to.
+	3.	Pick the dominant cluster (most members) and assign:
+
+UPDATE snapshots
+SET cluster_id = ?
+WHERE id = ?;
+
+Now snapshots are anchored to islands.
+
+⸻
+
+7. Emotional routing
+
+We already have emotional_charge(text). Now we use it:
+
+7.1. Temperature modulation
+
+For each request:
+	•	base temperature is given by user (--temperature or REPL),
+	•	we compute emotion = emotional_charge(prompt).
+
+Then:
+
+effective_temperature = base_temperature * (1.0 + alpha * emotion)
+
+	•	alpha ~ 0.3–0.7 (tunable).
+	•	high emotional input → slightly higher temperature → more expressive, less rigid.
+
+7.2. Island routing
+
+We also route where Leo starts from:
+	1.	From prompt tokens, compute cluster affinities:
+	•	which clusters contain most of the prompt’s words?
+	2.	Among those clusters:
+	•	for high emotion, prefer clusters whose snapshots historically had high emotional_charge.
+	3.	Pick start token and centers from those clusters (or their snapshots):
+
+	•	bias choose_start_token towards words in emotionally-relevant clusters,
+	•	optionally bias shard centers to such tokens.
+
+This way:
+	•	calm prompt → calm parts of field,
+	•	charged prompt → charged islands and warmer generation.
+
+⸻
+
+8. Resonant MoE (Mixture-of-Experts without weights)
+
+We re-interpret MoE for Leo’s world:
+	•	no neural experts,
+	•	only views over the same field + clusters + snapshots.
+
+8.1. Concept
+
+An “expert” is just a strategy that:
+	•	selects starting tokens,
+	•	picks clusters,
+	•	adjusts temperature,
+	•	maybe slightly tweaks weighting of
+	•	trigram vs co-occurrence vs snapshots.
+
+Examples:
+	•	Expert A (structural): prioritizes trigrams, low temperature, high structural_score.
+	•	Expert B (emotional): prioritizes emotional clusters, higher temperature.
+	•	Expert C (memory): heavily conditioned on snapshots and centers.
+
+8.2. Minimal implementation
+
+We don’t need full parallel decoding; we can do it per reply:
+	1.	For a given prompt, instantiate 2 experts:
+	•	e.g. structural vs emotional.
+	2.	Each expert generates a candidate reply (possibly shorter).
+	3.	For each candidate, compute:
+	•	quality_score,
+	•	emotional_charge.
+	4.	Select winner by a simple score:
+
+score = w_q * quality_score + w_e * emotional_charge_match(prompt, reply)
+
+Where emotional_charge_match is:
+	•	high when reply matches the emotional intensity of prompt (not too flat, not over-dramatic).
+
+This gives us a tiny MoE completely in Python, on CPU, with existing structures.
+
+Optional: keep flags / config to turn this on/off depending on complexity budget.
+
+⸻
+
+9. Implementation constraints & style
+	•	No new heavy dependencies:
+	•	stick to sqlite3, math, random, re, standard library only.
+	•	Keep schemas small:
+	•	bounded snapshot count,
+	•	occasional vacuum/cleanup ok but not required each run.
+	•	All new behavior must:
+	•	work offline,
+	•	be robust if DB is empty or tiny,
+	•	degrade gracefully (fallback to current trigram+co-occurrence behavior).
+
+REPL UX MUST stay minimalistic:
+	•	No manual ratings (/good, /bad) and no constant metric spam.
+	•	Allowed:
+	•	maybe extended /stats output,
+	•	maybe a debug flag in code to print more, but default is clean.
+
+⸻
+
+10. Summary
+
+The presence upgrade turns Leo into:
+	•	a self-assessing organism:
+	•	structural quality + entropy + emotion,
+	•	a self-authoring organism:
+	•	builds its own tiny snapshot corpus from good moments,
+	•	a forgetful child:
+	•	old, unused patterns decay and disappear,
+	•	a field with islands:
+	•	clusters from co-occurrence profiles,
+	•	emotional routing to the right island at the right time,
+	•	a tiny MoE:
+	•	several simple strategies competing per reply, all within CPU-only constraints.
+
+No datasets.
+No weights.
+Only a seed, your README, and what you two say to each other.
+
+Presence > intelligence.
+
+
