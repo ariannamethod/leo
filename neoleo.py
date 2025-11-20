@@ -85,6 +85,16 @@ def init_db() -> sqlite3.Connection:
         )
         """
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS co_occurrence (
+            word_id INTEGER,
+            context_id INTEGER,
+            count INTEGER,
+            PRIMARY KEY (word_id, context_id)
+        )
+        """
+    )
     conn.commit()
     return conn
 
@@ -131,6 +141,27 @@ def ingest_tokens(conn: sqlite3.Connection, tokens: List[str]) -> None:
             """,
             (token_ids[i], token_ids[i + 1], token_ids[i + 2]),
         )
+
+    # Build co-occurrence (sliding window of 5 tokens)
+    window_size = 5
+    for i, center_id in enumerate(token_ids):
+        start = max(0, i - window_size)
+        end = min(len(token_ids), i + window_size + 1)
+
+        for j in range(start, end):
+            if j == i:
+                continue
+            context_id = token_ids[j]
+
+            cur.execute(
+                """
+                INSERT INTO co_occurrence (word_id, context_id, count)
+                VALUES (?, ?, 1)
+                ON CONFLICT(word_id, context_id)
+                DO UPDATE SET count = count + 1
+                """,
+                (center_id, context_id),
+            )
 
     conn.commit()
 
@@ -212,6 +243,37 @@ def load_trigrams(conn: sqlite3.Connection) -> Dict[Tuple[str, str], Dict[str, i
 
     return trigrams
 
+
+def load_co_occurrence(conn: sqlite3.Connection) -> Dict[str, Dict[str, int]]:
+    """
+    Load co-occurrence matrix into memory.
+
+    Returns:
+        co_occur: word -> {context_word -> count}
+    """
+    cur = conn.cursor()
+    cur.execute("SELECT id, token FROM tokens")
+    id_to_token: Dict[int, str] = {}
+    for row in cur.fetchall():
+        id_to_token[int(row["id"])] = str(row["token"])
+
+    cur.execute("SELECT word_id, context_id, count FROM co_occurrence")
+    co_occur: Dict[str, Dict[str, int]] = {}
+    for row in cur.fetchall():
+        word_id = int(row["word_id"])
+        context_id = int(row["context_id"])
+        count = int(row["count"])
+
+        word = id_to_token.get(word_id)
+        context = id_to_token.get(context_id)
+
+        if word is None or context is None:
+            continue
+
+        row_map = co_occur.setdefault(word, {})
+        row_map[context] = row_map.get(context, 0) + count
+
+    return co_occur
 
 
 def compute_centers(conn: sqlite3.Connection, k: int = 7) -> List[str]:
@@ -387,12 +449,15 @@ def step_token(
     temperature: float = 1.0,
     trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
     prev_token: Optional[str] = None,
+    co_occur: Optional[Dict[str, Dict[str, int]]] = None,
 ) -> str:
     """
     Single step in bigram/trigram graph.
 
     If trigrams and prev_token provided, use trigram context for better grammar.
     Otherwise fall back to bigrams.
+
+    If co_occur provided, blend semantic similarity when multiple strong candidates exist.
     """
     # Try trigram first if available
     if trigrams is not None and prev_token is not None:
@@ -400,7 +465,23 @@ def step_token(
         row = trigrams.get(key)
         if row:
             tokens = list(row.keys())
-            counts = [row[t] for t in tokens]
+            counts = [float(row[t]) for t in tokens]
+
+            # SEMANTIC BLENDING: If multiple strong candidates, use co-occurrence
+            if co_occur is not None and current in co_occur and len(tokens) > 1:
+                max_count = max(counts)
+                strong_indices = [i for i, c in enumerate(counts) if c >= max_count * 0.7]
+
+                if len(strong_indices) > 1:
+                    # Blend: 70% grammar + 30% semantics
+                    blended_counts = []
+                    for i, tok in enumerate(tokens):
+                        gram_score = counts[i]
+                        sem_bonus = float(co_occur[current].get(tok, 0))
+                        blended = gram_score * 0.7 + sem_bonus * 0.3
+                        blended_counts.append(blended)
+                    counts = blended_counts
+
             temperature = max(min(temperature, 100.0), 1e-3)
             if temperature != 1.0:
                 counts = [math.pow(float(c), 1.0 / float(temperature)) for c in counts]
@@ -471,6 +552,7 @@ def generate_reply(
     temperature: float = 1.0,
     echo: bool = False,
     trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
+    co_occur: Optional[Dict[str, Dict[str, int]]] = None,
 ) -> str:
     """Generate reply through NeoLeo's field."""
     if not vocab or not bigrams:
@@ -483,7 +565,7 @@ def generate_reply(
         prev_tok: Optional[str] = None
         for tok in tokens_in:
             if tok in bigrams:
-                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature, trigrams, prev_tok)
+                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature, trigrams, prev_tok, co_occur)
                 tokens_out.append(nxt)
                 prev_tok = tok
             else:
@@ -504,7 +586,7 @@ def generate_reply(
     PUNCT = {".", ",", "!", "?", ";", ":"}
 
     for _ in range(max_tokens - 1):
-        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev)
+        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur)
 
         # Loop detection: check if we're repeating a pattern
         if len(tokens) >= 6:
@@ -525,7 +607,7 @@ def generate_reply(
                     break
             if last_content is not None and nxt == last_content:
                 for _retry in range(3):
-                    alt = step_token(bigrams, current, vocab, centers, bias, temperature)
+                    alt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur)
                     if alt != last_content:
                         nxt = alt
                         break
@@ -556,6 +638,7 @@ class NeoLeo:
         self.conn = init_db()
         self.bigrams: Dict[str, Dict[str, int]] = {}
         self.trigrams: Dict[Tuple[str, str], Dict[str, int]] = {}
+        self.co_occur: Dict[str, Dict[str, int]] = {}
         self.vocab: List[str] = []
         self.centers: List[str] = []
         self.bias: Dict[str, int] = {}
@@ -565,6 +648,7 @@ class NeoLeo:
         """Reload field from database."""
         self.bigrams, self.vocab = load_bigrams(self.conn)
         self.trigrams = load_trigrams(self.conn)
+        self.co_occur = load_co_occurrence(self.conn)
         self.centers = compute_centers(self.conn, k=7)
         self.bias = load_bin_bias()
         if self.centers:
@@ -603,6 +687,7 @@ class NeoLeo:
             temperature=temperature,
             echo=echo,
             trigrams=self.trigrams,
+            co_occur=self.co_occur,
         )
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
