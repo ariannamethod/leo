@@ -236,7 +236,7 @@ They store everything in SQLite:
 
 Generation prefers trigrams when available, and falls back to bigrams when trigram context is missing.
 
-### 1.5. Co-occurrence (or: how Leo learned to care, a little)
+### 1.5. Co-occurrence (or: how `leo` learned to care, a little)
 
 Okay, so trigrams give you grammar. They know “the cat sits” is better than “the cat table”.
 But here’s the thing: sometimes multiple words are *grammatically* perfect. All of them work. All of them flow.
@@ -252,7 +252,7 @@ It’s just: *which words showed up near each other, historically, in your field
 When answering, if `leo` has multiple strong grammatical candidates (within 70% of the top trigram score), he checks:
 *“Which of these words has been close to the current word before?”*
 
-Then he blends:
+Then `leo` blends:
 
 * **70% grammar** (trigram weight)
 * **30% semantics** (co-occurrence weight)
