@@ -547,6 +547,143 @@ def choose_start_token(
     return random.choice(pool)
 
 
+# ============================================================================
+# PRESENCE METRICS
+# ============================================================================
+
+
+def distribution_entropy(counts: List[float]) -> float:
+    """
+    Shannon entropy of a distribution in [0, log(N)].
+
+    Returns raw entropy; caller should normalize by log(N) for [0, 1] range.
+    """
+    total = sum(counts)
+    if total <= 0.0:
+        return 0.0
+
+    h = 0.0
+    for c in counts:
+        if c <= 0.0:
+            continue
+        p = c / total
+        h -= p * math.log(p + 1e-12)
+
+    return h
+
+
+def compute_prompt_novelty(
+    tokens: List[str],
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+) -> float:
+    """
+    Compute 'novelty' score in [0, 1] based on trigram coverage.
+
+    - Slide through all trigrams in the prompt
+    - Check how many are known to the field
+    - novelty = 1 - (known_fraction)
+
+    High novelty = unfamiliar situation (Leo hasn't seen these patterns)
+    Low novelty = familiar situation (Leo knows these patterns well)
+    """
+    if len(tokens) < 3:
+        return 0.5  # neutral for short prompts
+
+    total = 0
+    known = 0
+
+    for i in range(len(tokens) - 2):
+        a, b, c = tokens[i], tokens[i + 1], tokens[i + 2]
+        total += 1
+
+        row = trigrams.get((a, b))
+        if row and c in row:
+            known += 1
+
+    if total == 0:
+        return 0.5
+
+    coverage = known / total
+    novelty = 1.0 - coverage
+
+    # Clamp to [0, 1]
+    return max(0.0, min(1.0, novelty))
+
+
+def update_emotional_stats(
+    emotion_map: Dict[str, float],
+    text: str,
+    window: int = 3,
+    exclam_bonus: float = 1.0,
+    caps_bonus: float = 0.7,
+    repeat_bonus: float = 0.5,
+) -> None:
+    """
+    Update emotional scores for tokens based on local heuristics.
+
+    Heuristics:
+    - Tokens near '!' get a bonus
+    - ALL-CAPS words (length >= 2) get a bonus
+    - Repeated tokens in a short window get a bonus
+
+    This is intentionally simple and local - Leo learns emotional patterns
+    from his own conversation history, not from external sentiment models.
+    """
+    tokens = tokenize(text)
+    n = len(tokens)
+    if n == 0:
+        return
+
+    for i, tok in enumerate(tokens):
+        score = 0.0
+
+        # ALL CAPS words
+        if tok.isalpha() and len(tok) >= 2 and tok.upper() == tok:
+            score += caps_bonus
+
+        # Exclamation in neighborhood
+        start = max(0, i - window)
+        end = min(n, i + window + 1)
+        local_tokens = tokens[start:end]
+        if "!" in local_tokens:
+            score += exclam_bonus
+
+        # Local repetition
+        if local_tokens.count(tok) > 1:
+            score += repeat_bonus
+
+        if score > 0.0:
+            emotion_map[tok] = emotion_map.get(tok, 0.0) + score
+
+
+def compute_prompt_arousal(
+    tokens: List[str],
+    emotion_map: Dict[str, float],
+) -> float:
+    """
+    Compute rough 'arousal' score in [0, 1] from emotional charge of tokens.
+
+    Sum emotion scores over prompt tokens, normalize with soft cap.
+
+    High arousal = emotionally charged prompt (lots of !, CAPS, repetition)
+    Low arousal = calm, neutral prompt
+    """
+    if not tokens:
+        return 0.0
+
+    s = 0.0
+    for t in tokens:
+        s += emotion_map.get(t, 0.0)
+
+    # Soft normalization with log-like squashing
+    norm = s / (len(tokens) + 1e-6)
+    k = 0.5
+    arousal = 1.0 - math.exp(-k * norm)
+
+    # Clamp to [0, 1]
+    return max(0.0, min(1.0, arousal))
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -557,6 +694,7 @@ def step_token(
     trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
     prev_token: Optional[str] = None,
     co_occur: Optional[Dict[str, Dict[str, int]]] = None,
+    entropy_log: Optional[List[float]] = None,
 ) -> str:
     """
     Single step in bigram/trigram graph with semantic blending.
@@ -567,6 +705,8 @@ def step_token(
 
     temperature < 1.0 => sharper, more deterministic
     temperature > 1.0 => softer, more exploratory
+
+    If entropy_log provided, appends normalized entropy of this step's distribution.
     """
     # Try trigram first if available
     if trigrams is not None and prev_token is not None:
@@ -598,6 +738,13 @@ def step_token(
             if temperature != 1.0:
                 counts = [math.pow(c, 1.0 / float(temperature)) for c in counts]
 
+            # Log entropy if requested
+            if entropy_log is not None and tokens:
+                raw_entropy = distribution_entropy(counts)
+                max_entropy = math.log(len(tokens) + 1e-12)
+                norm_entropy = raw_entropy / max_entropy if max_entropy > 0.0 else 0.0
+                entropy_log.append(norm_entropy)
+
             total = sum(counts)
             if total > 0:
                 r = random.uniform(0.0, total)
@@ -621,6 +768,13 @@ def step_token(
 
     if temperature != 1.0:
         counts = [math.pow(float(c), 1.0 / float(temperature)) for c in counts]
+
+    # Log entropy if requested
+    if entropy_log is not None and tokens:
+        raw_entropy = distribution_entropy(counts)
+        max_entropy = math.log(len(tokens) + 1e-12)
+        norm_entropy = raw_entropy / max_entropy if max_entropy > 0.0 else 0.0
+        entropy_log.append(norm_entropy)
 
     total = sum(counts)
     if total <= 0:
@@ -680,12 +834,14 @@ def generate_reply(
     echo: bool = False,
     trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
     co_occur: Optional[Dict[str, Dict[str, int]]] = None,
+    emotion_map: Optional[Dict[str, float]] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
 
     Uses trigrams for better local grammar when available.
     echo=True: transform prompt token-by-token through the graph.
+    emotion_map: optional emotional charge map for presence features.
     """
     if not vocab or not bigrams:
         # Field is basically empty: just return prompt back.
@@ -708,6 +864,16 @@ def generate_reply(
         return output
 
     prompt_tokens = tokenize(prompt)
+
+    # PRESENCE METRICS (internal, not shown in REPL)
+    # Compute novelty: how unfamiliar is this prompt?
+    novelty = compute_prompt_novelty(prompt_tokens, trigrams or {})
+    # Compute arousal: how emotionally charged is this prompt?
+    arousal = compute_prompt_arousal(prompt_tokens, emotion_map or {})
+    # Collect entropy per-step during generation
+    entropy_log: List[float] = []
+    # (These will be used by PresencePulse, Experts, etc. in future layers)
+
     start = choose_start_from_prompt(prompt_tokens, bigrams, vocab, centers, bias)
 
     tokens: List[str] = [start]
@@ -718,7 +884,7 @@ def generate_reply(
     PUNCT = {".", ",", "!", "?", ";", ":"}
 
     for _ in range(max_tokens - 1):
-        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur)
+        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, entropy_log)
 
         # Loop detection: check if we're repeating a pattern
         if len(tokens) >= 6:
@@ -758,6 +924,10 @@ def generate_reply(
     if output and not output.rstrip()[-1:] in '.!?':
         output = output.rstrip() + '.'
 
+    # Compute average entropy across generation steps (for future use)
+    avg_entropy = sum(entropy_log) / len(entropy_log) if entropy_log else 0.0
+    # (novelty and avg_entropy will be used by PresencePulse layer)
+
     return output
 
 
@@ -777,6 +947,8 @@ class LeoField:
         self.vocab: List[str] = []
         self.centers: List[str] = []
         self.bias: Dict[str, int] = {}
+        # PRESENCE: emotional charge tracking
+        self.emotion: Dict[str, float] = {}
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -794,6 +966,8 @@ class LeoField:
         if not text.strip():
             return
         ingest_text(self.conn, text)
+        # PRESENCE: track emotional charge
+        update_emotional_stats(self.emotion, text)
         self.refresh(initial_shard=False)
         if self.centers:
             create_bin_shard("leo", self.centers)
@@ -817,6 +991,7 @@ class LeoField:
             echo=echo,
             trigrams=self.trigrams,
             co_occur=self.co_occur,
+            emotion_map=self.emotion,
         )
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
