@@ -14,7 +14,8 @@ import re
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, NamedTuple, Set
+from dataclasses import dataclass
 
 # ============================================================================
 # PATHS
@@ -134,6 +135,21 @@ def init_db() -> sqlite3.Connection:
             context_id INTEGER,
             count INTEGER,
             PRIMARY KEY (word_id, context_id)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            origin TEXT,
+            quality REAL,
+            emotional REAL,
+            created_at INTEGER,
+            last_used_at INTEGER,
+            use_count INTEGER DEFAULT 0,
+            cluster_id INTEGER
         )
         """
     )
@@ -547,6 +563,670 @@ def choose_start_token(
     return random.choice(pool)
 
 
+# ============================================================================
+# PRESENCE METRICS
+# ============================================================================
+
+
+def distribution_entropy(counts: List[float]) -> float:
+    """
+    Shannon entropy of a distribution in [0, log(N)].
+
+    Returns raw entropy; caller should normalize by log(N) for [0, 1] range.
+    """
+    total = sum(counts)
+    if total <= 0.0:
+        return 0.0
+
+    h = 0.0
+    for c in counts:
+        if c <= 0.0:
+            continue
+        p = c / total
+        h -= p * math.log(p + 1e-12)
+
+    return h
+
+
+def compute_prompt_novelty(
+    tokens: List[str],
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+) -> float:
+    """
+    Compute 'novelty' score in [0, 1] based on trigram coverage.
+
+    - Slide through all trigrams in the prompt
+    - Check how many are known to the field
+    - novelty = 1 - (known_fraction)
+
+    High novelty = unfamiliar situation (Leo hasn't seen these patterns)
+    Low novelty = familiar situation (Leo knows these patterns well)
+    """
+    if len(tokens) < 3:
+        return 0.5  # neutral for short prompts
+
+    total = 0
+    known = 0
+
+    for i in range(len(tokens) - 2):
+        a, b, c = tokens[i], tokens[i + 1], tokens[i + 2]
+        total += 1
+
+        row = trigrams.get((a, b))
+        if row and c in row:
+            known += 1
+
+    if total == 0:
+        return 0.5
+
+    coverage = known / total
+    novelty = 1.0 - coverage
+
+    # Clamp to [0, 1]
+    return max(0.0, min(1.0, novelty))
+
+
+def update_emotional_stats(
+    emotion_map: Dict[str, float],
+    text: str,
+    window: int = 3,
+    exclam_bonus: float = 1.0,
+    caps_bonus: float = 0.7,
+    repeat_bonus: float = 0.5,
+) -> None:
+    """
+    Update emotional scores for tokens based on local heuristics.
+
+    Heuristics:
+    - Tokens near '!' get a bonus
+    - ALL-CAPS words (length >= 2) get a bonus
+    - Repeated tokens in a short window get a bonus
+
+    This is intentionally simple and local - Leo learns emotional patterns
+    from his own conversation history, not from external sentiment models.
+    """
+    tokens = tokenize(text)
+    n = len(tokens)
+    if n == 0:
+        return
+
+    for i, tok in enumerate(tokens):
+        score = 0.0
+
+        # ALL CAPS words
+        if tok.isalpha() and len(tok) >= 2 and tok.upper() == tok:
+            score += caps_bonus
+
+        # Exclamation in neighborhood
+        start = max(0, i - window)
+        end = min(n, i + window + 1)
+        local_tokens = tokens[start:end]
+        if "!" in local_tokens:
+            score += exclam_bonus
+
+        # Local repetition
+        if local_tokens.count(tok) > 1:
+            score += repeat_bonus
+
+        if score > 0.0:
+            emotion_map[tok] = emotion_map.get(tok, 0.0) + score
+
+
+def compute_prompt_arousal(
+    tokens: List[str],
+    emotion_map: Dict[str, float],
+) -> float:
+    """
+    Compute rough 'arousal' score in [0, 1] from emotional charge of tokens.
+
+    Sum emotion scores over prompt tokens, normalize with soft cap.
+
+    High arousal = emotionally charged prompt (lots of !, CAPS, repetition)
+    Low arousal = calm, neutral prompt
+    """
+    if not tokens:
+        return 0.0
+
+    s = 0.0
+    for t in tokens:
+        s += emotion_map.get(t, 0.0)
+
+    # Soft normalization with log-like squashing
+    norm = s / (len(tokens) + 1e-6)
+    k = 0.5
+    arousal = 1.0 - math.exp(-k * norm)
+
+    # Clamp to [0, 1]
+    return max(0.0, min(1.0, arousal))
+
+
+@dataclass
+class Theme:
+    """
+    A thematic constellation - a cluster of co-occurring words.
+
+    Themes are built dynamically from co-occurrence patterns, not hardcoded.
+    They represent Leo's emergent understanding of semantic islands.
+
+    Example themes that might emerge:
+    - THEME_HOME: {mother, home, hand, warm, street}
+    - THEME_CODE: {code, error, terminal, test, sqlite}
+    - THEME_NIGHT: {night, dark, sleep, dream, silence}
+    """
+
+    id: int
+    centers: Set[str]  # Core words that define this theme
+    words: Set[str]  # Full vocabulary (centers + neighbors)
+    strength: float = 1.0  # Global theme strength (can evolve over time)
+
+
+class ActiveThemes(NamedTuple):
+    """
+    Which themes are 'lit up' by the current prompt.
+
+    theme_scores: theme_id -> activation score
+    active_words: union of words from top active themes
+    """
+
+    theme_scores: Dict[int, float]
+    active_words: Set[str]
+
+
+class PresencePulse(NamedTuple):
+    """
+    Composite presence metric combining novelty, arousal, and entropy.
+
+    All components in [0, 1]:
+    - novelty: how unfamiliar the situation is
+    - arousal: how emotionally charged the prompt is
+    - entropy: average uncertainty during generation
+    - pulse: weighted composite score
+
+    This is Leo's "situational awareness" - a single scalar capturing
+    the quality of the current moment.
+    """
+
+    novelty: float
+    arousal: float
+    entropy: float
+    pulse: float
+
+
+def compute_presence_pulse(
+    novelty: float,
+    arousal: float,
+    entropy: float,
+    w_novelty: float = 0.3,
+    w_arousal: float = 0.4,
+    w_entropy: float = 0.3,
+) -> PresencePulse:
+    """
+    Compute composite presence pulse from three signals.
+
+    Default weights: 40% arousal, 30% novelty, 30% entropy.
+    (Arousal weighted higher because it's the most direct emotional signal)
+
+    Returns PresencePulse with all components + final pulse score.
+    """
+    pulse = w_novelty * novelty + w_arousal * arousal + w_entropy * entropy
+
+    # Clamp to [0, 1]
+    pulse = max(0.0, min(1.0, pulse))
+
+    return PresencePulse(
+        novelty=novelty, arousal=arousal, entropy=entropy, pulse=pulse
+    )
+
+
+def build_themes(
+    co_occur: Dict[str, Dict[str, int]],
+    min_neighbors: int = 5,
+    min_total_cooccur: int = 10,
+    top_neighbors: int = 16,
+    merge_threshold: float = 0.4,
+) -> Tuple[List[Theme], Dict[str, List[int]]]:
+    """
+    Build thematic constellations from co-occurrence islands.
+
+    Algorithm:
+    1. Find candidate cores: tokens with enough neighbors and co-occurrence weight
+    2. For each core, build its neighborhood (top N context words)
+    3. Merge cores whose neighborhoods strongly overlap (Jaccard > threshold)
+    4. Return themes and token->themes index
+
+    This is simple agglomerative clustering, not fancy community detection.
+    Good enough for Leo's scale.
+    """
+    # 1. Collect candidates
+    candidates: List[Tuple[str, Set[str]]] = []
+
+    for token, ctx in co_occur.items():
+        if len(ctx) < min_neighbors:
+            continue
+
+        total = sum(ctx.values())
+        if total < min_total_cooccur:
+            continue
+
+        # Pick top neighbors by count
+        top = sorted(ctx.items(), key=lambda x: x[1], reverse=True)[:top_neighbors]
+        neighbor_set = {t for (t, _) in top}
+        neighbor_set.add(token)  # Include the core itself
+        candidates.append((token, neighbor_set))
+
+    if not candidates:
+        return [], {}
+
+    # 2. Merge candidates into themes via agglomerative clustering
+    used = [False] * len(candidates)
+    themes: List[Theme] = []
+    current_id = 0
+
+    for i, (core_i, neigh_i) in enumerate(candidates):
+        if used[i]:
+            continue
+
+        # Start new theme with this candidate
+        theme_words = set(neigh_i)
+        centers = {core_i}
+        used[i] = True
+
+        # Merge compatible candidates
+        for j, (core_j, neigh_j) in enumerate(candidates):
+            if used[j]:
+                continue
+
+            # Jaccard similarity
+            inter = len(theme_words & neigh_j)
+            union = len(theme_words | neigh_j)
+            if union == 0:
+                continue
+
+            jacc = inter / union
+            if jacc >= merge_threshold:
+                used[j] = True
+                theme_words |= neigh_j
+                centers.add(core_j)
+
+        theme = Theme(id=current_id, centers=centers, words=theme_words, strength=1.0)
+        themes.append(theme)
+        current_id += 1
+
+    # 3. Build token -> themes index
+    token_to_themes: Dict[str, List[int]] = {}
+    for theme in themes:
+        for w in theme.words:
+            token_to_themes.setdefault(w, []).append(theme.id)
+
+    return themes, token_to_themes
+
+
+def activate_themes_for_prompt(
+    prompt_tokens: List[str],
+    themes: List[Theme],
+    token_to_themes: Dict[str, List[int]],
+    max_themes: int = 3,
+) -> ActiveThemes:
+    """
+    Compute which themes are 'lit up' by the prompt.
+
+    For each token in prompt that belongs to themes, add +1 to that theme's score.
+    Return top N themes and their union of words.
+
+    This tells Leo: "Where are we right now? Which semantic islands are active?"
+    """
+    if not themes:
+        return ActiveThemes(theme_scores={}, active_words=set())
+
+    scores: Dict[int, float] = {}
+    for tok in prompt_tokens:
+        for tid in token_to_themes.get(tok, []):
+            scores[tid] = scores.get(tid, 0.0) + 1.0
+
+    if not scores:
+        return ActiveThemes(theme_scores={}, active_words=set())
+
+    # Pick top themes
+    ordered = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    top = ordered[:max_themes]
+    top_ids = {tid for (tid, _) in top}
+
+    # Collect words from active themes
+    active_words: Set[str] = set()
+    for theme in themes:
+        if theme.id in top_ids:
+            active_words |= theme.words
+
+    theme_scores = {tid: score for (tid, score) in top}
+    return ActiveThemes(theme_scores=theme_scores, active_words=active_words)
+
+
+def structural_quality(
+    prompt: str,
+    reply: str,
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+    min_len: int = 3,
+    max_len: int = 100,
+) -> float:
+    """
+    Assess structural quality of a reply in [0, 1].
+
+    Heuristics (Leo judging himself):
+    - Length sanity: too short or too long → penalty
+    - Repetition: low unique token ratio → penalty
+    - Novelty vs prompt: pure echo or total disconnect → penalty
+    - Grammar support: how many trigrams are known → bonus
+
+    This is intentionally simple. Leo doesn't need complex metrics.
+    He just needs to know: "Was this reply alive or flat?"
+    """
+    p_tokens = tokenize(prompt)
+    r_tokens = tokenize(reply)
+
+    if not r_tokens:
+        return 0.0
+
+    score = 1.0
+
+    # (1) Length sanity
+    if len(r_tokens) < min_len:
+        score *= 0.4  # too short
+    elif len(r_tokens) > max_len:
+        score *= 0.7  # too long (but less penalty)
+
+    # (2) Repetition penalty
+    unique_ratio = len(set(r_tokens)) / len(r_tokens)
+    if unique_ratio < 0.4:
+        score *= 0.5  # heavy repetition
+    elif unique_ratio < 0.6:
+        score *= 0.8  # moderate repetition
+
+    # (3) Novelty vs prompt
+    p_set = set(p_tokens)
+    r_set = set(r_tokens)
+
+    if r_set.issubset(p_set) and len(r_set) > 0:
+        # Pure echo (reply only uses prompt words)
+        score *= 0.4
+    elif len(p_set & r_set) == 0 and len(p_set) > 0:
+        # Total disconnect (no overlap at all)
+        score *= 0.7
+    else:
+        # Some healthy overlap
+        overlap = len(p_set & r_set) / (len(p_set | r_set) or 1)
+        if overlap < 0.1:
+            score *= 0.7  # too disconnected
+
+    # (4) Grammar support: check trigram coverage
+    if trigrams and len(r_tokens) >= 3:
+        known = 0
+        total = 0
+        for i in range(len(r_tokens) - 2):
+            a, b, c = r_tokens[i], r_tokens[i + 1], r_tokens[i + 2]
+            total += 1
+            row = trigrams.get((a, b))
+            if row and c in row:
+                known += 1
+
+        if total > 0:
+            coverage = known / total
+            if coverage < 0.3:
+                score *= 0.5  # mostly random/unknown patterns
+            elif coverage < 0.6:
+                score *= 0.8  # moderate support
+
+    # Clamp to [0, 1]
+    return max(0.0, min(1.0, score))
+
+
+class QualityScore(NamedTuple):
+    """
+    Leo's self-assessment of a reply.
+
+    structural: structural coherence [0, 1]
+    entropy: average generation entropy [0, 1]
+    overall: combined quality score [0, 1]
+    """
+
+    structural: float
+    entropy: float
+    overall: float
+
+
+def compute_quality_score(
+    prompt: str,
+    reply: str,
+    avg_entropy: float,
+    trigrams: Dict[Tuple[str, str], Dict[str, int]],
+) -> QualityScore:
+    """
+    Compute overall quality score for a reply.
+
+    Combines:
+    - structural quality (50%)
+    - entropy score (50%)
+
+    Entropy is mapped: middle range [0.3-0.7] is best (interesting but coherent),
+    very low or very high entropy → penalty.
+    """
+    structural = structural_quality(prompt, reply, trigrams)
+
+    # Map entropy to quality: middle is best
+    # 0.0-0.2: too deterministic (boring)
+    # 0.3-0.7: sweet spot (interesting + coherent)
+    # 0.8-1.0: too chaotic (incoherent)
+    if 0.3 <= avg_entropy <= 0.7:
+        entropy_quality = 1.0  # optimal range
+    elif avg_entropy < 0.3:
+        entropy_quality = 0.5 + avg_entropy / 0.6  # scale up from 0.5
+    else:  # > 0.7
+        entropy_quality = 1.0 - (avg_entropy - 0.7) / 0.6  # scale down
+
+    entropy_quality = max(0.0, min(1.0, entropy_quality))
+
+    # Combined quality (equal weights)
+    overall = 0.5 * structural + 0.5 * entropy_quality
+
+    return QualityScore(
+        structural=structural, entropy=entropy_quality, overall=overall
+    )
+
+
+def save_snapshot(
+    conn: sqlite3.Connection,
+    text: str,
+    origin: str,
+    quality: float,
+    emotional: float,
+    max_snapshots: int = 512,
+) -> None:
+    """
+    Save a snapshot of text (Leo's self-curated dataset).
+
+    Only saves if quality is high enough. If over max_snapshots,
+    deletes oldest/least-used snapshots.
+
+    This is Leo building his own training set from good moments.
+    No external corpus. Just his best replies over time.
+    """
+    import time
+
+    cur = conn.cursor()
+
+    # Insert snapshot
+    cur.execute(
+        """
+        INSERT INTO snapshots (text, origin, quality, emotional, created_at, last_used_at, use_count)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
+        """,
+        (text, origin, quality, emotional, int(time.time()), int(time.time())),
+    )
+
+    # Check snapshot count and cleanup if needed
+    cur.execute("SELECT COUNT(*) FROM snapshots")
+    count = cur.fetchone()[0]
+
+    if count > max_snapshots:
+        # Delete oldest snapshots with low use_count
+        # Sort by: use_count ASC, created_at ASC (oldest first)
+        # Delete bottom 10%
+        to_delete = max(1, int(max_snapshots * 0.1))
+        cur.execute(
+            """
+            DELETE FROM snapshots
+            WHERE id IN (
+                SELECT id FROM snapshots
+                ORDER BY use_count ASC, created_at ASC
+                LIMIT ?
+            )
+            """,
+            (to_delete,),
+        )
+
+    conn.commit()
+
+
+def should_save_snapshot(quality: QualityScore, arousal: float) -> bool:
+    """
+    Decide whether to save this moment as a snapshot.
+
+    Criteria:
+    - High quality (overall > 0.6)
+    - OR interesting emotional charge (arousal > 0.5) + decent quality (overall > 0.4)
+
+    Leo saves his best moments, not everything.
+    """
+    if quality.overall > 0.6:
+        return True  # High quality always saved
+
+    if arousal > 0.5 and quality.overall > 0.4:
+        return True  # High emotion + decent quality
+
+    return False
+
+
+def apply_memory_decay(
+    conn: sqlite3.Connection,
+    decay_factor: float = 0.95,
+    min_threshold: int = 2,
+) -> int:
+    """
+    Apply natural forgetting to co-occurrence memories.
+
+    Multiplicative decay: count → count * decay_factor
+    Delete entries below min_threshold.
+
+    This is Leo forgetting like a child - things fade over time
+    unless reinforced. No perfect memory, just resonance over time.
+
+    Returns number of entries deleted.
+    """
+    cur = conn.cursor()
+
+    # Decay all co-occurrence counts
+    cur.execute(
+        """
+        UPDATE co_occurrence
+        SET count = CAST(count * ? AS INTEGER)
+        WHERE count > 0
+        """,
+        (decay_factor,),
+    )
+
+    # Delete weak memories (below threshold)
+    cur.execute(
+        """
+        DELETE FROM co_occurrence
+        WHERE count < ?
+        """,
+        (min_threshold,),
+    )
+
+    deleted = cur.rowcount
+
+    conn.commit()
+    return deleted
+
+
+@dataclass
+class Expert:
+    """
+    A resonant expert - a perspective on the field.
+
+    No separate model. No learned weights. Just a different view:
+    - Different temperature (exploration vs precision)
+    - Different blend ratio (grammar vs semantics)
+    - Different sampling strategy
+
+    This is MoE as presence, not training.
+    """
+
+    name: str
+    temperature: float
+    semantic_weight: float  # 0.0 = pure grammar, 1.0 = pure semantics
+    description: str
+
+
+# Pre-defined expert perspectives
+EXPERTS = [
+    Expert(
+        name="structural",
+        temperature=0.8,
+        semantic_weight=0.2,
+        description="Grammar-focused, coherent structure",
+    ),
+    Expert(
+        name="semantic",
+        temperature=1.0,
+        semantic_weight=0.5,
+        description="Meaning-focused, thematic coherence",
+    ),
+    Expert(
+        name="creative",
+        temperature=1.3,
+        semantic_weight=0.4,
+        description="Exploratory, high entropy",
+    ),
+    Expert(
+        name="precise",
+        temperature=0.6,
+        semantic_weight=0.3,
+        description="Conservative, low entropy",
+    ),
+]
+
+
+def route_to_expert(
+    pulse: PresencePulse,
+    active_themes: Optional[ActiveThemes] = None,
+) -> Expert:
+    """
+    Route to an expert based on situational awareness.
+
+    Routing logic (no learned weights, pure heuristics):
+    - High novelty (> 0.7) → creative (explore unknown)
+    - Low entropy (< 0.3) → precise (stay coherent)
+    - Many active themes → semantic (follow themes)
+    - Default → structural (solid grammar)
+
+    This is presence-based routing, not gradient descent.
+    """
+    # Creative: explore the unknown
+    if pulse.novelty > 0.7:
+        return EXPERTS[2]  # creative
+
+    # Precise: stay coherent when entropy low
+    if pulse.entropy < 0.3:
+        return EXPERTS[3]  # precise
+
+    # Semantic: follow themes when context is rich
+    if active_themes and len(active_themes.theme_scores) >= 2:
+        return EXPERTS[1]  # semantic
+
+    # Structural: default, solid grammar
+    return EXPERTS[0]  # structural
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -557,6 +1237,7 @@ def step_token(
     trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
     prev_token: Optional[str] = None,
     co_occur: Optional[Dict[str, Dict[str, int]]] = None,
+    entropy_log: Optional[List[float]] = None,
 ) -> str:
     """
     Single step in bigram/trigram graph with semantic blending.
@@ -567,6 +1248,8 @@ def step_token(
 
     temperature < 1.0 => sharper, more deterministic
     temperature > 1.0 => softer, more exploratory
+
+    If entropy_log provided, appends normalized entropy of this step's distribution.
     """
     # Try trigram first if available
     if trigrams is not None and prev_token is not None:
@@ -598,6 +1281,13 @@ def step_token(
             if temperature != 1.0:
                 counts = [math.pow(c, 1.0 / float(temperature)) for c in counts]
 
+            # Log entropy if requested
+            if entropy_log is not None and tokens:
+                raw_entropy = distribution_entropy(counts)
+                max_entropy = math.log(len(tokens) + 1e-12)
+                norm_entropy = raw_entropy / max_entropy if max_entropy > 0.0 else 0.0
+                entropy_log.append(norm_entropy)
+
             total = sum(counts)
             if total > 0:
                 r = random.uniform(0.0, total)
@@ -621,6 +1311,13 @@ def step_token(
 
     if temperature != 1.0:
         counts = [math.pow(float(c), 1.0 / float(temperature)) for c in counts]
+
+    # Log entropy if requested
+    if entropy_log is not None and tokens:
+        raw_entropy = distribution_entropy(counts)
+        max_entropy = math.log(len(tokens) + 1e-12)
+        norm_entropy = raw_entropy / max_entropy if max_entropy > 0.0 else 0.0
+        entropy_log.append(norm_entropy)
 
     total = sum(counts)
     if total <= 0:
@@ -669,6 +1366,24 @@ def choose_start_from_prompt(
     return choose_start_token(vocab, centers, bias)
 
 
+class ReplyContext(NamedTuple):
+    """
+    Generation context for a reply (internal metrics).
+
+    output: the generated text
+    pulse: presence pulse metrics
+    quality: self-assessment score
+    arousal: emotional arousal of prompt
+    expert: which expert was selected (None if experts disabled)
+    """
+
+    output: str
+    pulse: PresencePulse
+    quality: QualityScore
+    arousal: float
+    expert: Optional[Expert] = None
+
+
 def generate_reply(
     bigrams: Dict[str, Dict[str, int]],
     vocab: List[str],
@@ -680,12 +1395,18 @@ def generate_reply(
     echo: bool = False,
     trigrams: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None,
     co_occur: Optional[Dict[str, Dict[str, int]]] = None,
+    emotion_map: Optional[Dict[str, float]] = None,
+    return_context: bool = False,
+    themes: Optional[List[Theme]] = None,
+    token_to_themes: Optional[Dict[str, List[int]]] = None,
+    use_experts: bool = True,
 ) -> str:
     """
     Generate a reply through Leo's field.
 
     Uses trigrams for better local grammar when available.
     echo=True: transform prompt token-by-token through the graph.
+    emotion_map: optional emotional charge map for presence features.
     """
     if not vocab or not bigrams:
         # Field is basically empty: just return prompt back.
@@ -708,6 +1429,30 @@ def generate_reply(
         return output
 
     prompt_tokens = tokenize(prompt)
+
+    # PRESENCE METRICS (internal, not shown in REPL)
+    # Compute novelty: how unfamiliar is this prompt?
+    novelty = compute_prompt_novelty(prompt_tokens, trigrams or {})
+    # Compute arousal: how emotionally charged is this prompt?
+    arousal = compute_prompt_arousal(prompt_tokens, emotion_map or {})
+    # Collect entropy per-step during generation
+    entropy_log: List[float] = []
+
+    # PRESENCE: Activate themes and route to expert
+    active_themes: Optional[ActiveThemes] = None
+    if use_experts and themes and token_to_themes:
+        active_themes = activate_themes_for_prompt(prompt_tokens, themes, token_to_themes)
+
+    # Preliminary pulse (without entropy, since we haven't generated yet)
+    preliminary_pulse = compute_presence_pulse(novelty, arousal, entropy=0.5)
+
+    # RESONANT EXPERTS: Route to expert based on situation
+    selected_expert: Optional[Expert] = None
+    if use_experts:
+        selected_expert = route_to_expert(preliminary_pulse, active_themes)
+        # Override temperature with expert's preference
+        temperature = selected_expert.temperature
+
     start = choose_start_from_prompt(prompt_tokens, bigrams, vocab, centers, bias)
 
     tokens: List[str] = [start]
@@ -718,7 +1463,7 @@ def generate_reply(
     PUNCT = {".", ",", "!", "?", ";", ":"}
 
     for _ in range(max_tokens - 1):
-        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur)
+        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, entropy_log)
 
         # Loop detection: check if we're repeating a pattern
         if len(tokens) >= 6:
@@ -758,6 +1503,30 @@ def generate_reply(
     if output and not output.rstrip()[-1:] in '.!?':
         output = output.rstrip() + '.'
 
+    # Compute average entropy across generation steps
+    avg_entropy = sum(entropy_log) / len(entropy_log) if entropy_log else 0.0
+
+    # Compute presence pulse (composite situational awareness)
+    pulse = compute_presence_pulse(
+        novelty=novelty, arousal=arousal, entropy=avg_entropy
+    )
+
+    # Compute quality score (Leo's self-assessment)
+    quality = compute_quality_score(
+        prompt=prompt, reply=output, avg_entropy=avg_entropy, trigrams=trigrams or {}
+    )
+
+    # Return context if requested (for LeoField snapshot saving)
+    if return_context:
+        context = ReplyContext(
+            output=output,
+            pulse=pulse,
+            quality=quality,
+            arousal=arousal,
+            expert=selected_expert,
+        )
+        return context  # type: ignore
+
     return output
 
 
@@ -777,6 +1546,20 @@ class LeoField:
         self.vocab: List[str] = []
         self.centers: List[str] = []
         self.bias: Dict[str, int] = {}
+        # PRESENCE: emotional charge tracking
+        self.emotion: Dict[str, float] = {}
+        # PRESENCE: last presence pulse (updated each reply)
+        self.last_pulse: Optional[PresencePulse] = None
+        # PRESENCE: last quality score (Leo's self-assessment)
+        self.last_quality: Optional[QualityScore] = None
+        # PRESENCE: themes (constellations over co-occurrence islands)
+        self.themes: List[Theme] = []
+        self.token_to_themes: Dict[str, List[int]] = {}
+        # PRESENCE: memory decay tracking
+        self.observe_count: int = 0
+        self.DECAY_INTERVAL: int = 100  # Apply decay every N observations
+        # PRESENCE: last selected expert (resonant routing)
+        self.last_expert: Optional[Expert] = None
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -786,6 +1569,8 @@ class LeoField:
         self.co_occur = load_co_occurrence(self.conn)
         self.centers = compute_centers(self.conn, k=7)
         self.bias = load_bin_bias("leo")
+        # PRESENCE: rebuild themes from co-occurrence
+        self.themes, self.token_to_themes = build_themes(self.co_occur)
         if initial_shard and self.centers:
             create_bin_shard("leo", self.centers)
 
@@ -794,6 +1579,15 @@ class LeoField:
         if not text.strip():
             return
         ingest_text(self.conn, text)
+        # PRESENCE: track emotional charge
+        update_emotional_stats(self.emotion, text)
+
+        # PRESENCE: increment observe count and apply decay periodically
+        self.observe_count += 1
+        if self.observe_count % self.DECAY_INTERVAL == 0:
+            # Natural forgetting: decay weak co-occurrence memories
+            apply_memory_decay(self.conn)
+
         self.refresh(initial_shard=False)
         if self.centers:
             create_bin_shard("leo", self.centers)
@@ -806,7 +1600,8 @@ class LeoField:
         echo: bool = False,
     ) -> str:
         """Generate reply through the field using trigram model."""
-        return generate_reply(
+        # Get reply with full context (pulse, quality, arousal)
+        context = generate_reply(
             self.bigrams,
             self.vocab,
             self.centers,
@@ -817,7 +1612,44 @@ class LeoField:
             echo=echo,
             trigrams=self.trigrams,
             co_occur=self.co_occur,
+            emotion_map=self.emotion,
+            return_context=True,
+            themes=self.themes,
+            token_to_themes=self.token_to_themes,
+            use_experts=True,
         )
+
+        # Store presence metrics
+        self.last_pulse = context.pulse
+        self.last_quality = context.quality
+        self.last_expert = context.expert
+
+        # PRESENCE: Save snapshot if this was a good moment
+        if should_save_snapshot(context.quality, context.arousal):
+            save_snapshot(
+                self.conn,
+                text=context.output,
+                origin="leo",
+                quality=context.quality.overall,
+                emotional=context.arousal,
+            )
+
+        # Also consider saving user prompt if it was clear/interesting
+        prompt_arousal = compute_prompt_arousal(tokenize(prompt), self.emotion)
+        if prompt_arousal > 0.6:  # High emotional charge
+            # Simple quality check for prompt: not too short, not just punctuation
+            prompt_tokens = tokenize(prompt)
+            if len(prompt_tokens) >= 3:
+                prompt_quality = 0.7  # Assume decent quality for interesting prompts
+                save_snapshot(
+                    self.conn,
+                    text=prompt,
+                    origin="user",
+                    quality=prompt_quality,
+                    emotional=prompt_arousal,
+                )
+
+        return context.output
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
         """Dump current lexicon + centers into a JSON snapshot."""
