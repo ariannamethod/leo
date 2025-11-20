@@ -108,7 +108,7 @@ python leo.py --temperature 0.5 "darkness eats the city"
 
 Example:
 
-> darkness eats city. city sleeps. sleeps silently.
+> Darkness eats city. City sleeps. Sleeps silently.
 
 ### REPL mode
 
