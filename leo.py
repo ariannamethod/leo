@@ -1853,6 +1853,8 @@ class LeoField:
                     generate_fn=self._overthinking_generate,
                     observe_fn=self._overthinking_observe,
                     pulse=pulse_snapshot,
+                    trauma_state=self._trauma_state if hasattr(self, '_trauma_state') else None,
+                    bootstrap=EMBEDDED_BOOTSTRAP,
                     config=OverthinkingConfig() if OverthinkingConfig else None,
                 )
 

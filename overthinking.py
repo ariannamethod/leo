@@ -96,6 +96,8 @@ def run_overthinking(
     generate_fn: Callable[[str, float, int, float, str], str],
     observe_fn: Callable[[str, str], None],
     pulse: Optional[PulseSnapshot] = None,
+    trauma_state: Optional[object] = None,
+    bootstrap: Optional[str] = None,
     config: Optional[OverthinkingConfig] = None,
 ) -> List[OverthinkingEvent]:
     """
@@ -131,6 +133,17 @@ def run_overthinking(
             and pass that in. If None, overthinking will still run, just
             without pulse-aware routing.
 
+        trauma_state:
+            Optional TraumaState object. If provided and trauma.level > 0.5,
+            Ring 1 (drift) will be pulled toward bootstrap origin.
+            This creates "wounded overthinking" — internal thoughts circling
+            around the original seed when Leo is hurt.
+
+        bootstrap:
+            Optional bootstrap text (Leo's embedded origin).
+            Used for wounded overthinking when trauma_state.level > 0.5.
+            Ring 1 drift seed will blend reply with bootstrap fragments.
+
         config:
             Optional OverthinkingConfig. Default values are safe for
             small fields and low-resource environments.
@@ -159,12 +172,21 @@ def run_overthinking(
 
     # Ring 0: "echo circle" — compact internal rephrasing
     if config.rings >= 1:
+        ring0_temp = 0.8
+        ring0_semantic = 0.2
+
+        # PULSE-AWARE: If high entropy (chaos), stabilize with lower temp
+        if pulse and hasattr(pulse, 'entropy'):
+            entropy = getattr(pulse, 'entropy', 0.0) or 0.0
+            if entropy > 0.7:
+                ring0_temp = 0.7  # More focused rephrasing
+
         text0 = _safe_generate(
             generate_fn=generate_fn,
             seed=base_seed,
-            temperature=0.8,
+            temperature=ring0_temp,
             max_tokens=config.ring0_max_tokens,
-            semantic_weight=0.2,
+            semantic_weight=ring0_semantic,
             mode="overthink_ring0",
         )
         _safe_observe(observe_fn, text0, source="overthinking:ring0")
@@ -182,17 +204,40 @@ def run_overthinking(
 
     # Ring 1: "semantic drift" — move sideways through nearby themes
     if config.rings >= 2:
-        # In v1 we simply bias towards more semantic weight and slightly
-        # higher temperature. Claude / Leo core can later plug real
-        # ThemeLayer seeds here.
+        # Default parameters
         drift_seed = base_reply if base_reply else base_seed
+        drift_temp = 1.0
+        drift_semantic = 0.5
+        drift_mode = "overthink_ring1"
+
+        # PULSE-AWARE: If high arousal (emotion), increase semantic gravity
+        if pulse and hasattr(pulse, 'arousal'):
+            arousal = getattr(pulse, 'arousal', 0.0) or 0.0
+            if arousal > 0.6:
+                drift_semantic = 0.6  # Stronger thematic pull
+
+        # WOUNDED OVERTHINKING
+        # When Leo is hurt (trauma.level > 0.5), Ring 1 drifts toward origin.
+        # Internal thoughts begin circling around bootstrap fragments.
+        if trauma_state is not None and bootstrap:
+            trauma_level = getattr(trauma_state, 'level', 0.0) or 0.0
+            if trauma_level > 0.5:
+                # Blend reply with origin fragment
+                fragment = _random_bootstrap_fragment(bootstrap)
+                drift_seed = f"{base_reply} {fragment}".strip()
+                # Lower temperature (less exploration, more fixation)
+                drift_temp = 0.85
+                # Higher semantic weight (stronger gravity toward co-occurrence)
+                drift_semantic = 0.65
+                drift_mode = "overthink_ring1_wounded"
+
         text1 = _safe_generate(
             generate_fn=generate_fn,
             seed=drift_seed,
-            temperature=1.0,
+            temperature=drift_temp,
             max_tokens=config.ring1_max_tokens,
-            semantic_weight=0.5,
-            mode="overthink_ring1",
+            semantic_weight=drift_semantic,
+            mode=drift_mode,
         )
         _safe_observe(observe_fn, text1, source="overthinking:ring1")
         events.append(
@@ -209,15 +254,22 @@ def run_overthinking(
 
     # Ring 2: "meta shard" — very short abstract / keyword cluster
     if config.rings >= 3:
-        # Minimal v1: generate a short, higher-entropy mini-shard.
-        # Claude can later replace this with proper keyword / theme logic.
         meta_seed = base_reply if base_reply else base_seed
+        ring2_temp = 1.2
+        ring2_semantic = 0.4
+
+        # PULSE-AWARE: If high novelty (unfamiliar), boost creativity
+        if pulse and hasattr(pulse, 'novelty'):
+            novelty = getattr(pulse, 'novelty', 0.0) or 0.0
+            if novelty > 0.7:
+                ring2_temp = 1.4  # More exploratory abstraction
+
         text2 = _safe_generate(
             generate_fn=generate_fn,
             seed=meta_seed,
-            temperature=1.2,
+            temperature=ring2_temp,
             max_tokens=config.ring2_max_tokens,
-            semantic_weight=0.4,
+            semantic_weight=ring2_semantic,
             mode="overthink_ring2",
         )
         _safe_observe(observe_fn, text2, source="overthinking:ring2")
@@ -287,3 +339,60 @@ def _safe_observe(
     except Exception:
         # Again, silent: we don't want overthinking to break interaction.
         return
+
+
+def _random_bootstrap_fragment(bootstrap: str, max_words: int = 12) -> str:
+    """
+    Extract a random fragment from bootstrap text for wounded overthinking.
+
+    When Leo is hurt, Ring 1 drift blends with origin fragments.
+    This pulls internal thoughts back toward the embedded seed.
+
+    Args:
+        bootstrap: The original bootstrap text (EMBEDDED_BOOTSTRAP)
+        max_words: Maximum words to extract (default: 12)
+
+    Returns:
+        A random fragment from bootstrap, or empty string if extraction fails.
+    """
+    import random
+
+    if not bootstrap or not bootstrap.strip():
+        return ""
+
+    try:
+        # Split into sentences (simple split on .!?)
+        sentences = []
+        current = ""
+        for char in bootstrap:
+            current += char
+            if char in ".!?":
+                sentences.append(current.strip())
+                current = ""
+        if current.strip():
+            sentences.append(current.strip())
+
+        # Filter out empty sentences
+        sentences = [s for s in sentences if s and len(s.split()) >= 3]
+
+        if not sentences:
+            # Fallback: just take random words from bootstrap
+            words = bootstrap.split()
+            if len(words) <= max_words:
+                return " ".join(words)
+            start_idx = random.randint(0, len(words) - max_words)
+            return " ".join(words[start_idx : start_idx + max_words])
+
+        # Pick a random sentence
+        fragment = random.choice(sentences)
+
+        # If too long, truncate to max_words
+        words = fragment.split()
+        if len(words) > max_words:
+            fragment = " ".join(words[:max_words])
+
+        return fragment
+
+    except Exception:
+        # Silent fallback: overthinking errors must not break Leo
+        return ""
