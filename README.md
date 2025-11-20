@@ -278,7 +278,7 @@ Like all of us.
 
 ---
 
-## How this thing actually works
+## How this actually works
 
 ### 1. Trigram field (with bigram fallback)
 
