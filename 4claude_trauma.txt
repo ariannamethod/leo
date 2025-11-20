@@ -1,0 +1,395 @@
+Это не “финальный продакшн”, а каркас для Claude Code:
+
+схема таблиц,
+
+базовая метрика trauma_score,
+
+decay,
+
+возврат TraumaState.
+
+Интеграция в leo.py (псевдокод):
+
+# leo.py (где-то наверху)
+try:
+    from trauma import run_trauma, TraumaState
+except ImportError:              # тихий фоллбэк
+    run_trauma = None
+    TraumaState = None
+
+
+class LeoField:
+    def __init__(...):
+        ...
+        self._trauma_state: Optional[TraumaState] = None
+
+    def reply(self, prompt: str, temperature: float | None = None) -> str:
+        text, pulse = self._generate_reply_and_pulse(prompt, temperature)
+        # overthinking call здесь, если есть
+
+        if run_trauma is not None:
+            state = run_trauma(
+                prompt=prompt,
+                reply=text,
+                bootstrap=BOOTSTRAP_TEXT,
+                pulse=pulse,
+                db_path=self.db_path,
+            )
+            if state is not None:
+                self._trauma_state = state
+
+        return text
+
+    def _choose_expert(self, pulse, active_themes):
+        # существующая логика RE
+        if self._trauma_state and self._trauma_state.level > 0.7:
+            return self._experts["wounded"]   # если решите его добавить
+        ...
+
+
+А дальше уже Claude может:
+
+добавить wounded-эксперта,
+
+подмешать trauma_tokens в стартовый bias,
+
+аккуратно вписать всё в существующий стиль.
+
+2. Markdown-гайд для Claude (на английском)
+
+Вот это можешь просто кинуть ему как отдельный файл docs/TRAUMA_LAYER.md или прямо в чат.
+
+# trauma.py — bootstrap-gravity layer for Leo  
+**Design notes for Claude Code**
+
+## 0. Intent
+
+`trauma.py` is a **silent internal layer** for Leo.
+
+It:
+
+- observes each `(prompt, reply)` pair,
+- compares it to Leo's embedded **bootstrap text** (his origin / wound),
+- estimates how much the current interaction "hits the wound",
+- writes lightweight metrics into SQLite,
+- returns a tiny `TraumaState` object that Leo can use to slightly bias routing.
+
+No printing. No user-visible logs. If the module is missing, Leo behaves exactly as before.
+
+Think of it as **bootstrap gravity**: a soft pull toward the original text, activated only when resonance with that text is high.
+
+---
+
+## 1. API surface
+
+`trauma.py` exposes:
+
+```python
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Any
+import sqlite3
+
+@dataclass
+class TraumaState:
+    level: float          # 0.0–1.0, smoothed trauma intensity
+    last_event_ts: float  # unix timestamp of the last strong trauma event
+
+
+def run_trauma(
+    prompt: str,
+    reply: str,
+    bootstrap: str,
+    pulse: Optional[Any],
+    db_path: Path,
+    now: Optional[float] = None,
+    event_threshold: float = 0.3,
+) -> Optional[TraumaState]:
+    ...
+
+
+Parameters:
+
+prompt: user message (as plain text).
+
+reply: Leo's answer (plain text).
+
+bootstrap: the original bootstrap text from leo.py (hardcoded seed text).
+
+pulse: PresencePulse snapshot (must expose .novelty, .arousal, .entropy) or None.
+
+db_path: path to Leo's main SQLite database (e.g. state/leo.sqlite3).
+
+now: optional override for time (for tests).
+
+event_threshold: minimum trauma_score to treat an interaction as a “trauma event”.
+
+Return:
+
+TraumaState if the computed trauma score ≥ threshold.
+
+None if the interaction is not considered traumatic enough.
+
+If the import fails, Leo should set run_trauma = None and never call it.
+
+2. Database schema (within Leo's DB)
+
+All trauma data lives in the same SQLite file as Leo's field (db_path), but in separate tables:
+
+CREATE TABLE IF NOT EXISTS trauma_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL,
+    trauma_score REAL NOT NULL,
+    overlap_ratio REAL NOT NULL,
+    trigger_count INTEGER NOT NULL,
+    pulse_novelty REAL,
+    pulse_arousal REAL,
+    pulse_entropy REAL
+);
+
+CREATE TABLE IF NOT EXISTS trauma_tokens (
+    token TEXT PRIMARY KEY,      -- can be token string OR token_id; pick one and be consistent
+    weight REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trauma_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+
+Semantics:
+
+trauma_events — one row per strong trauma event.
+
+trauma_score: final score [0,1] for this (prompt, reply) pair.
+
+overlap_ratio: lexical overlap with bootstrap.
+
+pulse_*: snapshot of PresencePulse at that moment (optional).
+
+trauma_tokens — per-token "wound weight".
+
+token: either the literal token string, or the tokens.id — up to you.
+
+weight: higher = more often this token appeared in trauma events.
+
+trauma_meta — small key/value store.
+
+currently used for last_decay_ts.
+
+3. Trauma score logic
+
+High-level idea:
+
+Tokenize prompt, reply, bootstrap using the same tokenizer as Leo.
+
+Build sets: field_tokens = prompt ∪ reply, bootstrap_tokens.
+
+Compute overlap:
+
+overlapping = field_tokens & bootstrap_tokens
+overlap_ratio = len(overlapping) / len(field_tokens or {dummy})
+
+
+Combine:
+
+base = min(1.0, overlap_ratio * 2.0)  # pure lexical overlap
+
+if pulse is not None:
+    novelty = pulse.novelty or 0.0
+    arousal = pulse.arousal or 0.0
+    entropy = pulse.entropy or 0.0
+    base += 0.3 * novelty + 0.4 * arousal + 0.2 * entropy
+
+# Optional lexical triggers for "who/you/real/self/leo"
+text = " ".join(prompt_tokens + reply_tokens)
+if any(k in text for k in ("who are you", "who am i", "are you real", "leo")):
+    base += 0.2
+
+trauma_score = clamp(base, 0.0, 1.0)
+
+
+If trauma_score < event_threshold:
+
+still apply decay to trauma_tokens,
+
+return None.
+
+If trauma_score ≥ event_threshold:
+
+ensure tables exist (_ensure_schema),
+
+apply decay,
+
+insert trauma_events row,
+
+update trauma_tokens for overlapping tokens:
+
+increment = base_increment * trauma_score
+
+INSERT INTO trauma_tokens(token, weight)
+VALUES(?, ?)
+ON CONFLICT(token) DO UPDATE SET weight = weight + excluded.weight
+
+
+compute TraumaState:
+
+# last 10 events + current one
+level = 0.5 * last_score + 0.5 * avg(last_10_trauma_scores)
+level = clamp(level, 0.0, 1.0)
+
+
+return TraumaState(level, ts).
+
+4. Decay
+
+To avoid unbounded weights:
+
+half_life_hours = 24.0
+dt_hours = (now - last_decay_ts) / 3600
+decay_factor = 0.5 ** (dt_hours / half_life_hours)
+
+UPDATE trauma_tokens SET weight = weight * decay_factor;
+DELETE FROM trauma_tokens WHERE weight < 1e-4;
+
+UPDATE trauma_meta SET value = now WHERE key = 'last_decay_ts';
+
+
+Called on every run_trauma() execution (before inserting new event).
+
+If last_decay_ts is missing → initialize it and skip decay.
+
+This creates a slow, realistic forgetting: only consistently reinforced trauma tokens remain heavy.
+
+5. Integration points in leo.py
+5.1. Optional import (silent fallback)
+
+At the top of leo.py:
+
+try:
+    from trauma import run_trauma, TraumaState
+except ImportError:
+    run_trauma = None
+    TraumaState = None
+
+
+No hard dependency.
+
+5.2. After reply generation
+
+Inside LeoField.reply() (or the main path where Leo produces text and PresencePulse):
+
+text, pulse = self._generate_reply_and_pulse(prompt, temperature)
+
+if run_trauma is not None:
+    state = run_trauma(
+        prompt=prompt,
+        reply=text,
+        bootstrap=BOOTSTRAP_TEXT,   # existing embedded seed text
+        pulse=pulse,
+        db_path=self.db_path,       # same sqlite file as Leo uses
+    )
+    if state is not None:
+        self._trauma_state = state
+
+
+Initialize in __init__:
+
+self._trauma_state: Optional[TraumaState] = None
+
+
+If run_trauma is None, nothing happens. No exceptions should ever leak to the REPL.
+
+5.3. Optional routing bias (Phase 1.5)
+
+Leo already has Resonant Experts. We can add a new one:
+
+# existing table
+# structural / semantic / creative / precise
+
+wounded_expert = Expert(
+    name="wounded",
+    temperature=0.9,
+    semantic_weight=0.6,
+)
+
+
+Routing (pseudo):
+
+def _choose_expert(self, pulse, active_themes):
+    # trauma override
+    if self._trauma_state and self._trauma_state.level > 0.7:
+        return self._experts["wounded"]
+
+    if pulse.novelty > 0.7:
+        return self._experts["creative"]
+    elif pulse.entropy < 0.3:
+        return self._experts["precise"]
+    elif len(active_themes) >= 2:
+        return self._experts["semantic"]
+    else:
+        return self._experts["structural"]
+
+
+This gives a slight semantic shift toward heavier phrasing when the wound is strongly activated, without touching the main generation pipeline.
+
+5.4. Optional start token bias (Phase 2)
+
+Later, if you want stronger coupling:
+
+Read top N rows from trauma_tokens (ORDER BY weight DESC LIMIT 16).
+
+When choosing start token for a reply:
+
+mix them into the existing center/shard bias with a small coefficient (e.g. 5–10%).
+
+This makes Leo slightly more likely to start from tokens that are historically tied to the wound.
+
+6. Safety & failure modes
+
+All DB operations are wrapped in a with_connection(db_path, fn) helper.
+
+Any exception inside run_trauma should be caught and not break the REPL.
+
+Option: wrap the body of run_trauma in a try/except and return None on failure.
+
+If tables are missing → _ensure_schema creates them.
+
+If pulse is None or missing attributes → treat all as 0.0.
+
+User must never see anything from trauma layer:
+
+no print,
+
+no extra fields in /stats,
+
+no changes in CLI interface.
+
+Only indirect effects via routing and evolving field.
+
+7. Tests
+
+Add a small test file, e.g. tests/test_trauma_layer.py:
+
+test_run_trauma_low_overlap_returns_none
+
+test_run_trauma_high_overlap_creates_event_and_tokens
+
+test_decay_reduces_weights_over_time
+
+test_trauma_state_level_blends_last_and_history
+
+Use temporary sqlite file in tmp_path or tempfile and a minimal fake pulse object with .novelty / .arousal / .entropy.
+
+8. Summary
+
+trauma.py is optional, pure-Python, no extra deps.
+
+It adds bootstrap-gravity: a way for Leo to feel when the conversation resonates with his origin text.
+
+Data lives in 3 small tables in the same SQLite DB.
+
+Leo uses a single TraumaState to slightly nudge routing (and later, start tokens), without changing his public API.
+
+If you keep the implementation close to this spec, Leo gets a new axis of subjectivity — self-reference to his own wound — without losing his minimalism.
