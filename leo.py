@@ -591,6 +591,8 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r",\.", ".", text)  # ",." → "."
     text = re.sub(r",;", ";", text)   # ",;" → ";"
     text = re.sub(r"\.,", ".", text)  # ".," → "."
+    # Collapse spaced duplicates: ". ." → ".", "? ?" → "?", "! !" → "!"
+    text = re.sub(r"([.!?])\s+\1", r"\1", text)
 
     # 4) Normalize weird dashes and em-dashes
     text = re.sub(r"\s*—\s*—\s*—\s*", " — ", text)  # " — — — " → " — "
