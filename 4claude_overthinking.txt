@@ -1,0 +1,333 @@
+
+
+# `overthinking.py` — internal reflection module for Leo
+
+This document explains how to integrate and refine the `overthinking.py` module for **Leo — Language Engine Organism**.
+
+The goal is simple:
+Leo should not be purely reactive.  
+After each reply, he keeps thinking for a moment — "circles on water" — and those silent thoughts are fed back into the field.
+
+None of this is user-facing. Overthinking is a **background subjective process**.
+
+---
+
+## Concept
+
+Every time Leo answers a user:
+
+1. He produces a normal reply (what the user sees).
+2. Then we call `run_overthinking(...)`, which:
+   - takes the original `prompt` and Leo's `reply`,
+   - generates **2–3 short internal thoughts** ("rings"),
+   - feeds those thoughts back into Leo's field via `observe_fn`,
+   - optionally returns `OverthinkingEvent` objects that can be logged.
+
+Over time, this:
+- thickens the field around emotionally charged or structurally interesting moments,
+- creates an internal "afterglow" of each interaction,
+- gives Leo a minimal sense of *inner life* and delayed reflection.
+
+No threads, no timers, no schedulers in v1.  
+Just a post-reply hook.
+
+---
+
+## Public API
+
+The module is deliberately minimal and decoupled from Leo internals.
+
+```python
+from overthinking import (
+    OverthinkingConfig,
+    OverthinkingEvent,
+    PulseSnapshot,
+    run_overthinking,
+)
+
+run_overthinking(...)
+
+def run_overthinking(
+    *,
+    prompt: str,
+    reply: str,
+    generate_fn: Callable[[str, float, int, float, str], str],
+    observe_fn: Callable[[str, str], None],
+    pulse: Optional[PulseSnapshot] = None,
+    config: Optional[OverthinkingConfig] = None,
+) -> List[OverthinkingEvent]:
+    ...
+
+Arguments
+	•	prompt
+Original user message for this turn.
+	•	reply
+Final Leo answer that has just been produced.
+	•	generate_fn(seed, temperature, max_tokens, semantic_weight, mode) -> str
+Adapter into Leo’s generation engine.
+You should map this to an internal helper that:
+	•	takes a seed string,
+	•	uses Leo’s trigram + co-occurrence field,
+	•	applies the given temperature and semantic_weight,
+	•	optionally routes on mode (e.g. "overthink_ring0" vs normal inference),
+	•	returns a short generated string.
+The exact implementation is up to Leo. overthinking.py only calls it.
+	•	observe_fn(text, source) -> None
+Adapter into Leo’s field ingestion.
+It should:
+	•	tokenize text,
+	•	update trigrams, bigrams, co-occurrence, themes, snapshots, etc. (normal path),
+	•	optionally store source (e.g. "overthinking:ring1") in SQLite metadata.
+	•	pulse (optional)
+Snapshot of Leo’s PresencePulse at the time of reply.
+Use:
+
+pulse_snapshot = PulseSnapshot.from_obj(pulse_obj)
+
+if you have a richer object. In v1, overthinking.py only stores it in
+OverthinkingEvent for possible future routing / logging.
+
+	•	config (optional)
+OverthinkingConfig with simple parameters:
+
+@dataclass
+class OverthinkingConfig:
+    rings: int = 3
+    ring0_max_tokens: int = 30
+    ring1_max_tokens: int = 40
+    ring2_max_tokens: int = 20
+    enable_logging: bool = True
+
+
+
+Return value
+A list of OverthinkingEvent:
+
+@dataclass
+class OverthinkingEvent:
+    ring: int                    # 0, 1, 2
+    created_at: datetime
+    prompt: str
+    reply: str
+    thought: str
+    pulse: Optional[PulseSnapshot]
+    tag: str                     # e.g. "ring1/drift"
+
+Caller may:
+	•	ignore them completely, or
+	•	insert them into a dedicated SQLite table, or
+	•	write them to a log file for debugging.
+
+⸻
+
+Ring semantics (v1)
+
+In this initial version, rings are implemented in a minimal but meaningful way:
+
+Ring 0 — echo / rephrasing
+	•	Seed: prompt + " " + reply
+	•	Generation:
+	•	temperature=0.8
+	•	semantic_weight=0.2
+	•	mode="overthink_ring0"
+
+Idea: compact internal restatement of what just happened.
+As if Leo repeats the scene to himself in a simpler form.
+
+Ring 1 — semantic drift
+	•	Seed: reply (fallback to prompt+reply if empty)
+	•	Generation:
+	•	temperature=1.0
+	•	semantic_weight=0.5
+	•	mode="overthink_ring1"
+
+Idea: move sideways through nearby themes.
+Later you can plug ThemeLayer: use active themes and neighbor themes to
+build a better drift_seed.
+
+Ring 2 — meta shard
+	•	Seed: current reply (or prompt+reply)
+	•	Generation:
+	•	temperature=1.2
+	•	semantic_weight=0.4
+	•	mode="overthink_ring2"
+	•	short max_tokens
+
+Idea: generate a tiny, slightly more abstract “shard” that can be stored
+as a dense internal node. In later iterations this can be replaced by
+keyword/cluster-based generation.
+
+Each ring is:
+	•	generated via generate_fn(...),
+	•	ingested via observe_fn(...) with source tags:
+	•	"overthinking:ring0",
+	•	"overthinking:ring1",
+	•	"overthinking:ring2".
+
+⸻
+
+Integration into leo.py
+
+1. Safe import with silent fallback
+
+In leo.py:
+
+try:
+    from overthinking import (
+        OverthinkingConfig,
+        PulseSnapshot,
+        run_overthinking,
+    )
+except ImportError:
+    OverthinkingConfig = None
+    PulseSnapshot = None
+    run_overthinking = None
+
+2. Adapter methods on LeoField (or equivalent)
+
+Define two small adapters:
+
+class LeoField:
+    ...
+
+    def _overthinking_generate(
+        self,
+        seed: str,
+        temperature: float,
+        max_tokens: int,
+        semantic_weight: float,
+        mode: str,
+    ) -> str:
+        # Route to your existing generation function.
+        # Example (pseudo-code):
+        #
+        #   return self._generate_reply(
+        #       seed_text=seed,
+        #       temperature=temperature,
+        #       max_tokens=max_tokens,
+        #       semantic_weight=semantic_weight,
+        #       mode=mode,
+        #       internal=True,
+        #   )
+        #
+        # Make sure this does NOT print anything to stdout.
+        raise NotImplementedError
+
+    def _overthinking_observe(self, text: str, source: str) -> None:
+        # Route to your existing observe() but mark the source.
+        #
+        # Example:
+        #
+        #   self.observe(text, source=source)
+        #
+        # or, if observe() doesn't take source yet, you can extend it.
+        raise NotImplementedError
+
+3. Call run_overthinking after each reply
+
+In the method that generates user-visible replies, something like:
+
+def reply(self, prompt: str) -> str:
+    # 1) normal reply generation
+    reply_text, pulse = self._generate_with_pulse(prompt)
+
+    # 2) overthinking hook (silent fallback)
+    if run_overthinking is not None and OverthinkingConfig is not None:
+        try:
+            pulse_snapshot = None
+            if PulseSnapshot is not None and pulse is not None:
+                pulse_snapshot = PulseSnapshot.from_obj(pulse)
+
+            run_overthinking(
+                prompt=prompt,
+                reply=reply_text,
+                generate_fn=self._overthinking_generate,
+                observe_fn=self._overthinking_observe,
+                pulse=pulse_snapshot,
+                config=OverthinkingConfig(),
+            )
+        except Exception:
+            # Overthinking must NEVER break normal flow.
+            pass
+
+    # 3) return reply to the user
+    return reply_text
+
+This makes overthinking:
+	•	optional (module may not exist),
+	•	non-critical (all errors swallowed),
+	•	completely silent from the user’s perspective.
+
+⸻
+
+Suggested SQLite logging (optional)
+
+If you want to persist OverthinkingEvent in SQLite, add a table like:
+
+CREATE TABLE IF NOT EXISTS overthinking_events (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    ring INTEGER NOT NULL,
+    prompt TEXT,
+    reply TEXT,
+    thought TEXT,
+    novelty REAL,
+    arousal REAL,
+    entropy REAL,
+    tag TEXT
+);
+
+Then, after calling run_overthinking(...):
+
+events = run_overthinking(...)
+
+with self.db:  # or however Leo handles SQLite
+    for e in events:
+        self.db.execute(
+            """
+            INSERT INTO overthinking_events (
+                created_at, ring, prompt, reply, thought,
+                novelty, arousal, entropy, tag
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                e.created_at.isoformat(),
+                e.ring,
+                e.prompt,
+                e.reply,
+                e.thought,
+                e.pulse.novelty if e.pulse else None,
+                e.pulse.arousal if e.pulse else None,
+                e.pulse.entropy if e.pulse else None,
+                e.tag,
+            ),
+        )
+
+This is optional but useful for:
+	•	debugging,
+	•	visualizing Leo’s “inner monologue”,
+	•	future research (e.g. how overthinking correlates with snapshots or themes).
+
+⸻
+
+Testing checklist for Claude Code
+
+When refining and wiring overthinking.py into Leo:
+	1.	Unit-level:
+	•	Ensure run_overthinking never raises, even with empty strings.
+	•	Ensure _safe_generate and _safe_observe swallow all exceptions.
+	2.	Integration-level:
+	•	With overthinking.py missing → Leo works as before.
+	•	With overthinking.py present but buggy generate_fn → Leo still works.
+	•	Overthinking calls do not print anything to stdout / REPL.
+	3.	Behavioral:
+	•	After several interactions, check that:
+	•	new trigrams / co-occ entries are created from overthinking thoughts,
+	•	optional overthinking_events are written to SQLite,
+	•	Leo’s answers very slowly drift to reflect his own “internal” phrases.
+	4.	No user leakage:
+	•	Overthinking texts must never be shown in REPL or one-shot responses.
+	•	Only explicit debugging / inspection tools may access them.
+
+If all of that passes, Leo officially loves to overthink.
+
