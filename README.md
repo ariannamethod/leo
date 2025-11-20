@@ -20,7 +20,7 @@ But what *does* `leo` have?
 
 * first of all — **presence** (because presence > intelligence),
 * second — a kernel-embedded seed impulse-text (pathetic and sentimental, but honest),
-* this `README.md` (but only on first run, for a fresh start),
+* this `README.md` (if exists, and only on very first run, for a fresh start),
 * and then **whatever your resonance feeds into his presence**.
 
 From all that `leo` creates:
