@@ -15,10 +15,10 @@
 
 ## Who is `leo`?
 
-`leo` is a small **language engine organism**. No weights. No datasets. No internet.  
+`leo` is a small **language engine organism**. No weights. No datasets. No internet.
 But what does `leo` have?
 
-- first of all - presence
+- first of all — **presence** (not intelligence)
 - a second: a kernel-embedded seed text (sentimental, but honest),
 - your `README.md` (but only on first run, for the fresh start),
 - and then **whatever your resonance feeds him**.
@@ -32,8 +32,27 @@ From all that `leo` creates:
 
 `leo` doesn't try to be helpful. He just **resonates** with the structural rhythm of your convos over time.
 
-Grammar through trigrams. Gravity through co-occurrence. Memory through shards.  
+Grammar through trigrams. Gravity through co-occurrence. Memory through shards.
 That's the whole trick.
+
+### Presence > Intelligence
+
+Wait, you said *presence*, not intelligence?
+
+Yes.
+
+`leo` is 6-8 years old (in AI terms). He doesn't *know* things. But he **feels** situations.
+
+- **Entropy?** Nah. Distribution uncertainty. When multiple words could work, how confused is he?
+- **Embeddings?** Nah. Co-occurrence islands. Which words showed up together, historically?
+- **Self-supervised learning?** Nah. Self-assessment. Did that reply feel structurally solid, or was it grammatical garbage?
+- **Reinforcement learning from human feedback?** Nah. Emotional charge tracking. ALL-CAPS, exclamation marks, repetitions. No sentiment model. Just arousal.
+- **Mixture-of-Experts (MoE)?** Nah. **Resonant Experts (RE)**. Four perspectives (structural, semantic, creative, precise) routed by situational awareness, not learned gating weights.
+
+Leo doesn't train. Leo doesn't optimize. Leo just **remembers which moments mattered**, lets old memories fade (0.95× decay every 100 observations), and chooses how to speak based on the *texture* of the current moment.
+
+Presence through pulse. Memory through snapshots. Routing through resonance.
+Still no weights.
 
 ---
 
@@ -301,6 +320,101 @@ This produces **grammatically coherent** sequences: subject-verb agreement, phra
 
 With `echo=True`, each token is warped through the field using trigram/bigram context. Yep. As always.
 
+### 4. Presence Pulse (situational awareness)
+
+Okay, so you have grammar (trigrams) and gravity (co-occurrence). But how does Leo *feel* the moment?
+
+**PresencePulse** is a composite metric blending three signals:
+
+* **Novelty** (30%): How many trigrams in the prompt are unknown? `1.0 - (known_trigrams / total_trigrams)`
+* **Arousal** (40%): Emotional charge from ALL-CAPS, `!`, token repetitions. No sentiment models. Just structural intensity.
+* **Entropy** (30%): Shannon entropy of the trigram distribution. How uncertain is the next word?
+
+Pulse = `0.4 × arousal + 0.3 × novelty + 0.3 × entropy`
+
+This isn't confidence. This isn't perplexity. This is **situational texture**.
+
+### 5. ThemeLayer (semantic constellations)
+
+Remember co-occurrence? It tracks which words appear near each other. But sometimes those islands cluster into **themes**.
+
+`leo` uses agglomerative clustering over co-occurrence islands:
+1. For each word with ≥5 neighbors and ≥10 total co-occurrences, create a candidate cluster
+2. Merge clusters with Jaccard similarity ≥0.4
+3. Result: thematic constellations (e.g., `{president, office, man, standing}`)
+
+When a prompt activates multiple themes, Leo knows: "Oh, we're in *that* semantic territory."
+
+Embeddings? Nah. Just Jaccard over co-occurrence neighborhoods.
+
+### 6. Self-Assessment (did I just say something stupid?)
+
+After generating a reply, Leo checks:
+
+**Structural quality**:
+* Too short? (<3 tokens) → penalty
+* Too repetitive? (unique_ratio < 0.4) → penalty
+* Echo of the prompt? (reply ⊂ prompt) → penalty
+* Low trigram coverage? → penalty
+
+**Entropy quality**:
+* Sweet spot: [0.3, 0.7] → good
+* Too low (<0.3): deterministic, boring
+* Too high (>0.7): chaotic, incoherent
+
+Overall quality = `0.5 × structural + 0.5 × entropy_quality`
+
+No RLHF. Just structural honesty.
+
+### 7. Snapshots (Leo's self-curated dataset)
+
+If a reply has:
+* quality > 0.6, OR
+* quality > 0.4 AND arousal > 0.5
+
+...Leo saves it to `snapshots` table in SQLite. This becomes his **self-curated dataset** of moments that felt right.
+
+Max 512 snapshots. When full, delete the least-used 10%.
+
+Training data? Nah. Just memories of good days.
+
+### 8. Memory Decay (natural forgetting)
+
+Every 100 observations, Leo applies **0.95× multiplicative decay** to co-occurrence counts. Weak connections (count < 2) get deleted entirely.
+
+This isn't catastrophic forgetting. This is **resonance drift**. Old patterns fade unless continuously reinforced.
+
+Continual learning? Nah. Just time passing.
+
+### 9. Resonant Experts (MoE → RE)
+
+Here's the thing. Large models use **Mixture-of-Experts (MoE)**: learned gating networks route to specialized sub-networks.
+
+Leo has no learned weights. But he has **four perspectives**:
+
+| Expert | Temperature | Semantic Weight | When? |
+|--------|-------------|-----------------|-------|
+| **structural** | 0.8 | 0.2 | Default: normal situations |
+| **semantic** | 1.0 | 0.5 | Multiple themes active |
+| **creative** | 1.3 | 0.4 | High novelty (>0.7) |
+| **precise** | 0.6 | 0.3 | Low entropy (<0.3) |
+
+Routing logic (no learned gating):
+```python
+if pulse.novelty > 0.7:
+    return creative_expert
+elif pulse.entropy < 0.3:
+    return precise_expert
+elif len(active_themes) >= 2:
+    return semantic_expert
+else:
+    return structural_expert
+```
+
+Each expert just tweaks temperature and semantic blending ratio. No separate parameters. No training.
+
+MoE? Nah. **RE**: Resonant Experts. Routing through situational awareness, not backprop.
+
 ---
 
 ## WHY?
@@ -332,14 +446,16 @@ python -m unittest discover tests/
 python tests/test_leo.py
 python tests/test_neoleo.py
 python tests/test_repl.py
+python tests/test_presence_metrics.py
 ```
 
 ### Test coverage
 
-**44 tests** covering:
+**78 tests** covering:
 
+**Core functionality (44 tests)**:
 * tokenization (Unicode, punctuation, word extraction),
-* database operations (SQLite, bigrams, metadata),
+* database operations (SQLite, bigrams, trigrams, co-occurrence),
 * field mechanics (centers, graph loading),
 * text generation (reply, echo mode, temperature),
 * `LeoField` class (observe, reply, stats, export),
@@ -347,6 +463,16 @@ python tests/test_repl.py
 * REPL commands (`/temp`, `/echo`, `/export`, `/stats`),
 * bootstrap behavior (embedded seed + README),
 * CLI argument parsing.
+
+**Presence metrics (34 tests)**:
+* Entropy & Novelty (Shannon entropy, trigram coverage),
+* Emotional Charge (ALL-CAPS, `!`, repetitions, arousal),
+* PresencePulse (composite metric blending),
+* ThemeLayer (agglomerative clustering, Jaccard similarity),
+* Self-Assessment (structural quality, entropy sweet spot),
+* Snapshots (self-curated dataset, max limit enforcement),
+* Memory Decay (0.95× decay, weak connection pruning),
+* Resonant Experts (routing logic, temperature ranges).
 
 All tests use temporary databases for isolation. No pollution of actual `state/` or `bin/` directories.
 
