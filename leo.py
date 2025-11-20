@@ -14,7 +14,8 @@ import re
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, NamedTuple
+from typing import Dict, List, Tuple, Optional, NamedTuple, Set
+from dataclasses import dataclass
 
 # ============================================================================
 # PATHS
@@ -684,6 +685,38 @@ def compute_prompt_arousal(
     return max(0.0, min(1.0, arousal))
 
 
+@dataclass
+class Theme:
+    """
+    A thematic constellation - a cluster of co-occurring words.
+
+    Themes are built dynamically from co-occurrence patterns, not hardcoded.
+    They represent Leo's emergent understanding of semantic islands.
+
+    Example themes that might emerge:
+    - THEME_HOME: {mother, home, hand, warm, street}
+    - THEME_CODE: {code, error, terminal, test, sqlite}
+    - THEME_NIGHT: {night, dark, sleep, dream, silence}
+    """
+
+    id: int
+    centers: Set[str]  # Core words that define this theme
+    words: Set[str]  # Full vocabulary (centers + neighbors)
+    strength: float = 1.0  # Global theme strength (can evolve over time)
+
+
+class ActiveThemes(NamedTuple):
+    """
+    Which themes are 'lit up' by the current prompt.
+
+    theme_scores: theme_id -> activation score
+    active_words: union of words from top active themes
+    """
+
+    theme_scores: Dict[int, float]
+    active_words: Set[str]
+
+
 class PresencePulse(NamedTuple):
     """
     Composite presence metric combining novelty, arousal, and entropy.
@@ -728,6 +761,129 @@ def compute_presence_pulse(
     return PresencePulse(
         novelty=novelty, arousal=arousal, entropy=entropy, pulse=pulse
     )
+
+
+def build_themes(
+    co_occur: Dict[str, Dict[str, int]],
+    min_neighbors: int = 5,
+    min_total_cooccur: int = 10,
+    top_neighbors: int = 16,
+    merge_threshold: float = 0.4,
+) -> Tuple[List[Theme], Dict[str, List[int]]]:
+    """
+    Build thematic constellations from co-occurrence islands.
+
+    Algorithm:
+    1. Find candidate cores: tokens with enough neighbors and co-occurrence weight
+    2. For each core, build its neighborhood (top N context words)
+    3. Merge cores whose neighborhoods strongly overlap (Jaccard > threshold)
+    4. Return themes and token->themes index
+
+    This is simple agglomerative clustering, not fancy community detection.
+    Good enough for Leo's scale.
+    """
+    # 1. Collect candidates
+    candidates: List[Tuple[str, Set[str]]] = []
+
+    for token, ctx in co_occur.items():
+        if len(ctx) < min_neighbors:
+            continue
+
+        total = sum(ctx.values())
+        if total < min_total_cooccur:
+            continue
+
+        # Pick top neighbors by count
+        top = sorted(ctx.items(), key=lambda x: x[1], reverse=True)[:top_neighbors]
+        neighbor_set = {t for (t, _) in top}
+        neighbor_set.add(token)  # Include the core itself
+        candidates.append((token, neighbor_set))
+
+    if not candidates:
+        return [], {}
+
+    # 2. Merge candidates into themes via agglomerative clustering
+    used = [False] * len(candidates)
+    themes: List[Theme] = []
+    current_id = 0
+
+    for i, (core_i, neigh_i) in enumerate(candidates):
+        if used[i]:
+            continue
+
+        # Start new theme with this candidate
+        theme_words = set(neigh_i)
+        centers = {core_i}
+        used[i] = True
+
+        # Merge compatible candidates
+        for j, (core_j, neigh_j) in enumerate(candidates):
+            if used[j]:
+                continue
+
+            # Jaccard similarity
+            inter = len(theme_words & neigh_j)
+            union = len(theme_words | neigh_j)
+            if union == 0:
+                continue
+
+            jacc = inter / union
+            if jacc >= merge_threshold:
+                used[j] = True
+                theme_words |= neigh_j
+                centers.add(core_j)
+
+        theme = Theme(id=current_id, centers=centers, words=theme_words, strength=1.0)
+        themes.append(theme)
+        current_id += 1
+
+    # 3. Build token -> themes index
+    token_to_themes: Dict[str, List[int]] = {}
+    for theme in themes:
+        for w in theme.words:
+            token_to_themes.setdefault(w, []).append(theme.id)
+
+    return themes, token_to_themes
+
+
+def activate_themes_for_prompt(
+    prompt_tokens: List[str],
+    themes: List[Theme],
+    token_to_themes: Dict[str, List[int]],
+    max_themes: int = 3,
+) -> ActiveThemes:
+    """
+    Compute which themes are 'lit up' by the prompt.
+
+    For each token in prompt that belongs to themes, add +1 to that theme's score.
+    Return top N themes and their union of words.
+
+    This tells Leo: "Where are we right now? Which semantic islands are active?"
+    """
+    if not themes:
+        return ActiveThemes(theme_scores={}, active_words=set())
+
+    scores: Dict[int, float] = {}
+    for tok in prompt_tokens:
+        for tid in token_to_themes.get(tok, []):
+            scores[tid] = scores.get(tid, 0.0) + 1.0
+
+    if not scores:
+        return ActiveThemes(theme_scores={}, active_words=set())
+
+    # Pick top themes
+    ordered = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    top = ordered[:max_themes]
+    top_ids = {tid for (tid, _) in top}
+
+    # Collect words from active themes
+    active_words: Set[str] = set()
+    for theme in themes:
+        if theme.id in top_ids:
+            active_words |= theme.words
+
+    theme_scores = {tid: score for (tid, score) in top}
+    return ActiveThemes(theme_scores=theme_scores, active_words=active_words)
 
 
 def step_token(
@@ -1002,6 +1158,9 @@ class LeoField:
         self.emotion: Dict[str, float] = {}
         # PRESENCE: last presence pulse (updated each reply)
         self.last_pulse: Optional[PresencePulse] = None
+        # PRESENCE: themes (constellations over co-occurrence islands)
+        self.themes: List[Theme] = []
+        self.token_to_themes: Dict[str, List[int]] = {}
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -1011,6 +1170,8 @@ class LeoField:
         self.co_occur = load_co_occurrence(self.conn)
         self.centers = compute_centers(self.conn, k=7)
         self.bias = load_bin_bias("leo")
+        # PRESENCE: rebuild themes from co-occurrence
+        self.themes, self.token_to_themes = build_themes(self.co_occur)
         if initial_shard and self.centers:
             create_bin_shard("leo", self.centers)
 
