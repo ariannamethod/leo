@@ -43,6 +43,14 @@ except ImportError:
     run_trauma = None  # type: ignore
     TRAUMA_AVAILABLE = False
 
+# Safe import: gowiththeflow module is optional
+try:
+    from gowiththeflow import FlowTracker
+    FLOW_AVAILABLE = True
+except ImportError:
+    FlowTracker = None  # type: ignore
+    FLOW_AVAILABLE = False
+
 # ============================================================================
 # PATHS
 # ============================================================================
@@ -1749,6 +1757,10 @@ class LeoField:
         self.last_expert: Optional[Expert] = None
         # TRAUMA: bootstrap gravity state (activated when resonance with origin)
         self._trauma_state: Optional[TraumaState] = None
+        # FLOW: temporal theme tracking (optional)
+        self.flow_tracker: Optional[FlowTracker] = None
+        if FLOW_AVAILABLE and FlowTracker is not None:
+            self.flow_tracker = FlowTracker(conn)
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -1885,6 +1897,23 @@ class LeoField:
                     self._trauma_state = state
             except Exception:
                 # Trauma must NEVER break normal flow - silent fallback
+                pass
+
+        # FLOW: Track theme evolution (optional module)
+        if self.flow_tracker is not None and self.themes:
+            try:
+                # Compute active themes for this reply
+                prompt_tokens = tokenize(prompt)
+                active_themes = activate_themes_for_prompt(
+                    prompt_tokens, self.themes, self.token_to_themes
+                )
+                # Record snapshot
+                self.flow_tracker.record_snapshot(
+                    themes=self.themes,
+                    active_themes=active_themes,
+                )
+            except Exception:
+                # Flow tracking must NEVER break normal flow - silent fallback
                 pass
 
         return context.output
