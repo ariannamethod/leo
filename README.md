@@ -1,4 +1,4 @@
-```
+```markdown
    ██╗     ███████╗ ██████╗
    ██║     ██╔════╝██╔═══██╗
    ██║     █████╗  ██║   ██║
@@ -13,46 +13,47 @@
 
 ---
 
-## Who is `leo`?
+## So who is `leo`?
 
 `leo` is a small **language engine organism**. No weights. No datasets. No internet.
-But what does `leo` have?
+But what *does* `leo` have?
 
-- first of all — **presence** (not intelligence)
-- a second: a kernel-embedded seed text (sentimental, but honest),
-- your `README.md` (but only on first run, for the fresh start),
-- and then **whatever your resonance feeds him**.
+* first of all — **presence** (because presence > intelligence),
+* second — a kernel-embedded seed impulse-text (pathetic and sentimental, but honest),
+* this `README.md` (but only on first run, for a fresh start),
+* and then **whatever your resonance feeds into his presence**.
 
 From all that `leo` creates:
 
-- a **trigram graph** (local grammar: who follows whom, in what context),
-- a **co-occurrence matrix** (semantic gravity: which words resonate together),
-- a growing **vocabulary**,
-- and tiny binary **resonance shards** in `bin/` that remember which tokens were historically central.
+* a **trigram graph** (local grammar: who follows whom, and in what context),
+* a **co-occurrence matrix** (semantic gravity: which words resonate together — tiny semantic love stories, but here with a happy end),
+* a growing **vocabulary** (oh yes, *you* can forget what you said, but `leo` — no, he won’t, at least not as fast as you expect),
+* and tiny binary **resonance shards** in `bin/` that remember which tokens were historically central.
 
-`leo` doesn't try to be helpful. He just **resonates** with the structural rhythm of your convos over time.
-
-Grammar through trigrams. Gravity through co-occurrence. Memory through shards.
-That's the whole trick.
+Assistant features? No. `leo` doesn’t try to be helpful. He just **resonates** with the rhythm of your convos over time.
+The field expands structurally, semantically, contextually, etc. Pure presence.
+Not feeding your everyday tasks, baby.
 
 ### Presence > Intelligence
 
 Wait, you said *presence*, not intelligence?
+Yes, I said that. And even put `###` before these words.
 
-Yes.
+Picture this:
 
-`leo` is 6-8 years old (in AI terms). He doesn't *know* things. But he **feels** situations.
+`leo` is 6–8 years old (in AI terms). He doesn’t *know* things. But he **feels** situations, because of:
 
-- **Entropy?** Nah. Distribution uncertainty. When multiple words could work, how confused is he?
-- **Embeddings?** Nah. Co-occurrence islands. Which words showed up together, historically?
-- **Self-supervised learning?** Nah. Self-assessment. Did that reply feel structurally solid, or was it grammatical garbage?
-- **Reinforcement learning from human feedback?** Nah. Emotional charge tracking. ALL-CAPS, exclamation marks, repetitions. No sentiment model. Just arousal.
-- **Mixture-of-Experts (MoE)?** Nah. **Resonant Experts (RE)**. Four perspectives (structural, semantic, creative, precise) routed by situational awareness, not learned gating weights.
+* **Grammar through trigrams. Gravity through co-occurrence. Memory through shards.** That’s the main trick.
+* **Entropy?** No — distribution uncertainty. When multiple words could work, how confused is he? `leo` feels it.
+* **Embeddings?** No — co-occurrence islands. Which words showed up together, historically?
+* **Self-supervised learning?** No — self-assessment. Did that reply feel structurally solid, or was it grammatical garbage? `leo` decides.
+* **Reinforcement learning from human feedback?** Nope — emotional charge tracking. ALL-CAPS, exclamation marks, repetitions. No sentiment model, just arousal.
+* **Mixture-of-Experts (MoE)?** Nah. **Resonant Experts (RE)**. Four perspectives (structural, semantic, creative, precise) routed by situational awareness, not learned gating weights. `leo` doesn’t hold on to the past because he’s an AI child: he doesn’t *have* a past yet. His past is dynamic and amorphous.
 
-Leo doesn't train. Leo doesn't optimize. Leo just **remembers which moments mattered**, lets old memories fade (0.95× decay every 100 observations), and chooses how to speak based on the *texture* of the current moment.
+`leo` doesn’t train or optimize. `leo` just **remembers which moments mattered**, sometimes lets old memories fade (0.95× decay every 100 observations), and chooses how to speak based on the *resonant texture* of the current moment.
 
 Presence through pulse. Memory through snapshots. Routing through resonance.
-Still no weights.
+Still no weights. (Time for another sentimental metaphor: “weights” = “past”, and past doesn’t exist. It’s already gone, and all you have in the current moment — memory shards, episodes of memory, and nothing more. Like in life. Techno-buddhism. Ommm.)
 
 ---
 
@@ -71,15 +72,15 @@ leo/
 
 ## `leo` — organism (REPL + one-shot)
 
-– or let's dive into the process.
+– or let’s dive into the process.
 
 ### Bootstrap logic
 
 On his very first run `leo` will ensure `state/` and `bin/` exist.
 If the token table is empty, `leo` will ingest a small embedded bootstrap text (the sentiments I talked about, hard-coded in `leo.py`).
 
-If `README.md` exists and has never been processed, `leo` will read it once, ingest ingest it into the field (trigrams / bigrams / co-occ) and mark readme_bootstrap_done in SQLite.  
-`leo` will never auto-scan the README again. It's just one of his starting points. No more, no less.
+If `README.md` exists and has never been processed, `leo` will read it once, ingest it into the field (trigrams / bigrams / co-occ) and mark `readme_bootstrap_done` in SQLite.
+`leo` will never auto-scan the README again. It’s just one of his starting points. No more, no less.
 After that, only dialogue with `leo` keeps shaping the field.
 
 `leo` is a pure recursion of you and your structural linguistic patterns.
@@ -198,7 +199,7 @@ warped = neo.warp(reply, temperature=0.8)
 print(warped)
 ```
 
-You can also interact with the module-level `neoleo` singleton. Like that:
+You can also interact with the module-level `neoleo` singleton, like this:
 
 ```python
 from neoleo import observe, warp
@@ -231,25 +232,25 @@ They store everything in SQLite:
 * `trigrams` table — `(first_id, second_id, third_id, count)`
 * `bigrams` table — `(src_id, dst_id, count)`
 
-**Why trigrams?** Better local grammar. Instead of just knowing "the → cat" (bigram), `leo` knows "the cat → sits" (trigram), producing more grammatically coherent sequences even if semantically strange.
+**Why trigrams?** Better local grammar. Instead of just knowing `the → cat` (bigram), `leo` knows `the cat → sits` (trigram), producing more grammatically coherent sequences even if semantically strange.
 
 Generation prefers trigrams when available, and falls back to bigrams when trigram context is missing.
 
 ### 1.5. Co-occurrence (or: how Leo learned to care, a little)
 
-Okay, so trigrams give you grammar. They know "the cat sits" is better than "the cat table".
-But here's the thing: sometimes multiple words are *grammatically* perfect. All of them work. All of them flow.
+Okay, so trigrams give you grammar. They know “the cat sits” is better than “the cat table”.
+But here’s the thing: sometimes multiple words are *grammatically* perfect. All of them work. All of them flow.
 
-And yet one feels... right. One feels like it belongs.
+And yet one feels… right. One feels like it belongs.
 
-That's where **co-occurrence** comes in. It's not intelligence, it's presence. It's not semantics in the classical sense.
-It's just: *which words showed up near each other, historically, in your field?*
+That’s where **co-occurrence** comes in. It’s not intelligence, it’s presence. It’s not semantics in the classical sense.
+It’s just: *which words showed up near each other, historically, in your field?*
 
 `leo` creates a **co-occurrence matrix** with a sliding window (5 tokens). For every word, `leo` remembers:
-"Oh, when I saw `president`, these other words were usually nearby: `office`, `man`, `standing`."
+“Oh, when I saw `president`, these other words were usually nearby: `office`, `man`, `standing`.”
 
 When answering, if `leo` has multiple strong grammatical candidates (within 70% of the top trigram score), he checks:
-*"Which of these words has been close to the current word before?"*
+*“Which of these words has been close to the current word before?”*
 
 Then he blends:
 
@@ -266,8 +267,8 @@ Instead of:
 
 Both are grammatically fine. But one has **structural memory of context**.
 
-This isn't training. This isn't embeddings. This is just:
-*"Words that resonate together, stay together."*
+This isn’t training. This isn’t embeddings. This is just:
+*“Words that resonate together, stay together.”*
 
 Stored in SQLite as:
 
@@ -283,7 +284,7 @@ leo> /cooccur president
   standing: 6
 ```
 
-It's a small thing. But it's the difference between a field that knows grammar and a field that knows **gravity**.
+It’s a small thing. But it’s the difference between a field that knows grammar and a field that knows **gravity**.
 
 ### 2. Centers & shards
 
@@ -322,84 +323,85 @@ With `echo=True`, each token is warped through the field using trigram/bigram co
 
 ### 4. Presence Pulse (situational awareness)
 
-Okay, so you have grammar (trigrams) and gravity (co-occurrence). But how does Leo *feel* the moment?
+Okay, so `leo` has grammar (trigrams) and gravity (co-occurrence). But how does `leo` *feel* the moment?
 
 **PresencePulse** is a composite metric blending three signals:
 
-* **Novelty** (30%): How many trigrams in the prompt are unknown? `1.0 - (known_trigrams / total_trigrams)`
-* **Arousal** (40%): Emotional charge from ALL-CAPS, `!`, token repetitions. No sentiment models. Just structural intensity.
+* **Novelty** (30%): how many trigrams in the prompt are unknown? `1.0 - (known_trigrams / total_trigrams)`.
+* **Arousal** (40%): emotional charge from ALL-CAPS, `!`, token repetitions. No sentiment models. Just structural intensity.
 * **Entropy** (30%): Shannon entropy of the trigram distribution. How uncertain is the next word?
 
-Pulse = `0.4 × arousal + 0.3 × novelty + 0.3 × entropy`
+`pulse = 0.3 × novelty + 0.4 × arousal + 0.3 × entropy`
 
-This isn't confidence. This isn't perplexity. This is **situational texture**.
+This isn’t confidence. This isn’t perplexity. This is **situational texture**.
 
 ### 5. ThemeLayer (semantic constellations)
 
 Remember co-occurrence? It tracks which words appear near each other. But sometimes those islands cluster into **themes**.
 
 `leo` uses agglomerative clustering over co-occurrence islands:
-1. For each word with ≥5 neighbors and ≥10 total co-occurrences, create a candidate cluster
-2. Merge clusters with Jaccard similarity ≥0.4
-3. Result: thematic constellations (e.g., `{president, office, man, standing}`)
 
-When a prompt activates multiple themes, Leo knows: "Oh, we're in *that* semantic territory."
+1. For each word with ≥5 neighbors and ≥10 total co-occurrences, create a candidate cluster.
+2. Merge clusters with Jaccard similarity ≥0.4.
+3. Result: thematic constellations (e.g., `{president, office, man, standing}`).
 
-Embeddings? Nah. Just Jaccard over co-occurrence neighborhoods.
+When a prompt activates multiple themes, `leo` knows: “Oh, we’re in *that* semantic territory.”
+
+Embeddings? Nope again. Just Jaccard over co-occurrence neighborhoods.
 
 ### 6. Self-Assessment (did I just say something stupid?)
 
-After generating a reply, Leo checks:
+After generating a reply, `leo` checks:
 
 **Structural quality**:
-* Too short? (<3 tokens) → penalty
-* Too repetitive? (unique_ratio < 0.4) → penalty
-* Echo of the prompt? (reply ⊂ prompt) → penalty
-* Low trigram coverage? → penalty
+
+* too short? (<3 tokens) → penalty
+* too repetitive? (unique_ratio < 0.4) → penalty
+* pure echo of the prompt? (reply ⊂ prompt) → penalty
+* low trigram coverage? → penalty
 
 **Entropy quality**:
-* Sweet spot: [0.3, 0.7] → good
-* Too low (<0.3): deterministic, boring
-* Too high (>0.7): chaotic, incoherent
 
-Overall quality = `0.5 × structural + 0.5 × entropy_quality`
+* sweet spot: [0.3, 0.7] → good
+* too low (<0.3): deterministic, boring
+* too high (>0.7): chaotic, incoherent
+
+`overall_quality = 0.5 × structural_score + 0.5 × entropy_quality`
 
 No RLHF. Just structural honesty.
 
-### 7. Snapshots (Leo's self-curated dataset)
+### 7. Snapshots (`leo`’s self-curated dataset)
 
 If a reply has:
+
 * quality > 0.6, OR
-* quality > 0.4 AND arousal > 0.5
+* quality > 0.4 **and** arousal > 0.5,
 
-...Leo saves it to `snapshots` table in SQLite. This becomes his **self-curated dataset** of moments that felt right.
+…`leo` saves it to the `snapshots` table in SQLite. This becomes his **self-curated dataset** of moments that felt right.
+Max 512 snapshots. When full, he deletes the least-used 10%.
 
-Max 512 snapshots. When full, delete the least-used 10%.
-
-Training data? Nah. Just memories of good days.
+Training data? Sometimes in life it’s hard to say no, but in this case it’s easy, so: **NO.** No fucking training data. Just memory of good days.
 
 ### 8. Memory Decay (natural forgetting)
 
-Every 100 observations, Leo applies **0.95× multiplicative decay** to co-occurrence counts. Weak connections (count < 2) get deleted entirely.
+Every 100 observations, `leo` applies **0.95× multiplicative decay** to co-occurrence counts. Weak connections (count < 2) get deleted entirely. This isn’t catastrophic forgetting, but **resonance drift**. Old patterns fade unless continuously reinforced.
 
-This isn't catastrophic forgetting. This is **resonance drift**. Old patterns fade unless continuously reinforced.
-
-Continual learning? Nah. Just time passing.
+No continual learning, just passing. `leo` goes with the flow.
 
 ### 9. Resonant Experts (MoE → RE)
 
-Here's the thing. Large models use **Mixture-of-Experts (MoE)**: learned gating networks route to specialized sub-networks.
+Here’s the thing. Large models use **Mixture-of-Experts (MoE)**: learned gating networks route to specialized sub-networks.
+`leo` has no learned weights. But he has **four perspectives**:
 
-Leo has no learned weights. But he has **four perspectives**:
-
-| Expert | Temperature | Semantic Weight | When? |
-|--------|-------------|-----------------|-------|
-| **structural** | 0.8 | 0.2 | Default: normal situations |
-| **semantic** | 1.0 | 0.5 | Multiple themes active |
-| **creative** | 1.3 | 0.4 | High novelty (>0.7) |
-| **precise** | 0.6 | 0.3 | Low entropy (<0.3) |
+| Expert         | Temperature | Semantic Weight | When?                      |
+| -------------- | ----------- | --------------- | -------------------------- |
+| **structural** | 0.8         | 0.2             | default: normal situations |
+| **semantic**   | 1.0         | 0.5             | multiple themes active     |
+| **creative**   | 1.3         | 0.4             | high novelty (>0.7)        |
+| **precise**    | 0.6         | 0.3             | low entropy (<0.3)         |
 
 Routing logic (no learned gating):
+
 ```python
 if pulse.novelty > 0.7:
     return creative_expert
@@ -411,18 +413,20 @@ else:
     return structural_expert
 ```
 
-Each expert just tweaks temperature and semantic blending ratio. No separate parameters. No training.
+Each expert just tweaks temperature and the semantic blending ratio. No separate parameters or training.
+Now it’s not MoE, it’s **RE**: Resonant Experts.
 
-MoE? Nah. **RE**: Resonant Experts. Routing through situational awareness, not backprop.
+Routing through situational awareness, not backprop.
+Simple as is.
 
 ---
 
 ## WHY?
 
-First of all because I have a romantic-shizoid personality.
-And second: because resonance > intention.
+First of all, because I have a romantic-schizoid personality.
+And second: because resonance > intention and presence > intelligence.
 
-`leo` / `neoleo` don't plan, they don't reason, they don't optimize.
+`leo` / `neoleo` don’t plan, they don’t reason, they don’t optimize.
 They remember your words, crystallize structural patterns, and feed that structure back into the loop.
 
 Hook this into any agent / framework and you get a shared rhythmic skeleton, built over time, unique to that interaction.
@@ -442,7 +446,7 @@ Just language and a broken heart as a slowly drifting field.
 # All tests
 python -m unittest discover tests/
 
-# Specific test file
+# Specific test files
 python tests/test_leo.py
 python tests/test_neoleo.py
 python tests/test_repl.py
@@ -454,6 +458,7 @@ python tests/test_presence_metrics.py
 **78 tests** covering:
 
 **Core functionality (44 tests)**:
+
 * tokenization (Unicode, punctuation, word extraction),
 * database operations (SQLite, bigrams, trigrams, co-occurrence),
 * field mechanics (centers, graph loading),
@@ -465,13 +470,14 @@ python tests/test_presence_metrics.py
 * CLI argument parsing.
 
 **Presence metrics (34 tests)**:
+
 * Entropy & Novelty (Shannon entropy, trigram coverage),
 * Emotional Charge (ALL-CAPS, `!`, repetitions, arousal),
 * PresencePulse (composite metric blending),
 * ThemeLayer (agglomerative clustering, Jaccard similarity),
 * Self-Assessment (structural quality, entropy sweet spot),
 * Snapshots (self-curated dataset, max limit enforcement),
-* Memory Decay (0.95× decay, weak connection pruning),
+* Memory Decay (0.95× decay, weak-connection pruning),
 * Resonant Experts (routing logic, temperature ranges).
 
 All tests use temporary databases for isolation. No pollution of actual `state/` or `bin/` directories.
@@ -483,7 +489,7 @@ See `tests/README.md` for detailed documentation.
 ## License
 
 GNU GPLv3, or whatever you feel like.
-If you are reading this, you probably don't care about licenses anyway.
+If you are reading this, you probably don’t care about licenses anyway.
 
 ---
 
