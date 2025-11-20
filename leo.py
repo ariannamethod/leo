@@ -644,8 +644,18 @@ def fix_punctuation(text: str) -> str:
             fixed.append(word)
         text = " ".join(fixed)
 
-    # 9) Clean up double spaces
+    # 9) Clean up double spaces and final polish
     text = re.sub(r"\s{2,}", " ", text).strip()
+
+    # 10) Final punctuation polish (GPT-5.1 suggestion)
+    # Fix bad combinations like ". :" → ":"
+    text = re.sub(r"\.\s*:", ":", text)
+    # Ensure proper spacing around em-dash
+    text = re.sub(r"—([A-Za-z])", r"— \1", text)  # "—The" → "— The"
+    # Remove comma after exclamation: "! ," → "!"
+    text = re.sub(r"!\s+,", "!", text)
+    # Remove hanging dash-dot: " -." / " —." → "."
+    text = re.sub(r"\s+[—-]\s*\.", ".", text)
 
     return text
 
