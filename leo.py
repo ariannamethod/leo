@@ -1384,23 +1384,24 @@ def choose_start_from_prompt(
 ) -> str:
     """
     Pick a starting token influenced by the prompt.
-    
+
     Strategy:
-    1. Prefer tokens from the prompt that have outgoing edges (structural anchors)
-    2. Otherwise, any token from the prompt that exists in vocab
+    1. Prefer content words (not punctuation) from prompt with outgoing edges
+    2. Otherwise, any content word from prompt in vocab
     3. Fallback to global centers/bias
-    
-    This avoids mechanically chaining from the last word every time.
+
+    This avoids mechanically chaining from the last word or starting with punctuation.
     """
-    # Prefer tokens from the prompt that actually have outgoing edges
-    # This is a structural anchor, not just the last word.
-    candidates = [t for t in prompt_tokens if t in bigrams and bigrams[t]]
+    PUNCT = {".", ",", "!", "?", ";", ":", "—", "-"}
+
+    # Prefer content words from the prompt that actually have outgoing edges
+    # This is a structural anchor, not just the last word or punctuation.
+    candidates = [t for t in prompt_tokens if t in bigrams and bigrams[t] and t not in PUNCT]
     if candidates:
         return random.choice(candidates)
 
-    # Fallback: any tokens from the prompt that exist in vocab,
-    # but also choose randomly, not "first available".
-    fallback = [t for t in prompt_tokens if t in vocab]
+    # Fallback: any content words from the prompt that exist in vocab
+    fallback = [t for t in prompt_tokens if t in vocab and t not in PUNCT]
     if fallback:
         return random.choice(fallback)
 
