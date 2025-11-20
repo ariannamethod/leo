@@ -513,7 +513,7 @@ def capitalize_sentences(text: str) -> str:
     """
     if not text:
         return text
-    
+
     result = []
     capitalize_next = True
 
@@ -530,6 +530,48 @@ def capitalize_sentences(text: str) -> str:
                 capitalize_next = True
 
     return "".join(result)
+
+
+def fix_punctuation(text: str) -> str:
+    """
+    Post-process punctuation artifacts without touching generation core.
+
+    Fixes:
+    - Extra spaces before punctuation: "hello , world" → "hello, world"
+    - Missing spaces after sentence punctuation: "Hello!How" → "Hello! How"
+    - Repeated punctuation: "!!!" → "!", "???" → "?", "..." → "."
+    - Strange dashes: " - - - " → " — "
+    - Artifacts like "t:." → "t."
+    - Multiple spaces → single space
+
+    Pure string operations, zero impact on presence architecture.
+    (Credit: GPT-5.1 suggestion for post-polish layer)
+    """
+    if not text:
+        return text
+
+    # 1) Remove extra spaces before punctuation
+    text = re.sub(r"\s+([.,!?;:])", r"\1", text)
+
+    # 2) Ensure space after .?! if followed by letter/digit
+    text = re.sub(r"([.?!])([^\s])", r"\1 \2", text)
+
+    # 3) Collapse repeated punctuation
+    text = re.sub(r"([!?]){2,}", r"\1", text)
+    text = re.sub(r"\.{2,}", ".", text)
+
+    # 4) Normalize weird dashes: " - - - " → " — "
+    text = re.sub(r"\s*-\s*-\s*-\s*", " — ", text)
+    text = re.sub(r"\s*-\s*-\s*", " — ", text)
+
+    # 5) Fix specific artifacts
+    text = text.replace("t:.", "t.")
+    text = text.replace("t:", "t")
+
+    # 6) Clean up double spaces
+    text = re.sub(r"\s{2,}", " ", text).strip()
+
+    return text
 
 
 def choose_start_token(
@@ -1426,6 +1468,7 @@ def generate_reply(
                 prev_tok = tok
         output = format_tokens(tokens_out)
         output = capitalize_sentences(output)
+        output = fix_punctuation(output)
         return output
 
     prompt_tokens = tokenize(prompt)
@@ -1502,6 +1545,9 @@ def generate_reply(
     # Ensure output ends with sentence-ending punctuation
     if output and not output.rstrip()[-1:] in '.!?':
         output = output.rstrip() + '.'
+
+    # Post-process: fix punctuation artifacts
+    output = fix_punctuation(output)
 
     # Compute average entropy across generation steps
     avg_entropy = sum(entropy_log) / len(entropy_log) if entropy_log else 0.0
