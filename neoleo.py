@@ -618,6 +618,11 @@ def generate_reply(
 
     output = format_tokens(tokens)
     output = capitalize_sentences(output)
+
+    # Ensure output ends with sentence-ending punctuation
+    if output and not output.rstrip()[-1:] in '.!?':
+        output = output.rstrip() + '.'
+
     return output
 
 
