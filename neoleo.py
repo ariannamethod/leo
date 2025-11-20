@@ -986,17 +986,19 @@ def choose_start_from_prompt(
 ) -> str:
     """
     Prompt-influenced start without mechanically using last word.
-    
+
     Strategy:
-    1. Prefer tokens from the prompt that have outgoing edges
-    2. Otherwise, any token from the prompt in vocab
+    1. Prefer content words (not punctuation) from prompt with outgoing edges
+    2. Otherwise, any content word from prompt in vocab
     3. Fallback to global centers/bias
     """
-    candidates = [t for t in prompt_tokens if t in bigrams and bigrams[t]]
+    PUNCT = {".", ",", "!", "?", ";", ":", "—", "-"}
+
+    candidates = [t for t in prompt_tokens if t in bigrams and bigrams[t] and t not in PUNCT]
     if candidates:
         return random.choice(candidates)
 
-    fallback = [t for t in prompt_tokens if t in vocab]
+    fallback = [t for t in prompt_tokens if t in vocab and t not in PUNCT]
     if fallback:
         return random.choice(fallback)
 
