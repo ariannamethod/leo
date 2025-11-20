@@ -18,7 +18,7 @@ Claude / Leo core can upgrade the internals, but the public API should stay:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, List, Optional
 
 
@@ -171,7 +171,7 @@ def run_overthinking(
         events.append(
             OverthinkingEvent(
                 ring=0,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 prompt=prompt,
                 reply=reply,
                 thought=text0,
@@ -198,7 +198,7 @@ def run_overthinking(
         events.append(
             OverthinkingEvent(
                 ring=1,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 prompt=prompt,
                 reply=reply,
                 thought=text1,
@@ -224,7 +224,7 @@ def run_overthinking(
         events.append(
             OverthinkingEvent(
                 ring=2,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 prompt=prompt,
                 reply=reply,
                 thought=text2,
