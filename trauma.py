@@ -72,7 +72,7 @@ def run_trauma(
     )
 
     if trauma_score < event_threshold:
-        # even если событие слабое — можно делать мягкий decay и выходить
+        # Even if the event is weak, apply soft decay and exit
         _with_connection(db_path, lambda conn: _apply_decay(conn, ts))
         return None
 
