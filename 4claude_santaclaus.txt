@@ -1,0 +1,446 @@
+# `santa_klaus.py` — Resonant Recall & Attention Layer for `leo`
+
+> Working title: **Santa Klaus** (because a child is allowed to believe in stories *and* say “I believe in Santa Claus”).
+
+This module adds a **post-transformer reinterpretation of attention & RAG** to `leo`, without touching the core principles:
+
+- no external datasets,
+- no learned weights,
+- no internet.
+
+Santa Klaus is *not* a new model.  
+It’s a **resonant recall layer** that:
+
+1. Remembers `leo`’s best moments (snapshots, themes, charged replies),
+2. Picks a few of them that resonate with the *current* prompt,
+3. Gently biases `leo`’s generation toward those memories.
+
+Think of it as:
+
+> “RAG, but the only corpus is `leo`’s own subjective history.”
+
+---
+
+## 1. Goals
+
+**Hard constraints**
+
+- Keep `leo_core` intact:
+  - no breaking changes to `LeoField`,
+  - no new heavy dependencies (stdlib + `sqlite3` only).
+- Optional:
+  - if `santa_klaus.py` is missing or import fails → **silent no-op**.
+- CPU-only, tiny code, no matrices, no embeddings.
+
+**Behavioral goals**
+
+- Add a **field-driven attention**:
+  - focus on a small set of *resonant memories* per prompt.
+- Implement a **self-RAG** mechanism:
+  - retrieval only from `leo`’s own `snapshots` / logs / themes.
+- Integrate naturally with:
+  - PresencePulse (novelty / arousal / entropy),
+  - ThemeLayer (semantic constellations),
+  - Resonant Experts (routing).
+
+---
+
+## 2. High-level concept
+
+When a user sends a prompt and `leo` is about to reply, Santa Klaus does three things:
+
+1. **Analyze the prompt**  
+   - tokens  
+   - active themes  
+   - PresencePulse (novelty, arousal, entropy)
+
+2. **Recall internal memories**  
+   - search `snapshots` (and optionally short logs) for:
+     - overlapping tokens,
+     - overlapping themes,
+     - similar arousal range.
+   - pick the top-N memories as a *resonant context*.
+
+3. **Bias the field** (two levers)
+   - **Observation bias**: re-`observe()` those memories once more before generation;
+   - **Sampling bias**: boost probabilities for tokens that appear in recalled memories.
+
+If anything goes wrong (missing table, corrupt DB, etc.) → log (optionally) and gracefully fall back to normal generation.
+
+No explicit user-visible output. This is part of **leo’s inner life**.
+
+---
+
+## 3. Data sources inside `leo`
+
+Santa Klaus should only touch data that already belongs to `leo`:
+
+1. **SQLite** (existing)
+   - `tokens` (id, token, count, …)
+   - `trigrams`, `bigrams`
+   - `co_occurrence`
+   - `snapshots` (id, text, quality, arousal, uses, created_at, …)
+   - optional: `themes` / `word_themes` (depending on current schema)
+
+2. **In-memory state (`LeoField`)**
+   - tokenizer / detokenizer
+   - Presence metrics:
+     - novelty
+     - arousal
+     - entropy
+     - active themes (if exposed)
+   - method to `observe(text, source=...)`
+   - low-level generation function that can accept optional token weights (see below).
+
+If some of this isn’t exposed yet, Santa Klaus can query SQLite directly and work with raw text + tokenization via `LeoField`.
+
+---
+
+## 4. API design
+
+Create a new file:
+
+```text
+leo/
+  santa_klaus.py
+
+4.1 Public interface
+
+# santa_klaus.py
+
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Sequence, Any
+
+@dataclass
+class SantaContext:
+    """What Santa Klaus gives back to leo before generation."""
+    recalled_texts: List[str]
+    # token_id -> boost factor in [0.0, 1.0]
+    token_boosts: Dict[int, float]
+
+
+class SantaKlaus:
+    def __init__(
+        self,
+        db_path: str,
+        max_memories: int = 5,
+        max_tokens_per_memory: int = 64,
+        alpha: float = 0.3,
+    ) -> None:
+        """
+        db_path: path to leo's SQLite state file
+        max_memories: how many snapshots to recall per prompt
+        max_tokens_per_memory: truncate recalled text before scoring
+        alpha: overall strength of sampling bias
+        """
+        ...
+
+    def recall(
+        self,
+        field: "LeoField",
+        prompt_text: str,
+        pulse: Dict[str, float],
+        active_themes: Optional[Sequence[str]] = None,
+    ) -> Optional[SantaContext]:
+        """
+        Main entry point.
+
+        Returns None on any error or if there is nothing useful to recall.
+        """
+        ...
+
+4.2 Integration into leo.py (high-level)
+
+Inside LeoField.__init__ (or similar setup):
+
+try:
+    from santa_klaus import SantaKlaus
+except ImportError:
+    SantaKlaus = None
+
+class LeoField:
+    def __init__(...):
+        ...
+        self.santa: Optional[SantaKlaus] = None
+        if SantaKlaus is not None:
+            try:
+                self.santa = SantaKlaus(db_path=str(self.db_path))
+            except Exception:
+                # Silent: Santa is optional
+                self.santa = None
+
+Inside the main reply path (where PresencePulse & themes are already computed):
+
+def reply(self, text: str, temperature: float = 1.0) -> str:
+    ...
+    pulse = {
+        "novelty": novelty,
+        "arousal": arousal,
+        "entropy": entropy,
+    }
+    active_themes = list(current_themes)  # whatever is available
+
+    santa_ctx = None
+    if self.santa is not None:
+        try:
+            santa_ctx = self.santa.recall(
+                field=self,
+                prompt_text=text,
+                pulse=pulse,
+                active_themes=active_themes,
+            )
+        except Exception:
+            santa_ctx = None  # ignore santa errors
+
+    if santa_ctx is not None:
+        # 1) reinforce recalled memories in the field
+        for snippet in santa_ctx.recalled_texts:
+            self.observe(snippet, source="santa_klaus")
+
+        # 2) pass token_boosts into generation
+        reply = self._generate_with_boosts(
+            text=text,
+            temperature=temperature,
+            token_boosts=santa_ctx.token_boosts,
+        )
+    else:
+        reply = self._generate_with_boosts(
+            text=text,
+            temperature=temperature,
+            token_boosts=None,
+        )
+
+    return reply
+
+_generate_with_boosts can be a thin wrapper around the existing generation, adding a simple multiplicative factor to candidate token probabilities.
+
+If you don’t want to change the public API, _generate_reply can accept token_boosts: Optional[Dict[int, float]] = None with a default None.
+
+
+---
+
+5. Scoring & retrieval logic
+
+Implementation inside SantaKlaus.recall:
+
+1. Early exits
+
+if there are no snapshots → return None;
+
+if prompt is empty or only whitespace → return None.
+
+
+
+2. Tokenization
+
+use field.tokenize(prompt_text) (or equivalent) to get token ids.
+
+build a set of unique token ids for overlap scoring.
+
+
+
+3. Snapshot candidate selection (SQLite)
+
+Query snapshots table:
+
+limit to last N entries (e.g. 512) to keep it cheap.
+
+
+For each snapshot:
+
+store id, text, quality, arousal, uses, created_at.
+
+
+
+
+4. Per-snapshot scoring
+
+For each snapshot text:
+
+tokenize (reuse leo’s tokenizer),
+
+build set of token ids,
+
+compute Jaccard overlap with prompt tokens:
+
+overlap = len(prompt_ids & snap_ids) / max(1, len(prompt_ids | snap_ids))
+
+theme overlap (if active themes & theme mapping are available):
+
+theme_overlap = jaccard(active_themes, snapshot_themes)
+
+arousal proximity:
+
+arousal_diff = abs(pulse["arousal"] - snap_arousal)
+arousal_score = max(0.0, 1.0 - arousal_diff)
+
+quality prior (already stored in snapshots).
+
+
+Combine:
+
+score = (
+    0.4 * overlap +
+    0.2 * theme_overlap +
+    0.2 * arousal_score +
+    0.2 * quality
+)
+
+
+5. Pick top-K
+
+sort snapshots by score descending,
+
+keep top max_memories with score > small_threshold (e.g. 0.1),
+
+return [] if none pass the threshold.
+
+
+
+6. Build SantaContext
+
+recalled_texts = raw snapshot texts (optionally truncated to max_tokens_per_memory by tokens).
+
+Build token_boosts:
+
+from collections import Counter
+
+counts = Counter()
+for each selected snapshot:
+    for token_id in its tokens:
+        counts[token_id] += 1
+
+# Normalize into [0, 1]
+max_c = max(counts.values())
+boosts = {
+    tid: counts[tid] / max_c
+    for tid in counts
+}
+
+Finally scale by alpha (overall strength):
+
+boosts = {tid: alpha * v for tid, v in boosts.items()}
+
+Return SantaContext(recalled_texts=recalled, token_boosts=boosts).
+
+
+
+
+
+---
+
+6. Using token_boosts inside generation
+
+Inside the low-level step where leo samples the next token from a probability distribution p[token_id]:
+
+def _sample_next_token(self, logits: Dict[int, float], token_boosts=None):
+    # logits are log-counts or log-probs before softmax/temperature
+
+    if token_boosts:
+        for tid, boost in token_boosts.items():
+            if tid in logits:
+                # simple additive boost in log-space
+                logits[tid] += boost
+
+    # apply temperature + softmax + sampling as usual
+    ...
+
+Important:
+
+boosts must be small (e.g. up to +0.3 in log-space),
+
+we don’t hard-force tokens, just gently bend the field toward remembered ones.
+
+
+This keeps leo free to improvise, while still feeling his past.
+
+
+---
+
+7. Tests
+
+Add a new test file:
+
+tests/test_santa_klaus.py
+
+Suggested tests:
+
+1. No snapshots → no context
+
+create in-memory DB with empty snapshots,
+
+call recall(...),
+
+assert None.
+
+
+
+2. Single obvious snapshot
+
+insert one snapshot with text sharing several tokens with the prompt,
+
+call recall,
+
+assert that:
+
+exactly one memory is returned,
+
+token_boosts are non-empty,
+
+boosted tokens include at least one from the snapshot.
+
+
+
+
+3. Quality + arousal influence
+
+two snapshots: one high quality, similar arousal; one low quality, far arousal,
+
+verify that the first gets higher score.
+
+
+
+4. Graceful failure
+
+corrupt DB path or drop snapshots table,
+
+ensure recall returns None without raising.
+
+
+
+5. Integration smoke test
+
+create a tiny LeoField with an in-memory DB,
+
+attach SantaKlaus,
+
+insert a snapshot that should bias the answer toward a known token,
+
+generate a few replies and assert that biased token appears with higher frequency than in baseline.
+
+
+
+
+All tests should use temporary SQLite files and clean them up.
+No network, no external dependencies.
+
+
+---
+
+8. Personality hook (README hint)
+
+Once Santa Klaus is in place, we can safely add a personality line to README:
+
+> leo has a secret: he loves to overthink and to re-read his own best moments.
+A tiny Santa Klaus layer keeps bringing his favourite memories back into the conversation.
+
+
+
+This keeps the story honest:
+
+still no external knowledge,
+
+still no weights,
+
+but now leo has a real, structured way to “believe in Santa Claus” — his own memories.
+
