@@ -59,6 +59,15 @@ except ImportError:
     MetaLeo = None  # type: ignore
     METALEO_AVAILABLE = False
 
+# Safe import: mathbrain module is optional
+try:
+    from mathbrain import MathBrain, MathState
+    MATHBRAIN_AVAILABLE = True
+except ImportError:
+    MathBrain = None  # type: ignore
+    MathState = None  # type: ignore
+    MATHBRAIN_AVAILABLE = False
+
 # NumPy for precise math (entropy, distributions, linear regression)
 # Graceful fallback to pure Python if not available
 try:
@@ -1801,6 +1810,15 @@ class LeoField:
         self.metaleo: Optional[MetaLeo] = None  # type: ignore
         if METALEO_AVAILABLE and MetaLeo is not None:
             self.metaleo = MetaLeo(self)  # type: ignore
+        # MATHBRAIN: body awareness (optional)
+        self._math_brain: Optional[Any] = None
+        if MATHBRAIN_AVAILABLE and MathBrain is not None:
+            try:
+                state_path = STATE_DIR / "mathbrain.json"
+                self._math_brain = MathBrain(self, hidden_dim=16, lr=0.01, state_path=state_path)
+            except Exception:
+                # Silent fail — MathBrain must never break Leo
+                self._math_brain = None
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -1963,9 +1981,17 @@ class LeoField:
         # METALEO: Inner voice routing (optional module)
         # Routes between base reply and meta reply based on situational awareness
         final_reply = context.output
+        used_metaleo = False
+        metaleo_weight = 0.0
         if self.metaleo is not None:
             try:
-                final_reply = self.metaleo.route_reply(
+                # Get metaleo weight before routing
+                if hasattr(self.metaleo, 'compute_meta_weight'):
+                    metaleo_weight = self.metaleo.compute_meta_weight(
+                        context.pulse, self._trauma_state,
+                        context.quality.overall if context.quality else 0.5
+                    )
+                meta_reply = self.metaleo.route_reply(
                     prompt=prompt,
                     base_reply=context.output,
                     pulse=context.pulse,
@@ -1973,9 +1999,74 @@ class LeoField:
                     quality=context.quality.overall if context.quality else 0.5,
                     overthinking_events=overthinking_events,
                 )
+                used_metaleo = (meta_reply != context.output)
+                final_reply = meta_reply
             except Exception:
                 # MetaLeo must NEVER break normal flow - silent fallback
                 final_reply = context.output
+
+        # MATHBRAIN: Body awareness observation (optional module)
+        # Learns from Leo's own metrics to predict quality
+        if self._math_brain is not None and MATHBRAIN_AVAILABLE and MathState is not None:
+            try:
+                # Compute active themes for emerging/fading scores
+                prompt_tokens = tokenize(prompt)
+                active_themes = activate_themes_for_prompt(
+                    prompt_tokens, self.themes, self.token_to_themes
+                ) if self.themes else None
+
+                # Get emerging/fading scores from flow tracker
+                emerging_score = 0.0
+                fading_score = 0.0
+                if self.flow_tracker is not None:
+                    try:
+                        emerging = self.flow_tracker.detect_emerging(window_hours=6.0, min_slope=0.1)
+                        fading = self.flow_tracker.detect_fading(window_hours=6.0, min_slope=0.1)
+                        # Average slope as score (or 0 if empty)
+                        emerging_score = sum(s for _, s in emerging) / len(emerging) if emerging else 0.0
+                        fading_score = abs(sum(s for _, s in fading) / len(fading)) if fading else 0.0
+                    except Exception:
+                        pass
+
+                # Count overthinking rings
+                rings_present = 0
+                if overthinking_events:
+                    try:
+                        rings_present = len(list(overthinking_events))
+                    except Exception:
+                        pass
+
+                # Compute unique ratio
+                reply_tokens = tokenize(final_reply)
+                unique_ratio = len(set(reply_tokens)) / len(reply_tokens) if reply_tokens else 0.0
+
+                # Build MathState
+                state = MathState(
+                    entropy=context.pulse.entropy if context.pulse else 0.0,
+                    novelty=context.pulse.novelty if context.pulse else 0.0,
+                    arousal=context.pulse.arousal if context.pulse else 0.0,
+                    pulse=context.pulse.pulse if context.pulse else 0.0,
+                    trauma_level=self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
+                    active_theme_count=len(active_themes.theme_scores) if active_themes else 0,
+                    total_themes=len(self.themes),
+                    emerging_score=emerging_score,
+                    fading_score=fading_score,
+                    reply_len=len(reply_tokens),
+                    unique_ratio=unique_ratio,
+                    expert_id=context.expert.name if context.expert else "structural",
+                    expert_temp=context.expert.temperature if context.expert else 1.0,
+                    expert_semantic=context.expert.semantic_weight if context.expert else 0.5,
+                    metaleo_weight=metaleo_weight,
+                    used_metaleo=used_metaleo,
+                    overthinking_enabled=OVERTHINKING_AVAILABLE,
+                    rings_present=rings_present,
+                    quality=context.quality.overall if context.quality else 0.5,
+                )
+                # Observe and learn
+                self._math_brain.observe(state)
+            except Exception:
+                # MathBrain must NEVER break normal flow - silent fallback
+                pass
 
         return final_reply
 
