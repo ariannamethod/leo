@@ -51,6 +51,14 @@ except ImportError:
     FlowTracker = None  # type: ignore
     FLOW_AVAILABLE = False
 
+# Safe import: metaleo module is optional
+try:
+    from metaleo import MetaLeo
+    METALEO_AVAILABLE = True
+except ImportError:
+    MetaLeo = None  # type: ignore
+    METALEO_AVAILABLE = False
+
 # ============================================================================
 # PATHS
 # ============================================================================
@@ -1761,6 +1769,10 @@ class LeoField:
         self.flow_tracker: Optional[FlowTracker] = None
         if FLOW_AVAILABLE and FlowTracker is not None:
             self.flow_tracker = FlowTracker(conn)
+        # METALEO: inner voice layer (optional)
+        self.metaleo: Optional[MetaLeo] = None  # type: ignore
+        if METALEO_AVAILABLE and MetaLeo is not None:
+            self.metaleo = MetaLeo(self)  # type: ignore
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -1852,6 +1864,7 @@ class LeoField:
                 )
 
         # OVERTHINKING: Silent background reflection (optional module)
+        overthinking_events = None
         if OVERTHINKING_AVAILABLE and run_overthinking is not None:
             try:
                 pulse_snapshot = None
@@ -1869,6 +1882,9 @@ class LeoField:
                     bootstrap=EMBEDDED_BOOTSTRAP,
                     config=OverthinkingConfig() if OverthinkingConfig else None,
                 )
+
+                # Save events for metaleo (inner voice needs Ring 2 shards)
+                overthinking_events = events
 
                 # Optional: persist overthinking events to SQLite for debugging
                 # (Not implemented in v1 - events are just discarded after ingestion)
@@ -1916,7 +1932,24 @@ class LeoField:
                 # Flow tracking must NEVER break normal flow - silent fallback
                 pass
 
-        return context.output
+        # METALEO: Inner voice routing (optional module)
+        # Routes between base reply and meta reply based on situational awareness
+        final_reply = context.output
+        if self.metaleo is not None:
+            try:
+                final_reply = self.metaleo.route_reply(
+                    prompt=prompt,
+                    base_reply=context.output,
+                    pulse=context.pulse,
+                    trauma_state=self._trauma_state,
+                    quality=context.quality.overall if context.quality else 0.5,
+                    overthinking_events=overthinking_events,
+                )
+            except Exception:
+                # MetaLeo must NEVER break normal flow - silent fallback
+                final_reply = context.output
+
+        return final_reply
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
         """Dump current lexicon + centers into a JSON snapshot."""
