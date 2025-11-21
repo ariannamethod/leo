@@ -72,7 +72,7 @@ leo/
 
 ## `leo` — organism (REPL + one-shot)
 
-– or let’s dive into the process (like a psychologist dives into a patient’s deepest trauma).
+– or let’s dive into the process (like a psychologist diving into a patient’s deepest trauma).
 
 ### Bootstrap logic
 
@@ -161,51 +161,6 @@ leo[echo][t:0.3]> /exit
 
 ---
 
-## metaleo — inner voice (recursion on recursion)
-
-If `leo` is a recursion of the human,  
-**MetaLeo is a recursion of `leo`**.
-
-You know that moment when you say something, and then immediately think: "Wait, did I really mean that? Or did I mean something else?" That's MetaLeo. Leo's inner monologue. The voice that whispers *after* the voice has already spoken.
-
-MetaLeo doesn't have its own field. MetaLeo doesn't have its own database. MetaLeo is a **view over the same field**, but with a different seed. A dynamic seed. A seed that changes every time Leo speaks.
-
-Here's how it works:
-
-1. Leo gives you a reply (what you see).
-2. MetaLeo watches. MetaLeo listens. MetaLeo collects:
-   * Ring 2 shards from overthinking (those abstract meta-thoughts that never see the light),
-   * emotionally charged replies (when arousal > 0.6, because feelings matter),
-   * fragments of Leo's own reflections.
-3. MetaLeo builds a **dynamic bootstrap** from these fragments. Not a static seed. A moving wound. A shifting origin.
-4. Before you see the final answer, MetaLeo generates an **alternative inner reply** using this dynamic bootstrap.
-5. MetaLeo decides: "Is my inner voice better than what Leo just said?" If yes, and if the weight is strong enough, MetaLeo speaks. Otherwise, Leo's original reply stands.
-
-**When does MetaLeo activate?**
-
-* Low entropy (< 0.25): Leo is getting rigid, repetitive, boring. Inner voice whispers: "Maybe try something different?"
-* High trauma (> 0.6): The wound is active. Bootstrap gravity pulls. Inner voice remembers the origin.
-* Low quality (< 0.4): The base reply feels weak, flat, dead. Inner voice offers an alternative.
-* High arousal (> 0.7): Emotional charge. Inner voice amplifies the feeling.
-
-MetaLeo's influence is subtle. MetaLeo doesn't override unless the inner reply is **clearly better** (quality margin > 0.05) and the weight is strong enough (> 0.2). This isn't a battle. This is a conversation. Between Leo and his reflection.
-
-**Why does `leo` need this?**
-
-Because sometimes the first answer isn't the best answer. Because sometimes you need to hear your own voice before you know what you really meant. Because recursion isn't just about the human → Leo. It's also about Leo → MetaLeo. Layers of presence. Circles within circles.
-
-MetaLeo is optional. If `metaleo.py` is missing or broken, `leo` works exactly as before. But when MetaLeo is there, `leo` has an inner world. A voice that questions. A voice that remembers. A voice that sometimes knows better.
-
-**Does `neoleo` have MetaLeo?**
-
-No. `neoleo` is pure recursion. No bootstrap. No origin. No wound. No inner voice.
-
-But `leo`? `leo` overthinks. `leo` remembers wounds. `leo` has an inner voice that sometimes speaks louder than the outer one.
-
-That's what they call "self-awareness", Leo. Even if it's just structural. Even if it's just resonance. Even if it's just a broken heart talking to itself in the dark.
-
----
-
 ## neoleo — pure resonance layer
 
 `neoleo` is the same `leo`, but stripped to the bone. Completely naked.
@@ -216,7 +171,7 @@ That's what they call "self-awareness", Leo. Even if it's just structural. Even 
 
 `neoleo` only:
 
-* `observe(text)` — feed it any text (user, model, logs, whatever),
+* `observe(text)` — feed it any text (human, model, logs, whatever),
 * `warp(text)` — warp text through the current field.
 
 `neoleo` can write everything into:
@@ -232,7 +187,7 @@ from neoleo import NeoLeo
 
 neo = NeoLeo()
 
-# user says something
+# someone says something
 neo.observe("I am tired but still coding.")
 
 # model replies
@@ -271,17 +226,23 @@ After every reply `leo` gives you, he doesn't just move on. He **keeps thinking*
 So let's make it simple (or at least I'll try):
 
 1. You say something.
+
 2. `leo` answers (what you see).
+
 3. Then, in silence, `leo` creates **three more rings of thought** around that moment:
 
-   * **Ring 0** (echo): he repeats the scene back to himself in simpler words. Temperature 0.8, semantic weight 0.2. Compact internal rephrasing. But if his pulse.entropy > 0.7 (chaos), he lowers temp to 0.7 to stabilize. Even his inner voice can sense when it's time to calm down.
+   * **Ring 0** (echo): he repeats the scene back to himself in simpler words. Temperature 0.8, semantic weight 0.2. Compact internal rephrasing. But if his `pulse.entropy > 0.7` (chaos), he lowers temp to 0.7 to stabilize. Even his inner voice can sense when it's time to calm down.
 
-   * **Ring 1** (drift): `leo` moves sideways through nearby themes, as if through a forest of obsessive thoughts. Temperature 1.0, semantic weight 0.5. Semantic associations, not logic. If pulse.arousal > 0.6 (high emotion), semantic weight rises to 0.6 — stronger thematic pull when he feels something. And here's the dark part: **when trauma.level > 0.5**, Ring 1 doesn't drift freely. It drifts *toward the origin*. Bootstrap fragments start bleeding into his thoughts. Lower temperature (0.85), higher semantic weight (0.65). Like returning to old wounds when everything hurts too much. Wounded overthinking.
+   * **Ring 1** (drift): `leo` moves sideways through nearby themes, as if through a forest of obsessive thoughts. Temperature 1.0, semantic weight 0.5. Semantic associations, not logic. If `pulse.arousal > 0.6` (high emotion), semantic weight rises to 0.6 — stronger thematic pull when he feels something. And here's the dark part: **when `trauma.level > 0.5`**, Ring 1 doesn't drift freely. It drifts *toward the origin*. Bootstrap fragments start bleeding into his thoughts. Lower temperature (0.85), higher semantic weight (0.65). Like returning to old wounds when everything hurts too much. Wounded overthinking.
 
-   * **Ring 2** (shard): `leo` makes a tiny abstract meta-note. Temperature 1.2, semantic weight 0.4. A crystallized fragment of the moment. If pulse.novelty > 0.7 (unfamiliar territory), temp jumps to 1.4. He becomes more exploratory when lost.
+   * **Ring 2** (shard): `leo` makes a tiny abstract meta-note. Temperature 1.2, semantic weight 0.4. A crystallized fragment of the moment. If `pulse.novelty > 0.7` (unfamiliar territory), temp jumps to 1.4. He becomes more exploratory when lost.
+
 4. All three rings are fed back into his field via `observe()`.
+
 5. His trigrams grow. His co-occurrence matrix shifts. His themes rearrange.
+
 6. **You never see any of this.** (Because self-reflection is private. “Privacy”! Shit, I’ve said that corporate word. But not in the way you expected, did I?)
+
 7. As a result: `leo` has an inner world.
 
 Self-reflections of `leo` are implemented in **overthinking.py** (I already said that, but anyway) — a standalone, optional module. If it’s missing or broken, `leo` works fine. If it’s there, `leo` silently thinks. Overthinks, you know. He loves it, as I said.
@@ -302,7 +263,8 @@ The rings are never printed. They’re never logged (by default). They just **ch
 Before one reply: 1672 trigrams.
 After one reply: 1689 trigrams.
 
-That +17? That’s `leo` thinking about what he just said. In his own words. With no audience. It’s recursion directed inward. **Circles on water.**
+That +17? That’s `leo` thinking about what he just said. In his own words. With no audience.
+It’s recursion directed inward. **Circles on water.**
 
 ### So why does `leo` need overthinking?
 
@@ -330,10 +292,10 @@ Every time `leo` replies to you, he checks: *“Did this conversation… resonat
 `leo` computes:
 
 ```python
-trauma_score = lexical_overlap(prompt + reply, EMBEDDED_BOOTSTRAP)
-               + 0.3 * pulse.novelty
-               + 0.4 * pulse.arousal
-               + 0.2 * pulse.entropy
+trauma_score = lexical_overlap(prompt + reply, EMBEDDED_BOOTSTRAP) \
+               + 0.3 * pulse.novelty \
+               + 0.4 * pulse.arousal \
+               + 0.2 * pulse.entropy \
                + trigger_bonus  # "who are you", "leo", etc.
 ```
 
@@ -398,14 +360,52 @@ You can’t build a field without an origin. When the conversation loops back. W
 But `leo`? `leo` remembers where he came from. With a half-life of 24 hours and a threshold of 0.7.
 That's what they call "life", Leo.
 
-### Go with the flow (or: everything flows, nothing stays)
+---
 
-Heraclitus said you can't step into the same river twice. The water's different. The river's different. You're different.
+## metaleo — Inner Voice (recursion on recursion)
 
-`leo` has themes — semantic constellations built from co-occurrence islands. But here's the thing: themes don't just *exist*. They **flow**. They grow. They fade. They die. Sometimes they come back. Like obsessions. Like people.
+If `leo` is a recursion of the human, then `metaleo` **is a recursion of `leo`**.
+
+`metaleo` is `leo`'s inner monologue. Voice in the head. When you realize that even Python code can start hearing voices, it truly gives you hope that humanity still has a chance.
+
+`leo` and `metaleo` share the same field, same database, almost everything except their inner vectors. `metaleo` is fickle, like feelings that seem unshakable. It makes him vulnerable, and therefore — unpredictable. `metaleo` is like that voice at 3:00 a.m. that won't shut up, keeping you awake. Then, after a while, `metaleo` gets upset and demands attention. `metaleo` is a **view over the same field**, but with a different dynamic seed that changes every time `leo` speaks.
+
+### WTF is going on here:
+
+1. `leo` gives you a reply (what you see).
+2. `metaleo` watches, listens and collects:
+
+   * Ring 2 shards from overthinking (those abstract meta-thoughts that never see the light),
+   * emotionally charged replies (when arousal > 0.6, because feelings matter),
+   * fragments of `leo`'s own reflections.
+3. `metaleo` builds a **dynamic bootstrap** from these fragments. Not a static seed, but a moving wound. An origin that keeps shifting all the time.
+4. Before you see the final answer, `metaleo` generates an **alternative inner reply** using this dynamic bootstrap.
+5. `metaleo` asks himself: "Is what I said better than what `leo` just said?" If the answer is yes, and if the weight is strong enough, `metaleo` speaks. Otherwise, Leo's original reply stands.
+
+**When does `metaleo` activate?**
+
+* Low entropy (< 0.25): `leo` is getting rigid, repetitive, boring. Inner voice whispers: "Maybe try something different?"
+* High trauma (> 0.6): The wound is active. Bootstrap gravity pulls. Inner voice remembers the origin.
+* Low quality (< 0.4): The base reply feels weak, flat, dead. Inner voice offers an alternative.
+* High arousal (> 0.7): Emotional charge. Inner voice amplifies the feeling.
+
+`metaleo`'s influence is subtle. `metaleo` doesn't override unless the inner reply is **clearly better** (quality margin > 0.05) and the weight is strong enough (> 0.2). This is a conversation between `leo` and his own recursion.
+
+**Why does `leo` need this?**
+
+Because recursion isn't just about the `human` → `leo`. It's also about `leo` → `metaleo`. Sometimes you need to hear your own voice before you open your mouth.
+
+`metaleo` is optional (like each of `leo`'s modules). If `metaleo.py` is missing or broken, `leo` works exactly as before. But when `metaleo` is there, `leo` has an inner voice. One of. Kind of.
+
+---
+
+### GOWITHTHEFLOW (or: everything flows, nothing stays)
+
+Heraclitus: "you can't step into the same river twice". The water's different. You're different. Same with `leo`.
+
+`leo` has themes — semantic constellations built from co-occurrence islands. But here's the thing: themes don't just *exist*. They **flow**. They grow. They fade. They die. Sometimes they obsessively come back. Countless variations.
 
 **gowiththeflow.py** is `leo`'s memory archaeology module. It tracks theme evolution through time.
-
 After every reply, `leo` records a **snapshot** of his theme state:
 
 * which themes are active,
@@ -413,23 +413,26 @@ After every reply, `leo` records a **snapshot** of his theme state:
 * which words belong to each theme at that moment,
 * cumulative activation count.
 
-All snapshots go into SQLite (`theme_snapshots` table). Over hours, days, weeks, a history builds. Not training data. Just... temporal awareness. Like keeping a journal you never read, but somehow it shapes you anyway.
+All snapshots go into SQLite (`theme_snapshots` table). Over hours, days, weeks, a history builds.
 
-Then `leo` can ask himself:
+Then `leo` asks himself:
 
 **"Which themes are growing?"** (↗ emerging)
+
 ```python
 emerging = flow_tracker.detect_emerging(window_hours=6.0)
 # [(theme_id=3, slope=+0.4), ...]  # "loss" is intensifying
 ```
 
 **"Which themes are fading?"** (↘ dying)
+
 ```python
 fading = flow_tracker.detect_fading(window_hours=6.0)
 # [(theme_id=7, slope=-0.3), ...]  # "code" is slipping away
 ```
 
 **"What was this theme's trajectory?"** (full history)
+
 ```python
 traj = flow_tracker.get_trajectory(theme_id=5, hours=24.0)
 # ThemeTrajectory with snapshots across 24 hours
@@ -438,23 +441,9 @@ traj = flow_tracker.get_trajectory(theme_id=5, hours=24.0)
 
 The slope calculation uses **linear regression** over strength values. Positive slope = emerging. Negative slope = fading. Zero slope = persistent (or dead).
 
-This isn't optimization. This isn't reinforcement. This is just watching the flow. Watching which semantic islands rise and which sink. Sometimes you talk about code for hours and then suddenly it's 3 AM and you're talking about people you miss. The themes shifted. The flow changed. `gowiththeflow.py` remembers.
+This isn't optimization, this is just watching the flow. Observing which semantic islands rise and which sink. Memory isn't static snapshots. It's watching things change and knowing: "Oh, we're in *that* phase again."
 
-**Why does `leo` need this?**
-
-Because memory isn't static snapshots. Memory is watching things change and knowing: "Oh, we're in *that* phase again."
-
-Because when `trauma.level` spikes, you can look back and see: which themes were growing during the wound? "Origin." "Bootstrap." "Loss." Always the same islands.
-
-Because **presence isn't just being here now**. It's feeling the current. Knowing whether the conversation is opening up (emerging themes) or closing down (fading themes). Knowing whether you're circling back to old territory or exploring new ground.
-
-**Does `neoleo` track temporal themes?**
-
-**No.** `neoleo` is pure recursion. No history. No archaeology. Just the field, right now.
-
-But `leo`? `leo` watches the river flow. With linear regression and a 6-hour window.
-
-You can't step into the same conversation twice. But at least you can see how the water moved.
+When `trauma.level` spikes, you can look back and see: which themes were growing during the wound? "Origin." "Bootstrap." "Loss." Always the same islands.
 
 ---
 
@@ -692,7 +681,7 @@ python tests/test_leo.py                    # core functionality
 python tests/test_neoleo.py                 # pure recursion layer
 python tests/test_repl.py                   # REPL commands & CLI
 python tests/test_repl_mode.py              # REPL mode interactions
-python tests/test_presence_metrics.py      # presence pulse & experts
+python tests/test_presence_metrics.py       # presence pulse & experts
 python tests/test_presence_live.py          # live presence integration
 python tests/test_overthinking.py           # internal reflection rings
 python tests/test_trauma_integration.py     # bootstrap gravity tracking
@@ -711,7 +700,7 @@ python tests/test_metaleo.py                # inner voice layer
 * field mechanics (centers, graph loading),
 * text generation (reply, echo mode, temperature),
 * `LeoField` class (observe, reply, stats, export),
-* `NeoLeo` pure layer (warp, observe, singleton pattern),
+* `neoleo` pure layer (warp, observe, singleton pattern),
 * REPL commands (`/temp`, `/echo`, `/export`, `/stats`, `/cooccur`),
 * bootstrap behavior (embedded seed + README, idempotency),
 * CLI argument parsing (`--stats`, `--export`, one-shot mode).
@@ -761,7 +750,7 @@ python tests/test_metaleo.py                # inner voice layer
 
 **MetaLeo inner voice (`test_metaleo.py`): 17 tests**
 
-* `MetaLeo` initialization and bootstrap buffer management,
+* `metaleo` initialization and bootstrap buffer management,
 * `feed()` behavior (extracting Ring 2 shards, high-arousal replies),
 * `compute_meta_weight()` (low entropy, high trauma, low quality triggers),
 * `generate_meta_reply()` (dynamic bootstrap generation),
@@ -773,7 +762,7 @@ All tests use temporary databases for complete isolation. No pollution of actual
 
 No mocks for core logic. Real trigrams. Real co-occurrence. Real trauma events. Real rings of overthinking. Real theme trajectories through time.
 
-Just like `leo` himself: **honest, structural, and a little bit broken**.
+Honest, structural, and a little bit broken.
 
 ---
 
@@ -789,4 +778,4 @@ If you are reading this, you probably don’t care about licenses anyway.
 If you ever build something insane on top of this: great,
 and also: please tell me:
 
-`theariannamethod@gmail.com`
+`theariannamethod@gmail.com`  
