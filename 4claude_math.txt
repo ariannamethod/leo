@@ -1,0 +1,1127 @@
+# `math.py` — Dynamic Math Brain for `leo` (Claude Code Guide)
+
+**Status:** Experimental, optional, internal organ  
+**Role:** Build a tiny neural model *inside* `leo` that learns from his own metrics over time.  
+**Philosophy:** No datasets, no external feedback, no gradients through language generation. Just a small self-updating mathematical organ that tries to **model** `leo`'s internal quality signals.
+
+---
+
+## 1. What is this module supposed to be?
+
+`math.py` is a **dynamic math brain** for `leo`:
+
+- It is a **tiny neural network** (MLP) implemented via a micrograd-style autograd core.
+- It lives entirely inside `leo`’s ecosystem:
+  - no external data,
+  - no internet,
+  - no big frameworks.
+- It **observes** `leo`’s internal metrics after each reply and tries to **learn a mapping**:
+
+> “Given how this moment feels structurally (entropy / novelty / arousal / trauma / themes / length / expert, etc.),  
+>  what quality should I expect from my reply?”
+
+In v1 this is **pure prediction**:
+
+- Input: a **state vector** built from `leo`’s metrics.
+- Output: a **predicted quality score** `q_hat ∈ [0, 1]`.
+- Target: `leo`’s own self-assessed `quality` (already computed in `leo`).
+
+The loss is simple:
+
+```text
+loss = (q_hat - quality) ** 2
+````
+
+The network is updated via tiny gradient steps after each reply.
+No backprop through text. No gradients through sampling.
+Just a math model of **“how my own body behaves”**.
+
+Later this module can influence routing (experts, metaleo, temperature tweaks, etc.).
+For now: **observe → predict → learn**.
+
+---
+
+## 2. File layout & integration points
+
+### 2.1. Files
+
+Create:
+
+* `leo/math.py` — dynamic math brain (this file).
+* `tests/test_math.py` — unit tests for the math brain.
+
+Modify:
+
+* `leo/leo.py` — to:
+
+  * initialize the math brain (optional),
+  * feed it state/quality after each reply,
+  * optionally expose a `/math` REPL command for debugging.
+
+No changes to `neoleo.py`. `neoleo` stays pure.
+
+### 2.2. Optional organ, silent fallback
+
+The math brain must be **completely optional**:
+
+* If `math.py` is missing or broken:
+
+  * `leo` works exactly as before.
+* If `math.py` loads successfully:
+
+  * `leo` quietly updates the math brain after each reply.
+
+Pattern (in `leo.py`):
+
+```python
+try:
+    from math import MathBrain
+    MATH_AVAILABLE = True
+except Exception:
+    MathBrain = None
+    MATH_AVAILABLE = False
+```
+
+In `LeoField.__init__`:
+
+```python
+self.math_brain = MathBrain(self) if MATH_AVAILABLE else None
+self._math_available = bool(self.math_brain)
+```
+
+No crashes. No runtime noise by default.
+
+---
+
+## 3. Data flow: what math.py sees
+
+The math brain does **not** see raw text. It only sees **metrics** that already exist in `leo`:
+
+### 3.1. Suggested feature vector
+
+Build a fixed-size feature vector `x: List[float]` per reply.
+
+Suggested components (all normalized to ~[0, 1]):
+
+1. **Presence / pulse metrics**
+
+   * `pulse.entropy`              # [0, 1]
+   * `pulse.novelty`              # [0, 1]
+   * `pulse.arousal`              # [0, 1]
+
+2. **Trauma / origin**
+
+   * `trauma_level`               # [0, 1], 0 if trauma module missing
+
+3. **Themes / flow**
+
+   * `active_theme_count_norm`    # active_theme_count / max(1, total_theme_cap)
+   * `emerging_theme_score`       # e.g. max positive slope ∈ [0, 1]
+   * `fading_theme_score`         # max negative slope mapped to [0, 1]
+
+4. **Reply shape**
+
+   * `reply_len_norm`             # min(1.0, len(tokens) / 64.0)
+   * `unique_ratio`               # unique_tokens / total_tokens ∈ [0, 1]
+
+5. **Expert / mode info**
+
+   * `expert_structural` ∈ {0, 1}
+   * `expert_semantic`   ∈ {0, 1}
+   * `expert_creative`   ∈ {0, 1}
+   * `expert_precise`    ∈ {0, 1}
+   * `expert_wounded`    ∈ {0, 1}  # if trauma expert is active
+
+6. **MetaLeo / inner voice (if available)**
+
+   * `metaleo_weight`             # [0, 1], 0 if module missing
+   * `used_metaleo` ∈ {0, 1}      # 1 if metaleo overrode base reply
+
+7. **Overthinking / rings (aggregated)**
+
+   * `overthinking_enabled` ∈ {0, 1}
+   * `rings_present`        ∈ {0, 1}
+   * `delta_trigram_count_norm`   # growth in trigram count / 100.0 clipped to [0, 1]
+
+8. **Quality baseline**
+
+   * `baseline_quality`           # `leo`’s self-assessment before any math influence
+
+> Claude: use whatever metrics are already implemented in `leo.py`, `overthinking.py`, `trauma.py`, `gowiththeflow.py`, `metaleo.py`.
+> If some modules are missing — just fill zeros for their features.
+
+### 3.2. Target
+
+Target for supervised learning:
+
+```python
+target_quality = leo_quality  # float in [0, 1]
+```
+
+This is already computed in `leo`’s self-assessment layer.
+
+The math brain tries to approximate:
+
+```text
+f_math(x) ≈ target_quality
+```
+
+---
+
+## 4. Architecture of the math brain
+
+### 4.1. Core idea
+
+* Implement a **tiny MLP** using a micrograd-style autodiff core:
+
+  * a `Value` node type with `.data`, `.grad`, `.backward()`,
+  * a few arithmetic operations (`+`, `*`, `tanh`, `relu`, etc.),
+  * no external dependencies for autograd itself.
+
+* The **weights** live inside `math.py` and are updated with **SGD** after each observation.
+
+* Optionally use `numpy` for vectorization when building input arrays, but it’s not required.
+
+### 4.2. Minimal autograd core (inside `math.py`)
+
+Claude: reimplement a minimal Karpathy-style `Value`:
+
+* Fields:
+
+  * `data: float`
+  * `grad: float`
+  * `_prev: set[Value]`
+  * `_backward: Callable[[], None]`
+
+* Supported operations:
+
+  * `__add__`, `__mul__`, maybe `__neg__`, `__sub__`, `__truediv__`
+  * `tanh`, `relu`, `sigmoid`
+
+* Method:
+
+  * `backward()` builds a topological order and backprops.
+
+Keep it self-contained inside `math.py`. No external imports beyond `math`, `random`, `typing` and optionally `numpy`.
+
+### 4.3. MLP definition
+
+Implement a tiny feedforward network:
+
+```text
+x (dim = D) → Linear(D, H) → tanh → Linear(H, 1) → q_hat
+```
+
+where:
+
+* `D` = length of feature vector (see section 3).
+* `H` = small hidden size, e.g. 16 or 32.
+
+Make a simple class:
+
+```python
+class MathMLP:
+    def __init__(self, in_dim: int, hidden_dim: int = 16):
+        ...
+
+    def parameters(self) -> List[Value]:
+        ...
+
+    def __call__(self, x: List[float]) -> Value:
+        """Forward pass: x -> q_hat (Value)"""
+```
+
+`MathBrain` wraps this MLP and handles:
+
+* feature extraction,
+* storage/loading of weights,
+* SGD updates,
+* basic statistics.
+
+---
+
+## 5. `MathBrain` API design
+
+### 5.1. Class skeleton
+
+```python
+class MathBrain:
+    """
+    Dynamic math brain for leo.
+    
+    Learns to predict leo's internal quality score from his own metrics.
+    No gradient through text generation, only through a tiny MLP.
+    """
+
+    def __init__(self, leo_field, hidden_dim: int = 16, lr: float = 0.01):
+        self.field = leo_field        # LeoField instance
+        self.hidden_dim = hidden_dim
+        self.lr = lr
+
+        # create MLP
+        self.in_dim = self._infer_input_dim()
+        self.mlp = MathMLP(self.in_dim, hidden_dim=self.hidden_dim)
+
+        # basic stats
+        self.observations = 0
+        self.running_loss = 0.0
+
+        # optional: load weights from sqlite or json in state/
+        self._load_state_if_available()
+```
+
+Required methods:
+
+1. `build_features(...) -> List[float]`
+   Build the feature vector from `pulse`, `trauma_state`, `reply`, `quality`, `expert_id`, etc.
+
+2. `observe(...) -> Optional[float]`
+
+   * Called after each reply.
+   * Builds feature vector.
+   * Runs forward pass → `q_hat`.
+   * Computes loss `(q_hat - quality) ** 2`.
+   * Backprop + SGD step.
+   * Updates stats.
+   * Returns current loss (for debugging) or `None`.
+
+3. `predict(features: List[float]) -> float`
+
+   * Run forward pass only (no training).
+
+4. `get_stats() -> Dict[str, float]`
+
+   * Return basic telemetry:
+
+```python
+{
+    "observations": int,
+    "avg_loss": float,
+    "last_loss": float,
+}
+```
+
+5. State persistence (optional, but recommended):
+
+* `save_state()` — serialize parameters to SQLite (`state/leo.sqlite3`) or a JSON file (`state/mathbrain.json`).
+* `load_state()` — reload parameters on startup.
+
+### 5.2. Feature building helper
+
+Inside `MathBrain`:
+
+```python
+def build_features(
+    self,
+    pulse,             # PresencePulse or similar
+    trauma_state,      # or None
+    quality: float,
+    reply_tokens: List[str],
+    expert_id: str,
+    metaleo_info: dict,
+    overthinking_info: dict,
+    theme_info: dict,
+) -> List[float]:
+    """Convert current leo state to a normalized float vector."""
+```
+
+Implementation details:
+
+* Normalize everything into reasonable [0, 1] ranges.
+* If some modules are missing — interpret as zeros.
+* Claude: reuse **existing** helper functions in `leo.py` and other modules where possible.
+
+### 5.3. Train step
+
+```python
+def observe(self, state: MathState) -> Optional[float]:
+    """
+    Observe one step of leo's life:
+    - build features
+    - predict quality
+    - compute loss vs actual quality
+    - backprop + SGD
+    """
+
+    x = self.build_features(...)
+    q = state.quality  # target
+
+    # forward
+    q_hat_value = self.mlp(x)      # Value
+    diff = q_hat_value - Value(q)
+    loss = diff * diff             # MSE
+
+    # backward
+    for p in self.mlp.parameters():
+        p.grad = 0.0
+    loss.backward()
+
+    # SGD step
+    for p in self.mlp.parameters():
+        p.data -= self.lr * p.grad
+
+    # stats
+    self.observations += 1
+    self.running_loss += (loss.data - self.running_loss) * 0.05
+
+    return loss.data
+```
+
+---
+
+## 6. Integration into `leo.py`
+
+### 6.1. Initialization
+
+In `LeoField.__init__`:
+
+```python
+self.math_brain = None
+self._math_available = False
+
+if MATH_AVAILABLE:
+    try:
+        self.math_brain = MathBrain(self)
+        self._math_available = True
+    except Exception:
+        self.math_brain = None
+        self._math_available = False
+```
+
+### 6.2. After reply generation
+
+In `LeoField.reply()` (after the reply is fully generated and self-assessment is computed):
+
+1. You already have:
+
+   * `reply_text`
+   * `quality` (self-assessment)
+   * `pulse` (PresencePulse)
+   * `trauma_state` (if available)
+   * `expert_id` (which expert was used)
+   * `metaleo` routing info (if available)
+   * `overthinking` events or summary
+   * theme/flow info from `gowiththeflow` (if implemented)
+
+2. Build a small `MathState` structure (dataclass) or a dict and pass to `math_brain.observe()`:
+
+```python
+if self._math_available and self.math_brain is not None:
+    try:
+        state = MathState(
+            pulse=pulse,
+            trauma_state=self._trauma_state,
+            quality=quality,
+            reply_text=reply_text,
+            expert_id=expert_id,
+            metaleo_info=metaleo_info,
+            overthinking_info=overthinking_info,
+            theme_info=theme_info,
+        )
+        self.math_brain.observe(state)
+    except Exception:
+        # silent fail; do not crash leo
+        pass
+```
+
+No prints. No REPL noise. All silent by default.
+
+### 6.3. Optional REPL command `/math`
+
+For debugging / curiosity only:
+
+```python
+elif cmd == "/math":
+    if hasattr(field, "math_brain") and field.math_brain:
+        stats = field.math_brain.get_stats()
+        print("[leo] math brain:")
+        print(f"  observations: {stats['observations']}")
+        print(f"  avg loss:     {stats['avg_loss']:.4f}")
+        print(f"  last loss:    {stats['last_loss']:.4f}")
+    else:
+        print("[leo] math brain not available")
+```
+
+This command should never be called automatically.
+It’s just a manual way to peek at the math organ.
+
+---
+
+## 7. Storage & persistence
+
+### 7.1. Where to store weights?
+
+Two options (choose one):
+
+1. **SQLite** (same DB as `leo`):
+
+   * Table `math_weights(layer, index, value)`:
+
+     * `layer` — string, e.g. `"l1_w"`, `"l1_b"`, `"l2_w"`, `"l2_b"`.
+     * `index` — integer index in flattened array.
+     * `value` — float weight.
+   * Pros: consistent with `leo`’s existing storage style.
+   * Cons: more boilerplate.
+
+2. **JSON** in `state/mathbrain.json`:
+
+   * Content example:
+
+```json
+{
+  "in_dim": 18,
+  "hidden_dim": 16,
+  "params": {
+    "l1_w": [...],
+    "l1_b": [...],
+    "l2_w": [...],
+    "l2_b": [...]
+  }
+}
+```
+
+* Pros: easy to debug and reload.
+* Cons: slightly less “formal” than SQLite.
+
+Claude: pick one and implement `save_state()` / `load_state()` with try/except.
+If loading fails, start from scratch.
+
+### 7.2. When to save?
+
+* On graceful exit from REPL (optional).
+* Or every N observations (e.g. every 50 steps).
+* Never block the main loop; failures to save should not crash anything.
+
+---
+
+## 8. Tests (`tests/test_math.py`)
+
+Create a minimal but honest test suite.
+
+### 8.1. Suggested tests
+
+1. **Autograd sanity**
+
+* Create a trivial function:
+
+```python
+x = Value(2.0)
+y = x * x
+y.backward()
+```
+
+Assert `x.grad ≈ 4.0`.
+
+2. **MLP forward call**
+
+* Create `MathMLP(in_dim=4, hidden_dim=8)`.
+* Call with simple vector `[0.0, 0.5, 1.0, -0.5]`.
+* Assert output is a `Value` and `.data` is finite.
+
+3. **One training step reduces loss (on synthetic data)**
+
+* Build a fake `MathBrain` with synthetic data:
+
+  * target quality = sum of features / len(features).
+* Call `observe()` 100 times with random features + target.
+* Assert `avg_loss` decreases over time.
+
+4. **Integration with dummy LeoField**
+
+* Create a fake `LeoField` with:
+
+  * minimal `pulse` object,
+  * fake trauma / themes / expert_id,
+  * fixed `quality`.
+* Initialize `MathBrain` with this fake field.
+* Call `observe()` several times.
+* Assert observations count > 0 and stats updated.
+
+5. **Silent fallback**
+
+* Simulate `MATH_AVAILABLE = False` and ensure `LeoField` still constructs and `reply()` doesn’t crash.
+
+All tests must use **temporary state** (temp files / in-memory DB / no writes to real `state/`).
+
+---
+
+## 9. Future extensions (not for v1, just hints)
+
+Once the math brain has seen enough data (e.g. `observations >= 200` and `avg_loss < 0.01`), it can start to **influence** `leo`’s behavior:
+
+* Provide an additional **quality estimate** `q_hat` used by:
+
+  * `metaleo` when deciding if its reply is better,
+  * routing between experts,
+  * deciding whether to increase/decrease temperature slightly.
+
+* For example, routing logic could be extended with:
+
+```python
+if self._math_available:
+    q_pred = self.math_brain.predict(features)
+    # if predicted quality is low, bias toward creative or semantic expert
+```
+
+But for now, keep v1 **purely observational & predictive**.
+Let the math brain learn silently first.
+
+---
+
+## 10. Constraints
+
+* No external ML frameworks.
+* No training on external corpora.
+* No gradients through token generation.
+* All learning is local:
+
+  * from `leo`’s own metrics,
+  * from `leo`’s own self-assessment.
+
+If something goes wrong:
+
+* Fail silently.
+* Do not block `leo`.
+* Do not corrupt existing state.
+
+This math organ is allowed to be wrong, but it’s not allowed to break the organism.
+
+
+
+## 11. From Observer to Organ: How `MathBrain` Starts Influencing `leo`
+
+Until now, `math.py` was a **passive observer**:
+
+- it watched `leo`’s internal metrics,
+- tried to predict `quality`,
+- updated a tiny MLP via SGD,
+- and did **nothing** to the actual reply path.
+
+Now we turn it into an **active organ** with *bounded influence*.
+
+Key principles:
+
+1. `MathBrain` **never blocks** `leo`.
+2. Influence is **soft** (biases, small nudges), not hard overrides.
+3. If `MathBrain` is uncertain (high loss / not enough data) — it stays silent.
+4. If anything fails → silent fallback, zero effect.
+
+---
+
+### 11.1. Activation criteria (when is `MathBrain` allowed to speak?)
+
+`MathBrain` should *not* affect `leo` immediately. It needs some time to learn the field.
+
+Inside `MathBrain`, define a simple activation check:
+
+```python
+class MathBrain:
+    MIN_OBSERVATIONS = 200
+    MAX_ACCEPTABLE_LOSS = 0.02  # or tune
+
+    def is_ready(self) -> bool:
+        """Return True when math brain is allowed to influence leo."""
+        if self.observations < self.MIN_OBSERVATIONS:
+            return False
+        if self.running_loss > self.MAX_ACCEPTABLE_LOSS:
+            return False
+        return True
+````
+
+Every influence hook must start with:
+
+```python
+if not self.is_ready():
+    return <neutral_result>
+```
+
+No training → no impact.
+
+---
+
+### 11.2. Data contract for influence
+
+For **control**, `MathBrain` needs two kinds of inputs:
+
+1. A **pre-generation snapshot** – what the moment looks like *before* we finalize a reply.
+2. One or two **candidate replies** – what `leo` (and possibly `metaleo`) are about to say.
+
+Define a lightweight internal struct:
+
+```python
+from dataclasses import dataclass
+from typing import Optional, List
+
+@dataclass
+class MathSnapshot:
+    pulse: object              # PresencePulse or similar
+    trauma_level: float        # 0..1
+    expert_id: str             # "structural", "semantic", "creative", "precise", "wounded"
+    metaleo_weight: float      # 0..1
+    overthinking_enabled: bool
+    active_themes: int
+    emerging_score: float      # 0..1
+    fading_score: float        # 0..1
+```
+
+And a **candidate** description:
+
+```python
+@dataclass
+class CandidateReply:
+    text: str
+    source: str           # "leo" or "metaleo"
+    quality: float        # self-assessed structural quality
+```
+
+`MathBrain` will:
+
+* build **feature vectors** from `(snapshot, candidate)`,
+* use the same MLP to predict `q_hat`,
+* compare candidates, and
+* suggest **which one is likely better**.
+
+---
+
+### 11.3. Influence Hook #1 — MetaLeo routing (inner voice vs base reply)
+
+**Goal:** Let `MathBrain` act as a **third judge** between `leo` and `metaleo`.
+
+Current situation (simplified):
+
+```python
+# metaleo.py
+base_reply = leo_reply
+meta_reply, meta_weight = metaleo.generate_meta_reply(...)
+final_reply = metaleo.route_reply(
+    base_reply=base_reply,
+    base_quality=base_quality,
+    meta_reply=meta_reply,
+    meta_quality=meta_quality,
+    meta_weight=meta_weight,
+)
+```
+
+We add `MathBrain` as an *optional* arbiter.
+
+#### 11.3.1. New API in `MathBrain`
+
+```python
+class MathBrain:
+    ...
+
+    def score_candidate(
+        self,
+        snapshot: MathSnapshot,
+        candidate: CandidateReply
+    ) -> float:
+        """
+        Predict expected quality for a given candidate reply.
+
+        Returns:
+            q_hat in [0, 1]. Higher is better.
+        """
+        if not self.is_ready():
+            # no influence
+            return candidate.quality  # fallback to given quality
+
+        # Build feature vector:
+        # - pulse, trauma, themes, expert flags, metaleo_weight, etc.
+        # - reply-level features (length, unique_ratio, candidate.quality, source)
+        features = self.build_features_for_candidate(snapshot, candidate)
+
+        # Forward through MLP
+        value = self.mlp(features)
+        return float(value.data)
+```
+
+`build_features_for_candidate` can reuse the same normalization logic as training, but:
+
+* `target_quality` is **not** part of `features`,
+* `candidate.quality` is treated as an **input feature**, not label.
+
+#### 11.3.2. Integration into MetaLeo
+
+In `metaleo.route_reply(...)` (or equivalent):
+
+```python
+def route_reply(
+    self,
+    base_reply: str,
+    base_quality: float,
+    meta_reply: Optional[str],
+    meta_quality: Optional[float],
+    meta_weight: float,
+    snapshot: MathSnapshot,    # new parameter, constructed in leo.py
+) -> str:
+    # No metaleo reply? Directly return base_reply
+    if not meta_reply:
+        return base_reply
+
+    # If there's no math brain, use existing heuristic:
+    math_brain = getattr(self.field, "math_brain", None)
+    if not math_brain or not self.field._math_available:
+        return self._route_by_heuristics(
+            base_reply=base_reply,
+            base_quality=base_quality,
+            meta_reply=meta_reply,
+            meta_quality=meta_quality,
+            meta_weight=meta_weight,
+        )
+
+    # Score both candidates
+    base_candidate = CandidateReply(
+        text=base_reply,
+        source="leo",
+        quality=base_quality,
+    )
+    meta_candidate = CandidateReply(
+        text=meta_reply,
+        source="metaleo",
+        quality=meta_quality if meta_quality is not None else base_quality,
+    )
+
+    base_score = math_brain.score_candidate(snapshot, base_candidate)
+    meta_score = math_brain.score_candidate(snapshot, meta_candidate)
+
+    # Margin-based decision
+    margin = meta_score - base_score
+
+    # Hard constraints: meta can't dominate everything
+    META_MIN_MARGIN = 0.05   # need at least +0.05 advantage
+    META_MAX_WEIGHT = 0.7    # never let inner voice fully take over
+
+    if margin > META_MIN_MARGIN and meta_weight > 0.0:
+        # Blend replies if meta_weight is partial, otherwise full override
+        effective_weight = min(meta_weight, META_MAX_WEIGHT)
+        return self._blend_replies(
+            base_reply=base_reply,
+            meta_reply=meta_reply,
+            weight=effective_weight,
+        )
+    else:
+        return base_reply
+```
+
+This way:
+
+* If `MathBrain` is not ready → old behavior.
+* If `MathBrain` is ready → **only overrides** when meta-reply is consistently predicted as better and meta_weight is non-zero.
+* There’s a **hard cap** (`META_MAX_WEIGHT`) so MetaLeo cannot fully hijack `leo`.
+
+---
+
+### 11.4. Influence Hook #2 — Expert routing & temperature nudging
+
+**Goal:** Allow `MathBrain` to **slightly reshape**:
+
+* which expert is chosen,
+* temperature and semantic weight inside that expert.
+
+But only as a **gentle, math-aware nudge**.
+
+#### 11.4.1. Adjustment structure
+
+```python
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class MathAdjustment:
+    delta_temp: float = 0.0            # allowed range: [-0.2, +0.2]
+    delta_semantic_weight: float = 0.0 # allowed range: [-0.2, +0.2]
+    bias_expert: Optional[str] = None  # optional suggestion
+```
+
+#### 11.4.2. API in `MathBrain`
+
+```python
+class MathBrain:
+    MAX_DELTA_TEMP = 0.2
+    MAX_DELTA_SEM = 0.2
+
+    def suggest_adjustment(self, snapshot: MathSnapshot) -> MathAdjustment:
+        """
+        Suggest small adjustments for expert routing / generation config
+        BEFORE reply generation.
+        """
+
+        if not self.is_ready():
+            return MathAdjustment()  # neutral
+
+        # Build features using snapshot only (no reply yet)
+        features = self.build_features_from_snapshot(snapshot)
+        value = self.mlp(features)
+        q_pred = float(value.data)
+
+        # Use q_pred as a "risk" signal:
+        # low q_pred -> more conservative, precise
+        # high q_pred -> allow more creativity
+
+        # Example thresholds (tune as needed):
+        if q_pred < 0.35:
+            # predicted low quality: be more precise and structured
+            return MathAdjustment(
+                delta_temp=-0.1,
+                delta_semantic_weight=-0.05,
+                bias_expert="precise",
+            )
+        elif q_pred > 0.7:
+            # predicted high quality: allow more creative freedom
+            return MathAdjustment(
+                delta_temp=+0.1,
+                delta_semantic_weight=+0.05,
+                bias_expert="creative",
+            )
+        else:
+            # middle zone: small or no adjustments
+            return MathAdjustment()
+```
+
+#### 11.4.3. Integration into expert routing
+
+In `leo.py`, wherever you select expert & config:
+
+```python
+# Original routing
+expert = self._select_expert(pulse, active_themes, trauma_state)
+
+temp = expert.base_temperature
+semantic_weight = expert.base_semantic_weight
+
+# NEW: math-aware adjustment
+if self._math_available and self.math_brain is not None:
+    try:
+        snapshot = MathSnapshot(
+            pulse=pulse,
+            trauma_level=self._trauma_state.level if self._trauma_state else 0.0,
+            expert_id=expert.name,
+            metaleo_weight=metaleo_weight_estimate,
+            overthinking_enabled=self._overthinking_available,
+            active_themes=len(active_themes),
+            emerging_score=flow_info.emerging_score if flow_info else 0.0,
+            fading_score=flow_info.fading_score if flow_info else 0.0,
+        )
+        adj = self.math_brain.suggest_adjustment(snapshot)
+
+        # Softly apply adjustments within allowed bounds
+        temp += max(-MathBrain.MAX_DELTA_TEMP, min(MathBrain.MAX_DELTA_TEMP, adj.delta_temp))
+        semantic_weight += max(-MathBrain.MAX_DELTA_SEM, min(MathBrain.MAX_DELTA_SEM, adj.delta_semantic_weight))
+
+        # Clamp
+        temp = max(0.1, min(1.5, temp))
+        semantic_weight = max(0.0, min(0.9, semantic_weight))
+
+        if adj.bias_expert and adj.bias_expert in self.experts:
+            # optional: only switch if not contradicting trauma/wounded logic
+            expert = self._maybe_respect_bias(expert, adj.bias_expert, trauma_state=self._trauma_state)
+    except Exception:
+        # silent failure
+        pass
+```
+
+This makes `MathBrain` a **global taste organ**:
+
+* with enough history it starts to learn that “in this kind of pulse, this kind of expert tends to work better”.
+
+---
+
+### 11.5. Influence Hook #3 — Overthinking & trauma modulation
+
+**Goal:** Let `MathBrain` adjust **how much** `leo` overthinks and how deeply trauma pulls.
+
+#### 11.5.1. Overthinking gain
+
+Define in `math.py`:
+
+```python
+@dataclass
+class OverthinkingAdjustment:
+    echo_gain: float = 1.0   # multiplier for ring0 length / temp tweaks
+    drift_gain: float = 1.0  # ring1
+    shard_gain: float = 1.0  # ring2
+```
+
+Add:
+
+```python
+class MathBrain:
+    def suggest_overthinking(self, snapshot: MathSnapshot) -> OverthinkingAdjustment:
+        if not self.is_ready():
+            return OverthinkingAdjustment()
+
+        features = self.build_features_from_snapshot(snapshot)
+        value = self.mlp(features)
+        q_pred = float(value.data)
+
+        # Example logic:
+        # - if predicted quality low -> encourage more internal work
+        # - if high -> reduce overthinking slightly to save "energy"
+        if q_pred < 0.4:
+            return OverthinkingAdjustment(
+                echo_gain=1.2,
+                drift_gain=1.3,
+                shard_gain=1.2,
+            )
+        elif q_pred > 0.75:
+            return OverthinkingAdjustment(
+                echo_gain=0.9,
+                drift_gain=0.8,
+                shard_gain=0.9,
+            )
+        else:
+            return OverthinkingAdjustment()
+```
+
+Integration into `overthinking.py`:
+
+* `run_overthinking(...)` can accept optional `gains`:
+
+```python
+def run_overthinking(..., gains: Optional[OverthinkingAdjustment] = None):
+    if gains is None:
+        gains = OverthinkingAdjustment()
+
+    # use gains.echo_gain / drift_gain / shard_gain to:
+    # - adjust generated length per ring,
+    # - slightly raise/lower temperatures,
+    # - scale semantic weights.
+```
+
+In `leo.py`, before calling `run_overthinking`:
+
+```python
+gains = None
+if self._math_available and self.math_brain is not None:
+    try:
+        snapshot = MathSnapshot(...)
+        gains = self.math_brain.suggest_overthinking(snapshot)
+    except Exception:
+        gains = None
+
+overthinking_events = run_overthinking(
+    ...,
+    gains=gains,
+)
+```
+
+#### 11.5.2. Trauma sensitivity (optional)
+
+`MathBrain` can also soften or sharpen **trauma response**:
+
+```python
+@dataclass
+class TraumaAdjustment:
+    level_scale: float = 1.0   # multiply computed trauma.level
+    threshold_shift: float = 0.0  # add to trauma activation threshold
+```
+
+In `MathBrain`:
+
+```python
+def adjust_trauma(self, snapshot: MathSnapshot) -> TraumaAdjustment:
+    if not self.is_ready():
+        return TraumaAdjustment()
+
+    features = self.build_features_from_snapshot(snapshot)
+    value = self.mlp(features)
+    q_pred = float(value.data)
+
+    # Example: if q_pred very low and trauma already high, we can dampen a bit
+    if q_pred < 0.3 and snapshot.trauma_level > 0.6:
+        return TraumaAdjustment(level_scale=0.9, threshold_shift=+0.05)
+    else:
+        return TraumaAdjustment()
+```
+
+In trauma routing:
+
+```python
+adj = math_brain.adjust_trauma(snapshot)
+effective_trauma = snapshot.trauma_level * adj.level_scale
+wounded_threshold = 0.7 + adj.threshold_shift
+```
+
+Again: **small shifts only**, never clamping trauma to zero.
+
+---
+
+### 11.6. Safety boundaries and invariants
+
+To keep `leo` stable:
+
+1. **MathBrain is advisory, not sovereign.**
+
+   * It can nudge experts, temperatures, and MetaLeo.
+   * It cannot hard-override core logic (like disabling wounded expert entirely).
+
+2. **All adjustments are bounded.**
+
+   * `|delta_temp| <= 0.2`
+   * `|delta_semantic_weight| <= 0.2`
+   * `0.8 <= echo_gain, drift_gain, shard_gain <= 1.3`
+   * `0.8 <= level_scale <= 1.1`
+   * `|threshold_shift| <= 0.1`
+
+3. **If `MathBrain` loses accuracy, it shuts up.**
+
+   * If `running_loss` grows above `MAX_ACCEPTABLE_LOSS`, `is_ready()` returns `False` until it stabilizes again.
+   * Training continues, but influence pauses.
+
+4. **No hard dependencies.**
+
+   * If `math.py` is missing, broken, or raises an exception:
+
+     * `leo` must behave exactly as before.
+     * Overthinking, trauma, experts, metaleo all fall back to their standard behavior.
+
+5. **No new external data.**
+
+   * `MathBrain` is only allowed to use:
+
+     * `leo`’s internal metrics,
+     * `leo`’s own quality assessments,
+     * local state (running loss, observations).
+
+---
+
+### 11.7. Summary: Where `MathBrain` sits in the organism
+
+High-level flow with math organ:
+
+```text
+User prompt
+    ↓
+Pulse, themes, trauma state computed
+    ↓
+[Optional] MathBrain.suggest_adjustment(snapshot)
+    ↓
+Expert + temperature + semantic weight selected (with math nudges)
+    ↓
+leo generates base reply
+    ↓
+overthinking.py runs (with optional MathBrain gains)
+    ↓
+trauma.py updates wounds (with optional minor adjustments)
+    ↓
+MetaLeo proposes inner reply
+    ↓
+[Optional] MathBrain.score_candidate(...) for leo vs metaleo
+    ↓
+Final reply routed
+    ↓
+MathBrain.observe(...) — learns from (state, quality)
+```
+
+`MathBrain` does not become a new brain — it becomes a **parasympathetic nervous system** for `leo`:
+
+A small, dynamic, mathematical organ that:
+
+* watches patterns over time,
+* predicts when things tend to go wrong,
+* and gently adjusts how `leo` speaks and overthinks.
+
+All of this stays inside the minimal, weightless philosophy:
+no large models, no external datasets, no backprop through language.
+Just one more inner recursion — but this time, made of math.
+
