@@ -478,7 +478,7 @@ When `trauma.level` spikes, you can look back and see: which themes were growing
 
 ## MATHBRAIN — leo knows how to count. and he has numpy.
 
-If `overthinking` is `leo`'s inner monologue, and `metaleo` is recursion on recursion, then **mathbrain** is `leo`'s **body awareness**. Proprioception through mathematics.
+If `overthinking` is `leo`'s inner monologue, and `metaleo` is recursion on recursion, then **`mathbrain`** is `leo`'s **body awareness**. Proprioception through mathematics.
 
 `leo` doesn't just speak. He **observes himself speaking**. He watches his own pulse, his trauma level, his themes flowing, his expert choices. And he learns: *"Given how this moment feels, what quality should I expect from myself?"*
 
@@ -487,6 +487,7 @@ If `overthinking` is `leo`'s inner monologue, and `metaleo` is recursion on recu
 ### How it works:
 
 1. After every reply, `leo` takes a snapshot of his internal state:
+     
    - Presence pulse (entropy, novelty, arousal)
    - Trauma level (bootstrap gravity)
    - Active themes (emerging, fading, total count)
@@ -495,13 +496,13 @@ If `overthinking` is `leo`'s inner monologue, and `metaleo` is recursion on recu
    - `metaleo`'s resonant weight (inner voice influence)
    - Overthinking activity (ring count)
 
-2. **MathBrain** extracts this into a **21-dimensional feature vector** (16 scalars + 5-dimensional expert one-hot).
+3. **`mathbrain`** extracts this into a **21-dimensional feature vector** (16 scalars + 5-dimensional expert one-hot).
 
-3. The tiny MLP (`21 → 16 → 1`) predicts the quality score.
+4. The tiny MLP (`21 → 16 → 1`) predicts the quality score.
 
-4. **MSE loss** is computed. **Backprop** happens. **SGD step** adjusts the content. No external frameworks — pure micrograd-style autograd (Karpathy-inspired, thanks.).
+5. **MSE loss** is computed. **Backprop** happens. **SGD step** adjusts the content. No external frameworks — pure micrograd-style autograd (Karpathy-inspired, thanks.).
 
-5. Everything are saved to JSON (`state/mathbrain.json`).
+6. Everything are saved to JSON (`state/mathbrain.json`).
    
 
 ### Active observation with influence
