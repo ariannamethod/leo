@@ -14,7 +14,7 @@ import re
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, NamedTuple, Set, Callable
+from typing import Dict, List, Tuple, Optional, NamedTuple, Set, Callable, Any
 from dataclasses import dataclass
 
 # Safe import: overthinking module is optional
@@ -67,6 +67,25 @@ except ImportError:
     MathBrain = None  # type: ignore
     MathState = None  # type: ignore
     MATHBRAIN_AVAILABLE = False
+
+# Safe import: santaclaus module is optional
+try:
+    from santaclaus import SantaKlaus, SantaContext
+    SANTACLAUS_AVAILABLE = True
+except ImportError:
+    SantaKlaus = None  # type: ignore
+    SantaContext = None  # type: ignore
+    SANTACLAUS_AVAILABLE = False
+
+# Safe import: episodes module is optional
+try:
+    from episodes import RAGBrain, Episode, RAG_AVAILABLE
+    EPISODES_AVAILABLE = True
+except ImportError:
+    RAGBrain = None  # type: ignore
+    Episode = None  # type: ignore
+    RAG_AVAILABLE = False
+    EPISODES_AVAILABLE = False
 
 # NumPy for precise math (entropy, distributions, linear regression)
 # Graceful fallback to pure Python if not available
@@ -1464,6 +1483,7 @@ def step_token(
     prev_token: Optional[str] = None,
     co_occur: Optional[Dict[str, Dict[str, int]]] = None,
     entropy_log: Optional[List[float]] = None,
+    token_boosts: Optional[Dict[str, float]] = None,
 ) -> str:
     """
     Single step in bigram/trigram graph with semantic blending.
@@ -1501,6 +1521,14 @@ def step_token(
                         blended_counts.append(blended)
                     counts = blended_counts
 
+            # Apply token boosts (Santa Klaus resonant recall)
+            if token_boosts:
+                for i, tok in enumerate(tokens):
+                    if tok in token_boosts:
+                        boost = token_boosts[tok]
+                        # Additive boost in log-space (small, gentle)
+                        counts[i] = counts[i] * (1.0 + boost)
+
             # Clamp temperature to safe range
             temperature = max(min(temperature, 100.0), 1e-3)
 
@@ -1531,6 +1559,14 @@ def step_token(
 
     tokens = list(row.keys())
     counts = [row[t] for t in tokens]
+
+    # Apply token boosts (Santa Klaus resonant recall)
+    if token_boosts:
+        for i, tok in enumerate(tokens):
+            if tok in token_boosts:
+                boost = token_boosts[tok]
+                # Additive boost in log-space (small, gentle)
+                counts[i] = counts[i] * (1.0 + boost)
 
     # Clamp temperature to safe range
     temperature = max(min(temperature, 100.0), 1e-3)
@@ -1628,6 +1664,7 @@ def generate_reply(
     token_to_themes: Optional[Dict[str, List[int]]] = None,
     use_experts: bool = True,
     trauma_state: Optional[Any] = None,
+    token_boosts: Optional[Dict[str, float]] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -1646,7 +1683,7 @@ def generate_reply(
         prev_tok: Optional[str] = None
         for tok in tokens_in:
             if tok in bigrams:
-                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature, trigrams, prev_tok, co_occur)
+                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature, trigrams, prev_tok, co_occur, None, token_boosts)
                 tokens_out.append(nxt)
                 prev_tok = tok
             else:
@@ -1692,7 +1729,7 @@ def generate_reply(
     PUNCT = {".", ",", "!", "?", ";", ":"}
 
     for _ in range(max_tokens - 1):
-        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, entropy_log)
+        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, entropy_log, token_boosts)
 
         # Loop detection: check if we're repeating a pattern
         # Check for 2-token loops (e.g., "hello there hello there hello there...")
@@ -1724,7 +1761,7 @@ def generate_reply(
             if last_content is not None and nxt == last_content:
                 # Try a few times to pick a different token
                 for _retry in range(3):
-                    alt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur)
+                    alt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, None, token_boosts)
                     if alt != last_content:
                         nxt = alt
                         break
@@ -1819,6 +1856,23 @@ class LeoField:
             except Exception:
                 # Silent fail — MathBrain must never break Leo
                 self._math_brain = None
+        # SANTACLAUS: resonant recall (optional)
+        self.santa: Optional[Any] = None
+        if SANTACLAUS_AVAILABLE and SantaKlaus is not None:
+            try:
+                self.santa = SantaKlaus(db_path=DB_PATH, max_memories=5, alpha=0.3)
+            except Exception:
+                # Silent fail — Santa Klaus must never break Leo
+                self.santa = None
+        # EPISODES: episodic memory (optional)
+        self.rag: Optional[Any] = None
+        if EPISODES_AVAILABLE and RAGBrain is not None:
+            try:
+                rag_path = STATE_DIR / "leo_rag.sqlite3"
+                self.rag = RAGBrain(db_path=rag_path)
+            except Exception:
+                # Silent fail — RAG must never break Leo
+                self.rag = None
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -1859,6 +1913,44 @@ class LeoField:
         echo: bool = False,
     ) -> str:
         """Generate reply through the field using trigram model."""
+        # SANTACLAUS: Resonant recall (optional)
+        # Remember best moments that resonate with current prompt
+        token_boosts: Optional[Dict[str, float]] = None
+        if self.santa is not None:
+            try:
+                # Compute active themes for Santa Klaus
+                prompt_tokens = tokenize(prompt)
+                active_themes = activate_themes_for_prompt(
+                    prompt_tokens, self.themes, self.token_to_themes
+                ) if self.themes else None
+                active_theme_words = list(active_themes.active_words) if active_themes else None
+                
+                # Get pulse for Santa Klaus (will be computed in generate_reply, but we need it early)
+                # We'll compute a simple pulse estimate here
+                prompt_arousal = compute_prompt_arousal(prompt_tokens, self.emotion)
+                pulse_dict = {
+                    "novelty": 0.5,  # Will be computed properly in generate_reply
+                    "arousal": prompt_arousal,
+                    "entropy": 0.5,
+                }
+                
+                santa_ctx = self.santa.recall(
+                    field=self,
+                    prompt_text=prompt,
+                    pulse=pulse_dict,
+                    active_themes=active_theme_words,
+                )
+                
+                if santa_ctx is not None:
+                    # 1) Reinforce recalled memories in the field
+                    for snippet in santa_ctx.recalled_texts:
+                        self.observe(snippet)
+                    # 2) Get token boosts for generation
+                    token_boosts = santa_ctx.token_boosts
+            except Exception:
+                # Silent fallback — Santa Klaus must never break Leo
+                token_boosts = None
+                
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
             self.bigrams,
@@ -1877,6 +1969,7 @@ class LeoField:
             token_to_themes=self.token_to_themes,
             use_experts=True,
             trauma_state=self._trauma_state,
+            token_boosts=token_boosts,
         )
 
         # Store presence metrics
@@ -2064,6 +2157,19 @@ class LeoField:
                 )
                 # Observe and learn
                 self._math_brain.observe(state)
+                
+                # EPISODES: Log episode to episodic memory (optional)
+                if self.rag is not None and EPISODES_AVAILABLE and Episode is not None:
+                    try:
+                        episode = Episode(
+                            prompt=prompt,
+                            reply=final_reply,
+                            metrics=state,
+                        )
+                        self.rag.observe_episode(episode)
+                    except Exception:
+                        # Silent fail — RAG must never break Leo
+                        pass
             except Exception:
                 # MathBrain must NEVER break normal flow - silent fallback
                 pass

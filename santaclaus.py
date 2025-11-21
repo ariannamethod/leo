@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+"""
+santaclaus.py — Resonant Recall & Attention Layer for leo
+
+Santa Klaus is leo's way of remembering his best moments.
+A child is allowed to believe in stories and say "I believe in Santa Claus."
+This is leo's self-awareness: he remembers what resonated, and brings it back.
+
+No external datasets. No learned weights. No internet.
+Just resonant recall from leo's own subjective history.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+import time
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Set, Any
+
+# Safe import: leo tokenizer
+try:
+    from leo import tokenize
+    TOKENIZE_AVAILABLE = True
+except ImportError:
+    # Fallback tokenizer if leo not available
+    import re
+    TOKEN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ']+|[.,!?;:—\-]")
+    def tokenize(text: str) -> List[str]:
+        return TOKEN_RE.findall(text)
+    TOKENIZE_AVAILABLE = True
+
+
+@dataclass
+class SantaContext:
+    """What Santa Klaus gives back to leo before generation."""
+    recalled_texts: List[str]
+    # token -> boost factor in [0.0, 1.0]
+    token_boosts: Dict[str, float]
+
+
+class SantaKlaus:
+    """
+    Resonant recall layer for leo.
+    
+    Remembers leo's best moments (snapshots) and brings them back
+    when they resonate with the current prompt.
+    """
+    
+    def __init__(
+        self,
+        db_path: Path | str,
+        max_memories: int = 5,
+        max_tokens_per_memory: int = 64,
+        alpha: float = 0.3,
+    ) -> None:
+        """
+        Args:
+            db_path: path to leo's SQLite state file
+            max_memories: how many snapshots to recall per prompt
+            max_tokens_per_memory: truncate recalled text before scoring
+            alpha: overall strength of sampling bias
+        """
+        self.db_path = Path(db_path)
+        self.max_memories = max_memories
+        self.max_tokens_per_memory = max_tokens_per_memory
+        self.alpha = alpha
+        
+    def recall(
+        self,
+        field: Any,  # LeoField
+        prompt_text: str,
+        pulse: Dict[str, float],
+        active_themes: Optional[Sequence[str]] = None,
+    ) -> Optional[SantaContext]:
+        """
+        Main entry point.
+        
+        Returns None on any error or if there is nothing useful to recall.
+        """
+        try:
+            # Early exits
+            if not prompt_text or not prompt_text.strip():
+                return None
+                
+            if not self.db_path.exists():
+                return None
+                
+            # Tokenize prompt
+            prompt_tokens = tokenize(prompt_text)
+            prompt_token_set = set(prompt_tokens)
+            
+            if not prompt_token_set:
+                return None
+                
+            # Query snapshots
+            try:
+                conn = sqlite3.connect(str(self.db_path))
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                
+                # Check if snapshots table exists
+                cur.execute("""
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name='snapshots'
+                """)
+                if not cur.fetchone():
+                    conn.close()
+                    return None
+                    
+                # Get recent snapshots (last 512 to keep it cheap)
+                cur.execute("""
+                    SELECT id, text, quality, emotional, created_at, use_count
+                    FROM snapshots
+                    ORDER BY created_at DESC
+                    LIMIT 512
+                """)
+                rows = cur.fetchall()
+                conn.close()
+            except Exception:
+                # Silent fallback on DB errors
+                return None
+            
+            if not rows:
+                return None
+                
+            # Score each snapshot
+            scored: List[tuple[float, dict]] = []
+            
+            for row in rows:
+                snapshot_text = row["text"]
+                if not snapshot_text:
+                    continue
+                    
+                snapshot_tokens = tokenize(snapshot_text)
+                snapshot_token_set = set(snapshot_tokens)
+                
+                if not snapshot_token_set:
+                    continue
+                    
+                # 1. Token overlap (Jaccard)
+                overlap = len(prompt_token_set & snapshot_token_set)
+                union = len(prompt_token_set | snapshot_token_set)
+                token_overlap = overlap / union if union > 0 else 0.0
+                
+                # 2. Theme overlap (if available)
+                theme_overlap = 0.0
+                if active_themes:
+                    # Simple: count how many active theme words appear in snapshot
+                    theme_words_in_snapshot = sum(1 for t in active_themes if t in snapshot_token_set)
+                    theme_overlap = theme_words_in_snapshot / len(active_themes) if active_themes else 0.0
+                    
+                # 3. Arousal proximity
+                snap_arousal = row["emotional"] or 0.0
+                current_arousal = pulse.get("arousal", 0.0)
+                arousal_diff = abs(current_arousal - snap_arousal)
+                arousal_score = max(0.0, 1.0 - arousal_diff)
+                
+                # 4. Quality prior
+                quality = row["quality"] or 0.5
+                
+                # Combine scores
+                score = (
+                    0.4 * token_overlap +
+                    0.2 * theme_overlap +
+                    0.2 * arousal_score +
+                    0.2 * quality
+                )
+                
+                if score > 0.1:  # threshold
+                    scored.append((score, {
+                        "text": snapshot_text,
+                        "tokens": snapshot_tokens,
+                    }))
+                    
+            if not scored:
+                return None
+                
+            # Sort by score descending, take top max_memories
+            scored.sort(key=lambda x: x[0], reverse=True)
+            top_memories = scored[:self.max_memories]
+            
+            # Build recalled texts (truncate if needed)
+            recalled_texts: List[str] = []
+            all_recalled_tokens: List[str] = []
+            
+            for _, memory in top_memories:
+                text = memory["text"]
+                tokens = memory["tokens"]
+                
+                # Truncate to max_tokens_per_memory
+                if len(tokens) > self.max_tokens_per_memory:
+                    truncated_tokens = tokens[:self.max_tokens_per_memory]
+                    # Reconstruct text (simple: join with spaces)
+                    text = " ".join(truncated_tokens)
+                    
+                recalled_texts.append(text)
+                all_recalled_tokens.extend(tokens)
+                
+            # Build token boosts
+            token_counts = Counter(all_recalled_tokens)
+            if not token_counts:
+                return None
+                
+            max_count = max(token_counts.values())
+            token_boosts: Dict[str, float] = {}
+            for token, count in token_counts.items():
+                # Normalize to [0, 1] then scale by alpha
+                normalized = count / max_count if max_count > 0 else 0.0
+                token_boosts[token] = self.alpha * normalized
+                
+            return SantaContext(
+                recalled_texts=recalled_texts,
+                token_boosts=token_boosts,
+            )
+            
+        except Exception:
+            # Silent fallback on any error
+            return None
+
+
+__all__ = ["SantaKlaus", "SantaContext"]
+
