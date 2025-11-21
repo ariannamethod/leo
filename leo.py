@@ -59,6 +59,15 @@ except ImportError:
     MetaLeo = None  # type: ignore
     METALEO_AVAILABLE = False
 
+# NumPy for precise math (entropy, distributions, linear regression)
+# Graceful fallback to pure Python if not available
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore
+    NUMPY_AVAILABLE = False
+
 # ============================================================================
 # PATHS
 # ============================================================================
@@ -743,25 +752,44 @@ def distribution_entropy(counts: List[float]) -> float:
     Shannon entropy of a distribution in [0, log(N)].
 
     Returns raw entropy; caller should normalize by log(N) for [0, 1] range.
+
+    Uses numpy for precision if available, falls back to pure Python.
     """
-    total = sum(counts)
-    if total <= 0.0:
+    if not counts:
         return 0.0
 
-    h = 0.0
-    for c in counts:
-        if c <= 0.0:
-            continue
-        p = c / total
-        # For numerical stability: only add epsilon if p is very small
-        # When p ≈ 1.0, log(p + epsilon) introduces floating point error
-        if p < 0.9999:
-            h -= p * math.log(p + 1e-12)
-        elif p < 1.0:
-            h -= p * math.log(p)  # No epsilon near 1.0
+    if NUMPY_AVAILABLE and np is not None:
+        # NumPy path: vectorized, more precise
+        arr = np.array(counts, dtype=np.float64)
+        total = arr.sum()
+        if total <= 0.0:
+            return 0.0
+        probs = arr / total
+        # Filter out zeros to avoid log(0)
+        probs = probs[probs > 0]
+        # Shannon entropy with epsilon for numerical stability
+        h = -np.sum(probs * np.log(probs + 1e-12))
+        return float(max(0.0, h))
+    else:
+        # Pure Python fallback
+        total = sum(counts)
+        if total <= 0.0:
+            return 0.0
 
-    # Clamp to [0, ∞) to handle floating point errors
-    return max(0.0, h)
+        h = 0.0
+        for c in counts:
+            if c <= 0.0:
+                continue
+            p = c / total
+            # For numerical stability: only add epsilon if p is very small
+            # When p ≈ 1.0, log(p + epsilon) introduces floating point error
+            if p < 0.9999:
+                h -= p * math.log(p + 1e-12)
+            elif p < 1.0:
+                h -= p * math.log(p)  # No epsilon near 1.0
+
+        # Clamp to [0, ∞) to handle floating point errors
+        return max(0.0, h)
 
 
 def compute_prompt_novelty(

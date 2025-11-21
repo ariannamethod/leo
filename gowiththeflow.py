@@ -22,6 +22,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Set, Tuple, Optional, Any
 
+# NumPy for precise linear regression (theme trajectory slopes)
+# Graceful fallback to pure Python if not available
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore
+    NUMPY_AVAILABLE = False
+
 
 # ============================================================================
 # DATA STRUCTURES
@@ -67,7 +76,8 @@ class ThemeTrajectory:
         Negative slope → fading theme (↘ dying)
         Zero slope → stable theme (→ persistent)
 
-        Uses simple linear regression over strength values.
+        Uses linear regression over strength values.
+        NumPy provides more precise calculations if available.
 
         Args:
             hours: Time window to compute slope (default: 6 hours)
@@ -87,12 +97,26 @@ class ThemeTrajectory:
         if len(recent) < 2:
             return 0.0
 
-        # Simple linear regression: slope = cov(x,y) / var(x)
-        # x = time offset from first snapshot
+        # x = time offset from first snapshot (in seconds)
         # y = strength
         times = [s.timestamp - recent[0].timestamp for s in recent]
         strengths = [s.strength for s in recent]
 
+        if NUMPY_AVAILABLE and np is not None:
+            # NumPy path: polyfit for precise linear regression
+            try:
+                # polyfit returns [slope, intercept]
+                coeffs = np.polyfit(times, strengths, 1)
+                slope_per_sec = float(coeffs[0])
+                # Convert to strength per hour for readability
+                slope_per_hour = slope_per_sec * 3600
+                return slope_per_hour
+            except Exception:
+                # Fall through to pure Python if polyfit fails
+                pass
+
+        # Pure Python fallback: manual linear regression
+        # slope = cov(x,y) / var(x)
         n = len(times)
         mean_t = sum(times) / n
         mean_s = sum(strengths) / n
