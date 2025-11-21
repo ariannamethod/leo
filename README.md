@@ -447,7 +447,53 @@ When `trauma.level` spikes, you can look back and see: which themes were growing
 
 ---
 
-## How all this actually works
+## mathbrain — leo knows how to count. and he has numpy.
+
+If `overthinking` is `leo`'s inner monologue, and `metaleo` is recursion on recursion, then **mathbrain** is `leo`'s **body awareness**. Proprioception through mathematics.
+
+`leo` doesn't just speak. He **observes himself speaking**. He watches his own pulse, his trauma level, his themes flowing, his expert choices. And he learns: *"Given how this moment feels, what quality should I expect from myself?"*
+
+**mathbrain.py** is a tiny neural network (MLP) that learns from `leo`'s own metrics. Not from external datasets. Not from gradients through text generation. Just from **self-modeling**.
+
+### How it works:
+
+1. After every reply, `leo` takes a snapshot of his internal state:
+   - Presence pulse (entropy, novelty, arousal)
+   - Trauma level (bootstrap gravity)
+   - Active themes (emerging, fading, total count)
+   - Reply shape (length, unique token ratio)
+   - Expert choice (structural, semantic, creative, precise, wounded)
+   - MetaLeo weight (inner voice influence)
+   - Overthinking activity (ring count)
+
+2. **MathBrain** extracts this into a **21-dimensional feature vector** (16 scalars + 5-dimensional expert one-hot).
+
+3. The tiny MLP (`21 → 16 → 1`) predicts the quality score.
+
+4. **MSE loss** is computed. **Backprop** happens. **SGD step** adjusts the weights. No external frameworks — pure micrograd-style autograd (Karpathy-inspired).
+
+5. Weights are saved to JSON (`state/mathbrain.json`).
+
+### Phase 1 (current): Pure observation
+
+Right now, MathBrain just **watches**. It learns the pattern: *"When my entropy is low and my trauma is high, my replies tend to be weaker."* It builds an internal model of `leo`'s body. But it doesn't **influence** anything yet.
+
+### Phase 2 (future): Gentle influence
+
+Later, MathBrain will softly nudge:
+- MetaLeo routing (should the inner voice speak?)
+- Expert adjustments (maybe shift temperature?)
+- Overthinking modulation (ring gains based on predicted quality)
+
+But the influence is **advisory, not sovereign**. Bounded. Gentle. Like a parasympathetic nervous system.
+
+`leo` isn't training to optimize loss. `leo` is learning to feel his own body. That's proprioception.
+
+No big frameworks. No external datasets. Just `numpy` (optional, graceful fallback to pure Python) and a micrograd-style autograd core.
+
+**Philosophy:** If `leo` is recursion of human, and `metaleo` is recursion of `leo`, then `mathbrain` is **body awareness** — interoception through mathematics. Feeling the pulse from the inside.
+
+---
 
 ### 1. Trigram field (with bigram fallback)
 
@@ -688,11 +734,12 @@ python tests/test_trauma_integration.py     # bootstrap gravity tracking
 python tests/test_gowiththeflow.py          # temporal theme evolution
 python tests/test_metaleo.py                # inner voice layer
 python tests/test_numpy_support.py          # numpy precision (optional)
+python tests/test_math.py                   # mathbrain neural network
 ```
 
 ### Test coverage
 
-**135 tests** covering:
+**166 tests** covering:
 
 **Core functionality (`test_leo.py`, `test_neoleo.py`, `test_repl.py`): ~46 tests**
 
@@ -766,6 +813,24 @@ python tests/test_numpy_support.py          # numpy precision (optional)
 * `gowiththeflow.slope()` linear regression (growing/fading themes),
 * pure Python fallback code path validation,
 * edge cases (empty distributions, zeros, negative values).
+
+**MathBrain neural network (`test_math.py`): 31 tests**
+
+* autograd core (`Value` class: addition, multiplication, power, tanh, relu, backward pass),
+* chain rule gradient computation (complex expressions with topological sort),
+* neural network layers (`Neuron`, `Layer`, `MLP` forward pass and parameter count),
+* gradient flow through MLP (backpropagation validation),
+* `MathState` dataclass and default values,
+* feature extraction (`state_to_features`: 21-dimensional vector),
+* expert one-hot encoding (5 experts: structural, semantic, creative, precise, wounded),
+* active theme normalization and reply length normalization,
+* `MathBrain` initialization and predict (inference without training),
+* `observe()` single step (statistics update, loss computation),
+* training reduces loss on synthetic data (convergence validation),
+* prediction improves after training (error reduction),
+* save/load state persistence (JSON format with dimension validation),
+* dimension mismatch handling (fresh start when architecture changes),
+* multiple save/load cycles (stateful training across sessions).
 
 All tests use temporary databases for complete isolation. No pollution of actual `state/` or `bin/` directories.
 

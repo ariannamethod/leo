@@ -20,9 +20,9 @@ import json
 import tempfile
 from pathlib import Path
 
-# Import math module
+# Import mathbrain module
 try:
-    from math import Value, MLP, MathBrain, MathState, state_to_features, NUMPY_AVAILABLE
+    from mathbrain import Value, MLP, MathBrain, MathState, state_to_features, NUMPY_AVAILABLE
     MATH_AVAILABLE = True
 except ImportError:
     MATH_AVAILABLE = False
@@ -33,7 +33,7 @@ class TestAutogradCore(unittest.TestCase):
 
     def setUp(self):
         if not MATH_AVAILABLE:
-            self.skipTest("math.py not available")
+            self.skipTest("mathbrain.py not available")
 
     def test_value_creation(self):
         """Test that Value nodes can be created."""
@@ -146,11 +146,11 @@ class TestNeuralNetworkLayers(unittest.TestCase):
 
     def setUp(self):
         if not MATH_AVAILABLE:
-            self.skipTest("math.py not available")
+            self.skipTest("mathbrain.py not available")
 
     def test_neuron_forward(self):
         """Test Neuron forward pass."""
-        from math import Neuron
+        from mathbrain import Neuron
 
         neuron = Neuron(nin=3)
         x = [Value(1.0), Value(2.0), Value(3.0)]
@@ -164,7 +164,7 @@ class TestNeuralNetworkLayers(unittest.TestCase):
 
     def test_neuron_parameters(self):
         """Test Neuron parameter count."""
-        from math import Neuron
+        from mathbrain import Neuron
 
         neuron = Neuron(nin=3)
         params = neuron.parameters()
@@ -176,7 +176,7 @@ class TestNeuralNetworkLayers(unittest.TestCase):
 
     def test_layer_forward(self):
         """Test Layer forward pass."""
-        from math import Layer
+        from mathbrain import Layer
 
         layer = Layer(nin=3, nout=2)
         x = [Value(1.0), Value(2.0), Value(3.0)]
@@ -190,7 +190,7 @@ class TestNeuralNetworkLayers(unittest.TestCase):
 
     def test_layer_parameters(self):
         """Test Layer parameter count."""
-        from math import Layer
+        from mathbrain import Layer
 
         layer = Layer(nin=3, nout=2)
         params = layer.parameters()
@@ -240,7 +240,7 @@ class TestFeatureExtraction(unittest.TestCase):
 
     def setUp(self):
         if not MATH_AVAILABLE:
-            self.skipTest("math.py not available")
+            self.skipTest("mathbrain.py not available")
 
     def test_mathstate_defaults(self):
         """Test MathState default values."""
@@ -326,7 +326,7 @@ class TestMathBrainTraining(unittest.TestCase):
 
     def setUp(self):
         if not MATH_AVAILABLE:
-            self.skipTest("math.py not available")
+            self.skipTest("mathbrain.py not available")
 
         # Use temporary directory for state files
         self.temp_dir = tempfile.mkdtemp()
@@ -495,7 +495,7 @@ class TestMathBrainPersistence(unittest.TestCase):
 
     def setUp(self):
         if not MATH_AVAILABLE:
-            self.skipTest("math.py not available")
+            self.skipTest("mathbrain.py not available")
 
         self.temp_dir = tempfile.mkdtemp()
         self.state_path = Path(self.temp_dir) / "test_persistence.json"
