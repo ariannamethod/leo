@@ -10,6 +10,15 @@ import time
 import math
 import re
 
+# NumPy for precise math (exponential decay, overlap calculations)
+# Graceful fallback to pure Python if not available
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore
+    NUMPY_AVAILABLE = False
+
 
 WORD_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿА-Яа-яЁё]+")
 

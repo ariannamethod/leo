@@ -21,6 +21,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, List, Optional
 
+# NumPy for precise math (optional)
+# Graceful fallback to pure Python if not available
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore
+    NUMPY_AVAILABLE = False
+
 
 # --- Data containers -------------------------------------------------------
 

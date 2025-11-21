@@ -41,6 +41,15 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Optional, Iterable, Any
 
+# NumPy for precise math (quality assessments, weight calculations)
+# Graceful fallback to pure Python if not available
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore
+    NUMPY_AVAILABLE = False
+
 
 # ============================================================================
 # CONFIG
