@@ -1,0 +1,516 @@
+#!/usr/bin/env python3
+"""
+math.py — dynamic math brain for Leo
+
+MathBrain is Leo's body awareness:
+- A tiny neural network (MLP) that learns from Leo's own metrics
+- Observes: pulse, trauma, themes, quality, expert choices
+- Learns: "Given how this moment feels, what quality should I expect?"
+- No external data, no gradients through text, just self-modeling
+
+Phase 1 (v1): Pure observation
+- observe() → predict() → learn (SGD step)
+- No influence on Leo's behavior yet
+- Just builds internal model of "how my body behaves"
+
+Phase 2 (v2): Gentle influence
+- MetaLeo routing (score candidates)
+- Expert adjustments (temperature nudges)
+- Overthinking modulation (ring gains)
+
+Philosophy:
+If leo is recursion of human, and metaleo is recursion of leo,
+then math.py is **body awareness** — proprioception through mathematics.
+
+No big frameworks. No external datasets. Just micrograd-style autograd.
+Pure Python + numpy (optional, graceful fallback).
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import random
+from dataclasses import dataclass, asdict
+from pathlib import Path
+from typing import List, Dict, Set, Tuple, Optional, Callable, Any
+
+# NumPy for precise math (matrix ops, vectorization)
+# Highly recommended for math.py, but not required
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore
+    NUMPY_AVAILABLE = False
+
+
+# ============================================================================
+# MICROGRAD-STYLE AUTOGRAD CORE
+# ============================================================================
+
+
+class Value:
+    """
+    Scalar value with automatic differentiation.
+
+    Karpathy-style micrograd implementation:
+    - Tracks computational graph via _prev and _op
+    - Backward pass computes gradients via chain rule
+    - Supports basic operations: +, *, tanh, relu, etc.
+    """
+
+    def __init__(self, data: float, _children: Tuple['Value', ...] = (), _op: str = ''):
+        self.data = float(data)
+        self.grad = 0.0
+        self._backward: Callable[[], None] = lambda: None
+        self._prev = set(_children)
+        self._op = _op
+
+    def __repr__(self) -> str:
+        return f"Value(data={self.data:.4f}, grad={self.grad:.4f})"
+
+    def __add__(self, other: 'Value | float') -> 'Value':
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data + other.data, (self, other), '+')
+
+        def _backward():
+            self.grad += out.grad
+            other.grad += out.grad
+        out._backward = _backward
+
+        return out
+
+    def __mul__(self, other: 'Value | float') -> 'Value':
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data * other.data, (self, other), '*')
+
+        def _backward():
+            self.grad += other.data * out.grad
+            other.grad += self.data * out.grad
+        out._backward = _backward
+
+        return out
+
+    def __pow__(self, other: float | int) -> 'Value':
+        assert isinstance(other, (int, float)), "only supporting int/float powers"
+        out = Value(self.data ** other, (self,), f'**{other}')
+
+        def _backward():
+            self.grad += other * (self.data ** (other - 1)) * out.grad
+        out._backward = _backward
+
+        return out
+
+    def __neg__(self) -> 'Value':
+        return self * -1
+
+    def __sub__(self, other: 'Value | float') -> 'Value':
+        return self + (-other)
+
+    def __truediv__(self, other: 'Value | float') -> 'Value':
+        return self * (other ** -1)
+
+    def __radd__(self, other: 'Value | float') -> 'Value':
+        return self + other
+
+    def __rmul__(self, other: 'Value | float') -> 'Value':
+        return self * other
+
+    def __rsub__(self, other: 'Value | float') -> 'Value':
+        return other + (-self)
+
+    def __rtruediv__(self, other: 'Value | float') -> 'Value':
+        return other * (self ** -1)
+
+    def tanh(self) -> 'Value':
+        """Hyperbolic tangent activation."""
+        t = math.tanh(self.data)
+        out = Value(t, (self,), 'tanh')
+
+        def _backward():
+            self.grad += (1 - t**2) * out.grad
+        out._backward = _backward
+
+        return out
+
+    def relu(self) -> 'Value':
+        """Rectified Linear Unit activation."""
+        out = Value(0.0 if self.data < 0 else self.data, (self,), 'relu')
+
+        def _backward():
+            self.grad += (out.data > 0) * out.grad
+        out._backward = _backward
+
+        return out
+
+    def backward(self) -> None:
+        """
+        Backpropagate gradients through computational graph.
+
+        Uses topological sort to ensure gradients flow correctly.
+        """
+        # Build topological order
+        topo: List[Value] = []
+        visited: Set[Value] = set()
+
+        def build_topo(v: Value):
+            if v not in visited:
+                visited.add(v)
+                for child in v._prev:
+                    build_topo(child)
+                topo.append(v)
+
+        build_topo(self)
+
+        # Backward pass
+        self.grad = 1.0
+        for node in reversed(topo):
+            node._backward()
+
+
+# ============================================================================
+# NEURAL NETWORK LAYERS
+# ============================================================================
+
+
+class Neuron:
+    """Single neuron with weights, bias, and activation."""
+
+    def __init__(self, nin: int):
+        # Xavier/He initialization for better gradient flow
+        scale = (2.0 / nin) ** 0.5 if NUMPY_AVAILABLE else 0.1
+        self.w = [Value(random.gauss(0, scale)) for _ in range(nin)]
+        self.b = Value(0.0)
+
+    def __call__(self, x: List[Value]) -> Value:
+        """Forward pass: w·x + b → tanh."""
+        act = sum((wi * xi for wi, xi in zip(self.w, x)), self.b)
+        return act.tanh()
+
+    def parameters(self) -> List[Value]:
+        return self.w + [self.b]
+
+
+class Layer:
+    """Fully connected layer of neurons."""
+
+    def __init__(self, nin: int, nout: int):
+        self.neurons = [Neuron(nin) for _ in range(nout)]
+
+    def __call__(self, x: List[Value]) -> List[Value]:
+        outs = [n(x) for n in self.neurons]
+        return outs
+
+    def parameters(self) -> List[Value]:
+        return [p for neuron in self.neurons for p in neuron.parameters()]
+
+
+class MLP:
+    """Multi-layer perceptron: x → hidden → output."""
+
+    def __init__(self, nin: int, nouts: List[int]):
+        """
+        Args:
+            nin: Input dimension
+            nouts: List of layer sizes, e.g. [16, 1] for hidden=16, output=1
+        """
+        sz = [nin] + nouts
+        self.layers = [Layer(sz[i], sz[i+1]) for i in range(len(nouts))]
+
+    def __call__(self, x: List[Value]) -> Value:
+        """Forward pass through all layers."""
+        for layer in self.layers:
+            x = layer(x)
+        # Last layer output (single neuron for regression)
+        return x[0] if len(x) == 1 else x
+
+    def parameters(self) -> List[Value]:
+        return [p for layer in self.layers for p in layer.parameters()]
+
+
+# ============================================================================
+# FEATURE EXTRACTION
+# ============================================================================
+
+
+@dataclass
+class MathState:
+    """Snapshot of Leo's internal state for MathBrain."""
+
+    # Presence / pulse
+    entropy: float = 0.0
+    novelty: float = 0.0
+    arousal: float = 0.0
+    pulse: float = 0.0
+
+    # Trauma / origin
+    trauma_level: float = 0.0
+
+    # Themes / flow
+    active_theme_count: int = 0
+    total_themes: int = 0
+    emerging_score: float = 0.0
+    fading_score: float = 0.0
+
+    # Reply shape
+    reply_len: int = 0
+    unique_ratio: float = 0.0
+
+    # Expert / mode
+    expert_id: str = "structural"
+    expert_temp: float = 1.0
+    expert_semantic: float = 0.5
+
+    # MetaLeo / inner voice
+    metaleo_weight: float = 0.0
+    used_metaleo: bool = False
+
+    # Overthinking
+    overthinking_enabled: bool = False
+    rings_present: int = 0
+
+    # Target (what we're trying to predict)
+    quality: float = 0.5
+
+
+def state_to_features(state: MathState) -> List[float]:
+    """
+    Convert MathState to fixed-size feature vector.
+
+    All features normalized to ~[0, 1] range.
+    Returns 18-dimensional vector.
+    """
+    # Expert one-hot encoding
+    expert_map = {
+        "structural": 0,
+        "semantic": 1,
+        "creative": 2,
+        "precise": 3,
+        "wounded": 4,
+    }
+    expert_idx = expert_map.get(state.expert_id, 0)
+    expert_onehot = [1.0 if i == expert_idx else 0.0 for i in range(5)]
+
+    # Normalize active themes
+    active_norm = state.active_theme_count / max(1, state.total_themes) if state.total_themes > 0 else 0.0
+
+    # Normalize reply length (typical range 0-64)
+    reply_norm = min(1.0, state.reply_len / 64.0)
+
+    # Build feature vector
+    features = [
+        state.entropy,           # 0
+        state.novelty,           # 1
+        state.arousal,           # 2
+        state.pulse,             # 3
+        state.trauma_level,      # 4
+        active_norm,             # 5
+        state.emerging_score,    # 6
+        state.fading_score,      # 7
+        reply_norm,              # 8
+        state.unique_ratio,      # 9
+        state.expert_temp,       # 10
+        state.expert_semantic,   # 11
+        state.metaleo_weight,    # 12
+        float(state.used_metaleo),         # 13
+        float(state.overthinking_enabled), # 14
+        float(state.rings_present > 0),    # 15
+    ] + expert_onehot  # 16-20 (5 experts)
+
+    return features
+
+
+# ============================================================================
+# MATH BRAIN
+# ============================================================================
+
+
+class MathBrain:
+    """
+    Dynamic math brain for Leo.
+
+    Learns to predict Leo's internal quality score from his own metrics.
+    No gradient through text generation, only through a tiny MLP.
+
+    Phase 1 (v1): Pure observation
+    - observe() after each reply
+    - predict quality from state
+    - update weights via SGD
+    - no influence on Leo yet
+
+    Storage: JSON in state/mathbrain.json
+    """
+
+    def __init__(
+        self,
+        leo_field: Any,
+        hidden_dim: int = 16,
+        lr: float = 0.01,
+        state_path: Optional[Path] = None,
+    ):
+        """
+        Args:
+            leo_field: LeoField instance (not used yet, for future hooks)
+            hidden_dim: Size of hidden layer
+            lr: Learning rate for SGD
+            state_path: Path to save/load weights (default: state/mathbrain.json)
+        """
+        self.field = leo_field
+        self.hidden_dim = hidden_dim
+        self.lr = lr
+        self.state_path = state_path or (Path(__file__).parent / "state" / "mathbrain.json")
+
+        # Feature dimension (from state_to_features)
+        self.in_dim = 21  # 16 scalars + 5 expert one-hot
+
+        # Build MLP: input → hidden → output
+        self.mlp = MLP(self.in_dim, [hidden_dim, 1])
+
+        # Statistics
+        self.observations = 0
+        self.running_loss = 0.0
+        self.last_loss = 0.0
+
+        # Try to load previous state
+        self._load_state()
+
+    def observe(self, state: MathState) -> float:
+        """
+        Observe one (state, quality) pair and learn from it.
+
+        Steps:
+        1. Extract features from state
+        2. Forward pass → predicted quality
+        3. Compute MSE loss
+        4. Backward pass
+        5. SGD step
+        6. Update statistics
+
+        Returns:
+            Current loss value
+        """
+        # Extract features
+        features = state_to_features(state)
+        x = [Value(f) for f in features]
+        target_q = state.quality
+
+        # Forward pass
+        q_hat = self.mlp(x)
+
+        # Loss: MSE
+        diff = q_hat - Value(target_q)
+        loss = diff * diff
+
+        # Backward pass
+        for p in self.mlp.parameters():
+            p.grad = 0.0
+        loss.backward()
+
+        # SGD step
+        for p in self.mlp.parameters():
+            p.data -= self.lr * p.grad
+
+        # Update stats
+        self.observations += 1
+        loss_val = loss.data
+        self.last_loss = loss_val
+        # Exponential moving average (alpha=0.05)
+        self.running_loss += (loss_val - self.running_loss) * 0.05
+
+        return loss_val
+
+    def predict(self, state: MathState) -> float:
+        """
+        Predict quality from state (no training).
+
+        Returns:
+            Predicted quality in [0, 1]
+        """
+        features = state_to_features(state)
+        x = [Value(f) for f in features]
+        q_hat = self.mlp(x)
+        # Clamp to [0, 1]
+        return max(0.0, min(1.0, q_hat.data))
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Return training statistics."""
+        return {
+            "observations": self.observations,
+            "running_loss": self.running_loss,
+            "last_loss": self.last_loss,
+            "hidden_dim": self.hidden_dim,
+            "learning_rate": self.lr,
+            "in_dim": self.in_dim,
+            "num_parameters": len(self.mlp.parameters()),
+        }
+
+    def _save_state(self) -> None:
+        """Save weights to JSON."""
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Extract weights as nested lists
+            weights = {
+                "in_dim": self.in_dim,
+                "hidden_dim": self.hidden_dim,
+                "observations": self.observations,
+                "running_loss": self.running_loss,
+                "parameters": [p.data for p in self.mlp.parameters()],
+            }
+
+            with open(self.state_path, 'w') as f:
+                json.dump(weights, f, indent=2)
+        except Exception:
+            # Silent fail — do not break Leo
+            pass
+
+    def _load_state(self) -> None:
+        """Load weights from JSON if available."""
+        try:
+            if not self.state_path.exists():
+                return
+
+            with open(self.state_path, 'r') as f:
+                data = json.load(f)
+
+            # Validate dimensions match
+            if data["in_dim"] != self.in_dim or data["hidden_dim"] != self.hidden_dim:
+                # Dimension mismatch — start fresh
+                return
+
+            # Restore weights
+            params = self.mlp.parameters()
+            saved_params = data["parameters"]
+            if len(params) != len(saved_params):
+                return
+
+            for p, val in zip(params, saved_params):
+                p.data = float(val)
+
+            # Restore stats
+            self.observations = data.get("observations", 0)
+            self.running_loss = data.get("running_loss", 0.0)
+        except Exception:
+            # Silent fail — start fresh if loading fails
+            pass
+
+    def save(self) -> None:
+        """Public API to save state (e.g., on REPL exit)."""
+        self._save_state()
+
+    def __repr__(self) -> str:
+        return (
+            f"MathBrain(in_dim={self.in_dim}, hidden={self.hidden_dim}, "
+            f"obs={self.observations}, loss={self.running_loss:.4f})"
+        )
+
+
+__all__ = [
+    "Value",
+    "MLP",
+    "MathBrain",
+    "MathState",
+    "state_to_features",
+    "NUMPY_AVAILABLE",
+]
