@@ -687,11 +687,12 @@ python tests/test_overthinking.py           # internal reflection rings
 python tests/test_trauma_integration.py     # bootstrap gravity tracking
 python tests/test_gowiththeflow.py          # temporal theme evolution
 python tests/test_metaleo.py                # inner voice layer
+python tests/test_numpy_support.py          # numpy precision (optional)
 ```
 
 ### Test coverage
 
-**129 tests** covering:
+**135 tests** covering:
 
 **Core functionality (`test_leo.py`, `test_neoleo.py`, `test_repl.py`): ~46 tests**
 
@@ -757,6 +758,14 @@ python tests/test_metaleo.py                # inner voice layer
 * `route_reply()` (quality-based routing, silent fallback on errors),
 * bootstrap buffer limits and snippet clipping,
 * safe quality assessment heuristics.
+
+**NumPy support (`test_numpy_support.py`): 6 tests**
+
+* `NUMPY_AVAILABLE` flag validation across modules,
+* `distribution_entropy` precision with numpy and fallback,
+* `gowiththeflow.slope()` linear regression (growing/fading themes),
+* pure Python fallback code path validation,
+* edge cases (empty distributions, zeros, negative values).
 
 All tests use temporary databases for complete isolation. No pollution of actual `state/` or `bin/` directories.
 
