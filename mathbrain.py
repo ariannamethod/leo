@@ -279,7 +279,7 @@ def state_to_features(state: MathState) -> List[float]:
     Convert MathState to fixed-size feature vector.
 
     All features normalized to ~[0, 1] range.
-    Returns 18-dimensional vector.
+    Returns 21-dimensional vector.
     """
     # Expert one-hot encoding
     expert_map = {
@@ -393,7 +393,7 @@ class MathBrain:
         # Extract features
         features = state_to_features(state)
         x = [Value(f) for f in features]
-        target_q = state.quality
+        target_q = max(0.0, min(1.0, state.quality))
 
         # Forward pass
         q_hat = self.mlp(x)
