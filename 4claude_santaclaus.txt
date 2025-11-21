@@ -25,7 +25,7 @@ Think of it as:
 
 **Hard constraints**
 
-- Keep `leo_core` intact:
+- Keep `leo` intact:
   - no breaking changes to `LeoField`,
   - no new heavy dependencies (stdlib + `sqlite3` only).
 - Optional:
@@ -443,4 +443,505 @@ still no external knowledge,
 still no weights,
 
 but now leo has a real, structured way to “believe in Santa Claus” — his own memories.
+
+# ragbrain.py — episodic RAG for Leo's inner life
+
+**Goal:** give `leo` a tiny, local, self-contained **episodic memory** layer that remembers *moments* (prompt + reply + metrics), and can later retrieve similar moments to inform analysis or future layers.
+
+No external APIs.  
+No heavy embeddings.  
+No new hard dependency beyond Python stdlib (SQLite) and whatever is already in `leo`.
+
+`ragbrain.py` is **optional**:
+
+- If the module is missing → `leo` and `math.py` must behave exactly as before.
+- If the DB is empty or corrupted → silent fallback, no crashes, no hard coupling.
+- Every call site **must** guard imports and calls.
+
+Think of `ragbrain` as a **local episode log + simple similarity search** built from Leo’s own metrics and texts.
+
+---
+
+## File layout
+
+Place `ragbrain.py` next to `math.py` in the `leo/` package:
+
+```text
+leo/
+  leo.py
+  neoleo.py
+  math.py         # dynamic math brain (already exists)
+  ragbrain.py     # episodic RAG (this file)
+
+  state/          # runtime DBs (already used by leo)
+    leo.sqlite3
+    mathbrain.json
+    leo_rag.sqlite3   # new file created by ragbrain
+
+  bin/
+  json/
+  tests/
+````
+
+`ragbrain.py` is a pure-Python module. No extra install steps.
+
+---
+
+## Concept: what RAG means here
+
+This is **not** internet RAG and not classic vector DB.
+Here RAG = “I remember specific *internal episodes* of myself.”
+
+Each episode is:
+
+* what the human said (`prompt`),
+* what `leo` replied (`reply`),
+* how it felt (`MathState` metrics: entropy, novelty, arousal, trauma, expert, etc.),
+* what quality score `math.py` assigned to that reply.
+
+Later we can ask:
+
+> “Given how the current moment feels (entropy / trauma / themes / expert…),
+> what were the most similar moments in the past, and how good were they?”
+
+Phase 1 (v1):
+
+* RAG only **logs** episodes and supports `query_by_state()`.
+* No behavior change yet, just ready for future use by `math.py` or other modules.
+
+Phase 2 (later):
+
+* `math.py` can optionally look up similar episodes and adjust its prediction or diagnostics.
+* Still optional, still fully guarded.
+
+---
+
+## Data model
+
+Use a small SQLite DB: `state/leo_rag.sqlite3`.
+
+Tables:
+
+```sql
+CREATE TABLE IF NOT EXISTS episodes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at      REAL NOT NULL,      -- unix timestamp
+    prompt          TEXT NOT NULL,
+    reply           TEXT NOT NULL,
+
+    -- scalar metrics from MathState, all in [0, 1] or small ranges
+    entropy         REAL NOT NULL,
+    novelty         REAL NOT NULL,
+    arousal         REAL NOT NULL,
+    pulse           REAL NOT NULL,
+    trauma_level    REAL NOT NULL,
+    active_themes   REAL NOT NULL,
+    emerging_score  REAL NOT NULL,
+    fading_score    REAL NOT NULL,
+    reply_len_norm  REAL NOT NULL,
+    unique_ratio    REAL NOT NULL,
+    expert_temp     REAL NOT NULL,
+    expert_semantic REAL NOT NULL,
+    metaleo_weight  REAL NOT NULL,
+    used_metaleo    INTEGER NOT NULL,
+    overthinking_on INTEGER NOT NULL,
+    rings_present   INTEGER NOT NULL,
+
+    -- target
+    quality         REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_episodes_created
+    ON episodes(created_at);
+```
+
+If you want a minimal text index for cheap keyword overlap, add:
+
+```sql
+CREATE TABLE IF NOT EXISTS episode_tokens (
+    episode_id  INTEGER NOT NULL,
+    token       TEXT NOT NULL,
+    count       INTEGER NOT NULL,
+    PRIMARY KEY (episode_id, token)
+);
+```
+
+Tokens can just be split-on-whitespace lowercased words; no fancy NLP needed.
+
+---
+
+## Episode structure
+
+Define a small dataclass in `ragbrain.py`:
+
+```python
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import Any, Dict
+
+from pathlib import Path
+import sqlite3
+import time
+import re
+
+from math import isnan
+
+from math import isnan
+
+TOKEN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿА-Яа-яЁё0-9]+")
+
+
+@dataclass
+class Episode:
+    prompt: str
+    reply: str
+    metrics: "MathState"   # import type from math.py or use Protocol
+```
+
+Inside `ragbrain.py` you don’t need to own `MathState`, you can import it:
+
+```python
+try:
+    from math import MathState  # or from .math import MathState, depending on package
+    MATH_AVAILABLE = True
+except Exception:
+    MathState = Any  # type: ignore
+    MATH_AVAILABLE = False
+```
+
+If `MathState` import fails → RAG can still log text-only episodes if needed,
+but for now we assume `math.py` exists (because you already added it).
+
+---
+
+## RAGBrain API
+
+Expose a single main class + availability flag:
+
+```python
+RAG_AVAILABLE = True  # set to False on any catastrophic init error
+
+
+class RAGBrain:
+    """
+    Local episodic memory for Leo.
+
+    - Stores (prompt, reply, MathState, quality) as episodes in SQLite
+    - Provides simple similarity search over internal metrics + tokens
+    - NO required coupling: safe to ignore if unavailable
+    """
+
+    def __init__(self, db_path: Path | None = None):
+        # default: state/leo_rag.sqlite3 (same pattern as other state files)
+        ...
+    
+    def observe_episode(self, episode: Episode) -> None:
+        """
+        Insert one episode into the DB.
+
+        MUST:
+        - clamp all floats to [0, 1] or reasonable ranges
+        - ignore NaNs and replace with 0.0
+        - catch all sqlite errors and fail silently
+        """
+        ...
+
+    def query_similar(
+        self,
+        metrics: MathState,
+        top_k: int = 5,
+        min_quality: float = 0.0,
+    ) -> list[dict]:
+        """
+        Find past episodes with similar internal configuration.
+
+        Returns a list of small dicts:
+
+        [
+          {
+            "episode_id": int,
+            "created_at": float,
+            "quality": float,
+            "distance": float,
+            "entropy": float,
+            "novelty": float,
+            "arousal": float,
+            "trauma_level": float,
+            "prompt": str,
+            "reply": str,
+          },
+          ...
+        ]
+
+        If DB is empty, or any error occurs — returns [].
+        """
+        ...
+
+    def get_summary_for_state(
+        self,
+        metrics: MathState,
+        top_k: int = 10,
+    ) -> dict:
+        """
+        Convenience method for math.py / leo.py:
+
+        - query_similar(...)
+        - compute aggregate stats:
+            - avg_quality
+            - max_quality
+            - mean_distance
+            - count
+            - recentness (time decay if desired)
+
+        Return a dict like:
+
+        {
+          "count": 7,
+          "avg_quality": 0.68,
+          "max_quality": 0.92,
+          "mean_distance": 0.21,
+        }
+
+        If no episodes — return a dict with zeros.
+        """
+        ...
+```
+
+All filesystem + SQLite operations must be wrapped in try/except.
+If anything goes wrong → return empty results, do **not** propagate exceptions.
+
+---
+
+## Similarity metric (no heavy vectors)
+
+For `query_similar()` we don’t want embeddings or big frameworks.
+Use a **simple, explainable similarity** based on the `MathState` vector.
+
+Re-use your existing `state_to_features()` from `math.py`:
+
+```python
+from math import state_to_features
+
+def _state_to_vector(metrics: MathState) -> list[float]:
+    # 21-dim vector already defined in math.py
+    return state_to_features(metrics)
+```
+
+Inside `ragbrain.py`:
+
+1. Convert the **query** state into a float vector `q`.
+2. For each candidate row from DB:
+
+   * reconstruct a vector `v` from stored scalar columns.
+3. Compute **cosine distance** (or L2 distance):
+
+```python
+def cosine_distance(a: list[float], b: list[float]) -> float:
+    # no numpy requirement
+    dot = sum(x*y for x, y in zip(a, b))
+    na = sum(x*x for x in a) ** 0.5
+    nb = sum(y*y for y in b) ** 0.5
+    if na == 0 or nb == 0:
+        return 1.0
+    return 1.0 - dot / (na * nb)
+```
+
+4. Rank episodes by distance; pick top_k with lowest distance.
+5. Optionally drop low-quality episodes by `quality < min_quality`.
+
+You can start extremely simple:
+
+* no keyword token index,
+* no theme overlap,
+* just metric space of `MathState`.
+
+Later, if needed, you can expand with:
+
+* a cheap overlap score between prompt tokens and current prompt,
+* or a Jaccard index over sets of high-arousal words.
+
+---
+
+## Integration with `leo.py`
+
+Integration must be **one-way and soft**:
+
+1. Try to import `ragbrain` at the top of `leo.py`:
+
+```python
+try:
+    from ragbrain import RAGBrain, RAG_AVAILABLE
+except Exception:
+    RAGBrain = None  # type: ignore
+    RAG_AVAILABLE = False
+```
+
+2. Inside `LeoField.__init__` (or similar), create an optional instance:
+
+```python
+self.rag = None
+if RAG_AVAILABLE:
+    try:
+        from pathlib import Path
+        db_path = Path(__file__).parent / "state" / "leo_rag.sqlite3"
+        self.rag = RAGBrain(db_path=db_path)
+    except Exception:
+        self.rag = None
+```
+
+3. After `leo` generates a reply and builds `MathState` (for `math.py`),
+   insert an episode **if** RAG is available:
+
+```python
+def _after_reply(
+    self,
+    prompt: str,
+    reply: str,
+    math_state: MathState,
+) -> None:
+    # existing calls
+    if self.mathbrain is not None:
+        self.mathbrain.observe(math_state)
+
+    # new: episodic logging
+    if self.rag is not None:
+        try:
+            from ragbrain import Episode
+            episode = Episode(prompt=prompt, reply=reply, metrics=math_state)
+            self.rag.observe_episode(episode)
+        except Exception:
+            # silent failure, do NOTHING
+            pass
+```
+
+4. No behavioral changes in `leo` for now.
+   `rag` is purely logging and query-capable.
+
+---
+
+## Integration with `math.py` (optional, phase 2)
+
+`math.py` can **optionally** ask RAG for context when predicting quality,
+but this must be fully guarded.
+
+Example pattern inside `MathBrain`:
+
+```python
+try:
+    from ragbrain import RAGBrain, RAG_AVAILABLE
+except Exception:
+    RAGBrain = None  # type: ignore
+    RAG_AVAILABLE = False
+```
+
+In `MathBrain.__init__`:
+
+```python
+self.rag = None
+if RAG_AVAILABLE:
+    try:
+        from pathlib import Path
+        db_path = Path(__file__).parent / "state" / "leo_rag.sqlite3"
+        self.rag = RAGBrain(db_path=db_path)
+    except Exception:
+        self.rag = None
+```
+
+When you **observe** a state (v1 = logging only):
+
+```python
+def observe(self, state: MathState) -> float:
+    # 1) train neural model
+    loss_val = self._train_once(state)
+
+    # 2) optional: log episode to RAG (if Leo passed prompt/reply in state or via hook)
+    if self.rag is not None and getattr(state, "prompt", None) and getattr(state, "reply", None):
+        try:
+            from ragbrain import Episode
+            ep = Episode(prompt=state.prompt, reply=state.reply, metrics=state)
+            self.rag.observe_episode(ep)
+        except Exception:
+            pass
+
+    return loss_val
+```
+
+Later (phase 2), in `predict()` or a new method, you can optionally:
+
+* call `self.rag.get_summary_for_state(state, top_k=10)`,
+* get `avg_quality`, `max_quality`, `count`, etc.,
+* and either:
+
+  * just return those diagnostics to REPL/stats,
+  * or (very gently) blend them into the final prediction.
+
+But that is **future work**, not required in the first pass.
+For now, RAG is just a **mirror** of Leo’s experiences.
+
+---
+
+## Fallback rules (non-negotiable)
+
+1. If `ragbrain.py` is missing → `leo` and `math.py` *must not* break.
+
+   * `RAG_AVAILABLE = False`
+   * `self.rag = None`
+   * All call sites guard with `if self.rag is not None: ...`
+2. If DB cannot be created or opened → `self.rag = None`.
+3. If any error occurs during `observe_episode()` or `query_similar()`:
+
+   * catch, ignore, **do not** propagate.
+   * methods must either:
+
+     * return `None` / `[]` / `{}` (safe defaults),
+     * or just silently skip inserts.
+4. No code path in `leo.py` or `math.py` is allowed to depend **critically** on RAG:
+
+   * no required returns,
+   * no raises from RAG into core generation.
+
+Leo must be fully capable of living with:
+
+* only `leo.py`,
+* or `leo + neoleo`,
+* or `leo + math`,
+* or `leo + math + rag`,
+* or any other combination where some modules are missing.
+
+Everything else is **presence extensions**, not hard dependencies.
+
+---
+
+## Summary
+
+* `ragbrain.py` is **Leo’s episodic memory**:
+
+  * saves prompt + reply + MathState + quality into SQLite,
+  * provides simple similarity search over internal metrics.
+* It is completely **optional**, with strict silent fallbacks.
+* It plays nicely with `math.py`:
+
+  * same feature space (`state_to_features`),
+  * later can provide “what happened in similar states?” summaries.
+* No heavy dependencies, no external calls, no internet.
+
+You can start with:
+
+1. Implement `RAGBrain` with:
+
+   * `observe_episode()`
+   * `query_similar()`
+   * `get_summary_for_state()`
+2. Wire it into `leo.py` and `math.py` with all guards and try/except.
+3. Add a small `tests/test_ragbrain.py` later for:
+
+   * DB creation
+   * insert + query
+   * empty DB behavior
+   * failure safety.
+
+Leo’s inner world is already there.
+This just lets him **remember his own moments** in a structured way.
+
+
 
