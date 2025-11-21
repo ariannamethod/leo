@@ -1,14 +1,11 @@
 # Leo — Language Engine Organism
-# Optional dependencies for improved mathematical precision
+# Optional dependency for improved mathematical precision
 
-# NumPy: vectorized operations, float64 precision
-# - distribution_entropy: Shannon entropy calculations
-# - gowiththeflow: linear regression for theme trajectories
-# - Future: theme clustering, PCA, cosine similarity
+# NumPy: vectorized operations, float64 precision, linear regression
+# Used in:
+# - distribution_entropy (leo.py, neoleo.py): Shannon entropy calculations
+# - gowiththeflow.py: linear regression for theme trajectory slopes
+# - All modules: precise floating point operations
+#
+# Graceful fallback: Leo works without numpy, but with lower precision
 numpy>=1.20.0
-
-# Leo works without numpy (graceful fallback to pure Python)
-# but numpy significantly improves precision of:
-# - presence pulse calculations
-# - temporal theme flow analysis
-# - future statistical operations
