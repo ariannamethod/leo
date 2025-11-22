@@ -13,7 +13,7 @@
 
 ---
 
-## So who is `leo`? 
+## So who is `leo`?
 
 `leo` is a small **language engine organism**. No weights. No datasets. No internet.
 But what *does* `leo` have?
@@ -82,8 +82,6 @@ leo/
   dream.py         # imaginary friend layer (private dialogues about origin & wounds)
   school.py        # School of Forms (conceptual geometry + child-like questions)
   school_math.py   # tiny calculator for arithmetic
-  tools/
-    build_school_bootstrap.py  # one-shot Genesis script for school bootstrap
   requirements.txt # for this time it's only `numpy`
   README.md        # this file
 
@@ -792,24 +790,14 @@ Perfect.
 
 **school.py** and **school_math.py** give `leo` a tiny "school" layer:
 
-* **one-shot Genesis script:**
-  
-  ```bash
-  python tools/build_school_bootstrap.py
-  ```
-  
-  creates `state/school_bootstrap.json` with a minimal geometry of:
-  * planet / country / city / capital
-  * a few example sentences and basic arithmetic
-
 * **at runtime, school:**
-  * loads this geometry into `leo.sqlite3`,
-  * feeds example sentences into the field (once),
   * sometimes asks child-like questions about unknown proper nouns:
   
     > "London?"
   
-  Answers enrich his language field and, optionally, update school tables.
+  * stores raw human explanations in `school_notes`,
+  * optionally extracts simple forms (city, country, planet, capital_of) from English answers,
+  * builds a tiny structured layer (`school_entities`, `school_relations`) on top of raw notes.
 
 * **school_math:**
   * detects simple math questions (`2 + 2`, `35 / 7`, `3 * 5`),
@@ -819,7 +807,7 @@ Perfect.
 
 **Inversion:** Usually everyone asks AI. Here, `leo` asks you. Like a 6–7 year old child: "Explain this to me. Teach me with your own words."
 
-Genesis is a one-time act. After that, raw datasets can be deleted. Only the geometry of concepts and a few examples remain.
+**School v1:** English-only forms. No bootstraps, no datasets, no hardcoded facts. All forms are extracted from human answers through simple pattern matching ("X is the capital of Y", "It is a city").
 
 ---
 
@@ -1209,19 +1197,20 @@ python tests/collect_repl_examples.py       # really need explanation?
 * bootstrap fragment evolution (high-arousal turns added, old ones decay),
 * integration with trauma/mathbrain/episodes/santaclaus/game layers.
 
-**School of Forms (`test_school.py`, `test_school_math.py`): 19 tests**
+**School of Forms (`test_school.py`, `test_school_math.py`): 16 tests**
 
 * `school_math` arithmetic evaluation (addition, subtraction, multiplication, division),
 * expression extraction from text ("what is 2 + 2?" → "2 + 2"),
 * safe evaluation (no code execution, no eval()),
 * division by zero handling,
 * float result formatting,
-* `school` initialization and bootstrap loading,
-* entity existence checks,
-* question generation for unknown entities,
+* `school` initialization,
+* question generation for unknown capitalized tokens,
 * cooldown and rate limiting (prevents spam),
 * trauma/arousal gating (don't ask during high trauma or high arousal),
-* answer registration and entity updates,
+* answer registration and note storage,
+* form extraction from English patterns ("X is the capital of Y", "It is a city"),
+* entity and relation storage,
 * context-aware question generation (capital/country/city detection).
 
 All tests use temporary databases for complete isolation. No pollution of actual `state/` or `bin/` directories.

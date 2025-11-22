@@ -113,13 +113,13 @@ except ImportError:
 
 # Safe import: school module is optional
 try:
-    from school import School, SchoolConfig, SchoolPulse, SchoolSuggestion, SCHOOL_AVAILABLE
+    from school import School, SchoolConfig, SchoolPulse, SchoolQuestion, SCHOOL_AVAILABLE
     SCHOOL_MODULE_AVAILABLE = True
 except ImportError:
     School = None  # type: ignore
     SchoolConfig = None  # type: ignore
     SchoolPulse = None  # type: ignore
-    SchoolSuggestion = None  # type: ignore
+    SchoolQuestion = None  # type: ignore
     SCHOOL_AVAILABLE = False
     SCHOOL_MODULE_AVAILABLE = False
 
@@ -1981,21 +1981,7 @@ class LeoField:
                 self.game = None
         # SCHOOL: School of Forms (optional)
         self.school: Optional[Any] = None
-        self._last_school_suggestion: Optional[Any] = None
-        if SCHOOL_MODULE_AVAILABLE and School is not None:
-            try:
-                self.school = School(
-                    db_path=DB_PATH,
-                    field=self,
-                    config=SchoolConfig() if SchoolConfig else None,
-                )
-            except Exception:
-                # Silent fail — School must never break Leo
-                self.school = None
-        
-        # SCHOOL: School of Forms (optional)
-        self.school: Optional[Any] = None
-        self._last_school_suggestion: Optional[Any] = None
+        self._last_school_question: Optional[Any] = None
         if SCHOOL_MODULE_AVAILABLE and School is not None:
             try:
                 self.school = School(
@@ -2071,6 +2057,15 @@ class LeoField:
         echo: bool = False,
     ) -> str:
         """Generate reply through the field using trigram model."""
+        # SCHOOL: If we previously asked a question, treat this as answer
+        if self.school is not None and self._last_school_question is not None:
+            try:
+                self.school.register_answer(self._last_school_question, prompt)
+                self._last_school_question = None
+            except Exception:
+                # Silent fallback
+                pass
+        
         # SANTACLAUS: Resonant recall (optional)
         # Remember best moments that resonate with current prompt
         token_boosts: Optional[Dict[str, float]] = None
@@ -2454,9 +2449,9 @@ class LeoField:
                 pass
 
         # SCHOOL: Maybe ask a question (optional)
-        if self.school is not None:
+        if self.school is not None and SCHOOL_MODULE_AVAILABLE:
             try:
-                # Build SchoolPulse from Leo's state
+                # Build SchoolPulse from Leo's state (optional)
                 school_pulse = None
                 if SchoolPulse is not None:
                     trauma_level = 0.0
@@ -2466,28 +2461,26 @@ class LeoField:
                     school_pulse = SchoolPulse(
                         novelty=context.pulse.novelty if context.pulse else 0.5,
                         arousal=context.pulse.arousal if context.pulse else 0.5,
-                        entropy=context.pulse.entropy if context.pulse else 0.5,
                         trauma=trauma_level,
                     )
                 
-                # Observe turn
-                self.school.observe_turn(
-                    prompt=prompt,
-                    reply=final_reply,
-                    pulse=school_pulse,
-                )
+                # Get MathState if available (for gating)
+                math_state = None
+                if 'state' in locals() and state is not None:
+                    math_state = state
                 
                 # Maybe ask question
-                suggestion = self.school.maybe_ask_question(
-                    human_utterance=prompt,
+                question = self.school.maybe_ask(
+                    human_text=prompt,
+                    math_state=math_state,
                     pulse=school_pulse,
                 )
                 
-                if suggestion is not None:
-                    # Store suggestion for next turn (answer handling)
-                    self._last_school_suggestion = suggestion
+                if question is not None:
+                    # Store question for next turn (answer handling)
+                    self._last_school_question = question
                     # Append question to reply
-                    final_reply = final_reply.rstrip() + "\n\n" + suggestion.question
+                    final_reply = final_reply.rstrip() + "\n\n" + question.text
                 
             except Exception:
                 # Silent fail — School must never break Leo
