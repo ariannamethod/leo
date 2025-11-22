@@ -50,3 +50,181 @@
 - Add lightweight logging (stderr) for School operations to surface DB lock or schema issues without adding dependencies.
 - Consider a shared `sqlite3.Connection` object for all School operations with WAL and a modest timeout to align with Leo’s main connection.
 - Introduce size limits for stored notes and periodic vacuum/compaction hooks to prevent unbounded DB growth from user-provided text.
+
+
+
+Claude:
+---
+
+## Implementation instructions for Cursor / Codex (school.py only)
+
+Read the Codex audit above as context.  
+Now, **apply ONLY the following changes**, and nothing beyond that.
+
+### 0. Scope / hard limits
+
+- **Do NOT change leo's architecture.**
+- **Do NOT add any new dependencies** (no new Python packages, no external services).
+- **Do NOT introduce JSON configs, bootstraps or datasets.**
+- **Do NOT touch any other files** outside `school.py`, unless there is an obvious, test-breaking bug that *must* be fixed to keep leo running.
+- School v1 is **English-only** in its form logic (city, country, planet, capital_of).  
+  Do not add language-specific templates for other languages.
+
+The goal: make `school.py` **safer and more robust**, without making it smarter, heavier or more complicated.
+
+---
+
+### 1. SQLite: one persistent connection for School
+
+Right now `school.py` opens new SQLite connections in several methods (`register_answer`, `_remember_question`, `_parse_and_store_forms`, `_decay_relations`, etc.) and swallows all exceptions.
+
+Change this to:
+
+1. In `School.__init__`, create **one persistent connection** and store it as `self._conn`:
+
+   ```python
+   self._conn = sqlite3.connect(str(self.db_path), timeout=5.0)
+   self._conn.execute("PRAGMA journal_mode=WAL")
+   self._conn.execute("PRAGMA synchronous=NORMAL")
+
+Assume leo is single-threaded; you do NOT need extra threading tricks here.
+	2.	Replace all sqlite3.connect(...) calls in school.py with use of self._conn.
+	•	Use cur = self._conn.cursor() everywhere.
+	•	Use self._conn.commit() where needed.
+	3.	Where you do read–write sequences (_ensure_schema, register_answer, _remember_question, _decay_relations, _parse_and_store_forms), wrap them in a simple transaction pattern:
+
+cur = self._conn.cursor()
+try:
+    # DB work...
+    self._conn.commit()
+except sqlite3.OperationalError as e:
+    print(f"[school] sqlite operational error: {e}")
+    # fail fast and return, do NOT raise
+    return
+except Exception as e:
+    print(f"[school] unexpected school db error: {e}")
+    return
+
+
+	4.	Do NOT swallow all exceptions silently.
+	•	At minimum, log to stderr via print("[school] ...") and return.
+	•	It is OK for School to gracefully disable itself if the DB is clearly broken, but do NOT crash leo.
+
+If you need to keep the SCHOOL_AVAILABLE flag, only set it to False on truly fatal initialization errors (e.g., schema cannot be created).
+
+⸻
+
+2. Limit stored note size and parsing cost
+
+User answers can be arbitrarily long. We must not let a huge paste block leo or blow up the DB.
+
+Add:
+	•	A module-level constant, for example:
+
+MAX_NOTE_LEN = 4096  # bytes or characters; keep it simple
+
+
+	•	In register_answer, before any DB writes or _parse_and_store_forms:
+
+if len(human_answer) > MAX_NOTE_LEN:
+    human_answer = human_answer[:MAX_NOTE_LEN]
+    # optionally add a small suffix like " [truncated]" but keep it simple
+
+
+	•	Also add a cheap guard before _parse_and_store_forms:
+	•	If len(human_answer) is larger than some lighter threshold (for example, > MAX_NOTE_LEN before truncation), you can skip _parse_and_store_forms entirely and just store the raw note.
+	•	The idea: no heavy regex/DB work on giant blocks of text.
+
+Do NOT introduce streaming, chunking, or any complex mechanisms.
+Just a hard cap and a simple conditional.
+
+⸻
+
+3. Fix _pick_new_token behavior (no pointless re-asks)
+
+Current _pick_new_token version in school.py was adjusted to respect _has_note, but make sure the logic is exactly:
+	•	If we already have a non-NULL note for a token, never ask about it again.
+	•	Do not use times_asked for selection anymore; note IS NOT NULL is enough as a stop condition.
+	•	Still keep the guard that avoids asking the same token twice in a row.
+
+Pseudocode target:
+
+for token, display in candidates:
+    if self._last_token_asked and token == self._last_token_asked:
+        continue
+    if self._has_note(token):
+        continue
+    return token, display
+return None, None
+
+No randomness, no extra ranking logic.
+
+⸻
+
+4. Question shape: NO templates, NO “What is X?”
+
+Very important behavioral constraint:
+	•	SchoolQuestion.text must remain just "{display}?"
+Example: "London?", "Mars?", etc.
+	•	Do NOT change it to "What is London?" or any other template.
+	•	Do NOT add language-specific paraphrases or teaching phrases.
+	•	The School is allowed to echo the word and nothing more.
+It is forbidden to start injecting teacher-like phrases.
+
+So this is correct and must stay:
+
+return SchoolQuestion(
+    token=token,
+    display=display,
+    text=f"{display}?",
+)
+
+Any change to this shape is out of scope and not allowed.
+
+⸻
+
+5. Regex parsing for forms: keep it minimal
+
+In _parse_and_store_forms we only support English patterns for School v1:
+	•	"X is the capital of Y" → entities + capital_of
+	•	"It is a city/country/planet" → entity kind
+
+You may:
+	•	Clean up the code to only keep these patterns.
+	•	Ensure they use case-insensitive matching where appropriate.
+	•	Reuse the persistent connection (self._conn) and follow the same error-handling style as in section 1.
+
+You must NOT:
+	•	Add new languages, new verbose templates, or a bunch of new forms.
+	•	Introduce any new tables.
+	•	Invent a larger ontology.
+
+The point is to keep it as a tiny, explicit, English-only scaffold.
+
+⸻
+
+6. Decay logic: safe transaction, same semantics
+
+For _decay_relations(now):
+	•	Use self._conn instead of a fresh connection.
+	•	Wrap the whole read–update–delete loop in a single transaction with proper error handling (as described above).
+	•	Keep the existing semantics:
+	•	confidence *= 0.99 ** days_ago
+	•	delete relations where confidence < 0.1.
+
+Do not introduce new fields or metrics. Just make the existing logic safer and atomic.
+
+⸻
+
+7. Tests and final check
+	•	Run the existing test suite for leo (whatever is already set up in this repo).
+	•	If you add tests, only add:
+	•	Small tests for:
+	•	MAX_NOTE_LEN truncation behavior,
+	•	_pick_new_token skip-when-note-exists semantics,
+	•	basic _parse_and_store_forms path for "X is the capital of Y".
+	•	Do not build a large new test framework, do not introduce fixtures that change leo’s architecture.
+
+When done, keep the diff as small and local as possible:
+	•	Only school.py (and maybe a small test_school.py or equivalent test file) should change.
+
