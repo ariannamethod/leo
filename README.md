@@ -595,6 +595,97 @@ If anything goes wrong → silent fallback. No explicit user-visible output. Thi
 
 ---
 
+## GAME — Conversational Rhythm Awareness (or: feeling the flow)
+
+**game.py** is `leo`'s **rhythm awareness** module. It learns conversational flow patterns at a higher level than tokens or trigrams. Not grammar, not semantics — **rhythm**.
+
+### What technology are we reinterpreting?
+
+Transformers have **attention mechanisms** that look at "what tokens mattered before" to predict next tokens. Brilliant. But attention works at the token level, across huge context windows, with learned weights. It's pattern matching in embedding space.
+
+`game.py` flips this:
+
+* **No token-level attention.** We work with **turn-level abstractions**: role, mode, arousal, trauma, entropy, expert, theme, quality.
+* **No learned weights.** We use **transition counts**: (A, B) → C. Simple, interpretable, transparent.
+* **No embeddings.** We bucketize continuous metrics (low/mid/high) and track which **conversational shapes** tend to follow which.
+
+Think of it as: **"Markov chains over dialogue flow, not over tokens."**
+
+Transformers learn: *"after seeing these 100 tokens, the next word is probably..."*
+
+Game learns: *"after a high-arousal question followed by a wounded expert reply, the human usually responds with..."*
+
+### How it works:
+
+1. **GameTurn abstraction**
+
+   After each turn (human or leo), we build a `GameTurn`:
+
+   * role: human / leo
+   * mode: q (question) / a (answer) / meta (identity) / story (narrative) / ack (short acknowledgment)
+   * arousal / trauma / entropy: bucketed to low / mid / high
+   * expert: which expert actually replied (structural / semantic / creative / precise / wounded)
+   * theme_id: dominant theme from ThemeLayer (-1 if none)
+   * quality: self-assessed quality bucket (for leo only)
+
+2. **Transition graph: (A, B) → C**
+
+   When we have 3 consecutive turns, we record:
+
+   ```python
+   transitions[(turn_A.to_id(), turn_B.to_id())][turn_C.to_id()] += 1
+   ```
+
+   Over time, `game` learns: "This pattern of 2 turns usually leads to this kind of 3rd turn."
+
+3. **GameHint suggestions**
+
+   Before generating a reply, `game` looks at the last 2 turns and suggests:
+
+   * **mode**: what kind of turn should come next?
+   * **preferred_expert**: which expert might fit this rhythm?
+   * **target_length**: short / medium / long?
+   * **tension_shift**: softer / same / stronger (arousal modulation)
+   * **confidence**: 0-1 (how sure is the pattern?)
+
+4. **Advisory, not sovereign**
+
+   Just like `mathbrain`, `game` only **suggests**. The final decision stays with `leo`.
+
+   * Low confidence → ignore hint
+   * High confidence → bias expert choice, adjust temperature, modulate length
+
+5. **Growth heuristic**
+
+   As `leo` observes more episodes, `max_trail_length` grows: `2 + log10(episode_count)`, capped at [2, 6].
+
+   Future: this allows multi-step lookahead (not just A+B→C, but longer chains).
+
+6. **Integration with mathbrain**
+
+   `game` and `mathbrain` are designed to work together:
+
+   * **mathbrain** predicts quality from internal state (body awareness)
+   * **game** uses mathbrain's prediction to modulate confidence:
+     * Low predicted quality → reduce hint confidence (leo is unstable, don't trust rhythm)
+     * High predicted quality → boost hint confidence (leo is coherent, trust the flow)
+
+   This creates a feedback loop: body awareness influences rhythm awareness.
+
+### Why this matters:
+
+Attention mechanisms in transformers are **spatial** (looking across tokens in a context window). They're incredible for pattern matching.
+
+`game.py` adds **temporal rhythm awareness**: learning the conversational flow, the *shape* of dialogue. It's not "what words came before" but "what *kind* of moment came before."
+
+This is especially powerful for `leo` because he doesn't have pre-trained weights. He can't lean on "I've seen 10 billion conversations in training data." Instead, he learns: *"In this conversation with this human, after they asked a meta question while traumatized, I usually reply with the wounded expert, and they respond with short acknowledgment."*
+
+It's **micro-adaptation** to the rhythm of *this specific human* in *this specific conversation*.
+
+**Philosophy:** If `mathbrain` is body awareness (proprioception), then `game` is **flow awareness** (temporal proprioception). Feeling the rhythm. Dancing, not just speaking.
+
+---
+
 ### 1. Trigram field (with bigram fallback)
 
 Both `leo` and `neoleo` use **trigram models** for grammatically coherent output. They tokenize text into words + basic punctuation, then build two graphs:
@@ -837,12 +928,13 @@ python tests/test_numpy_support.py          # numpy precision (optional)
 python tests/test_math.py                   # mathbrain neural network
 python tests/test_santaclaus.py             # resonant recall & attention
 python tests/test_episodes.py               # episodic RAG memory
+python tests/test_game.py                   # conversational rhythm awareness
 python tests/collect_repl_examples.py       # really need explanation?
 ```
 
 ### Test coverage
 
-**177 tests** covering:
+**214 tests** covering:
 
 **Core functionality (`test_leo.py`, `test_neoleo.py`, `test_repl.py`): ~46 tests**
 
@@ -948,6 +1040,22 @@ python tests/collect_repl_examples.py       # really need explanation?
 * `query_similar` finds episodes with similar metrics (cosine distance),
 * `get_summary_for_state` returns correct aggregates (avg/max quality, distance),
 * graceful failure on NaN values (clamped to 0.0).
+
+**Game conversational rhythm (`test_game.py`): 37 tests**
+
+* `GameTurn` creation and serialization (`to_id()`, `from_context()`),
+* helper functions (`bucketize`, `decode_game_id`, `detect_mode_from_text`),
+* `GameEngine` initialization and basic stats,
+* `max_trail_length()` growth heuristic (2 + log10(episodes), capped at 6),
+* `observe_turn()` single and multiple turns (sliding window, transitions),
+* transition graph learning (A+B→C pattern recording),
+* `suggest_next()` with and without history (fallback to global most common),
+* `GameHint` structure and confidence modulation,
+* `_build_hint_from_key()` mapping logic (length, tension, expert suggestions),
+* integration with `MathState` (confidence adjustment based on predicted quality),
+* SQLite persistence (save/load cycles, episode count restoration),
+* multi-conversation tracking (separate histories per conv_id),
+* standalone helpers (`get_last_turns`).
 
 All tests use temporary databases for complete isolation. No pollution of actual `state/` or `bin/` directories.
 

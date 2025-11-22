@@ -87,6 +87,18 @@ except ImportError:
     RAG_AVAILABLE = False
     EPISODES_AVAILABLE = False
 
+# Safe import: game module is optional
+try:
+    from game import GameEngine, GameTurn, GameHint, detect_mode_from_text, GAME_AVAILABLE
+    GAME_MODULE_AVAILABLE = True
+except ImportError:
+    GameEngine = None  # type: ignore
+    GameTurn = None  # type: ignore
+    GameHint = None  # type: ignore
+    detect_mode_from_text = None  # type: ignore
+    GAME_AVAILABLE = False
+    GAME_MODULE_AVAILABLE = False
+
 # NumPy for precise math (entropy, distributions, linear regression)
 # Graceful fallback to pure Python if not available
 try:
@@ -1873,6 +1885,15 @@ class LeoField:
             except Exception:
                 # Silent fail — RAG must never break Leo
                 self.rag = None
+        # GAME: conversational rhythm awareness (optional)
+        self.game: Optional[Any] = None
+        if GAME_MODULE_AVAILABLE and GameEngine is not None:
+            try:
+                game_path = STATE_DIR / "game.sqlite3"
+                self.game = GameEngine(db_path=game_path)
+            except Exception:
+                # Silent fail — Game must never break Leo
+                self.game = None
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -2172,6 +2193,81 @@ class LeoField:
                         pass
             except Exception:
                 # MathBrain must NEVER break normal flow - silent fallback
+                pass
+
+        # GAME: Conversational rhythm awareness (optional module)
+        # Learn turn-level patterns: (A, B) → C transitions
+        if self.game is not None and GAME_MODULE_AVAILABLE and GameTurn is not None:
+            try:
+                # Determine conversation ID (for now, use fixed "main" - could be session-based in REPL)
+                conv_id = "main"
+
+                # Build MathState for human prompt (approximate metrics)
+                prompt_tokens = tokenize(prompt)
+                prompt_arousal = compute_prompt_arousal(prompt_tokens, self.emotion)
+                prompt_state = None
+                if MATHBRAIN_AVAILABLE and MathState is not None:
+                    prompt_state = MathState(
+                        entropy=0.5,  # Unknown for prompt
+                        novelty=0.5,
+                        arousal=prompt_arousal,
+                        pulse=0.5,
+                        trauma_level=self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
+                        active_theme_count=0,
+                        total_themes=len(self.themes),
+                    )
+
+                # Observe human turn
+                if prompt_state is not None and detect_mode_from_text is not None:
+                    mode = detect_mode_from_text(prompt, is_reply=False)
+                    # Get dominant theme for prompt
+                    theme_id = -1
+                    if self.themes:
+                        try:
+                            active = activate_themes_for_prompt(prompt_tokens, self.themes, self.token_to_themes)
+                            if active and active.theme_scores:
+                                theme_id = active.theme_scores[0][0]  # Top theme ID
+                        except Exception:
+                            pass
+
+                    human_turn = GameTurn.from_context(
+                        role="human",
+                        mode=mode,
+                        math_state=prompt_state,
+                        theme_id=theme_id,
+                        expert="structural",  # Default for human
+                        quality_value=None,  # Will be "mid"
+                    )
+                    self.game.observe_turn(conv_id, human_turn)
+
+                # Observe leo turn (use MathState if available from mathbrain section)
+                if 'state' in locals() and state is not None:
+                    # Determine mode for leo's reply
+                    mode_leo = detect_mode_from_text(final_reply, is_reply=True) if detect_mode_from_text else "a"
+
+                    # Get dominant theme for reply
+                    theme_id_leo = -1
+                    reply_tokens = tokenize(final_reply)
+                    if self.themes:
+                        try:
+                            active_leo = activate_themes_for_prompt(reply_tokens, self.themes, self.token_to_themes)
+                            if active_leo and active_leo.theme_scores:
+                                theme_id_leo = active_leo.theme_scores[0][0]
+                        except Exception:
+                            pass
+
+                    leo_turn = GameTurn.from_context(
+                        role="leo",
+                        mode=mode_leo,
+                        math_state=state,
+                        theme_id=theme_id_leo,
+                        expert=state.expert_id,
+                        quality_value=state.quality,
+                    )
+                    self.game.observe_turn(conv_id, leo_turn)
+
+            except Exception:
+                # Game must NEVER break normal flow - silent fallback
                 pass
 
         return final_reply
