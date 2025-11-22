@@ -1,4 +1,4 @@
-## dream.py — Imaginary Friend Layer for `leo`
+## dream.py — Imaginary Friend Layer for `leo` 
 
 If `metaleo` is leo’s **inner voice**  
 and `overthinking` is **circles on water** after each reply,  
