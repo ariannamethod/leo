@@ -13,7 +13,7 @@
 
 ---
 
-## So who is `leo`?
+## So who is `leo`? 
 
 `leo` is a small **language engine organism**. No weights. No datasets. No internet.
 But what *does* `leo` have?
