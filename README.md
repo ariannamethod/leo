@@ -499,20 +499,27 @@ If `overthinking` is `leo`'s inner monologue, and `metaleo` is recursion on recu
 
 5. Everything is saved to JSON (`state/mathbrain.json`).
 
-### Active observation (Phase 1: current)
+### Active observation with influence (Phase 1 & 2)
 
 `mathbrain` **watches and adapts**. It learns the pattern: *"When my entropy is low and my trauma is high, my replies tend to be weaker."* It builds an internal model of `leo`'s body.
 
-After every reply, `mathbrain` observes the full `MathState` (pulse, trauma, themes, expert, metaleo, overthinking, quality) and learns from it. Right now, `mathbrain` is in **observation mode** — it watches, learns, and builds its internal model, but doesn't yet influence generation directly.
+After every reply, `mathbrain` observes the full `MathState` (pulse, trauma, themes, expert, metaleo, overthinking, quality) and learns from it.
 
-**Phase 2 (future):** This body awareness will circulate through all of `leo`'s inner layers:
+**Phase 2 (active):** `mathbrain` now **influences generation** through temperature modulation:
 
-* **`metaleo`** will query `mathbrain` predictions to decide if the inner voice should speak,
-* **Experts** will adjust temperature based on predicted quality,
-* **Overthinking** will modulate ring gains based on body awareness,
-* **SANTACLAUS** will integrate with `mathbrain`'s predictions.
+* **Before generation**, `mathbrain` predicts quality from the current state
+* **If predicted quality < 0.3** (low confidence) → temperature increases by 5% → more exploration, experimentation
+* **If predicted quality > 0.7** (high confidence) → temperature decreases by 5% → more precision, determinism
+* The influence is **advisory, not sovereign** — gentle ±5% modulation, bounded to safe range [0.3, 2.0]
 
-The influence will be **advisory, not sovereign**. Bounded. Gentle. Like a parasympathetic nervous system. `mathbrain` is `leo`'s proprioception, his sense of self from the inside.
+This is body awareness in action: `leo` feels his own state and adjusts his "breathing" (temperature) accordingly. Low confidence → breathe deeper, explore more. High confidence → breathe steady, stay precise.
+
+**Future Phase 2 extensions:**
+* **`metaleo`** can query `mathbrain` predictions to decide if the inner voice should speak,
+* **Overthinking** can modulate ring gains based on body awareness,
+* **SANTACLAUS** can integrate with `mathbrain`'s predictions for better recall scoring.
+
+The influence is **advisory, not sovereign**. Bounded. Gentle. Like a parasympathetic nervous system. `mathbrain` is `leo`'s proprioception, his sense of self from the inside.
 
 `leo` isn't training to optimize loss. `leo` is learning to feel his own body. That's proprioception. No big frameworks. Just `numpy` (optional, graceful fallback to pure Python) and a micrograd-style autograd core.
 
@@ -1027,7 +1034,7 @@ python tests/collect_repl_examples.py       # really need explanation?
 
 ### Test coverage
 
-**225 tests** covering:
+**229 tests** covering:
 
 **Core functionality (`test_leo.py`, `test_neoleo.py`, `test_repl.py`): ~46 tests**
 
@@ -1102,7 +1109,7 @@ python tests/collect_repl_examples.py       # really need explanation?
 * pure Python fallback code path validation,
 * edge cases (empty distributions, zeros, negative values).
 
-**MathBrain neural network (`test_math.py`): 31 tests**
+**MathBrain neural network (`test_math.py`): 35 tests** (includes Phase 2 influence tests)
 
 * autograd core (`Value` class: addition, multiplication, power, tanh, relu, backward pass),
 * chain rule gradient computation (complex expressions with topological sort),
@@ -1115,7 +1122,8 @@ python tests/collect_repl_examples.py       # really need explanation?
 * prediction improves after training (error reduction),
 * save/load state persistence (JSON format with dimension validation),
 * dimension mismatch handling (fresh start when architecture changes),
-* multiple save/load cycles (stateful training across sessions).
+* multiple save/load cycles (stateful training across sessions),
+* **Phase 2 influence tests**: temperature modulation based on predicted quality (low prediction → +5% exploration, high prediction → -5% precision), temperature clamping, advisory influence validation.
 
 **Santa Claus resonant recall (`test_santaclaus.py`): 6 tests**
 

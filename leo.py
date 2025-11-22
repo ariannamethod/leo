@@ -1689,6 +1689,7 @@ def generate_reply(
     use_experts: bool = True,
     trauma_state: Optional[Any] = None,
     token_boosts: Optional[Dict[str, float]] = None,
+    mathbrain: Optional[Any] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -1742,6 +1743,57 @@ def generate_reply(
         selected_expert = route_to_expert(preliminary_pulse, active_themes, trauma_state)
         # Override temperature with expert's preference
         temperature = selected_expert.temperature
+        
+        # MATHBRAIN Phase 2: Influence temperature based on predicted quality
+        if mathbrain is not None and MATHBRAIN_AVAILABLE and MathState is not None:
+            try:
+                # Build preliminary MathState for prediction (before generation)
+                trauma_level = 0.0
+                if trauma_state is not None and hasattr(trauma_state, 'level'):
+                    trauma_level = trauma_state.level
+                
+                active_theme_count = len(active_themes.theme_scores) if active_themes else 0
+                total_themes = len(themes) if themes else 0
+                
+                # Approximate MathState (we don't have reply_len, unique_ratio, quality yet)
+                pred_state = MathState(
+                    entropy=0.5,  # Will be computed during generation
+                    novelty=novelty,
+                    arousal=arousal,
+                    pulse=preliminary_pulse.pulse if hasattr(preliminary_pulse, 'pulse') else 0.0,
+                    trauma_level=trauma_level,
+                    active_theme_count=active_theme_count,
+                    total_themes=total_themes,
+                    emerging_score=0.0,  # Would need flow tracker
+                    fading_score=0.0,
+                    reply_len=0,  # Unknown before generation
+                    unique_ratio=0.5,  # Default estimate
+                    expert_id=selected_expert.name if selected_expert else "structural",
+                    expert_temp=selected_expert.temperature if selected_expert else 1.0,
+                    expert_semantic=selected_expert.semantic_weight if selected_expert else 0.5,
+                    metaleo_weight=0.0,  # Will be computed later
+                    used_metaleo=False,
+                    overthinking_enabled=OVERTHINKING_AVAILABLE,
+                    rings_present=0,  # Unknown before overthinking
+                    quality=0.5,  # Unknown before generation
+                )
+                
+                # Predict quality
+                predicted_q = mathbrain.predict(pred_state)
+                
+                # Adjust temperature based on prediction (advisory, gentle)
+                # Low predicted quality (< 0.3) → increase exploration (higher temp)
+                # High predicted quality (> 0.7) → increase precision (lower temp)
+                if predicted_q < 0.3:
+                    temperature *= 1.05  # +5% exploration
+                elif predicted_q > 0.7:
+                    temperature *= 0.95  # -5% precision
+                # Clamp to safe range
+                temperature = max(0.3, min(2.0, temperature))
+                
+            except Exception:
+                # Silent fallback — MathBrain influence must never break generation
+                pass
 
     start = choose_start_from_prompt(prompt_tokens, bigrams, vocab, centers, bias)
 
@@ -2027,6 +2079,7 @@ class LeoField:
             use_experts=True,
             trauma_state=self._trauma_state,
             token_boosts=token_boosts,
+            mathbrain=self._math_brain,  # Pass mathbrain for Phase 2 influence
         )
 
         # Store presence metrics
