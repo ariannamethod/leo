@@ -807,7 +807,7 @@ Perfect.
   * feeds example sentences into the field (once),
   * sometimes asks child-like questions about unknown proper nouns:
   
-    > "London? Is it a city, a person, or something else?"
+    > "London?"
   
   Answers enrich his language field and, optionally, update school tables.
 

@@ -137,15 +137,15 @@ class TestSchool(unittest.TestCase):
             pulse=SchoolPulse(),
         )
 
-    def test_generate_question_context_aware(self):
-        """Test question generation is context-aware."""
-        # Question about capital
+    def test_generate_question_minimal(self):
+        """Test question generation is minimal (no templates)."""
+        # Just the name with question mark
         question = self.school._generate_question("London", "What is the capital of UK?")
-        self.assertIn("capital", question.lower())
+        self.assertEqual(question, "London?")
         
-        # Question about country
+        # Same for any context
         question = self.school._generate_question("Germany", "I visited a country.")
-        self.assertIn("country", question.lower())
+        self.assertEqual(question, "Germany?")
 
 
 if __name__ == "__main__":

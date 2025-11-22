@@ -456,23 +456,14 @@ class School:
     
     def _generate_question(self, display_name: str, context: str) -> str:
         """
-        Generate a child-like question about unknown entity.
+        Generate a minimal question about unknown entity.
         
-        This is a simple template for now. In future, Leo could generate
-        the question through his own field, making it more organic.
-        For now, we use context-aware templates that feel natural.
+        No templates. Just the name with a question mark.
+        Leo will learn from the human's answer naturally.
         """
-        # Check if context mentions capital/country/city
-        context_lower = context.lower()
-        if any(word in context_lower for word in ['capital', 'столица']):
-            return f"{display_name}? Is it the capital of a country?"
-        elif any(word in context_lower for word in ['country', 'страна']):
-            return f"{display_name}? Is it a country?"
-        elif any(word in context_lower for word in ['city', 'город']):
-            return f"{display_name}? Is it a city?"
-        else:
-            # Generic question - Leo will learn from the answer
-            return f"{display_name}? What is that for you: a city, a country, a person, or something else?"
+        # Minimal: just the name with question mark
+        # Leo will learn from the answer through observe()
+        return f"{display_name}?"
     
     def _extract_entities(self, text: str) -> List[tuple]:
         """Extract known entities from text (for last_seen updates)."""
