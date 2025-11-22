@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sqlite3
 import re
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,9 @@ FORM_LEXEMES = {
     "country": "country",
     "planet": "planet",
 }
+
+# Maximum note length to prevent unbounded DB growth
+MAX_NOTE_LEN = 4096  # characters
 
 # --------------------------------------------------------------------------
 # DATA STRUCTURES
@@ -97,12 +101,18 @@ class School:
         self._last_question_ts = 0.0
         self._last_token_asked: Optional[str] = None
         
+        # Create persistent connection with WAL and timeout
         try:
+            self._conn = sqlite3.connect(str(self.db_path), timeout=5.0)
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA synchronous=NORMAL")
             self._ensure_schema()
-        except Exception:
+        except Exception as e:
             # School must never break leo
+            print(f"[school] failed to initialize: {e}", file=sys.stderr)
             global SCHOOL_AVAILABLE
             SCHOOL_AVAILABLE = False
+            self._conn = None  # type: ignore
     
     # ------------------------------------------------------------------
     # PUBLIC API
@@ -164,18 +174,20 @@ class School:
         Also attempts simple pattern parsing to extract forms (city, country, capital_of).
         On parse failure, just stores the note. All errors are silent.
         """
-        if not SCHOOL_AVAILABLE:
+        if not SCHOOL_AVAILABLE or self._conn is None:
             return
         
         if not question or not human_answer:
             return
         
+        # Truncate long answers to prevent unbounded DB growth
+        if len(human_answer) > MAX_NOTE_LEN:
+            human_answer = human_answer[:MAX_NOTE_LEN] + " [truncated]"
+        
         ts = now if now is not None else time.time()
         
+        cur = self._conn.cursor()
         try:
-            conn = sqlite3.connect(str(self.db_path))
-            cur = conn.cursor()
-            
             # Check if note already exists
             cur.execute(
                 "SELECT id, note, times_asked FROM school_notes WHERE token = ?",
@@ -207,17 +219,20 @@ class School:
                     (question.token, question.display, human_answer.strip(), ts, ts, 1),
                 )
             
-            conn.commit()
-            conn.close()
-        except Exception:
-            # ignore DB errors
-            pass
+            self._conn.commit()
+        except sqlite3.OperationalError as e:
+            print(f"[school] sqlite operational error: {e}", file=sys.stderr)
+            return
+        except Exception as e:
+            print(f"[school] unexpected school db error: {e}", file=sys.stderr)
+            return
         
-        # Attempt to parse forms from answer (best-effort, silent on failure)
-        try:
-            self._parse_and_store_forms(question.token, question.display, human_answer, ts)
-        except Exception:
-            pass
+        # Attempt to parse forms from answer (best-effort, skip if answer too long)
+        if len(human_answer) <= MAX_NOTE_LEN:
+            try:
+                self._parse_and_store_forms(question.token, question.display, human_answer, ts)
+            except Exception as e:
+                print(f"[school] parse forms error: {e}", file=sys.stderr)
         
         # Feed the explanation into Leo's field as language
         try:
@@ -232,8 +247,10 @@ class School:
     
     def _ensure_schema(self) -> None:
         """Create all school tables if needed."""
-        conn = sqlite3.connect(str(self.db_path))
-        cur = conn.cursor()
+        if self._conn is None:
+            return
+        
+        cur = self._conn.cursor()
         
         # school_notes: raw explanations
         cur.execute(
@@ -297,8 +314,7 @@ class School:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_school_rel_triple ON school_relations(subject, relation, object)"
         )
         
-        conn.commit()
-        conn.close()
+        self._conn.commit()
     
     def _can_ask_now(
         self,
@@ -318,19 +334,23 @@ class School:
             return False
         
         # 3) Per-hour limit
+        if self._conn is None:
+            return False
         try:
-            conn = sqlite3.connect(str(self.db_path))
-            cur = conn.cursor()
+            cur = self._conn.cursor()
             hour_ago = now - 3600.0
             cur.execute(
                 "SELECT COUNT(*) FROM school_notes WHERE last_seen > ?",
                 (hour_ago,),
             )
             count = cur.fetchone()[0]
-            conn.close()
             if count >= cfg.max_questions_per_hour:
                 return False
-        except Exception:
+        except sqlite3.OperationalError as e:
+            print(f"[school] sqlite operational error: {e}", file=sys.stderr)
+            return False
+        except Exception as e:
+            print(f"[school] unexpected error checking per-hour limit: {e}", file=sys.stderr)
             return False
         
         # 4) MathState gates (if available)
@@ -467,15 +487,15 @@ class School:
     
     def _has_note(self, token: str) -> bool:
         """Check if we already have an explanation for this token."""
+        if self._conn is None:
+            return False
         try:
-            conn = sqlite3.connect(str(self.db_path))
-            cur = conn.cursor()
+            cur = self._conn.cursor()
             cur.execute(
                 "SELECT 1 FROM school_notes WHERE token = ? AND note IS NOT NULL LIMIT 1",
                 (token,),
             )
             row = cur.fetchone()
-            conn.close()
             return row is not None
         except Exception:
             return False
@@ -496,9 +516,11 @@ class School:
         - "X is the capital of Y" → city/country, capital_of
         - "It is a city/country/planet" → kind
         """
+        if self._conn is None:
+            return
+        
         answer_lower = answer.lower()
-        conn = sqlite3.connect(str(self.db_path))
-        cur = conn.cursor()
+        cur = self._conn.cursor()
         
         try:
             # Pattern 1: "X is the capital of Y" (EN)
@@ -517,7 +539,7 @@ class School:
                 
                 # Upsert relation
                 self._upsert_relation(cur, token, "capital_of", object_token, now)
-                conn.commit()
+                self._conn.commit()
                 return
             
             # Pattern 2: "It is a city/country/planet" (EN)
@@ -526,13 +548,13 @@ class School:
             if match:
                 kind = match.group(1)
                 self._upsert_entity(cur, token, display, kind, now)
-                conn.commit()
+                self._conn.commit()
                 return
             
-        except Exception:
-            pass
-        finally:
-            conn.close()
+        except sqlite3.OperationalError as e:
+            print(f"[school] sqlite operational error in parse forms: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[school] unexpected error in parse forms: {e}", file=sys.stderr)
     
     def _upsert_entity(
         self,
@@ -585,10 +607,11 @@ class School:
         
         This allows forgetting facts while keeping forms.
         """
+        if self._conn is None:
+            return
+        
+        cur = self._conn.cursor()
         try:
-            conn = sqlite3.connect(str(self.db_path))
-            cur = conn.cursor()
-            
             # Get all relations
             cur.execute("SELECT id, last_seen, confidence FROM school_relations")
             rows = cur.fetchall()
@@ -607,17 +630,19 @@ class School:
                             (new_confidence, row_id),
                         )
             
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
+            self._conn.commit()
+        except sqlite3.OperationalError as e:
+            print(f"[school] sqlite operational error in decay: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[school] unexpected error in decay: {e}", file=sys.stderr)
     
     def _remember_question(self, token: str, display: str, now: float) -> None:
         """Log the question and update counters."""
+        if self._conn is None:
+            return
+        
+        cur = self._conn.cursor()
         try:
-            conn = sqlite3.connect(str(self.db_path))
-            cur = conn.cursor()
-            
             cur.execute(
                 """
                 INSERT INTO school_notes (token, display, first_seen, last_seen, times_asked)
@@ -634,7 +659,8 @@ class School:
             if random.random() < 0.01:
                 self._decay_relations(now)
             
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
+            self._conn.commit()
+        except sqlite3.OperationalError as e:
+            print(f"[school] sqlite operational error in remember question: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[school] unexpected error in remember question: {e}", file=sys.stderr)
