@@ -99,6 +99,18 @@ except ImportError:
     GAME_AVAILABLE = False
     GAME_MODULE_AVAILABLE = False
 
+# Safe import: dream module is optional
+try:
+    from dream import DreamContext, DreamConfig, maybe_run_dream, init_dream, DREAM_AVAILABLE
+    DREAM_MODULE_AVAILABLE = True
+except ImportError:
+    DreamContext = None  # type: ignore
+    DreamConfig = None  # type: ignore
+    maybe_run_dream = None  # type: ignore
+    init_dream = None  # type: ignore
+    DREAM_AVAILABLE = False
+    DREAM_MODULE_AVAILABLE = False
+
 # NumPy for precise math (entropy, distributions, linear regression)
 # Graceful fallback to pure Python if not available
 try:
@@ -1894,6 +1906,30 @@ class LeoField:
             except Exception:
                 # Silent fail — Game must never break Leo
                 self.game = None
+        # DREAM: imaginary friend layer (optional)
+        # Initialize dream bootstrap from Leo's origin
+        if DREAM_MODULE_AVAILABLE and DREAM_AVAILABLE and init_dream is not None:
+            try:
+                # Extract key README fragments for friend's initial seed
+                readme_fragments = []
+                if README_PATH.exists():
+                    try:
+                        readme_text = README_PATH.read_text(encoding="utf-8")
+                        # Extract a few key philosophical fragments
+                        fragments = [
+                            "language is a field",
+                            "presence > intelligence",
+                            "Pure recursion. Resonant essence",
+                            "No weights. No datasets. No internet",
+                            "Leo listens to you. He records. He resonates",
+                        ]
+                        readme_fragments = fragments[:3]
+                    except Exception:
+                        pass
+                init_dream(DB_PATH, EMBEDDED_BOOTSTRAP, readme_fragments)
+            except Exception:
+                # Silent fail — Dream must never break Leo
+                pass
         self.refresh(initial_shard=True)
 
     def refresh(self, initial_shard: bool = False) -> None:
@@ -2270,6 +2306,51 @@ class LeoField:
                 # Game must NEVER break normal flow - silent fallback
                 pass
 
+        # DREAM: Imaginary friend dialogue (optional module)
+        # Private conversations about origin, wounds, and presence
+        if DREAM_MODULE_AVAILABLE and DREAM_AVAILABLE and maybe_run_dream is not None and DreamContext is not None:
+            try:
+                # Build MathState if available (reuse from mathbrain section if computed)
+                math_state = None
+                if 'state' in locals() and state is not None:
+                    math_state = state
+                elif MATHBRAIN_AVAILABLE and MathState is not None:
+                    # Fallback: construct minimal state
+                    math_state = MathState(
+                        entropy=context.pulse.entropy if context.pulse else 0.0,
+                        novelty=context.pulse.novelty if context.pulse else 0.0,
+                        arousal=context.pulse.arousal if context.pulse else 0.0,
+                        pulse=context.pulse.pulse if context.pulse else 0.0,
+                        trauma_level=self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
+                        quality=context.quality.overall if context.quality else 0.5,
+                    )
+
+                # Build dream context
+                dream_ctx = DreamContext(
+                    prompt=prompt,
+                    reply=final_reply,
+                    math_state=math_state,
+                    pulse_novelty=context.pulse.novelty if context.pulse else 0.0,
+                    pulse_arousal=context.pulse.arousal if context.pulse else 0.0,
+                    pulse_entropy=context.pulse.entropy if context.pulse else 0.0,
+                    trauma_level=self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
+                    themes=[theme.id for theme in self.themes] if self.themes else [],
+                    expert=context.expert.name if context.expert else "structural",
+                    quality=context.quality.overall if context.quality else 0.5,
+                )
+
+                # Maybe run dream (handles all decision logic internally)
+                maybe_run_dream(
+                    ctx=dream_ctx,
+                    generate_fn=self._dream_generate,
+                    observe_fn=self._dream_observe,
+                    db_path=DB_PATH,
+                )
+
+            except Exception:
+                # Dream must NEVER break normal flow - silent fallback
+                pass
+
         return final_reply
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
@@ -2354,6 +2435,55 @@ class LeoField:
             self.observe(text)
         except Exception:
             # Silent: overthinking errors must not break interaction
+            pass
+
+    def _dream_generate(self, seed: str, temperature: float, semantic_weight: float) -> str:
+        """
+        Adapter for dream module: generates dream dialogue turn.
+
+        Maps dream parameters to Leo's generation machinery.
+        Never prints to stdout - this is pure internal dialogue with imaginary friend.
+        """
+        try:
+            result = generate_reply(
+                self.bigrams,
+                self.vocab,
+                self.centers,
+                self.bias,
+                seed,
+                max_tokens=50,  # Keep dream utterances short
+                temperature=temperature,
+                echo=False,
+                trigrams=self.trigrams,
+                co_occur=self.co_occur,
+                emotion_map=self.emotion,
+                return_context=False,
+                themes=self.themes,
+                token_to_themes=self.token_to_themes,
+                use_experts=False,  # Dream uses explicit temp/semantic_weight
+                semantic_weight=semantic_weight,
+            )
+            if isinstance(result, str):
+                return result
+            return getattr(result, "output", seed)
+        except Exception:
+            # Silent fallback: dream must never break Leo
+            return ""
+
+    def _dream_observe(self, text: str) -> None:
+        """
+        Adapter for dream module: ingests dream dialogue turn.
+
+        Feeds dream conversations back into Leo's field without
+        displaying them to the user.
+        """
+        if not text.strip():
+            return
+        try:
+            # Normal observe path - dream conversations become part of field
+            self.observe(text)
+        except Exception:
+            # Silent: dream errors must not break interaction
             pass
 
 
