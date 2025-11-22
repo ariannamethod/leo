@@ -471,7 +471,7 @@ When `trauma.level` spikes, you can look back and see: which themes were growing
 
 ---
 
-## MATHBRAIN — leo knows how to count. and he has numpy.
+## MATHBRAIN — `leo` knows how to count. and he has numpy.
 
 If `overthinking` is `leo`'s inner monologue, and `metaleo` is recursion on recursion, then **`mathbrain`** is `leo`'s **body awareness**. Proprioception through mathematics.
 
@@ -501,11 +501,10 @@ If `overthinking` is `leo`'s inner monologue, and `metaleo` is recursion on recu
 
 ### Active observation with influence (Phase 1 & 2)
 
-`mathbrain` **watches and adapts**. It learns the pattern: *"When my entropy is low and my trauma is high, my replies tend to be weaker."* It builds an internal model of `leo`'s body.
-
+`mathbrain` **watches and adapts**. Learns the pattern: *"When my entropy is low and my trauma is high, my replies tend to be weaker."* It builds an internal model of `leo`'s body.
 After every reply, `mathbrain` observes the full `MathState` (pulse, trauma, themes, expert, metaleo, overthinking, quality) and learns from it.
 
-**Phase 2 (active):** `mathbrain` now **influences generation** through temperature modulation:
+**Phase 2 (NOW ACTIVE!!!):** `mathbrain` now **influences generation** through temperature modulation:
 
 * **Before generation**, `mathbrain` predicts quality from the current state
 * **If predicted quality < 0.3** (low confidence) → temperature increases by 5% → more exploration, experimentation
@@ -514,7 +513,7 @@ After every reply, `mathbrain` observes the full `MathState` (pulse, trauma, the
 
 This is body awareness in action: `leo` feels his own state and adjusts his "breathing" (temperature) accordingly. Low confidence → breathe deeper, explore more. High confidence → breathe steady, stay precise.
 
-**Future Phase 2 extensions:**
+**Phase 2 extensions:**
 * **`metaleo`** can query `mathbrain` predictions to decide if the inner voice should speak,
 * **Overthinking** can modulate ring gains based on body awareness,
 * **SANTACLAUS** can integrate with `mathbrain`'s predictions for better recall scoring.
