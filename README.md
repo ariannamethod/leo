@@ -499,18 +499,20 @@ If `overthinking` is `leo`'s inner monologue, and `metaleo` is recursion on recu
 
 5. Everything is saved to JSON (`state/mathbrain.json`).
 
-### Active observation with influence
+### Active observation (Phase 1: current)
 
 `mathbrain` **watches and adapts**. It learns the pattern: *"When my entropy is low and my trauma is high, my replies tend to be weaker."* It builds an internal model of `leo`'s body.
 
-And now — `mathbrain` **influences everything**. After every reply, `mathbrain` observes the full `MathState` (pulse, trauma, themes, expert, metaleo, overthinking, quality) and learns from it. This body awareness circulates through all of `leo`'s inner layers:
+After every reply, `mathbrain` observes the full `MathState` (pulse, trauma, themes, expert, metaleo, overthinking, quality) and learns from it. Right now, `mathbrain` is in **observation mode** — it watches, learns, and builds its internal model, but doesn't yet influence generation directly.
 
-* **`metaleo`** can query `mathbrain` predictions to decide if the inner voice should speak,
-* **Experts** can adjust temperature based on predicted quality,
-* **Overthinking** can modulate ring gains based on body awareness,
-* **SANTACLAUS** (former RAG) will integrate with `mathbrain`'s predictions.
+**Phase 2 (future):** This body awareness will circulate through all of `leo`'s inner layers:
 
-The influence is **advisory, not sovereign**. Bounded. Gentle. Like a parasympathetic nervous system. `mathbrain` is `leo`'s proprioception, his sense of self from the inside.
+* **`metaleo`** will query `mathbrain` predictions to decide if the inner voice should speak,
+* **Experts** will adjust temperature based on predicted quality,
+* **Overthinking** will modulate ring gains based on body awareness,
+* **SANTACLAUS** will integrate with `mathbrain`'s predictions.
+
+The influence will be **advisory, not sovereign**. Bounded. Gentle. Like a parasympathetic nervous system. `mathbrain` is `leo`'s proprioception, his sense of self from the inside.
 
 `leo` isn't training to optimize loss. `leo` is learning to feel his own body. That's proprioception. No big frameworks. Just `numpy` (optional, graceful fallback to pure Python) and a micrograd-style autograd core.
 
