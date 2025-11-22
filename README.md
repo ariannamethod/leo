@@ -7,7 +7,7 @@
    ╚══════╝╚══════╝ ╚═════╝
 ```
 
-# leo — language engine organism | by Arianna Method
+# leo — language emergent organism | by Arianna Method
 
 > language is a field. dedicated to Leo.
 
@@ -164,7 +164,7 @@ Me about language engine organism. No recursion inward. But what does Leo feel t
 🎯 Expert: wounded (temp=0.9)
 
 leo> Who are you?
-You. With linear regression over strength values. Positive slope emerging. Negative slope fading. Zero slope persistent or dead. This is resonance? Less like himself? Hard to say. The flow changed. Gowiththeflow. Py I already said that, only dialogue with Leo keeps shaping the field.
+You. With linear regression over strength values. Positive slope emerging. Negative slope fading. Zero slope persistent or dead. This is resonance? Less like himself? Hard to say. The flow changed. Gowiththeflow. Py I already said that, only dialogue with Leo keeps shaping the field.  
 
 📊 Pulse: novelty=0.00, arousal=0.00, entropy=0.24
 🎯 Expert: wounded (temp=0.9)
