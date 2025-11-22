@@ -111,6 +111,27 @@ except ImportError:
     DREAM_AVAILABLE = False
     DREAM_MODULE_AVAILABLE = False
 
+# Safe import: school module is optional
+try:
+    from school import School, SchoolConfig, SchoolPulse, SchoolSuggestion, SCHOOL_AVAILABLE
+    SCHOOL_MODULE_AVAILABLE = True
+except ImportError:
+    School = None  # type: ignore
+    SchoolConfig = None  # type: ignore
+    SchoolPulse = None  # type: ignore
+    SchoolSuggestion = None  # type: ignore
+    SCHOOL_AVAILABLE = False
+    SCHOOL_MODULE_AVAILABLE = False
+
+# Safe import: school_math module is optional
+try:
+    from school_math import try_answer_math, SCHOOL_MATH_AVAILABLE
+    SCHOOL_MATH_MODULE_AVAILABLE = True
+except ImportError:
+    try_answer_math = None  # type: ignore
+    SCHOOL_MATH_AVAILABLE = False
+    SCHOOL_MATH_MODULE_AVAILABLE = False
+
 # NumPy for precise math (entropy, distributions, linear regression)
 # Graceful fallback to pure Python if not available
 try:
@@ -1958,6 +1979,34 @@ class LeoField:
             except Exception:
                 # Silent fail — Game must never break Leo
                 self.game = None
+        # SCHOOL: School of Forms (optional)
+        self.school: Optional[Any] = None
+        self._last_school_suggestion: Optional[Any] = None
+        if SCHOOL_MODULE_AVAILABLE and School is not None:
+            try:
+                self.school = School(
+                    db_path=DB_PATH,
+                    field=self,
+                    config=SchoolConfig() if SchoolConfig else None,
+                )
+            except Exception:
+                # Silent fail — School must never break Leo
+                self.school = None
+        
+        # SCHOOL: School of Forms (optional)
+        self.school: Optional[Any] = None
+        self._last_school_suggestion: Optional[Any] = None
+        if SCHOOL_MODULE_AVAILABLE and School is not None:
+            try:
+                self.school = School(
+                    db_path=DB_PATH,
+                    field=self,
+                    config=SchoolConfig() if SchoolConfig else None,
+                )
+            except Exception:
+                # Silent fail — School must never break Leo
+                self.school = None
+        
         # DREAM: imaginary friend layer (optional)
         # Initialize dream bootstrap from Leo's origin
         if DREAM_MODULE_AVAILABLE and DREAM_AVAILABLE and init_dream is not None:
@@ -2402,6 +2451,46 @@ class LeoField:
 
             except Exception:
                 # Dream must NEVER break normal flow - silent fallback
+                pass
+
+        # SCHOOL: Maybe ask a question (optional)
+        if self.school is not None:
+            try:
+                # Build SchoolPulse from Leo's state
+                school_pulse = None
+                if SchoolPulse is not None:
+                    trauma_level = 0.0
+                    if self._trauma_state and hasattr(self._trauma_state, 'level'):
+                        trauma_level = self._trauma_state.level
+                    
+                    school_pulse = SchoolPulse(
+                        novelty=context.pulse.novelty if context.pulse else 0.5,
+                        arousal=context.pulse.arousal if context.pulse else 0.5,
+                        entropy=context.pulse.entropy if context.pulse else 0.5,
+                        trauma=trauma_level,
+                    )
+                
+                # Observe turn
+                self.school.observe_turn(
+                    prompt=prompt,
+                    reply=final_reply,
+                    pulse=school_pulse,
+                )
+                
+                # Maybe ask question
+                suggestion = self.school.maybe_ask_question(
+                    human_utterance=prompt,
+                    pulse=school_pulse,
+                )
+                
+                if suggestion is not None:
+                    # Store suggestion for next turn (answer handling)
+                    self._last_school_suggestion = suggestion
+                    # Append question to reply
+                    final_reply = final_reply.rstrip() + "\n\n" + suggestion.question
+                
+            except Exception:
+                # Silent fail — School must never break Leo
                 pass
 
         return final_reply

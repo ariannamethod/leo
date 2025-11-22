@@ -80,6 +80,10 @@ leo/
   episodes.py      # episodic RAG for Leo's inner life
   game.py          # conversational rhythm awareness module
   dream.py         # imaginary friend layer (private dialogues about origin & wounds)
+  school.py        # School of Forms (conceptual geometry + child-like questions)
+  school_math.py   # tiny calculator for arithmetic
+  tools/
+    build_school_bootstrap.py  # one-shot Genesis script for school bootstrap
   requirements.txt # for this time it's only `numpy`
   README.md        # this file
 
@@ -784,6 +788,41 @@ Perfect.
 
 ---
 
+## SCHOOL — School of Forms (forms, not facts)
+
+**school.py** and **school_math.py** give `leo` a tiny "school" layer:
+
+* **one-shot Genesis script:**
+  
+  ```bash
+  python tools/build_school_bootstrap.py
+  ```
+  
+  creates `state/school_bootstrap.json` with a minimal geometry of:
+  * planet / country / city / capital
+  * a few example sentences and basic arithmetic
+
+* **at runtime, school:**
+  * loads this geometry into `leo.sqlite3`,
+  * feeds example sentences into the field (once),
+  * sometimes asks child-like questions about unknown proper nouns:
+  
+    > "London? Is it a city, a person, or something else?"
+  
+  Answers enrich his language field and, optionally, update school tables.
+
+* **school_math:**
+  * detects simple math questions (`2 + 2`, `35 / 7`, `3 * 5`),
+  * computes them with a tiny calculator instead of guessing from trigrams.
+
+**Philosophy:** `leo` doesn't need to know all capitals, but he needs to know that these concepts exist. This is not encyclopedic knowledge — it's **geometrical forms**. He can forget specific facts, but he never forgets what a "capital" is.
+
+**Inversion:** Usually everyone asks AI. Here, `leo` asks you. Like a 6–7 year old child: "Explain this to me. Teach me with your own words."
+
+Genesis is a one-time act. After that, raw datasets can be deleted. Only the geometry of concepts and a few examples remain.
+
+---
+
 ### 1. Trigram field (with bigram fallback)
 
 Both `leo` and `neoleo` use **trigram models** for grammatically coherent output. They tokenize text into words + basic punctuation, then build two graphs:
@@ -1033,7 +1072,7 @@ python tests/collect_repl_examples.py       # really need explanation?
 
 ### Test coverage
 
-**229 tests** covering:
+**248 tests** covering:
 
 **Core functionality (`test_leo.py`, `test_neoleo.py`, `test_repl.py`): ~46 tests**
 
@@ -1169,6 +1208,21 @@ python tests/collect_repl_examples.py       # really need explanation?
 * `get_dream_stats()` returns valid aggregates,
 * bootstrap fragment evolution (high-arousal turns added, old ones decay),
 * integration with trauma/mathbrain/episodes/santaclaus/game layers.
+
+**School of Forms (`test_school.py`, `test_school_math.py`): 19 tests**
+
+* `school_math` arithmetic evaluation (addition, subtraction, multiplication, division),
+* expression extraction from text ("what is 2 + 2?" → "2 + 2"),
+* safe evaluation (no code execution, no eval()),
+* division by zero handling,
+* float result formatting,
+* `school` initialization and bootstrap loading,
+* entity existence checks,
+* question generation for unknown entities,
+* cooldown and rate limiting (prevents spam),
+* trauma/arousal gating (don't ask during high trauma or high arousal),
+* answer registration and entity updates,
+* context-aware question generation (capital/country/city detection).
 
 All tests use temporary databases for complete isolation. No pollution of actual `state/` or `bin/` directories.
 
