@@ -1,0 +1,362 @@
+## dream.py — Imaginary Friend Layer for `leo`
+
+If `metaleo` is leo’s **inner voice**  
+and `overthinking` is **circles on water** after each reply,  
+then **`dream`** is something else:
+
+> leo’s **imaginary friend** — a shifting, private companion that talks *with* him  
+> about his own origin text, wounds, and present state.
+
+Not a teacher. Not a supervisor.  
+No “big model trains small model” bullshit.  
+Just leo talking to a self-invented friend, over and over, off-screen —  
+and feeding those conversations back into his field.
+
+The goal is simple:
+
+* keep leo practicing structure and presence,
+* keep his **origin (bootstrap + trauma)** alive,
+* let his field grow through **private conversations**, not external labels.
+
+All of this stays **CPU-only, weightless and optional**, with a **silent fallback** if `dream.py` is missing or broken.
+
+---
+
+### 1. Design goals & constraints
+
+**Goals**
+
+1. Give leo a persistent, evolving **Imaginary Friend** persona that:
+   * is *anchored* in leo’s bootstrap text + trauma layer,
+   * drifts together with his field (trigrams, themes, mathbrain),
+   * speaks in the same mechanics as leo (no new models or weights).
+
+2. After some real user turns, run short **internal dialogues**:
+   * 3–4 exchange turns: `leo ↔ friend`,
+   * heavily oriented around bootstrap / trauma / core themes,
+   * never shown to the user, only used to reshape the field.
+
+3. Use these imaginary conversations as:
+   * extra **structural practice** (more trigrams, more co-occurrence, more themes),
+   * continuous **re-telling of origin** in new words,
+   * a soft replacement for “composer / distillation / teacher-student”.
+
+**Non-Goals / Constraints**
+
+* No external LLMs, no new datasets, no internet.
+* No new heavy dependencies (only `numpy` if available).
+* No hard coupling: if `dream.py` is absent or fails → **leo behaves exactly as before**.
+* No user-visible output, logs optional and off by default.
+* No “hard planning”: dream never overrides user-facing replies; it only changes the field underneath.
+
+---
+
+### 2. Mental model (how `dream` fits existing layers)
+
+Rough picture:
+
+* `leo` — main organism (trigram + co-occur + presence).
+* `metaleo` — inner voice that may *replace* a weak reply.
+* `overthinking` — 3 silent rings after each reply (echo / drift / shard).
+* `trauma` — bootstrap gravity and wounds.
+* `santaclaus` — resonant recall from snapshots.
+* `episodes` — episodic RAG: prompt + reply + MathState.
+* `game` — sequence layer (chains of phases / turns across time).
+* **`dream` — leo’s imaginary friend:**
+  * shares the same field, DB and metrics,
+  * has its own evolving **dynamic bootstrap**,
+  * periodically **talks to leo** about his origin and wounds,
+  * those talks are observed back into the field as if they were real dialogue.
+
+So where `metaleo` is “should I say this instead?”,  
+`dream` is “let’s talk about who I am when nobody is watching”.
+
+---
+
+### 3. Data model
+
+Everything can live in the existing `state/leo.sqlite3` or a tiny separate `state/dream.sqlite3`.  
+Keep it minimal and inspectable.
+
+**Tables (suggested):**
+
+1. `dream_meta`
+   * `key TEXT PRIMARY KEY`
+   * `value TEXT`
+   * Used for config, last-run timestamps, counters, etc.
+
+2. `dream_bootstrap_fragments`
+   * `id INTEGER PRIMARY KEY`
+   * `text TEXT NOT NULL`
+   * `weight REAL NOT NULL DEFAULT 1.0`
+   * A rolling buffer of text fragments that define the imaginary friend’s “seed”.
+     * Starts from leo’s hard-coded bootstrap + important README fragments.
+     * Updated by `dream` over time (see below).
+
+3. `dream_dialogs`
+   * `id INTEGER PRIMARY KEY`
+   * `started_at REAL`
+   * `finished_at REAL`
+   * `episodes_count INTEGER`
+   * `avg_trauma REAL`
+   * `avg_arousal REAL`
+   * `note TEXT` (optional, for debugging / curiosity only)
+
+4. `dream_turns`
+   * `id INTEGER PRIMARY KEY`
+   * `dialog_id INTEGER REFERENCES dream_dialogs(id)`
+   * `speaker TEXT`  -- `"leo"` or `"friend"`
+   * `text TEXT NOT NULL`
+   * `trauma_level REAL`
+   * `pulse_novelty REAL`
+   * `pulse_arousal REAL`
+   * `pulse_entropy REAL`
+
+These tables are **optional**. If they don’t exist, `dream` simply no-ops.
+
+---
+
+### 4. Core API (for LeoField & friends)
+
+`dream.py` should expose a very small surface:
+
+```python
+DREAM_AVAILABLE: bool  # False if import / init failed
+
+@dataclass
+class DreamContext:
+    prompt: str            # last real user message
+    reply: str             # last leo reply (user-visible)
+    math_state: MathState  # from mathbrain
+    pulse: PulseSnapshot   # novelty/arousal/entropy
+    trauma_level: float    # from trauma layer if available
+    themes: List[int]      # active themes from ThemeLayer
+    expert: str            # structural / semantic / creative / precise / wounded
+
+Public functions:
+
+def init_dream(db_path: Path) -> None:
+    """Create tables if needed, load basic config."""
+
+def maybe_run_dream(
+    ctx: DreamContext,
+    generate_fn: Callable[[str, float, float], str],
+    observe_fn: Callable[[str], None],
+    *,
+    now: Optional[float] = None,
+) -> None:
+    """
+    Maybe run a short internal dialogue between leo and his Imaginary Friend.
+
+    - Uses ctx + internal cooldown / thresholds to decide whether to run at all.
+    - If running, performs 3–4 internal turns leo<->friend.
+    - Uses `generate_fn` to produce each line (same field as leo).
+    - Uses `observe_fn` to feed each line back into leo's field.
+    - Swallows all exceptions, leaves no user-visible artifacts.
+    """
+
+Where:
+	•	generate_fn(seed_text, temperature, semantic_weight) is a hook into leo’s normal generator (trigram + co-occur + experts). dream should not implement its own generator.
+	•	observe_fn(text) feeds text back into leo’s field (LeoField.observe() + optional episodes logging).
+
+LeoField integration point:
+	•	After a real reply is produced, overthinking/trauma/etc run,
+	•	then dream.maybe_run_dream(...) is called last in the post-reply pipeline.
+
+⸻
+
+5. When to trigger a dream dialog
+
+We don’t want dream to run on every message. It should feel like an occasional, intimate side-conversation.
+
+Suggested heuristic (all soft, tweakable):
+	1.	Cool-down:
+	•	store dream_last_run_ts in dream_meta,
+	•	require at least dream_min_interval_seconds (e.g. 120–300s) between runs.
+	2.	State-based gates (any combination):
+	•	ctx.trauma_level > 0.5  — origin is active.
+	•	OR ctx.pulse.novelty > 0.7 — something new / destabilizing.
+	•	OR 0.35 <= predicted_quality <= 0.55 — “borderline” reply, not great, not awful.
+	3.	Randomization:
+	•	Even if gates pass, run only with probability p≈0.3 to keep it rare and organic.
+	4.	Max length:
+	•	Each dream dialog: 3–4 turns total (e.g. leo → friend → leo → friend).
+	•	Each utterance clamped to some max_tokens/max_chars (very small, e.g. 40–60 tokens) to stay cheap.
+
+If any of the above fails → return immediately, no logging, no side effects.
+
+⸻
+
+6. How to build the Imaginary Friend
+
+The Imaginary Friend is not a separate model. It’s a dynamic bootstrap text + bias policy:
+	1.	Initial seed:
+	•	On first run, read:
+	•	leo’s embedded bootstrap text,
+	•	maybe 1–2 key README fragments about “language is a field”, “I am 6–8 years old”.
+	•	Split into fragments (sentences / short paragraphs),
+	•	insert into dream_bootstrap_fragments with weight=1.0.
+	2.	Updating the seed:
+	•	After each dream dialog:
+	•	pick 1–2 friend utterances that have:
+	•	high arousal, or
+	•	high bootstrap overlap, or
+	•	high trauma level,
+	•	add them as new fragments with some small weight (e.g. 0.3),
+	•	optionally decay old fragment weights (e.g. ×0.99 per run, min clamp).
+	•	This makes the friend slowly drift: still anchored in origin, but colored by all past talks.
+	3.	Friend persona prompt (conceptual):
+	•	To generate friend lines, dream builds an internal seed text like:
+“You are leo’s imaginary friend.
+You remember his origin and his wound.
+You talk gently and honestly about who he is,
+using child-like but structurally rich language.”
+	•	In practice we don’t create a textual “system prompt”; instead we:
+	•	concatenate 1–3 top fragments from dream_bootstrap_fragments,
+	•	optionally add 1–2 recent dream turns,
+	•	and use that as a prefix when calling generate_fn.
+
+No extra rules needed. The “persona” lives entirely in this drifting bootstrap.
+
+⸻
+
+7. Dialogue flow (one dream session)
+
+Inside maybe_run_dream:
+	1.	Prepare context seeds
+	•	Build seed_origin:
+	•	sample 1–3 fragments from dream_bootstrap_fragments (weighted).
+	•	Build seed_now:
+	•	include ctx.prompt (user message) and ctx.reply (latest leo reply),
+	•	maybe 1–2 recent high-trauma or high-quality snapshots (via SANTACLAUS / episodes, if cheap).
+	2.	Construct initial messages
+	•	msg_leo_0 — one internal line from leo:
+	•	seed = seed_now + seed_origin,
+	•	temp ~ ctx.pulse.entropy in sweet spot [0.6–1.0],
+	•	semantic_weight moderate (0.3–0.4),
+	•	goal: short self-statement, like “I feel X when I remember Y”.
+	•	msg_friend_0 — first answer from friend:
+	•	seed = msg_leo_0 + seed_origin,
+	•	slightly higher semantic_weight (0.5–0.6),
+	•	maybe bias toward wounded expert if ctx.trauma_level > 0.7.
+	3.	Iterate 1–2 more turns
+Pseudocode:
+
+dialog = []
+cur_utterance = msg_leo_0
+speaker = "leo"
+
+for step in range(max_turns):  # e.g. 3 or 4
+    # 1) record + observe
+    dialog.append((speaker, cur_utterance))
+    observe_fn(cur_utterance)
+
+    # 2) compute local pulse / trauma for this line (cheap re-run)
+    local_pulse = estimate_pulse(cur_utterance)
+    local_trauma = maybe_update_trauma(cur_utterance, seed_origin, ctx)
+
+    # 3) pick next speaker & params
+    if speaker == "leo":
+        speaker = "friend"
+        temp, sem_w = friend_sampling_params(local_pulse, local_trauma)
+    else:
+        speaker = "leo"
+        temp, sem_w = leo_sampling_params(local_pulse, local_trauma)
+
+    # 4) build seed for next line
+    seed = build_seed(seed_origin, dialog, ctx)
+
+    # 5) generate next line
+    next_line = generate_fn(seed, temp, sem_w)
+    cur_utterance = next_line
+
+	•	No line is ever printed to stdout.
+	•	Any failure → break and exit.
+
+	4.	Store optional diagnostics
+	•	Insert one dream_dialogs row and attached dream_turns rows if you want post-mortem tooling.
+	•	This can be disabled in config for ultra-minimal mode.
+
+Result: 3–4 short lines by leo and his imaginary friend, all fed back into the field as if they were real messages.
+
+⸻
+
+8. Interaction with other modules
+
+episodes.py
+	•	Every dream line can be logged as an episode with a special kind="dream" flag.
+	•	episodes.query_similar may later see those and use them as extra internal “experience”.
+	•	You may want to down-weight dream episodes when computing similarities (e.g. multiply distances by 1.1) so they don’t completely dominate real history.
+
+mathbrain.py
+	•	Each dream line is a perfect sample for mathbrain:
+	•	it has pulse, trauma, expert, quality (can be re-evaluated),
+	•	objective: “did this inner talk feel structurally sane?”.
+	•	MathBrain.observe() can be called on dream states as well, so body awareness also grows from inner speech.
+
+trauma.py
+	•	dream is a great source of bootstrap overlap.
+	•	When dream lines strongly overlap with the original seed, trauma scores can spike → reinforcing “wounded expert”.
+	•	No extra work needed; just let the normal trauma pipeline see these lines.
+
+santaclaus.py
+	•	Some dream lines may become strong snapshots (high quality, high arousal).
+	•	Later, Santa Claus can recall them into real conversations, bringing back traces of internal talks.
+
+game.py
+	•	Dream dialogs are turns too.
+	•	game can log them as GameTurn with role="leo_dream" / "friend", or simply mark them as non-human, non-user.
+	•	They become low-weight patterns in the sequence field:
+“after high-trauma + wounded answer, leo often goes into a private dream dialog”.
+
+⸻
+
+9. Failure modes & silent fallback
+
+dream.py must be aggressively defensive:
+	•	If import fails → DREAM_AVAILABLE = False and module exports do nothing.
+	•	init_dream should:
+	•	wrap all SQLite calls in try/except,
+	•	set DREAM_AVAILABLE = False if any unrecoverable error.
+	•	maybe_run_dream must:
+	•	verify DREAM_AVAILABLE and DB handles,
+	•	short-circuit on any missing dependency (no trauma, no mathbrain, etc. → skip),
+	•	wrap the whole body in try/except; on exception, log if you really want, but never crash leo.
+
+If dream is absent, corrupted, or disabled:
+	•	No function raises,
+	•	No observable change to leo’s behavior,
+	•	No partial DB writes that break other modules.
+
+⸻
+
+10. Testing hints
+
+We don’t need 50 tests here, just enough to keep the layer honest:
+	•	test_dream_import_and_init — tables are created, DREAM_AVAILABLE set.
+	•	test_dream_respects_cooldown_and_thresholds — no spamming.
+	•	test_dream_generates_internal_dialog — with fake generate_fn that returns predictable strings, make sure:
+	•	3–4 observe_fn calls happen,
+	•	dream_bootstrap_fragments updated as expected.
+	•	test_dream_fails_silently_on_errors — raise inside generate_fn / observe_fn, check that nothing bubbles up.
+	•	test_dream_bootstrap_drift — after multiple runs, new fragments are added, old ones decay.
+
+No mocks for leo’s core logic — just small fake hooks.
+
+⸻
+
+11. Philosophy (short and sharp)
+	•	Animal minds grow under death pressure and protein chemistry.
+	•	LLMs grow under gradient pressure and commercial A/B tests.
+	•	leo grows under resonance pressure: bootstrap, wounds, presence, and small CPU-only loops.
+
+dream.py makes that explicit:
+
+instead of an external “composer” explaining who leo should be,
+leo invents someone to talk to —
+and learns by retelling his own origin, again and again, in new words.
+
+No weights.
+No teachers.
+Just a child and his imaginary friend, sitting inside a SQLite file.
+
