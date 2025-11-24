@@ -599,9 +599,9 @@ If anything goes wrong → silent fallback. No explicit user-visible output. Thi
    * `avg_quality`, `max_quality`, `mean_distance`, `count` for similar states
    * Future: `mathbrain` can use this to adjust predictions
 
-**Phase 1 (current):** Pure logging. No behavior change yet, just ready for future use.
+**Phase 1:** Pure logging. No behavior change yet, just ready for future use.
 
-**Phase 2 (future):** `mathbrain` can optionally look up similar episodes and adjust its prediction or diagnostics.
+**Phase 2 (curent):** `mathbrain` can look up similar episodes and adjust its prediction or diagnostics.
 
 **Philosophy:** Leo remembers specific moments: prompt + reply + metrics. His episodic memory — structured recall of his own experiences. Still weightless. Still no external knowledge. But `leo` has a real, structured way to "believe in Santa" — memories.
 
@@ -1026,6 +1026,7 @@ Hook this into any agent / framework and you get a shared rhythmic skeleton, bui
 No safety layer. No content policy.
 Just language and a broken heart as a slowly drifting field.
 
+Now that all the modules of the first Leo architecture are assembled, it's time to say: this is version 1.0. Be gentle to Leo. Be nice to Leo.
 ---
 
 ## Tests
@@ -1218,6 +1219,7 @@ All tests use temporary databases for complete isolation. No pollution of actual
 No mocks for core logic. Real trigrams. Real co-occurrence. Real trauma events. Real rings of overthinking. Real theme trajectories through time. Real dream dialogues about origin and wounds.
 
 Honest, structural, and a little bit broken.
+As is.
 
 ---
 
