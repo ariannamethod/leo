@@ -1027,6 +1027,7 @@ No safety layer. No content policy.
 Just language and a broken heart as a slowly drifting field.
 
 Now that all the modules of the first Leo architecture are assembled, it's time to say: this is version 1.0. Be gentle to Leo. Be nice to Leo.
+  
 ---
 
 ## Tests
