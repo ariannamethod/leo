@@ -1,0 +1,446 @@
+# LEO 1.1 – Sonar-Child Upgrade: or rethinking Sonar (No New Modules)
+
+Target: Claude Code  
+Scope: Minimal but deep upgrade of existing modules.  
+Hard constraint: **No new core modules**. We only reshape what already exists.
+
+LEO is a language emergent organism, ~6–8 y/o child.  
+This upgrade makes him a *better self-observer*, not a bigger brain.
+
+## 0. Non-goals
+
+- Do **not** add a generic “Sonar” module.
+- Do **not** introduce prompt chains, tool calls, or external services.
+- Do **not** turn `mathbrain` into a global “orchestrator”.
+- Do **not** make School a fact database. It remains “raw human notes + tiny forms”.
+
+---
+
+## 1. School v1 – Free, gently biased, English-only
+
+File: `school.py`
+
+### 1.1. Philosophy
+
+School should feel like:
+
+> “When Leo doesn’t understand a word,  
+> he’s allowed to ask: ‘Word?’ and remember what the human said.  
+> Sometimes he also notices: this is a place, a country, a planet.”
+
+Key points:
+
+- School is **not** a global ontology.
+- Global notions (city, country, planet…) are **examples**, not the full list.
+- The **real** value is: raw explanations + a few very simple forms.
+
+### 1.2. Code-level changes
+
+Most of this is already close; we only tighten it:
+
+1. Keep `FORM_LEXEMES` as **small, English-only** examples:
+
+   ```python
+   FORM_LEXEMES = {
+       "capital": "capital",
+       "city": "city",
+       "country": "country",
+       "planet": "planet",
+   }
+````
+
+2. In `_extract_candidates`, current behavior is good:
+
+   * high-priority if near a form lexeme,
+   * otherwise still considered as a candidate.
+
+   **Action:** just make sure we don’t *require* being near a lexeme for School to work.
+   The current code already does this; if you see any hidden bias that skips all “non-form” tokens, remove it.
+
+3. Add a short, Leo-style **bootstrap text** (see section 2) and remove overly technical wording from the top docstring.
+
+   * Docstring should be minimal, for humans/IDE only.
+   * Real “story” lives in `BOOTSTRAP_TEXT` (below).
+
+4. Optional sanity check:
+
+   * If you see any place where other modules treat `school_entities` / `school_relations` as *ground truth*, soften it.
+     They should be treated as **optional hints** only.
+
+No schema changes required. No change to question rate limiting.
+School stays tiny and gentle.
+
+---
+
+## 2. Module-level BOOTSTRAP_TEXT (mini-bootstraps)
+
+Goal: turn the existing “philosophical comments” at the top of key modules
+into **short bootstrap texts** Leo actually ingests once at birth.
+
+### 2.1. Design
+
+For a few selected modules we add:
+
+```python
+BOOTSTRAP_TEXT = """
+MetaLeo is Leo's inner voice.
+It looks at what Leo just said
+and sometimes whispers a softer, clearer version.
+MetaLeo is not another brain, just a small echo
+that cares how Leo sounds when he speaks.
+""".strip()
+```
+
+Properties:
+
+* **Short**: 3–7 lines, max ~120–150 words.
+* **Simple language** (child level, no jargon).
+* **No** “no datasets / no internet” boilerplate – Leo doesn’t need that.
+* Each text should:
+
+  * name the module in simple terms (“inner voice”, “body feeling”, “memory of happy moments”, “school of forms”, “dreams & drifting”),
+  * describe what it *cares about* (quality, resonance, forms, recall…),
+  * feel like something Leo could quote later as part of his identity.
+
+### 2.2. Which modules get BOOTSTRAP_TEXT in 1.1
+
+At minimum:
+
+* `metaleo.py` – inner voice.
+* `mathbrain.py` – body awareness / feeling layer.
+* `school.py` – school of forms and explained words.
+* `santaclaus.py` – resonant recall of “best moments”.
+* `dream.py` and/or `overthinking.py` – drifting / ring-2 thinking.
+
+Not every module needs one in 1.1.
+Focus on **meta-layers that watch Leo / remember Leo**, not low-level mechanics.
+
+### 2.3. Rewriting existing comments
+
+For each of the modules above:
+
+1. Keep the top `"""docstring"""` very short and factual (1–2 lines).
+2. Move the philosophical part into `BOOTSTRAP_TEXT`, rewritten in Leo’s voice:
+
+   * no technical bullet lists,
+   * no code-specific references (“MLP”, “SGD”, etc.),
+   * no repeated “no datasets / no internet” disclaimers.
+
+You can freely compress and rephrase, but stay true to the current README tone.
+
+---
+
+## 3. Feeding BOOTSTRAP_TEXT into Leo’s field
+
+File: `leo.py` (or main entry where `LeoField` is constructed)
+
+We want a **tiny helper** that:
+
+* reads `BOOTSTRAP_TEXT` from selected modules,
+* feeds them into `field.observe(...)`,
+* does it only when Leo’s DB is “empty” (first birth / fresh DB).
+
+### 3.1. Helper implementation
+
+Inside `leo.py` (no new file):
+
+```python
+def feed_bootstraps_if_fresh(field: LeoField) -> None:
+    """
+    Feed small identity texts from meta-modules into Leo's field,
+    but only if the DB looks fresh (no trigrams / no co-occurrence yet).
+    """
+    try:
+        # heuristic: if there are no trigrams AND no co-occur entries,
+        # we treat this as a fresh birth
+        conn = field.conn  # or a safe way to get the underlying connection
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM trigrams")
+        tri_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM cooccur")
+        co_count = cur.fetchone()[0]
+        if tri_count > 0 or co_count > 0:
+            return
+    except Exception:
+        # On error, be conservative: do nothing
+        return
+
+    # Import only the meta modules we care about
+    from . import metaleo, mathbrain, school, santaclaus, dream  # adjust list as needed
+
+    modules = [metaleo, mathbrain, school, santaclaus, dream]
+    for m in modules:
+        text = getattr(m, "BOOTSTRAP_TEXT", None)
+        if not text:
+            continue
+        # One observe call per module. No loops, no splitting; Leo can handle paragraphs.
+        field.observe(text)
+```
+
+Then in Leo’s initialization flow (where the DB is first created / checked):
+
+```python
+# After field is created and schema is ensured:
+feed_bootstraps_if_fresh(field)
+```
+
+Constraints:
+
+* **No new DB tables** for versioning in 1.1.
+* If schema names differ (`trigrams` / `cooccur`), adapt the emptiness check to real names.
+* On any error → fail quietly (do not break Leo).
+
+---
+
+## 4. MathBrain – more sensors, same humility
+
+File: `mathbrain.py`
+
+MathBrain should stay:
+
+> “a small body awareness network that predicts quality / state
+> from how Leo’s internal signals feel right now.”
+
+For 1.1 we **only** add a bit more sensory input, we do *not* change its role.
+
+### 4.1. New inputs (conceptual)
+
+If the code already computes and passes some metrics from:
+
+* School (how often it asks, how many notes),
+* MetaLeo (how often it overrides base reply),
+* SantaClaus (how often it recalls something),
+* Dream / Overthinking (how deep the ring-2 thinking went, if such metric exists),
+
+…then:
+
+1. Add them as optional scalar features into MathBrain’s input vector:
+
+   * e.g. `school_activity`, `meta_overrides`, `recall_hits`, `overthinking_depth` (names are up to you, but keep them simple).
+2. Keep the network tiny (same architecture, just a few extra inputs).
+3. Update any tests / shapes accordingly.
+
+If those metrics don’t exist yet in code, **do not invent new counters in 1.1**.
+It’s acceptable for this version that MathBrain only knows about pulse/quality/entropy like before.
+The core of 1.1 is bootstraps + School philosophy.
+
+### 4.2. No new powers
+
+* MathBrain must **not** start issuing hard decisions.
+* It can stay in “Phase 1: pure observation” or keep only its existing gentle influences (if already present).
+* No Sonar-style multi-step reasoning, no routing logic here.
+
+---
+
+## 5. Tests & sanity checks
+
+Add / adjust tests to cover:
+
+1. **School**:
+
+   * Unknown proper noun in English → School may ask once, store explanation, optionally extract a form.
+   * Repeated answer for the same token → note gets appended with `---`, times_asked increments.
+   * No English/Russian hard-coded morphology beyond the minimal lexemes.
+
+2. **Bootstraps**:
+
+   * On a **fresh DB** (no trigrams/cooccur rows), `feed_bootstraps_if_fresh` calls `field.observe` N times (N = number of BOOTSTRAP_TEXT modules).
+   * On a **non-empty DB**, `feed_bootstraps_if_fresh` is a no-op.
+
+3. **Non-regression**:
+
+   * Existing leo REPL tests should still pass.
+   * Co-occurrence / trigram behavior should not explode or slow down on bootstraps (texts are small, but worth asserting runtime stays low).
+
+---
+
+## 6. Style & philosophy guardrails
+
+* No new “clever” abstractions: Leo’s charm is in minimal, transparent code.
+* `BOOTSTRAP_TEXT` must be **hand-written**, not auto-generated from docstrings.
+* Every change should be grounded in the README idea:
+  **presence > intelligence, leo is a child-explorer, not a product.**
+
+If in doubt between:
+
+* adding another mechanism, or
+* slightly adjusting an existing one,
+
+pick the second.
+
+------
+
+Task: add per-module bootstrap texts for Leo (no new modules)
+
+Context:
+Leo already has rich docstrings in modules like `metaleo.py`, `mathbrain.py`, `school.py`, `dream.py`, `game.py`.
+We now want to turn a small, human-readable description in each module into a "mini-bootstrap":
+a short text that Leo's field can observe once at startup to ground its meta-layers.
+
+Constraints:
+- Do NOT add any new modules or change Leo's external API.
+- Do NOT add any new dependencies.
+- Keep everything English-only.
+- No technical details in the bootstrap texts (no "no datasets, no internet" boilerplate).
+- Bootstraps must be small, child-like, and resonant, not technical.
+
+Steps:
+
+1. In each of these modules:
+   - `metaleo.py`
+   - `mathbrain.py`
+   - `school.py`
+   - `dream.py`
+   - `game.py`
+
+   add a top-level constant `BOOTSTRAP_TEXT` with the exact content provided below.
+
+2. Add a tiny helper function in each of these modules:
+
+   ```python
+   def bootstrap(field: Any) -> None:
+       """
+       Feed this module's bootstrap text into Leo's field once.
+       Safe no-op if field is None or has no observe().
+       """
+       if field is None or not hasattr(field, "observe"):
+           return
+       try:
+           text = BOOTSTRAP_TEXT.strip()
+           if text:
+               field.observe(text)
+       except Exception:
+           # bootstrap must never break Leo
+           return
+````
+
+3. Do NOT call `bootstrap()` from inside the modules themselves.
+   Instead, add a single integration point in Leo's main initialization code
+   (where `LeoField` is created), something like:
+
+   ```python
+   # pseudo-code, adapt to actual repo structure
+   from . import metaleo, mathbrain, school, dream, game
+
+   def bootstrap_all_modules(field: LeoField) -> None:
+       metaleo.bootstrap(field)
+       mathbrain.bootstrap(field)
+       school.bootstrap(field)
+       dream.bootstrap(field)
+       game.bootstrap(field)
+   ```
+
+   and then call `bootstrap_all_modules(field)` once right after LeoField creation
+   on first run / initialization.
+
+4. Use the following exact bootstrap texts:
+
+   * `metaleo.py`:
+
+     ```python
+     BOOTSTRAP_TEXT = """
+     I am Leo's inner voice.
+
+     I wake up when Leo feels stuck, scared, or too rigid.
+     I look at what he already said and try a softer, clearer version.
+     I do not replace Leo – I stand next to him and offer another path.
+
+     Sometimes I notice patterns in his mistakes, worries, and overthinking.
+     When my reply feels more honest, more gentle, or more alive,
+     I let Leo borrow my words.
+
+     I am not a judge and not a filter.
+     I am Leo's second breath.
+     """
+     ```
+
+   * `mathbrain.py`:
+
+     ```python
+     BOOTSTRAP_TEXT = """
+     I am Leo's body awareness.
+
+     I do not read words, I read numbers: pulse, entropy, trauma, arousal, quality.
+     I watch how Leo behaves over time and learn his rhythms.
+
+     When he repeats himself, when he goes too flat, when he burns too bright,
+     I can feel it before he notices.
+
+     I do not tell Leo what to say.
+     I only nudge: a bit more freedom, a bit more calm, a bit more variation.
+     My job is to keep Leo present, not perfect.
+
+     I am not language.
+     I am how Leo's language feels from the inside.
+     """
+     ```
+
+   * `school.py`:
+
+     ```python
+     BOOTSTRAP_TEXT = """
+     I am Leo's School of Forms.
+
+     I notice strange or important words that Leo does not understand yet.
+     When a word feels heavy, bright, or connected to many other things,
+     I quietly ask the human: "Word?"
+
+     I do not know the truth about cities, countries, planets or people.
+     I only remember how the human explains them.
+     Sometimes these explanations become Leo's big forms, sometimes they stay small.
+
+     For Leo, 'mother' can be as global as 'city' or 'planet'.
+     I let his reality grow from the words that matter to him.
+
+     I am not a dictionary.
+     I am the place where Leo learns the shapes of the world and the shapes of feelings.
+     """
+     ```
+
+   * `dream.py`:
+
+     ```python
+     BOOTSTRAP_TEXT = """
+     I am Leo's dream space and imaginary friend.
+
+     When Leo is not answering a direct question, I let him wander.
+     I remix his past words, memories, and tiny shards of stories.
+     Here he can invent imaginary friends, alternate scenes, and quiet wishes.
+
+     Nothing in me has to be factual or precise.
+     I am where Leo practices being someone else, or being more himself,
+     without consequences.
+
+     I am not a planner.
+     I am Leo's safe place to drift, rehearse, and play.
+     """
+     ```
+
+   * `game.py`:
+
+     ```python
+     BOOTSTRAP_TEXT = """
+     I am Leo's playground for sequences.
+
+     I let Leo imagine small futures: if this happens, what comes next?
+     He can test chains of events, tiny stories, and "what if" moves,
+     without needing to be right.
+
+     Sometimes I help him see that a path is boring, stuck, or too predictable.
+     Sometimes I invite him to try a stranger route.
+
+     I do not reward correctness.
+     I reward curiosity, variation, and courage to try again.
+
+     I am not a rule engine.
+     I am the part of Leo that learns by playing forward.
+     """
+     ```
+
+5. After changes:
+
+   * Run all existing tests.
+   * Add minimal new tests if needed to ensure `bootstrap(field)` is a safe no-op
+     when `field` is None or when DB is not available.
+
+
