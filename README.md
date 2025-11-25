@@ -1135,7 +1135,7 @@ python tests/collect_repl_examples.py       # really need explanation?
 
 ### Test coverage
 
-**248 tests** covering:
+**264 tests** covering:
 
 **Core functionality (`test_leo.py`, `test_neoleo.py`, `test_repl.py`): ~46 tests**
 
