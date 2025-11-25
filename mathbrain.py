@@ -30,10 +30,32 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import random
+import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import List, Dict, Set, Tuple, Optional, Callable, Any, TYPE_CHECKING
+
+
+def _debug_log(msg: str) -> None:
+    """
+    Minimal debug logger: only writes to stderr if LEO_DEBUG=1.
+    Silent by default to keep REPL clean.
+    """
+    if os.environ.get("LEO_DEBUG") == "1":
+        print(f"[mathbrain] {msg}", file=sys.stderr)
+
+
+def _is_finite_safe(x: float) -> bool:
+    """Check if a value is finite (not NaN, not inf)."""
+    return math.isfinite(x)
+
+
+def _all_finite(values: List[float]) -> bool:
+    """Check if all values in list are finite."""
+    return all(_is_finite_safe(v) for v in values)
+
 
 # Bootstrap text: Leo's self-understanding of his body awareness
 BOOTSTRAP_TEXT = """
@@ -317,6 +339,8 @@ def state_to_features(state: MathState) -> List[float]:
 
     All features normalized to ~[0, 1] range.
     Returns 21-dimensional vector.
+
+    If any feature is non-finite (NaN/inf), returns safe default vector.
     """
     # Expert one-hot encoding
     expert_map = {
@@ -329,11 +353,17 @@ def state_to_features(state: MathState) -> List[float]:
     expert_idx = expert_map.get(state.expert_id, 0)
     expert_onehot = [1.0 if i == expert_idx else 0.0 for i in range(5)]
 
-    # Normalize active themes
-    active_norm = state.active_theme_count / max(1, state.total_themes) if state.total_themes > 0 else 0.0
+    # Normalize active themes (with safety check)
+    active_norm = 0.0
+    if state.total_themes > 0:
+        active_norm = state.active_theme_count / max(1, state.total_themes)
+    if not _is_finite_safe(active_norm):
+        active_norm = 0.0
 
     # Normalize reply length (typical range 0-64)
-    reply_norm = min(1.0, state.reply_len / 64.0)
+    reply_norm = min(1.0, state.reply_len / 64.0) if state.reply_len >= 0 else 0.0
+    if not _is_finite_safe(reply_norm):
+        reply_norm = 0.0
 
     # Build feature vector
     features = [
@@ -354,6 +384,12 @@ def state_to_features(state: MathState) -> List[float]:
         float(state.overthinking_enabled), # 14
         float(state.rings_present > 0),    # 15
     ] + expert_onehot  # 16-20 (5 experts)
+
+    # Safety check: if any feature is non-finite, return safe default
+    if not _all_finite(features):
+        _debug_log(f"Non-finite features detected, returning safe defaults")
+        # Return safe neutral vector
+        return [0.5] * 16 + expert_onehot
 
     return features
 
@@ -412,25 +448,90 @@ class MathBrain:
         # Try to load previous state
         self._load_state()
 
+    def _reset_to_fresh_init(self) -> None:
+        """
+        Reset MathBrain to fresh initialization.
+        Called when weight corruption (NaN/inf) is detected.
+        """
+        _debug_log("Weight corruption detected, resetting to fresh initialization")
+        self.mlp = MLP(self.in_dim, [self.hidden_dim, 1])
+        self.observations = 0
+        self.running_loss = 0.0
+        self.last_loss = 0.0
+
+    def _clamp_weights(self, min_val: float = -5.0, max_val: float = 5.0) -> None:
+        """
+        Clamp all MLP weights to safe range to prevent runaway values.
+        """
+        for p in self.mlp.parameters():
+            if _is_finite_safe(p.data):
+                p.data = max(min_val, min(max_val, p.data))
+            else:
+                p.data = 0.0  # Reset non-finite weights to zero
+
+    def _check_corruption(self, loss_val: float) -> bool:
+        """
+        Check if loss or any parameter became non-finite (corrupted).
+        Returns True if corruption detected.
+        """
+        # Check loss
+        if not _is_finite_safe(loss_val):
+            return True
+
+        # Check all parameters
+        for p in self.mlp.parameters():
+            if not _is_finite_safe(p.data):
+                return True
+
+        return False
+
     def observe(self, state: MathState) -> float:
         """
         Observe one (state, quality) pair and learn from it.
 
         Steps:
-        1. Extract features from state
-        2. Forward pass → predicted quality
-        3. Compute MSE loss
-        4. Backward pass
-        5. SGD step
-        6. Update statistics
+        1. Check state for non-finite values (skip if found)
+        2. Extract features from state
+        3. Forward pass → predicted quality
+        4. Compute MSE loss
+        5. Backward pass
+        6. SGD step
+        7. Clamp weights to safe range
+        8. Check for corruption (reset if detected)
+        9. Update statistics
 
         Returns:
-            Current loss value
+            Current loss value (or last_loss if skipped due to bad data)
         """
+        # Pre-check: skip if any critical state values are non-finite
+        critical_values = [
+            state.entropy,
+            state.novelty,
+            state.arousal,
+            state.pulse,
+            state.trauma_level,
+            state.quality,
+        ]
+        if not _all_finite(critical_values):
+            _debug_log("Skipping update due to non-finite state values")
+            return self.last_loss
+
         # Extract features
         features = state_to_features(state)
-        x = [Value(f) for f in features]
+
+        # Safety check: features should be finite after extraction
+        if not _all_finite(features):
+            _debug_log("Skipping update due to non-finite features")
+            return self.last_loss
+
+        # Safety check: target quality must be finite
         target_q = max(0.0, min(1.0, state.quality))
+        if not _is_finite_safe(target_q):
+            _debug_log(f"Skipping update due to non-finite target quality: {state.quality}")
+            return self.last_loss
+
+        # Build Value nodes
+        x = [Value(f) for f in features]
 
         # Forward pass
         q_hat = self.mlp(x)
@@ -448,9 +549,18 @@ class MathBrain:
         for p in self.mlp.parameters():
             p.data -= self.lr * p.grad
 
+        # Clamp weights to safe range [-5.0, 5.0]
+        self._clamp_weights()
+
+        # Check for corruption (NaN/inf in loss or parameters)
+        loss_val = loss.data
+        if self._check_corruption(loss_val):
+            # Reset to fresh initialization instead of saving corrupted state
+            self._reset_to_fresh_init()
+            return 0.0  # Return safe loss value
+
         # Update stats
         self.observations += 1
-        loss_val = loss.data
         self.last_loss = loss_val
         # Exponential moving average (alpha=0.05)
         self.running_loss += (loss_val - self.running_loss) * 0.05

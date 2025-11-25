@@ -17,6 +17,7 @@ Tests cover:
 
 import unittest
 import json
+import math
 import tempfile
 from pathlib import Path
 
@@ -504,6 +505,76 @@ class TestMathBrainTraining(unittest.TestCase):
         self.assertEqual(stats["in_dim"], 21)
         self.assertIn("running_loss", stats)
         self.assertIn("num_parameters", stats)
+
+    def test_nan_inf_handling(self):
+        """
+        Test that MathBrain handles non-finite features safely.
+        Should skip updates with NaN/inf features and not save corrupted state.
+        """
+        class DummyField:
+            pass
+
+        brain = MathBrain(
+            leo_field=DummyField(),
+            hidden_dim=8,
+            state_path=self.state_path,
+        )
+
+        # Observe a normal state first
+        normal_state = MathState(
+            entropy=0.5,
+            novelty=0.3,
+            quality=0.8,
+        )
+        loss1 = brain.observe(normal_state)
+        self.assertIsNotNone(loss1)
+        self.assertTrue(math.isfinite(loss1))
+        self.assertEqual(brain.observations, 1)
+
+        # Try to observe state with NaN entropy
+        nan_state = MathState(
+            entropy=float('nan'),
+            novelty=0.3,
+            quality=0.8,
+        )
+        loss2 = brain.observe(nan_state)
+        # Should skip and return last loss
+        self.assertTrue(math.isfinite(loss2))
+        self.assertEqual(brain.observations, 1)  # Should not increment
+
+        # Try state with inf novelty
+        inf_state = MathState(
+            entropy=0.5,
+            novelty=float('inf'),
+            quality=0.8,
+        )
+        loss3 = brain.observe(inf_state)
+        self.assertTrue(math.isfinite(loss3))
+        self.assertEqual(brain.observations, 1)  # Should not increment
+
+        # Try state with nan quality
+        nan_quality_state = MathState(
+            entropy=0.5,
+            novelty=0.3,
+            quality=float('nan'),
+        )
+        loss4 = brain.observe(nan_quality_state)
+        self.assertTrue(math.isfinite(loss4))
+        self.assertEqual(brain.observations, 1)  # Should not increment
+
+        # Observe another normal state - should work
+        normal_state2 = MathState(
+            entropy=0.4,
+            novelty=0.2,
+            quality=0.7,
+        )
+        loss5 = brain.observe(normal_state2)
+        self.assertTrue(math.isfinite(loss5))
+        self.assertEqual(brain.observations, 2)  # Should increment
+
+        # Verify all parameters are still finite
+        for p in brain.mlp.parameters():
+            self.assertTrue(math.isfinite(p.data))
 
 
 class TestMathBrainPersistence(unittest.TestCase):

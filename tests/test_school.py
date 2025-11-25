@@ -2,7 +2,9 @@
 """Tests for school module (minimal School of Forms)."""
 
 import unittest
+import sqlite3
 import tempfile
+import time
 from pathlib import Path
 
 try:
@@ -345,6 +347,62 @@ class TestSchool(unittest.TestCase):
         if row:  # Relation might be deleted if confidence < 0.1
             new_confidence = row[0]
             self.assertLess(new_confidence, initial_confidence)
+        conn.close()
+
+    def test_note_length_cap_on_concatenation(self):
+        """
+        Test that school_notes.note never grows beyond MAX_NOTE_LEN,
+        even after multiple appended answers.
+        """
+        from school import MAX_NOTE_LEN, SchoolQuestion
+
+        token = "testtoken"
+        display = "TestToken"
+
+        # Create question manually
+        question = SchoolQuestion(token=token, display=display, text=f"{display}?")
+
+        # Register first answer (large but under limit)
+        first_answer = "A" * (MAX_NOTE_LEN - 100)
+        self.school.register_answer(question, first_answer)
+
+        # Check note length
+        conn = sqlite3.connect(str(self.school.db_path))
+        cur = conn.cursor()
+        cur.execute("SELECT note FROM school_notes WHERE token = ?", (token,))
+        row = cur.fetchone()
+        self.assertIsNotNone(row)
+        note1 = row[0]
+        self.assertLessEqual(len(note1), MAX_NOTE_LEN + 20)  # Allow for truncation marker
+        conn.close()
+
+        # Register second answer (will be appended)
+        second_answer = "B" * 1000
+        self.school.register_answer(question, second_answer)
+
+        # Check combined note doesn't exceed limit
+        conn = sqlite3.connect(str(self.school.db_path))
+        cur = conn.cursor()
+        cur.execute("SELECT note FROM school_notes WHERE token = ?", (token,))
+        row = cur.fetchone()
+        self.assertIsNotNone(row)
+        note2 = row[0]
+        self.assertLessEqual(len(note2), MAX_NOTE_LEN + 20)  # Allow for truncation marker
+        self.assertIn("truncated", note2.lower())  # Should have truncation marker
+        conn.close()
+
+        # Register third answer
+        third_answer = "C" * 1000
+        self.school.register_answer(question, third_answer)
+
+        # Check note still doesn't exceed limit
+        conn = sqlite3.connect(str(self.school.db_path))
+        cur = conn.cursor()
+        cur.execute("SELECT note FROM school_notes WHERE token = ?", (token,))
+        row = cur.fetchone()
+        self.assertIsNotNone(row)
+        note3 = row[0]
+        self.assertLessEqual(len(note3), MAX_NOTE_LEN + 20)  # Allow for truncation marker
         conn.close()
 
 
