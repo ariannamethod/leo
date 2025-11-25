@@ -7,8 +7,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import os
 import random
 import re
 import sqlite3
@@ -438,75 +440,118 @@ def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
         set_meta(conn, "readme_bootstrap_done", "missing")
 
 
+def _debug_log(msg: str) -> None:
+    """
+    Minimal debug logger for leo.py: only writes to stderr if LEO_DEBUG=1.
+    Silent by default to keep REPL clean.
+    """
+    if os.environ.get("LEO_DEBUG") == "1":
+        print(f"[leo] {msg}", file=sys.stderr)
+
+
+def _compute_bootstrap_hash(modules_with_texts: List[Tuple[str, str]]) -> str:
+    """
+    Compute SHA-256 hash of all module bootstrap texts combined.
+    Returns hex digest string.
+    """
+    combined = "\n===\n".join(f"{name}:\n{text}" for name, text in modules_with_texts)
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest()
+
+
 def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
     """
     Feed small identity texts from meta-modules into Leo's field,
-    but only if the DB looks fresh (no trigrams / no co-occurrence yet).
+    but only if the bootstrap content hash has changed or is missing.
 
     This is Leo 1.1 - Sonar-Child upgrade: Leo learns about his internal layers
     through simple, child-like bootstrap texts.
+
+    Uses a content hash instead of trigram/cooccur counts to avoid
+    double-ingestion if the DB is vacuumed or tables are truncated.
     """
     try:
-        # heuristic: if there are no trigrams AND no co-occur entries,
-        # we treat this as a fresh birth
         conn = field.conn
-        cur = conn.cursor()
 
-        cur.execute("SELECT COUNT(*) FROM trigrams")
-        tri_count = cur.fetchone()[0]
+        # Import meta modules that have BOOTSTRAP_TEXT
+        modules_to_bootstrap = []
 
-        cur.execute("SELECT COUNT(*) FROM cooccur")
-        co_count = cur.fetchone()[0]
-
-        if tri_count > 0 or co_count > 0:
-            # Not fresh - skip bootstrap feeding
-            return
-    except Exception:
-        # On error, be conservative: do nothing
-        return
-
-    # Import meta modules that have BOOTSTRAP_TEXT
-    modules_to_bootstrap = []
-
-    try:
-        import metaleo
-        modules_to_bootstrap.append(("metaleo", metaleo))
-    except ImportError:
-        pass
-
-    try:
-        import mathbrain
-        modules_to_bootstrap.append(("mathbrain", mathbrain))
-    except ImportError:
-        pass
-
-    try:
-        import school
-        modules_to_bootstrap.append(("school", school))
-    except ImportError:
-        pass
-
-    try:
-        import dream
-        modules_to_bootstrap.append(("dream", dream))
-    except ImportError:
-        pass
-
-    try:
-        import game
-        modules_to_bootstrap.append(("game", game))
-    except ImportError:
-        pass
-
-    # Feed each module's bootstrap
-    for name, module in modules_to_bootstrap:
         try:
-            bootstrap_fn = getattr(module, "bootstrap", None)
-            if bootstrap_fn is not None and callable(bootstrap_fn):
-                bootstrap_fn(field)
-        except Exception:
-            # Silent fail - bootstrap must never break Leo
+            import metaleo
+            text = getattr(metaleo, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                modules_to_bootstrap.append(("metaleo", text, metaleo))
+        except ImportError:
             pass
+
+        try:
+            import mathbrain
+            text = getattr(mathbrain, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                modules_to_bootstrap.append(("mathbrain", text, mathbrain))
+        except ImportError:
+            pass
+
+        try:
+            import school
+            text = getattr(school, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                modules_to_bootstrap.append(("school", text, school))
+        except ImportError:
+            pass
+
+        try:
+            import dream
+            text = getattr(dream, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                modules_to_bootstrap.append(("dream", text, dream))
+        except ImportError:
+            pass
+
+        try:
+            import game
+            text = getattr(game, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                modules_to_bootstrap.append(("game", text, game))
+        except ImportError:
+            pass
+
+        # If no modules found, nothing to do
+        if not modules_to_bootstrap:
+            return
+
+        # Compute current hash of all bootstrap texts
+        texts_for_hash = [(name, text) for name, text, _ in modules_to_bootstrap]
+        current_hash = _compute_bootstrap_hash(texts_for_hash)
+
+        # Check stored hash
+        stored_hash = get_meta(conn, "module_bootstrap_hash")
+
+        if stored_hash == current_hash:
+            # Bootstrap already done with this exact content
+            _debug_log(f"Bootstrap hash matches ({current_hash[:8]}...), skipping")
+            return
+
+        # Hash is different or missing - feed bootstraps
+        _debug_log(f"Bootstrap hash changed or missing, feeding {len(modules_to_bootstrap)} modules")
+
+        for name, text, module in modules_to_bootstrap:
+            try:
+                bootstrap_fn = getattr(module, "bootstrap", None)
+                if bootstrap_fn is not None and callable(bootstrap_fn):
+                    bootstrap_fn(field)
+                    _debug_log(f"Fed bootstrap from {name}")
+            except Exception as e:
+                # Silent fail - bootstrap must never break Leo
+                _debug_log(f"Bootstrap failed for {name}: {e}")
+
+        # Save new hash
+        set_meta(conn, "module_bootstrap_hash", current_hash)
+        _debug_log(f"Saved bootstrap hash: {current_hash[:8]}...")
+
+    except Exception as e:
+        # On error, be conservative: do nothing, don't crash Leo
+        _debug_log(f"feed_bootstraps_if_fresh error: {e}")
+        return
 
 
 # ============================================================================

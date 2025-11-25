@@ -239,7 +239,11 @@ class School:
                     new_note = f"{old_note}\n\n---\n{human_answer.strip()}"
                 else:
                     new_note = human_answer.strip()
-                
+
+                # Enforce MAX_NOTE_LEN on combined string to prevent unbounded growth
+                if len(new_note) > MAX_NOTE_LEN:
+                    new_note = new_note[:MAX_NOTE_LEN] + " […truncated…]"
+
                 cur.execute(
                     """
                     UPDATE school_notes

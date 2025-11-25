@@ -155,6 +155,39 @@ class TestBootstrapFeeding(unittest.TestCase):
         except ImportError:
             self.skipTest("mathbrain not available")
 
+    def test_bootstrap_hash_prevents_double_ingest(self):
+        """
+        Test that bootstrap hash mechanism prevents double-ingestion.
+        Run bootstrap twice, verify it only feeds once by default.
+        """
+        conn = leo.init_db()
+        leo.bootstrap_if_needed(conn)
+        field1 = leo.LeoField(conn)
+
+        # Get initial vocab count (includes embedded seed + README + bootstraps)
+        initial_count = len(field1.vocab)
+
+        # Check that bootstrap hash is set
+        hash1 = leo.get_meta(conn, "module_bootstrap_hash")
+        self.assertIsNotNone(hash1)
+        self.assertTrue(len(hash1) > 0)
+
+        # Force feed_bootstraps_if_fresh again (simulating second startup)
+        leo.feed_bootstraps_if_fresh(field1)
+
+        # Refresh field to get updated vocab
+        field1.refresh()
+
+        # Vocab count should be the same (no double-ingestion)
+        second_count = len(field1.vocab)
+        self.assertEqual(second_count, initial_count)
+
+        # Hash should still be the same
+        hash2 = leo.get_meta(conn, "module_bootstrap_hash")
+        self.assertEqual(hash1, hash2)
+
+        conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()
