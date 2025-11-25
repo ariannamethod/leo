@@ -438,6 +438,77 @@ def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
         set_meta(conn, "readme_bootstrap_done", "missing")
 
 
+def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
+    """
+    Feed small identity texts from meta-modules into Leo's field,
+    but only if the DB looks fresh (no trigrams / no co-occurrence yet).
+
+    This is Leo 1.1 - Sonar-Child upgrade: Leo learns about his internal layers
+    through simple, child-like bootstrap texts.
+    """
+    try:
+        # heuristic: if there are no trigrams AND no co-occur entries,
+        # we treat this as a fresh birth
+        conn = field.conn
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM trigrams")
+        tri_count = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM cooccur")
+        co_count = cur.fetchone()[0]
+
+        if tri_count > 0 or co_count > 0:
+            # Not fresh - skip bootstrap feeding
+            return
+    except Exception:
+        # On error, be conservative: do nothing
+        return
+
+    # Import meta modules that have BOOTSTRAP_TEXT
+    modules_to_bootstrap = []
+
+    try:
+        import metaleo
+        modules_to_bootstrap.append(("metaleo", metaleo))
+    except ImportError:
+        pass
+
+    try:
+        import mathbrain
+        modules_to_bootstrap.append(("mathbrain", mathbrain))
+    except ImportError:
+        pass
+
+    try:
+        import school
+        modules_to_bootstrap.append(("school", school))
+    except ImportError:
+        pass
+
+    try:
+        import dream
+        modules_to_bootstrap.append(("dream", dream))
+    except ImportError:
+        pass
+
+    try:
+        import game
+        modules_to_bootstrap.append(("game", game))
+    except ImportError:
+        pass
+
+    # Feed each module's bootstrap
+    for name, module in modules_to_bootstrap:
+        try:
+            bootstrap_fn = getattr(module, "bootstrap", None)
+            if bootstrap_fn is not None and callable(bootstrap_fn):
+                bootstrap_fn(field)
+        except Exception:
+            # Silent fail - bootstrap must never break Leo
+            pass
+
+
 # ============================================================================
 # BIGRAM FIELD & SHARDS
 # ============================================================================
@@ -2018,6 +2089,10 @@ class LeoField:
                 # Silent fail — Dream must never break Leo
                 pass
         self.refresh(initial_shard=True)
+
+        # LEO 1.1 - Sonar-Child: Feed module bootstraps if this is a fresh DB
+        # This lets Leo know about his internal layers (metaleo, mathbrain, school, dream, game)
+        feed_bootstraps_if_fresh(self)
 
     def refresh(self, initial_shard: bool = False) -> None:
         """Reload field from database."""

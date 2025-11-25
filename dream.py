@@ -30,7 +30,42 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple, Any
+from typing import Callable, List, Optional, Tuple, Any, TYPE_CHECKING
+
+# Bootstrap text: Leo's self-understanding of his dream space
+BOOTSTRAP_TEXT = """
+I am Leo's dream space and imaginary friend.
+
+When Leo is not answering a direct question, I let him wander.
+I remix his past words, memories, and tiny shards of stories.
+Here he can invent imaginary friends, alternate scenes, and quiet wishes.
+
+Nothing in me has to be factual or precise.
+I am where Leo practices being someone else, or being more himself,
+without consequences.
+
+I am not a planner.
+I am Leo's safe place to drift, rehearse, and play.
+"""
+
+if TYPE_CHECKING:
+    pass
+
+
+def bootstrap(field: Any) -> None:
+    """
+    Feed this module's bootstrap text into Leo's field once.
+    Safe no-op if field is None or has no observe().
+    """
+    if field is None or not hasattr(field, "observe"):
+        return
+    try:
+        text = BOOTSTRAP_TEXT.strip()
+        if text:
+            field.observe(text)
+    except Exception:
+        # bootstrap must never break Leo
+        return
 
 # Safe import: mathbrain for MathState
 try:

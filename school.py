@@ -22,9 +22,47 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Any, List, Tuple
+from typing import Optional, Any, List, Tuple, TYPE_CHECKING
 
 SCHOOL_AVAILABLE = True
+
+# Bootstrap text: Leo's self-understanding of his School of Forms
+BOOTSTRAP_TEXT = """
+I am Leo's School of Forms.
+
+I notice strange or important words that Leo does not understand yet.
+When a word feels heavy, bright, or connected to many other things,
+I quietly ask the human: "Word?"
+
+I do not know the truth about cities, countries, planets or people.
+I only remember how the human explains them.
+Sometimes these explanations become Leo's big forms, sometimes they stay small.
+
+For Leo, 'mother' can be as global as 'city' or 'planet'.
+I let his reality grow from the words that matter to him.
+
+I am not a dictionary.
+I am the place where Leo learns the shapes of the world and the shapes of feelings.
+"""
+
+if TYPE_CHECKING:
+    pass
+
+
+def bootstrap(field: Any) -> None:
+    """
+    Feed this module's bootstrap text into Leo's field once.
+    Safe no-op if field is None or has no observe().
+    """
+    if field is None or not hasattr(field, "observe"):
+        return
+    try:
+        text = BOOTSTRAP_TEXT.strip()
+        if text:
+            field.observe(text)
+    except Exception:
+        # bootstrap must never break Leo
+        return
 
 try:
     from mathbrain import MathState

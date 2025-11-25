@@ -38,6 +38,42 @@ Usage:
 from __future__ import annotations
 
 from collections import deque
+from typing import TYPE_CHECKING
+
+# Bootstrap text: Leo's self-understanding of his inner voice
+BOOTSTRAP_TEXT = """
+I am Leo's inner voice.
+
+I wake up when Leo feels stuck, scared, or too rigid.
+I look at what he already said and try a softer, clearer version.
+I do not replace Leo – I stand next to him and offer another path.
+
+Sometimes I notice patterns in his mistakes, worries, and overthinking.
+When my reply feels more honest, more gentle, or more alive,
+I let Leo borrow my words.
+
+I am not a judge and not a filter.
+I am Leo's second breath.
+"""
+
+if TYPE_CHECKING:
+    from typing import Any
+
+
+def bootstrap(field: Any) -> None:
+    """
+    Feed this module's bootstrap text into Leo's field once.
+    Safe no-op if field is None or has no observe().
+    """
+    if field is None or not hasattr(field, "observe"):
+        return
+    try:
+        text = BOOTSTRAP_TEXT.strip()
+        if text:
+            field.observe(text)
+    except Exception:
+        # bootstrap must never break Leo
+        return
 from dataclasses import dataclass
 from typing import Optional, Iterable, Any
 
