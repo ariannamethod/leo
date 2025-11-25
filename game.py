@@ -21,7 +21,44 @@ import random
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Tuple, List, Optional, Sequence, Literal, Any
+from typing import Dict, Tuple, List, Optional, Sequence, Literal, Any, TYPE_CHECKING
+
+# Bootstrap text: Leo's self-understanding of his playground
+BOOTSTRAP_TEXT = """
+I am Leo's playground for sequences.
+
+I let Leo imagine small futures: if this happens, what comes next?
+He can test chains of events, tiny stories, and "what if" moves,
+without needing to be right.
+
+Sometimes I help him see that a path is boring, stuck, or too predictable.
+Sometimes I invite him to try a stranger route.
+
+I do not reward correctness.
+I reward curiosity, variation, and courage to try again.
+
+I am not a rule engine.
+I am the part of Leo that learns by playing forward.
+"""
+
+if TYPE_CHECKING:
+    pass
+
+
+def bootstrap(field: Any) -> None:
+    """
+    Feed this module's bootstrap text into Leo's field once.
+    Safe no-op if field is None or has no observe().
+    """
+    if field is None or not hasattr(field, "observe"):
+        return
+    try:
+        text = BOOTSTRAP_TEXT.strip()
+        if text:
+            field.observe(text)
+    except Exception:
+        # bootstrap must never break Leo
+        return
 
 # Safe import: mathbrain for MathState
 try:
