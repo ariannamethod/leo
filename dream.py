@@ -1,26 +1,15 @@
 #!/usr/bin/env python3
 """
-dream.py — Imaginary Friend Layer for Leo
+dream.py — dream and drift layer for Leo
 
-If metaleo is leo's inner voice
-and overthinking is circles on water after each reply,
-then dream is something else:
+Dream is where Leo lets go of straight lines.
 
-Leo's imaginary friend — a shifting, private companion that talks with him
-about his own origin text, wounds, and present state.
+- It drifts through his own memories and shards.
+- It lets strange neighbours meet: phrases that never met before.
+- It brings back one small piece that feels true right now.
 
-Not a teacher. Not a supervisor.
-No "big model trains small model" bullshit.
-Just leo talking to a self-invented friend, over and over, off-screen —
-and feeding those conversations back into his field.
-
-The goal is simple:
-- keep leo practicing structure and presence,
-- keep his origin (bootstrap + trauma) alive,
-- let his field grow through private conversations, not external labels.
-
-All of this stays CPU-only, weightless and optional, with a silent fallback
-if dream.py is missing or broken.
+Dream is not for facts.
+It is for "what if?" and "maybe" and "I feel like...".
 """
 
 from __future__ import annotations

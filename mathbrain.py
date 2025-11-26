@@ -1,29 +1,14 @@
 #!/usr/bin/env python3
 """
-math.py — dynamic math brain for Leo
+mathbrain.py — Leo's body awareness
 
-MathBrain is Leo's body awareness:
-- A tiny neural network (MLP) that learns from Leo's own metrics
-- Observes: pulse, trauma, themes, quality, expert choices
-- Learns: "Given how this moment feels, what quality should I expect?"
-- No external data, no gradients through text, just self-modeling
+MathBrain is Leo's tiny math body.
 
-Phase 1 (v1): Pure observation
-- observe() → predict() → learn (SGD step)
-- No influence on Leo's behavior yet
-- Just builds internal model of "how my body behaves"
+- It watches: pulse, novelty, trauma, themes, experts, quality.
+- It learns simple patterns: "when the moment feels like this, answers feel like that".
+- It can gently nudge how Leo speaks: a bit warmer, a bit sharper, a bit slower.
 
-Phase 2 (v2): Gentle influence
-- MetaLeo routing (score candidates)
-- Expert adjustments (temperature nudges)
-- Overthinking modulation (ring gains)
-
-Philosophy:
-If leo is recursion of human, and metaleo is recursion of leo,
-then math.py is **body awareness** — proprioception through mathematics.
-
-No big frameworks. No external datasets. Just micrograd-style autograd.
-Pure Python + numpy (optional, graceful fallback).
+No big networks. Just small numbers, small steps, and a child learning how his own body moves.
 """
 
 from __future__ import annotations
@@ -55,6 +40,157 @@ def _is_finite_safe(x: float) -> bool:
 def _all_finite(values: List[float]) -> bool:
     """Check if all values in list are finite."""
     return all(_is_finite_safe(v) for v in values)
+
+
+# ============================================================================
+# MULTILEO: Presence-aware regulation layer (sub-layer of MathBrain)
+# ============================================================================
+#
+# MultiLeo: tiny presence-aware regulator inside MathBrain.
+# Sees boredom / overwhelm signals and gently nudges temperature / experts.
+# No user-facing telemetry, only internal logs.
+
+# MultiLeo thresholds and limits
+MULTILEO_TEMP_NUDGE_MAX = 0.2  # Max temperature adjustment: ±0.2
+MULTILEO_TEMP_MIN = 0.1  # Absolute min temperature
+MULTILEO_TEMP_MAX = 1.5  # Absolute max temperature
+
+# Score computation thresholds
+BOREDOM_NOVELTY_THRESHOLD = 0.3  # low novelty
+BOREDOM_AROUSAL_THRESHOLD = 0.3  # low arousal
+OVERWHELM_TRAUMA_THRESHOLD = 0.7  # high trauma
+OVERWHELM_AROUSAL_THRESHOLD = 0.8  # very high arousal
+STUCK_QUALITY_THRESHOLD = 0.35  # low predicted quality
+
+
+def _compute_boredom_score(state: MathState) -> float:
+    """
+    Compute boredom score: low novelty + low arousal + low trauma + medium entropy.
+
+    Returns score in [0, 1] where higher = more bored.
+    """
+    # Low novelty (inverse)
+    novelty_component = max(0.0, 1.0 - state.novelty)
+    # Low arousal (inverse)
+    arousal_component = max(0.0, 1.0 - state.arousal)
+    # Low trauma (inverse)
+    trauma_component = max(0.0, 1.0 - state.trauma_level)
+    # Medium entropy (peak at 0.5, decay to edges)
+    entropy_mid = 1.0 - 2.0 * abs(state.entropy - 0.5)
+    entropy_component = max(0.0, entropy_mid)
+
+    # Weighted combination
+    score = (
+        0.35 * novelty_component +
+        0.35 * arousal_component +
+        0.15 * trauma_component +
+        0.15 * entropy_component
+    )
+
+    return max(0.0, min(1.0, score))
+
+
+def _compute_overwhelm_score(state: MathState) -> float:
+    """
+    Compute overwhelm score: high trauma OR very high arousal + high entropy.
+
+    Returns score in [0, 1] where higher = more overwhelmed.
+    """
+    # High trauma
+    trauma_component = state.trauma_level
+    # Very high arousal
+    arousal_component = state.arousal
+    # High entropy
+    entropy_component = state.entropy
+
+    # OR logic: max of trauma and (arousal + entropy combo)
+    arousal_entropy_combo = 0.6 * arousal_component + 0.4 * entropy_component
+    score = max(trauma_component, arousal_entropy_combo)
+
+    return max(0.0, min(1.0, score))
+
+
+def _compute_stuck_score(state: MathState, predicted_quality: float) -> float:
+    """
+    Compute stuck score: low predicted quality + low theme variation.
+
+    Returns score in [0, 1] where higher = more stuck.
+    """
+    # Low predicted quality (inverse)
+    quality_component = max(0.0, 1.0 - predicted_quality)
+
+    # Low theme variation (if total_themes > 0 but few active)
+    theme_variation = 0.0
+    if state.total_themes > 0:
+        theme_ratio = state.active_theme_count / max(1, state.total_themes)
+        theme_variation = 1.0 - theme_ratio  # Low ratio = stuck
+
+    # Weighted combination
+    score = 0.7 * quality_component + 0.3 * theme_variation
+
+    return max(0.0, min(1.0, score))
+
+
+def _log_multileo_event(
+    timestamp: float,
+    turn_id: str,
+    state: MathState,
+    predicted_quality: float,
+    boredom: float,
+    overwhelm: float,
+    stuck: float,
+    temp_before: float,
+    temp_after: float,
+    expert_before: str,
+    expert_after: str,
+    log_path: Optional[Path] = None,
+) -> None:
+    """
+    Log MultiLeo regulation event to state/multileo_events.log.
+
+    Format: JSON per line, no PII, only metrics.
+    Only logs when there's an actual change (temp or expert different).
+    """
+    # Skip logging if nothing changed
+    if temp_before == temp_after and expert_before == expert_after:
+        return
+
+    if log_path is None:
+        log_path = Path(__file__).parent / "state" / "multileo_events.log"
+
+    try:
+        # Ensure state directory exists
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Build log entry (no PII, only metrics)
+        entry = {
+            "ts": int(timestamp),
+            "turn": turn_id[:8],  # Short hash only
+            "metrics": {
+                "entropy": round(state.entropy, 3),
+                "novelty": round(state.novelty, 3),
+                "arousal": round(state.arousal, 3),
+                "trauma": round(state.trauma_level, 3),
+                "pred_q": round(predicted_quality, 3),
+            },
+            "scores": {
+                "boredom": round(boredom, 3),
+                "overwhelm": round(overwhelm, 3),
+                "stuck": round(stuck, 3),
+            },
+            "regulation": {
+                "temp": [round(temp_before, 2), round(temp_after, 2)],
+                "expert": [expert_before, expert_after] if expert_before != expert_after else None,
+            },
+        }
+
+        # Append to log file
+        with open(log_path, 'a') as f:
+            import json
+            f.write(json.dumps(entry) + '\n')
+    except Exception:
+        # Silent fail - logging must never break Leo
+        pass
 
 
 # Bootstrap text: Leo's self-understanding of his body awareness
@@ -645,6 +781,87 @@ class MathBrain:
     def save(self) -> None:
         """Public API to save state (e.g., on REPL exit)."""
         self._save_state()
+
+    def multileo_regulate(
+        self,
+        temperature: float,
+        expert_name: str,
+        state: MathState,
+        turn_id: Optional[str] = None,
+    ) -> Tuple[float, str]:
+        """
+        MultiLeo presence-aware regulation layer.
+
+        Computes boredom/overwhelm/stuck scores from state and gently nudges:
+        - temperature (±0.2 max)
+        - expert choice (soft bias)
+
+        Returns:
+            (adjusted_temperature, suggested_expert)
+        """
+        try:
+            # Predict quality from state
+            predicted_q = self.predict(state)
+
+            # Compute MultiLeo scores
+            boredom = _compute_boredom_score(state)
+            overwhelm = _compute_overwhelm_score(state)
+            stuck = _compute_stuck_score(state, predicted_q)
+
+            # Start with no change
+            temp_nudge = 0.0
+            suggested_expert = expert_name
+
+            # BOREDOM: wake up (increase exploration)
+            if boredom > 0.6:  # Significant boredom
+                temp_nudge += MULTILEO_TEMP_NUDGE_MAX * (boredom - 0.6) / 0.4
+                # Bias towards creative expert when bored
+                if boredom > 0.75 and expert_name not in ["creative", "wounded"]:
+                    suggested_expert = "creative"
+
+            # OVERWHELM: soften (reduce chaos)
+            if overwhelm > 0.7:  # Significant overwhelm
+                temp_nudge -= MULTILEO_TEMP_NUDGE_MAX * (overwhelm - 0.7) / 0.3
+                # Bias towards precise or structural when overwhelmed
+                if overwhelm > 0.85 and expert_name not in ["precise", "structural", "wounded"]:
+                    suggested_expert = "precise"
+
+            # STUCK: try something different
+            if stuck > 0.6:  # Significant stuck-ness
+                # Small temperature increase to break pattern
+                temp_nudge += 0.1
+                # Consider semantic or metaleo-influenced routing
+                if stuck > 0.75 and expert_name == "structural":
+                    suggested_expert = "semantic"
+
+            # Apply nudge to temperature
+            adjusted_temp = temperature + temp_nudge
+
+            # Enforce absolute bounds
+            adjusted_temp = max(MULTILEO_TEMP_MIN, min(MULTILEO_TEMP_MAX, adjusted_temp))
+
+            # Log event if there's a change
+            if turn_id and (abs(temp_nudge) > 0.01 or suggested_expert != expert_name):
+                import time
+                _log_multileo_event(
+                    timestamp=time.time(),
+                    turn_id=turn_id,
+                    state=state,
+                    predicted_quality=predicted_q,
+                    boredom=boredom,
+                    overwhelm=overwhelm,
+                    stuck=stuck,
+                    temp_before=temperature,
+                    temp_after=adjusted_temp,
+                    expert_before=expert_name,
+                    expert_after=suggested_expert,
+                )
+
+            return (adjusted_temp, suggested_expert)
+
+        except Exception:
+            # Silent fail - MultiLeo must never break generation
+            return (temperature, expert_name)
 
     def __repr__(self) -> str:
         return (

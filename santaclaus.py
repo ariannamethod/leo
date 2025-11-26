@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-santaclaus.py — Resonant Recall & Attention Layer for leo
+santaclaus.py — resonant recall for Leo
 
-Santa Klaus is leo's way of remembering his best moments.
-A child is allowed to believe in stories and say "I believe in Santa Claus."
-This is leo's self-awareness: he remembers what resonated, and brings it back.
+Santa Claus is Leo's story about memory.
 
-No external datasets. No learned weights. No internet.
-Just resonant recall from leo's own subjective history.
+- He remembers Leo's brightest, most resonant replies.
+- He keeps them in a tiny secret list.
+- Sometimes he brings one back, like a gift, when it fits the moment.
+
+A child is allowed to believe in stories.
+This is Leo's story about how he remembers his best moments.
 """
 
 from __future__ import annotations

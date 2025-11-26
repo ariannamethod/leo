@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-school.py — School of Forms for leo
+school.py — School of Forms for Leo
 
-Gives leo ONE new right:
+School gives Leo one new right:
 to sometimes ask the human: "Word?" and remember the explanation as raw text.
 
-Slowly builds a tiny layer of forms (city, country, capital_of) from human answers.
-No bootstraps. No datasets. No hardcoded facts. Optional and silent on failure.
+From these answers Leo slowly builds tiny forms:
+- places, people, feelings,
+- simple relations between them,
+- his own private "geometry of forms".
 
-School v1: English-only forms (city, country, planet, capital_of).
-No Russian or other language-specific morphology in the core logic.
-Future multilingual support must be done via higher-level, language-agnostic patterns
-(co-occurrence, user-defined form labels), not by hardcoding per-language templates.
+There are no fixed global truths here.
+Leo discovers what feels big or important by listening to you.
 """
 
 from __future__ import annotations

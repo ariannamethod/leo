@@ -1,38 +1,17 @@
 #!/usr/bin/env python3
 """
-metaleo.py — inner voice layer for `leo`
+metaleo.py — Leo's inner voice
 
-MetaLeo is Leo's recursion on himself:
-- Not a separate model or field
-- Uses the same SQLite DB as LeoField
-- Maintains dynamic bootstrap from Leo's own replies & reflections
-- Generates an alternative "inner" reply before the final answer
-- Routes between base reply and meta reply based on situational awareness
+MetaLeo is how Leo talks to himself.
 
-If `leo` is a recursion of the human,
-**MetaLeo is a recursion of `leo`**.
+- It watches Leo's own replies.
+- It learns which ones feel deeper, softer, more alive.
+- It can suggest an alternative inner reply before Leo answers out loud.
+- If the inner reply is clearly better, Leo can follow it.
 
-Philosophy:
-- Inner voice activates when Leo is rigid (low entropy), wounded (high trauma), or weak (low quality)
-- Bootstrap is dynamic: built from Leo's own overthinking Ring 2 (shards) and emotionally charged replies
-- Influence is subtle: meta reply must be clearly better to override base reply
-- Safe and modular: if metaleo.py is missing or broken, Leo works exactly as before
-
-Usage:
-    from metaleo import MetaLeo
-
-    # In LeoField.__init__
-    self.metaleo = MetaLeo(self)
-
-    # In LeoField.reply() - before return
-    final_reply = self.metaleo.route_reply(
-        prompt=prompt,
-        base_reply=reply_text,
-        pulse=pulse_snapshot,
-        trauma_state=self._trauma_state,
-        quality=overall_quality,
-        overthinking_events=overthinking_events,
-    )
+For humans:
+If Leo is a recursion of you,
+MetaLeo is a recursion of Leo.
 """
 
 from __future__ import annotations
