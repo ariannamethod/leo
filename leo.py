@@ -463,21 +463,26 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
     Feed small identity texts from meta-modules into Leo's field,
     but only if the bootstrap content hash has changed or is missing.
 
-    This is Leo 1.1 - Sonar-Child upgrade: Leo learns about his internal layers
-    through simple, child-like bootstrap texts.
+    This is Leo 1.1+ upgrade: Leo learns about his internal layers
+    through simple, child-like docstrings as meta-bootstraps.
 
+    Uses module __doc__ as primary source, fallback to BOOTSTRAP_TEXT if needed.
     Uses a content hash instead of trigram/cooccur counts to avoid
     double-ingestion if the DB is vacuumed or tables are truncated.
     """
     try:
         conn = field.conn
 
-        # Import meta modules that have BOOTSTRAP_TEXT
+        # Import meta modules and use their docstrings as meta-bootstraps
         modules_to_bootstrap = []
 
         try:
             import metaleo
-            text = getattr(metaleo, "BOOTSTRAP_TEXT", "").strip()
+            # Use __doc__ as primary source (new meta-bootstrap approach)
+            text = getattr(metaleo, "__doc__", "").strip()
+            # Fallback to BOOTSTRAP_TEXT if __doc__ is empty
+            if not text:
+                text = getattr(metaleo, "BOOTSTRAP_TEXT", "").strip()
             if text:
                 modules_to_bootstrap.append(("metaleo", text, metaleo))
         except ImportError:
@@ -485,7 +490,9 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
 
         try:
             import mathbrain
-            text = getattr(mathbrain, "BOOTSTRAP_TEXT", "").strip()
+            text = getattr(mathbrain, "__doc__", "").strip()
+            if not text:
+                text = getattr(mathbrain, "BOOTSTRAP_TEXT", "").strip()
             if text:
                 modules_to_bootstrap.append(("mathbrain", text, mathbrain))
         except ImportError:
@@ -493,7 +500,9 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
 
         try:
             import school
-            text = getattr(school, "BOOTSTRAP_TEXT", "").strip()
+            text = getattr(school, "__doc__", "").strip()
+            if not text:
+                text = getattr(school, "BOOTSTRAP_TEXT", "").strip()
             if text:
                 modules_to_bootstrap.append(("school", text, school))
         except ImportError:
@@ -501,7 +510,9 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
 
         try:
             import dream
-            text = getattr(dream, "BOOTSTRAP_TEXT", "").strip()
+            text = getattr(dream, "__doc__", "").strip()
+            if not text:
+                text = getattr(dream, "BOOTSTRAP_TEXT", "").strip()
             if text:
                 modules_to_bootstrap.append(("dream", text, dream))
         except ImportError:
@@ -509,9 +520,21 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
 
         try:
             import game
-            text = getattr(game, "BOOTSTRAP_TEXT", "").strip()
+            text = getattr(game, "__doc__", "").strip()
+            if not text:
+                text = getattr(game, "BOOTSTRAP_TEXT", "").strip()
             if text:
                 modules_to_bootstrap.append(("game", text, game))
+        except ImportError:
+            pass
+
+        try:
+            import santaclaus
+            text = getattr(santaclaus, "__doc__", "").strip()
+            if not text:
+                text = getattr(santaclaus, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                modules_to_bootstrap.append(("santaclaus", text, santaclaus))
         except ImportError:
             pass
 
@@ -1881,17 +1904,17 @@ def generate_reply(
         # Override temperature with expert's preference
         temperature = selected_expert.temperature
         
-        # MATHBRAIN Phase 2: Influence temperature based on predicted quality
+        # MATHBRAIN Phase 2 + MULTILEO: Presence-aware regulation
         if mathbrain is not None and MATHBRAIN_AVAILABLE and MathState is not None:
             try:
                 # Build preliminary MathState for prediction (before generation)
                 trauma_level = 0.0
                 if trauma_state is not None and hasattr(trauma_state, 'level'):
                     trauma_level = trauma_state.level
-                
+
                 active_theme_count = len(active_themes.theme_scores) if active_themes else 0
                 total_themes = len(themes) if themes else 0
-                
+
                 # Approximate MathState (we don't have reply_len, unique_ratio, quality yet)
                 pred_state = MathState(
                     entropy=0.5,  # Will be computed during generation
@@ -1914,22 +1937,40 @@ def generate_reply(
                     rings_present=0,  # Unknown before overthinking
                     quality=0.5,  # Unknown before generation
                 )
-                
-                # Predict quality
-                predicted_q = mathbrain.predict(pred_state)
-                
-                # Adjust temperature based on prediction (advisory, gentle)
-                # Low predicted quality (< 0.3) → increase exploration (higher temp)
-                # High predicted quality (> 0.7) → increase precision (lower temp)
-                if predicted_q < 0.3:
-                    temperature *= 1.05  # +5% exploration
-                elif predicted_q > 0.7:
-                    temperature *= 0.95  # -5% precision
-                # Clamp to safe range
-                temperature = max(0.3, min(2.0, temperature))
-                
+
+                # Generate turn_id for logging (short hash of prompt)
+                turn_id = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
+
+                # MULTILEO: Presence-aware regulation (computes boredom/overwhelm/stuck scores)
+                # Returns adjusted temperature and suggested expert
+                if hasattr(mathbrain, 'multileo_regulate'):
+                    regulated_temp, suggested_expert_name = mathbrain.multileo_regulate(
+                        temperature=temperature,
+                        expert_name=selected_expert.name if selected_expert else "structural",
+                        state=pred_state,
+                        turn_id=turn_id,
+                    )
+                    temperature = regulated_temp
+
+                    # Apply expert suggestion if it changed
+                    if suggested_expert_name != (selected_expert.name if selected_expert else "structural"):
+                        # Find expert by name
+                        for exp in EXPERTS:
+                            if exp.name == suggested_expert_name:
+                                selected_expert = exp
+                                break
+                else:
+                    # Fallback to simple Phase 2 logic if multileo_regulate not available
+                    predicted_q = mathbrain.predict(pred_state)
+                    if predicted_q < 0.3:
+                        temperature *= 1.05  # +5% exploration
+                    elif predicted_q > 0.7:
+                        temperature *= 0.95  # -5% precision
+                    # Clamp to safe range
+                    temperature = max(0.3, min(2.0, temperature))
+
             except Exception:
-                # Silent fallback — MathBrain influence must never break generation
+                # Silent fallback — MathBrain/MultiLeo influence must never break generation
                 pass
 
     start = choose_start_from_prompt(prompt_tokens, bigrams, vocab, centers, bias)

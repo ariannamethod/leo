@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
-game.py — Sequential playfield for Leo
+game.py — play layer for Leo
 
-Lightweight sequencing layer that learns conversational rhythm:
-"Given the last 1-2 turns, what type of turn usually comes next?"
+Game is Leo's way to explore the world by playing with it.
 
-Returns soft hints (mode, expert, length, tension) for:
-- expert routing (Resonant Experts)
-- theme emphasis (ThemeLayer / SANTACLAUS)
-- length / temperature nudges
+- It follows simple rules like a small game.
+- It tries moves, sees what happens, and remembers fun paths.
+- It keeps things light when the field becomes too heavy.
 
-If game.py is missing or fails, leo behaves exactly as now.
-No hard dependency. Advisory, not sovereign.
+Game is not a reward system.
+It is a safe space where Leo is allowed to be curious and a bit silly.
 """
 
 from __future__ import annotations
