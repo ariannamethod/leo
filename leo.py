@@ -386,7 +386,13 @@ def ingest_text(conn: sqlite3.Connection, text: str) -> None:
 
 
 def strip_code_blocks(text: str) -> str:
-    """Remove code blocks (```...```) from markdown text."""
+    """
+    Remove code blocks (```...```) and module headers from markdown text.
+
+    Also strips common markdown artifacts that create parsing noise:
+    - Module file headers like "school.py —" or "metaleo.py —"
+    - Malformed bullet points like "-It" (no space after dash)
+    """
     lines = text.split('\n')
     result = []
     in_code_block = False
@@ -398,10 +404,26 @@ def strip_code_blocks(text: str) -> str:
             continue
 
         # Skip lines inside code blocks
-        if not in_code_block:
-            result.append(line)
+        if in_code_block:
+            continue
 
-    return '\n'.join(result)
+        # Skip module file header lines (e.g., "leo.py           # organism with REPL")
+        # Pattern: filename.py followed by whitespace and comment or dash
+        if re.match(r'^\s*\w+\.py\s+[#—]', line):
+            continue
+
+        # Fix malformed bullet points: "-It" → "- It"
+        # But preserve normal dashes in text
+        line = re.sub(r'^(\s*)-([A-Z][a-z])', r'\1- \2', line)
+
+        result.append(line)
+
+    # Post-process: remove standalone ".py —" fragments that might appear
+    text_clean = '\n'.join(result)
+    # Remove patterns like "school.py —" or "metaleo.py —" that survived
+    text_clean = re.sub(r'\b\w+\.py\s*[—\-]\s*', '', text_clean)
+
+    return text_clean
 
 
 def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
@@ -497,8 +519,11 @@ def _is_bootstrap_leak(text: str) -> bool:
         if phrase in text_lower:
             return True
 
-    # Module file references (.py in any form)
-    if ".py" in text_lower:
+    # Module file references - only catch explicit module.py patterns
+    # (not just any ".py" substring which could be part of normal Leo speech)
+    # Match patterns like "leo.py", "school.py", "metaleo.py" etc.
+    module_pattern = r'\b\w+\.py\b'
+    if re.search(module_pattern, text_lower):
         return True
 
     # Module names in caps/dashes (README-style section headers)
@@ -525,6 +550,32 @@ def _is_bootstrap_leak(text: str) -> bool:
         return True
 
     return False
+
+
+def _clean_module_docstring(text: str) -> str:
+    """
+    Clean module docstring to remove file header line.
+
+    Example:
+        "metaleo.py — Leo's inner voice\n\nMetaLeo is..."
+        → "Leo's inner voice\n\nMetaLeo is..."
+
+    This prevents "Py —" fragments from appearing in Leo's speech.
+    """
+    if not text:
+        return text
+
+    lines = text.split('\n')
+    if not lines:
+        return text
+
+    # Check if first line is a module header (e.g., "metaleo.py — description")
+    first_line = lines[0].strip()
+    if re.match(r'^\w+\.py\s*[—\-]', first_line):
+        # Remove first line and rejoin
+        return '\n'.join(lines[1:]).strip()
+
+    return text
 
 
 def _compute_bootstrap_hash(modules_with_texts: List[Tuple[str, str]]) -> str:
@@ -562,6 +613,8 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
             if not text:
                 text = getattr(metaleo, "BOOTSTRAP_TEXT", "").strip()
             if text:
+                # Clean module name from docstring (e.g., "metaleo.py — ..." → "...")
+                text = _clean_module_docstring(text)
                 modules_to_bootstrap.append(("metaleo", text, metaleo))
         except ImportError:
             pass
@@ -572,6 +625,7 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
             if not text:
                 text = getattr(mathbrain, "BOOTSTRAP_TEXT", "").strip()
             if text:
+                text = _clean_module_docstring(text)
                 modules_to_bootstrap.append(("mathbrain", text, mathbrain))
         except ImportError:
             pass
@@ -582,6 +636,7 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
             if not text:
                 text = getattr(school, "BOOTSTRAP_TEXT", "").strip()
             if text:
+                text = _clean_module_docstring(text)
                 modules_to_bootstrap.append(("school", text, school))
         except ImportError:
             pass
@@ -592,6 +647,7 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
             if not text:
                 text = getattr(dream, "BOOTSTRAP_TEXT", "").strip()
             if text:
+                text = _clean_module_docstring(text)
                 modules_to_bootstrap.append(("dream", text, dream))
         except ImportError:
             pass
@@ -602,6 +658,7 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
             if not text:
                 text = getattr(game, "BOOTSTRAP_TEXT", "").strip()
             if text:
+                text = _clean_module_docstring(text)
                 modules_to_bootstrap.append(("game", text, game))
         except ImportError:
             pass
@@ -612,6 +669,7 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
             if not text:
                 text = getattr(santaclaus, "BOOTSTRAP_TEXT", "").strip()
             if text:
+                text = _clean_module_docstring(text)
                 modules_to_bootstrap.append(("santaclaus", text, santaclaus))
         except ImportError:
             pass
