@@ -386,7 +386,12 @@ def ingest_text(conn: sqlite3.Connection, text: str) -> None:
 
 
 def strip_code_blocks(text: str) -> str:
-    """Remove code blocks (```...```) from markdown text."""
+    """
+    Clean markdown text for Leo's field ingestion.
+    - Remove code blocks (```...```)
+    - Remove .py extensions from filenames (school.py → school)
+    - Fix bullet point spacing (-It → - It)
+    """
     lines = text.split('\n')
     result = []
     in_code_block = False
@@ -399,6 +404,23 @@ def strip_code_blocks(text: str) -> str:
 
         # Skip lines inside code blocks
         if not in_code_block:
+            # Remove .py extensions from module names
+            line = line.replace('metaleo.py', 'metaleo')
+            line = line.replace('mathbrain.py', 'mathbrain')
+            line = line.replace('school.py', 'school')
+            line = line.replace('dream.py', 'dream')
+            line = line.replace('game.py', 'game')
+            line = line.replace('santaclaus.py', 'santaclaus')
+            line = line.replace('leo.py', 'leo')
+            line = line.replace('neoleo.py', 'neoleo')
+
+            # Fix bullet points: ensure space after dash
+            if line.strip().startswith('-') and len(line.strip()) > 1:
+                stripped = line.lstrip()
+                indent = line[:len(line) - len(stripped)]
+                if stripped[1] != ' ':
+                    line = indent + '- ' + stripped[1:]
+
             result.append(line)
 
     return '\n'.join(result)
