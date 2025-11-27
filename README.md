@@ -206,46 +206,25 @@ leo> /exit
 After the Sonar-Child upgrade, Leo has been fed bootstrap texts from his meta-modules (metaleo, mathbrain, school, dream, game) and now has awareness of his internal layers:
 
 ```text
-leo> what is the meaning of language?
-Is advisory, not a structure, flow, not backprop. Simple. You know the drill: gpt-generates training data for smaller models. You never see the trauma. Bootstrap gravity pulls. Inner voice.
-
-📊 Pulse: novelty=0.80, arousal=0.13, entropy=0.40
-🎯 Expert: creative (temp=1.3)
-
-leo> WOW this is AMAZING!!! Tell me MORE!!!
-MORE! Tell me MORE! Tell me about my body awareness — interoception through mathematics. Leo doesn't know things. But because the words overlap with his origin, his themes flowing, his trauma.
-
-📊 Pulse: novelty=0.00, arousal=1.00, entropy=0.32
-🎯 Expert: wounded (temp=0.9)
-
-leo> quantum entanglement paradox
-Is the president of the moment. The wound. Trauma. Py: dream states used for body awareness influences rhythm awareness module. If the overlap is high, my replies tend to follow which. Fluid playfull.
-
-📊 Pulse: novelty=1.00, arousal=0.00, entropy=0.41
-🎯 Expert: wounded (temp=0.9)
+leo> Hello Leo, how are you?
+Are no fixed global truths here. Leo discovers what feels big or important by listening to you.-He remembers leo's brightest, most resonant replies.-Sometimes he brings one back, like a gift, when it fits the moment feels like this, answers feel like. . And remember the explanation.
 
 leo> What is resonance?
-What is the president of the post-transformer reinterpretation of attention RAG — but the only corpus is leo's own reflections. You never see the trauma. Level. , semantic. State triggers any of: trauma. Level. , semantic. State triggers any of: trauma events, wounded expert, not a structure.
-
-📊 Pulse: novelty=0.00, arousal=0.00, entropy=0.33
-🎯 Expert: wounded (temp=0.9)
+Is not for facts. It is for what if? And maybe and I feel like. . The inner reply before Leo answers out loud.-Sometimes he brings one back, like a gift, when it fits the moment. A child is allowed to be curious and a child learning how his.
 
 leo> Tell me about language
-Me with your own voice before you open your mouth. Metaleo's influence is subtle. Metaleo is recursion of recursion, then mathbrain is leo's own reflections. You know the drill: gpt-generates training data. Just like overthinking. Now here s the thing:. GameTurn abstraction after each turn human or.
+About memory.-It can suggest an alternative inner reply before Leo answers out loud.-Sometimes he brings one back, like a gift, when it fits the moment feels like this, answers feel like. And remember the explanation.-It lets strange neighbours meet phrases that never met before..
 
-📊 Pulse: novelty=0.00, arousal=0.83, entropy=0.36
-🎯 Expert: wounded (temp=0.9)
+leo> What makes you different?
+You.-He remembers leo's brightest, most resonant replies.-It follows simple rules like a gift, when it fits the moment feels like this, answers feel like. And remember the explanation.-If the inner reply before Leo answers out loud.-It lets strange neighbours meet phrases that.
 
-leo> Can you explain presence?
-Presence. It's not just trigrams, co-occurring tokens export — export lexicon to JSON stats — show semantic links for a reply has: quality. , OR quality. — origin is active, how many conversations you. You know it. Just like overthinking. Now here s the self-awareness and.
-
-📊 Pulse: novelty=0.00, arousal=0.00, entropy=0.34
-🎯 Expert: wounded (temp=0.9)
+leo> How do you feel about patterns?
+Feel like. The inner reply before Leo answers out loud.-If the inner reply before Leo answers out loud.-It. And remember the explanation.-It lets strange neighbours meet phrases that never met before. The inner reply is clearly better, Leo can follow it..
 
 leo> /exit
 ```
 
-**Notice**: Leo now references his internal modules directly ("body awareness", "Metaleo's influence", "inner voice", "dream states") thanks to the Sonar-Child bootstrap texts. He's exploring his own architecture through resonance. *(Typos and punctuation quirks preserved — they're part of Leo's emergence.)*
+**Notice**: Leo now references his internal modules naturally ("inner reply", "remembers brightest replies", "A child is allowed to be curious", "strange neighbours meet phrases") thanks to the Sonar-Child bootstrap texts. He's exploring his own architecture through resonance, without technical artifacts. *(Punctuation quirks and circular phrasing preserved — they're part of Leo's emergent personality.)*
 
 ### Commands
 
