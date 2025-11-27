@@ -421,23 +421,21 @@ def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
         print("[leo] bootstrapping from embedded seed...", file=sys.stderr)
         ingest_text(conn, EMBEDDED_BOOTSTRAP)
 
+    # README bootstrap: read on first launch
     readme_flag = get_meta(conn, "readme_bootstrap_done")
     if readme_flag == "1":
         return
 
-    if README_PATH.exists():
-        try:
-            print("[leo] bootstrapping from README.md...", file=sys.stderr)
-            text = README_PATH.read_text(encoding="utf-8", errors="ignore")
-            # Strip code blocks to avoid ingesting Python snippets
-            text = strip_code_blocks(text)
-            ingest_text(conn, text)
-            set_meta(conn, "readme_bootstrap_done", "1")
-        except Exception as e:
-            print(f"[leo] WARNING: failed to read README.md: {e}", file=sys.stderr)
-            set_meta(conn, "readme_bootstrap_done", "error")
-    else:
-        set_meta(conn, "readme_bootstrap_done", "missing")
+    readme_path = Path(__file__).parent / "README.md"
+    if not readme_path.exists():
+        return
+
+    print("[leo] reading README.md for first time...", file=sys.stderr)
+    readme_text = readme_path.read_text(encoding="utf-8")
+    # Strip code blocks to prevent technical leaks
+    readme_clean = strip_code_blocks(readme_text)
+    ingest_text(conn, readme_clean)
+    set_meta(conn, "readme_bootstrap_done", "1")
 
 
 def _debug_log(msg: str) -> None:
@@ -447,6 +445,86 @@ def _debug_log(msg: str) -> None:
     """
     if os.environ.get("LEO_DEBUG") == "1":
         print(f"[leo] {msg}", file=sys.stderr)
+
+
+def _is_bootstrap_leak(text: str) -> bool:
+    """
+    Detect if reply contains bootstrap/meta text fragments that should stay internal.
+
+    Returns True if text looks like raw bootstrap/module documentation
+    instead of a natural Leo reply.
+
+    Bootstrap leak patterns:
+    - "These conversations are private never shown to user"
+    - Module names in caps/dashes: "— GAME —", "— MATHBRAIN —"
+    - File references: "game.py", "metaleo.py", "mathbrain.py"
+    - Docstring-like phrases: "conversational rhythm awareness", "Active observation"
+    - Meta-descriptions about internal layers
+    """
+    if not text or len(text.strip()) < 10:
+        return False
+
+    text_lower = text.lower()
+
+    # Direct bootstrap phrases - only catch obvious technical leaks
+    # (not natural language that happens to mention concepts)
+    bootstrap_phrases = [
+        "these conversations are private never shown to user",
+        "private never shown to user",
+        "bootstrap texts",
+        "has been fed bootstrap",
+        "neoleo pure layer",
+        "export, neoleo",
+        "readme bootstrap done",
+        "mark readme",
+        "in sqlite",
+        "tokens table",
+        "word id",
+        "standalone helpers",
+        "get last turns",
+        "lru eviction",
+        "multiplicative decay",
+        "every observations",  # grammatical error from bootstrap
+        "i. — export",
+        "ii. —",
+        "iii. —",
+        "stats, max",
+        "eviction, memory",
+        "bootstrap fragment",
+    ]
+
+    for phrase in bootstrap_phrases:
+        if phrase in text_lower:
+            return True
+
+    # Module file references (.py in any form)
+    if ".py" in text_lower:
+        return True
+
+    # Module names in caps/dashes (README-style section headers)
+    module_markers = [
+        "— GAME —",
+        "— MATHBRAIN —",
+        "— METALEO —",
+        "— DREAM —",
+        "— SCHOOL —",
+        "— SANTACLAUS —",
+        "— OVERTHINKING —",
+        "— TRAUMA —",
+    ]
+    for marker in module_markers:
+        if marker.lower() in text_lower or marker in text:
+            return True
+
+    # Check for unusually high density of module names
+    # (OK to mention once or twice, but not OK if reply is mostly module names)
+    module_keywords = ["mathbrain", "metaleo", "game", "dream", "school", "santa", "overthinking", "trauma"]
+    keyword_count = sum(1 for kw in module_keywords if kw in text_lower)
+    word_count = len(text.split())
+    if word_count > 0 and keyword_count / word_count > 0.25:  # >25% module keywords
+        return True
+
+    return False
 
 
 def _compute_bootstrap_hash(modules_with_texts: List[Tuple[str, str]]) -> str:
@@ -559,10 +637,11 @@ def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
 
         for name, text, module in modules_to_bootstrap:
             try:
-                bootstrap_fn = getattr(module, "bootstrap", None)
-                if bootstrap_fn is not None and callable(bootstrap_fn):
-                    bootstrap_fn(field)
-                    _debug_log(f"Fed bootstrap from {name}")
+                # Feed the text (which is __doc__, NOT BOOTSTRAP_TEXT)
+                # This prevents bootstrap leaks while still letting Leo know about his layers
+                if text and hasattr(field, "observe"):
+                    field.observe(text)
+                    _debug_log(f"Fed bootstrap from {name} (__doc__)")
             except Exception as e:
                 # Silent fail - bootstrap must never break Leo
                 _debug_log(f"Bootstrap failed for {name}: {e}")
@@ -2646,6 +2725,23 @@ class LeoField:
             except Exception:
                 # Silent fail — School must never break Leo
                 pass
+
+        # BOOTSTRAP LEAK FILTER: Prevent internal meta-text from leaking into user-facing replies
+        # MultiLeo should stay an internal self-awareness layer, not a narrator
+        if _is_bootstrap_leak(final_reply):
+            _debug_log(f"Bootstrap leak detected, using fallback reply")
+            # Fallback: simple acknowledgment that doesn't reveal internal structure
+            fallback_replies = [
+                "Yes.",
+                "I see.",
+                "Listening.",
+                "Continue.",
+                "Go on.",
+                "Understood.",
+            ]
+            # Pick fallback based on prompt length (deterministic for same prompt)
+            prompt_hash = sum(ord(c) for c in prompt) % len(fallback_replies)
+            final_reply = fallback_replies[prompt_hash]
 
         return final_reply
 
