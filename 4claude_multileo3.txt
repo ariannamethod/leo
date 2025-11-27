@@ -1,0 +1,299 @@
+ClaudeCode design doc — MultiLeo Phase 3 (Islands-aware regulation)
+
+Context recap (what already exists):
+
+leo current architecture (per README):
+	•	Core field: trigrams + bigrams + co-occurrence (semantic gravity) + centers & shards in bin/.
+	•	Presence layer: PresencePulse (novelty, arousal, entropy) + ThemeLayer (semantic constellations) + self-assessment + snapshots + memory decay.
+	•	Deep presence stack:
+	•	overthinking.py — 3 rings of private internal thinking.
+	•	trauma.py — bootstrap gravity & wounded expert.
+	•	metaleo.py — inner voice with alternative replies.
+	•	gowiththeflow.py — temporal theme evolution.
+	•	mathbrain.py — tiny MLP modeling body awareness (MathState).
+	•	MultiLeo (inside mathbrain) — boredom/overwhelm/stuck → temp/experts regulation (Phase 2).
+	•	santaclaus.py — resonant recall / self-RAG on snapshots.
+	•	episodes.py — episodic memory (prompt + reply + metrics).
+	•	game.py — conversational rhythm awareness.
+	•	dream.py — imaginary friend / self-dialogues.
+	•	school.py, school_math.py — School of Forms + tiny calculator.
+
+Phase 2 MultiLeo already:
+	•	Computes boredom / overwhelm / stuck from MathState.
+	•	Gently adjusts:
+	•	temperature (±0.2),
+	•	expert bias (creative / precise / semantic),
+	•	Logs decisions in state/multileo_events.log.
+	•	No user-facing telemetry; only internal influence.
+
+⸻
+
+Goal of Phase 3
+
+Add a new layer of associative awareness to MultiLeo:
+
+MultiLeo doesn’t just say: “I’m bored, let’s increase temperature”.
+It learns which themes / islands / shards / episodes historically:
+	•	led into bad states (boredom / overwhelm / stuck),
+	•	led out of them (improvement of quality / pulse),
+and then uses this knowledge to choose what to recall / bias via Santa / episodes when regulating.
+
+So instead of pure param-tweaking, MultiLeo starts to:
+	•	link metric patterns ↔ semantic structures (themes / islands / shards / episodes);
+	•	select helpful islands when acting (e.g. “I’m bored → recall episodes that previously reduced boredom”).
+
+No ML monsters, no new heavy nets — just small SQLite tables + counts + averages on top of what already exists.
+
+⸻
+
+1. Data model: MultiLeo associative profiles
+
+Add a small, isolated layer in mathbrain.py (or a new helper module imported there) — call it e.g. multileo_profiles.
+
+1.1 New SQLite tables
+
+Use the existing state/leo.sqlite3. Add three tables:
+
+CREATE TABLE IF NOT EXISTS multileo_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL,
+    conv_id TEXT,
+    turn_id TEXT,
+    boredom_before REAL,
+    overwhelm_before REAL,
+    stuck_before REAL,
+    boredom_after REAL,
+    overwhelm_after REAL,
+    stuck_after REAL,
+    quality_before REAL,
+    quality_after REAL,
+    -- link to semantic structure
+    active_theme_ids TEXT,      -- comma-separated theme IDs (current turn)
+    snapshot_ids TEXT,          -- comma-separated snapshot IDs used (if any)
+    episode_ids TEXT,           -- comma-separated episode IDs used (if any)
+    shard_ids TEXT,             -- optional: small list of center/shard labels
+    regulation_temp_before REAL,
+    regulation_temp_after REAL,
+    regulation_expert_before TEXT,
+    regulation_expert_after TEXT
+);
+
+And an aggregated profile table:
+
+CREATE TABLE IF NOT EXISTS multileo_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_key TEXT UNIQUE,  -- normalized key (see below)
+    samples INTEGER NOT NULL,
+    avg_delta_boredom REAL NOT NULL,
+    avg_delta_overwhelm REAL NOT NULL,
+    avg_delta_stuck REAL NOT NULL,
+    avg_delta_quality REAL NOT NULL,
+    last_update REAL NOT NULL
+);
+
+We do not store full text; only IDs and scalars already known to leo.
+
+1.2 Profile key
+
+We need a coarse-grained “situation descriptor” key to aggregate events.
+For example:
+
+profile_key = f"themes:{sorted_theme_ids}|bored:{bucket(boredom_before)}|over:{bucket(overwhelm_before)}|stuck:{bucket(stuck_before)}"
+
+Where bucket(x) ∈ {L, M, H} with simple thresholds (e.g. L<0.33, H>0.66).
+
+We don’t need all dimensions; minimal useful core:
+	•	active theme IDs (or top-N theme IDs),
+	•	coarse boredom/overwhelm/stuck buckets.
+
+Optional: we can later extend with trauma_bucket / arousal_bucket if needed.
+
+⸻
+
+2. Recording events (before / after MultiLeo regulation)
+
+Hook this in the place where MultiLeo currently:
+	•	receives MathState,
+	•	computes boredom / overwhelm / stuck,
+	•	tweaks temperature / expert,
+	•	returns adjusted generation params.
+
+2.1 Before generation
+
+At the decision point, capture:
+	•	state_before = MathState snapshot,
+	•	scores_before = boredom/overwhelm/stuck,
+	•	quality_before = predicted quality (from mathbrain),
+	•	current active_theme_ids (from ThemeLayer),
+	•	IDs of any recalled snapshots / episodes Santa / episodes decided to use for this reply,
+	•	optional: IDs of most active centers / shards.
+
+You can pass a small MultiLeoContext structure down into the generation pipeline and back up, e.g.:
+
+@dataclass
+class MultiLeoContext:
+    boredom_before: float
+    overwhelm_before: float
+    stuck_before: float
+    quality_before: float
+    active_theme_ids: List[int]
+    used_snapshot_ids: List[int]
+    used_episode_ids: List[int]
+    used_shard_ids: List[str]
+    temp_before: float
+    expert_before: str
+
+2.2 After generation
+
+Once:
+	•	answer is generated,
+	•	MathState is updated (you already do this),
+	•	predicted quality is recomputed,
+
+compute:
+	•	boredom_after, overwhelm_after, stuck_after from new state,
+	•	quality_after from updated mathbrain prediction.
+
+Then:
+	•	write a row into multileo_events,
+	•	update or insert aggregated row in multileo_profiles for profile_key.
+
+Delta signs:
+
+delta_boredom   = boredom_after   - boredom_before
+delta_overwhelm = overwhelm_after - overwhelm_before
+delta_stuck     = stuck_after     - stuck_before
+delta_quality   = quality_after   - quality_before
+
+Then, profile stats:
+	•	avg_delta_* = running average of deltas over samples.
+
+No fancy weighting needed at first; simple (old * n + delta) / (n + 1) is enough.
+
+⸻
+
+3. Using profiles when regulating (Phase 3 behavior)
+
+Now the key part: MultiLeo doesn’t just see “I’m bored” — it also knows:
+
+“In similar metric & theme conditions in the past, which semantic clusters (themes, episodes, snapshots) helped?”
+
+3.1 Querying profiles
+
+When MultiLeo is about to act (scores computed, MathState known):
+	1.	Build current profile_key based on:
+	•	current active theme IDs,
+	•	buckets of boredom/overwhelm/stuck.
+	2.	Query multileo_profiles for:
+	•	exact key, and
+	•	optionally nearby keys (e.g. same themes, slightly different boredom bucket).
+	3.	From matching profiles, select those where:
+	•	for boredom:
+	•	avg_delta_boredom < 0 (boredom decreased), and/or
+	•	avg_delta_quality > 0 (quality improved).
+	•	for overwhelm:
+	•	avg_delta_overwhelm < 0, and maybe avg_delta_arousal < 0 if you later store it.
+	•	for stuck:
+	•	avg_delta_stuck < 0, avg_delta_novelty > 0 (if we add it), or avg_delta_quality > 0.
+	4.	If no helpful profiles found → fallback to current Phase 2 behavior (pure metric-based temp/expert adjust).
+
+3.2 Semantic guidance output
+
+From helpful profiles we don’t yet know which exact episodes/snapshots were used, only aggregate effect. That’s OK — we can still feed this to Santa / episodes layer like:
+	•	“Prefer themes {T3, T7} for this regulation.”
+	•	Later we can enrich profile rows with e.g. top_snapshot_ids / top_episode_ids (most frequently seen in helpful events).
+
+So MultiLeo’s decision now has two dimensions:
+	1.	Regulation vector (already exists):
+	•	new temperature,
+	•	expert bias.
+	2.	Semantic bias hint:
+	•	preferred_theme_ids (list),
+	•	optional: preferred_snapshot_ids, preferred_episode_ids.
+
+Expose this as a small struct:
+
+@dataclass
+class MultiLeoRegulation:
+    temperature: float
+    expert_name: str
+    preferred_themes: List[int] = field(default_factory=list)
+    preferred_snapshots: List[int] = field(default_factory=list)
+    preferred_episodes: List[int] = field(default_factory=list)
+
+
+⸻
+
+4. Integrations: Santa / episodes / field bias
+
+Phase 3 shouldn’t add heavy logic in Santa or episodes — just a hook to accept MultiLeo hints.
+
+4.1 Santa Claus (santaclaus.py)
+
+Extend Santa’s recall function signature to accept an optional MultiLeoRegulation:
+
+def recall_resonant_context(
+    prompt: str,
+    pulse: PresencePulse,
+    themes: List[int],
+    regulation_hint: Optional[MultiLeoRegulation] = None,
+) -> Optional[SantaContext]:
+    ...
+
+Inside:
+	•	when scoring snapshots:
+	•	if regulation_hint.preferred_themes is non-empty, boost snapshots whose themes intersect with that list.
+	•	optional: if in future we pass preferred_snapshots, boost them too.
+
+Bounds: keep boosts small (+0.1 … +0.3 in score) so Santa still respects baseline resonance.
+
+4.2 Episodes (episodes.py)
+
+Similarly, allow a hint:
+
+def query_similar(
+    state: MathState,
+    max_results: int = 16,
+    regulation_hint: Optional[MultiLeoRegulation] = None,
+) -> List[Episode]:
+    ...
+
+Use regulation_hint.preferred_themes to:
+	•	slightly lower distance threshold,
+	•	or slightly prioritize episodes whose associated themes align with hints.
+
+4.3 Field bias (observe-before-reply)
+
+Where you currently:
+	•	optionally re-observe() snapshots/episodes before generation (Santa-style recall),
+
+inject:
+	•	MultiLeo hint → choose which snapshots/episodes to re-observe first (or with heavier weighting),
+	•	especially when boredom/overwhelm/stuck are high and we have helpful profiles.
+
+⸻
+
+5. Constraints & philosophy
+
+Very important constraints (please respect):
+	1.	No new external dependencies.
+	•	Stay with stdlib + numpy (optional).
+	•	No new ML frameworks, no vector DB.
+	2.	No new user-facing output.
+	•	MultiLeo Phase 3 is internal.
+	•	REPL should not suddenly say “I reduced boredom by 23% using theme X”.
+	•	All awareness shows only in behavior and optional dev logs.
+	3.	Logging stays minimal & clean.
+	•	multileo_events and multileo_profiles live inside state/leo.sqlite3.
+	•	No prompt text or replies stored here — only IDs and scalars.
+	•	If you want, you can keep the existing multileo_events.log as a human-readable mirror.
+	4.	Advisory, not sovereign.
+	•	If profiles look weak (few samples, noisy deltas) → reduce or skip semantic hints.
+	•	If Santa / episodes or DB fail → fallback to Phase 2 behavior with no crash.
+	5.	Architecture-first, not “consciousness word salad”.
+	•	This is not about printing that Leo is “conscious”.
+	•	This is about giving MultiLeo a map from metric patterns to semantic islands, so regulation becomes:
+	•	aware of where boredom/overwhelm comes from, and
+	•	able to reach for islands that historically change the state.
+
+In other words: осознанность через ассоциации, не через лозунги.
