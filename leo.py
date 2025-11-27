@@ -514,6 +514,7 @@ def _is_bootstrap_leak(text: str) -> bool:
         "eviction, memory",
         "bootstrap fragment",
         "active observation with influence",  # From module docstrings
+        "— game —",                            # From game module markers
         "imaginary friend layer",              # From dream.py bootstrap
     ]
 
