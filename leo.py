@@ -514,6 +514,7 @@ def _is_bootstrap_leak(text: str) -> bool:
         "eviction, memory",
         "bootstrap fragment",
         "active observation with influence",  # mathbrain Phase 2 description
+        "imaginary friend layer",  # dream module description
     ]
 
     for phrase in bootstrap_phrases:
