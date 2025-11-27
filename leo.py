@@ -513,6 +513,8 @@ def _is_bootstrap_leak(text: str) -> bool:
         "stats, max",
         "eviction, memory",
         "bootstrap fragment",
+        "active observation with influence",  # From module docstrings
+        "imaginary friend layer",              # From dream.py bootstrap
     ]
 
     for phrase in bootstrap_phrases:
