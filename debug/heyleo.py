@@ -74,7 +74,11 @@ class HeyLeoObserver:
         self.conversations: List[Dict[str, Any]] = []
         self.metrics_history: List[Dict[str, float]] = []
 
+        # Generate unique run_id for this HeyLeo session (for Phase 3 prognosis tracking)
+        self.run_id = f"heyleo_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
         print(f"[heyleo] Initialized observer")
+        print(f"[heyleo] Run ID: {self.run_id}")
         print(f"[heyleo] Topics loaded: {len(self.topics)}")
         print(f"[heyleo] Turns per topic: {self.settings['turns_per_topic']}")
         print(f"[heyleo] Total conversations planned: {self.settings['total_conversations']}")
@@ -134,6 +138,8 @@ class HeyLeoObserver:
         conversation_log = {
             "num": conversation_num,
             "theme": theme,
+            "theme_id": theme,  # Explicit theme_id for Phase 3 analysis
+            "run_id": self.run_id,  # Session-wide run_id for prognosis tracking
             "target_modules": target_modules,
             "turns": [],
             "metrics_before": self._get_current_metrics(),
