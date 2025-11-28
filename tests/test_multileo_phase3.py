@@ -367,7 +367,7 @@ class TestPhase3Integration(unittest.TestCase):
             active_theme_count=5,
         )
 
-        temp, expert, hints = self.brain.multileo_regulate(
+        temp, expert, hints, metrics = self.brain.multileo_regulate(
             temperature=1.0,
             expert_name="structural",
             state=state,
@@ -377,6 +377,11 @@ class TestPhase3Integration(unittest.TestCase):
         # Should return dict with expected keys
         self.assertIn("preferred_themes", hints)
         self.assertIn("preferred_snapshots", hints)
+        # Should return metrics dict
+        self.assertIn("boredom", metrics)
+        self.assertIn("overwhelm", metrics)
+        self.assertIn("stuck", metrics)
+        self.assertIn("quality", metrics)
         self.assertIn("preferred_episodes", hints)
         self.assertIsInstance(hints["preferred_themes"], list)
 
@@ -449,8 +454,8 @@ class TestPhase3Integration(unittest.TestCase):
 
         state = MathState(novelty=0.5, arousal=0.5)
 
-        # Should not raise, should return empty hints
-        temp, expert, hints = self.brain.multileo_regulate(
+        # Should not raise, should return empty hints and default metrics
+        temp, expert, hints, metrics = self.brain.multileo_regulate(
             temperature=1.0,
             expert_name="structural",
             state=state,
@@ -458,6 +463,9 @@ class TestPhase3Integration(unittest.TestCase):
         )
 
         self.assertEqual(hints["preferred_themes"], [])
+        # Should still return valid metrics even on DB error
+        self.assertIn("boredom", metrics)
+        self.assertIn("quality", metrics)
 
 
 if __name__ == '__main__':

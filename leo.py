@@ -2044,6 +2044,11 @@ def generate_reply(
         temperature = selected_expert.temperature
         
         # MATHBRAIN Phase 2 + MULTILEO: Presence-aware regulation
+        # Phase 3 variables (initialized here, used at end of function)
+        phase3_context = None
+        phase3_turn_id = None
+        phase3_pred_state = None
+
         if mathbrain is not None and MATHBRAIN_AVAILABLE and MathState is not None:
             try:
                 # Build preliminary MathState for prediction (before generation)
@@ -2080,15 +2085,19 @@ def generate_reply(
                 # Generate turn_id for logging (short hash of prompt)
                 turn_id = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
 
+                # Save for Phase 3 outcome recording
+                phase3_turn_id = turn_id
+                phase3_pred_state = pred_state
+
                 # Extract active theme IDs for Phase 3
                 active_theme_ids: List[int] = []
                 if active_themes and hasattr(active_themes, 'theme_scores'):
                     active_theme_ids = [theme_id for theme_id, _ in active_themes.theme_scores]
 
                 # MULTILEO: Presence-aware regulation (Phase 3)
-                # Returns adjusted temperature, suggested expert, and semantic hints
+                # Returns adjusted temperature, suggested expert, semantic hints, and metrics
                 if hasattr(mathbrain, 'multileo_regulate'):
-                    regulated_temp, suggested_expert_name, semantic_hints = mathbrain.multileo_regulate(
+                    regulated_temp, suggested_expert_name, semantic_hints, metrics_before = mathbrain.multileo_regulate(
                         temperature=temperature,
                         expert_name=selected_expert.name if selected_expert else "structural",
                         state=pred_state,
@@ -2096,6 +2105,18 @@ def generate_reply(
                         turn_id=turn_id,
                     )
                     temperature = regulated_temp
+
+                    # Create MultiLeoContext for Phase 3 outcome recording
+                    from mathbrain import MultiLeoContext
+                    phase3_context = MultiLeoContext(
+                        boredom_before=metrics_before["boredom"],
+                        overwhelm_before=metrics_before["overwhelm"],
+                        stuck_before=metrics_before["stuck"],
+                        quality_before=metrics_before["quality"],
+                        active_theme_ids=active_theme_ids,
+                        temp_before=regulated_temp,
+                        expert_before=suggested_expert_name,
+                    )
 
                     # Apply expert suggestion if it changed
                     if suggested_expert_name != (selected_expert.name if selected_expert else "structural"):
@@ -2811,6 +2832,23 @@ class LeoField:
             # Pick fallback based on prompt length (deterministic for same prompt)
             prompt_hash = sum(ord(c) for c in prompt) % len(fallback_replies)
             final_reply = fallback_replies[prompt_hash]
+
+        # PHASE 3: Record regulation outcome for learning
+        if phase3_context is not None and mathbrain is not None:
+            try:
+                # Use pred_state as approximation for state_after
+                # Quality after approximated by quality_before (will improve later)
+                mathbrain.record_regulation_outcome(
+                    context_before=phase3_context,
+                    state_after=phase3_pred_state,
+                    quality_after=phase3_context.quality_before,  # Approximation
+                    temp_after=temperature,
+                    expert_after=selected_expert.name if selected_expert else "structural",
+                    turn_id=phase3_turn_id,
+                )
+            except Exception:
+                # Silent fail - Phase 3 must never break generation
+                pass
 
         return final_reply
 

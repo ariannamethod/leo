@@ -1157,7 +1157,7 @@ class MathBrain:
         state: MathState,
         active_theme_ids: Optional[List[int]] = None,
         turn_id: Optional[str] = None,
-    ) -> Tuple[float, str, Dict[str, List[int]]]:
+    ) -> Tuple[float, str, Dict[str, List[int]], Dict[str, float]]:
         """
         MultiLeo presence-aware regulation layer (Phase 3).
 
@@ -1166,8 +1166,9 @@ class MathBrain:
         - Queries profiles for semantic hints (Phase 3)
 
         Returns:
-            (adjusted_temperature, suggested_expert, semantic_hints)
+            (adjusted_temperature, suggested_expert, semantic_hints, metrics)
             semantic_hints = {"preferred_themes": [...], ...}
+            metrics = {"boredom": float, "overwhelm": float, "stuck": float, "quality": float}
         """
         try:
             if active_theme_ids is None:
@@ -1235,11 +1236,20 @@ class MathBrain:
                     expert_after=suggested_expert,
                 )
 
-            return (adjusted_temp, suggested_expert, semantic_hints)
+            # Collect metrics for Phase 3 outcome recording
+            metrics = {
+                "boredom": boredom,
+                "overwhelm": overwhelm,
+                "stuck": stuck,
+                "quality": predicted_q,
+            }
+
+            return (adjusted_temp, suggested_expert, semantic_hints, metrics)
 
         except Exception:
             # Silent fail - MultiLeo must never break generation
-            return (temperature, expert_name, {"preferred_themes": [], "preferred_snapshots": [], "preferred_episodes": []})
+            default_metrics = {"boredom": 0.0, "overwhelm": 0.0, "stuck": 0.0, "quality": 0.5}
+            return (temperature, expert_name, {"preferred_themes": [], "preferred_snapshots": [], "preferred_episodes": []}, default_metrics)
 
     def record_regulation_outcome(
         self,
