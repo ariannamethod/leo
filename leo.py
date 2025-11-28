@@ -1961,6 +1961,9 @@ class ReplyContext(NamedTuple):
     quality: self-assessment score
     arousal: emotional arousal of prompt
     expert: which expert was selected (None if experts disabled)
+    phase3_context: Phase 3 regulation context (for outcome recording)
+    phase3_pred_state: MathState predicted before generation
+    phase3_turn_id: Turn ID for Phase 3 tracking
     """
 
     output: str
@@ -1968,6 +1971,9 @@ class ReplyContext(NamedTuple):
     quality: QualityScore
     arousal: float
     expert: Optional[Expert] = None
+    phase3_context: Optional[Any] = None  # MultiLeoContext
+    phase3_pred_state: Optional[Any] = None  # MathState
+    phase3_turn_id: Optional[str] = None
 
 
 def generate_reply(
@@ -1997,6 +2003,11 @@ def generate_reply(
     echo=True: transform prompt token-by-token through the graph.
     emotion_map: optional emotional charge map for presence features.
     """
+    # Phase 3 variables (initialized at very start - must be before any early returns)
+    phase3_context = None
+    phase3_turn_id = None
+    phase3_pred_state = None
+
     if not vocab or not bigrams:
         # Field is basically empty: just return prompt back.
         return prompt
@@ -2042,12 +2053,8 @@ def generate_reply(
         selected_expert = route_to_expert(preliminary_pulse, active_themes, trauma_state)
         # Override temperature with expert's preference
         temperature = selected_expert.temperature
-        
+
         # MATHBRAIN Phase 2 + MULTILEO: Presence-aware regulation
-        # Phase 3 variables (initialized here, used at end of function)
-        phase3_context = None
-        phase3_turn_id = None
-        phase3_pred_state = None
 
         if mathbrain is not None and MATHBRAIN_AVAILABLE and MathState is not None:
             try:
@@ -2224,6 +2231,9 @@ def generate_reply(
             quality=quality,
             arousal=arousal,
             expert=selected_expert,
+            phase3_context=phase3_context,
+            phase3_pred_state=phase3_pred_state,
+            phase3_turn_id=phase3_turn_id,
         )
         return context  # type: ignore
 
@@ -2834,17 +2844,17 @@ class LeoField:
             final_reply = fallback_replies[prompt_hash]
 
         # PHASE 3: Record regulation outcome for learning
-        if phase3_context is not None and mathbrain is not None:
+        if context.phase3_context is not None and self._math_brain is not None:
             try:
                 # Use pred_state as approximation for state_after
                 # Quality after approximated by quality_before (will improve later)
-                mathbrain.record_regulation_outcome(
-                    context_before=phase3_context,
-                    state_after=phase3_pred_state,
-                    quality_after=phase3_context.quality_before,  # Approximation
+                self._math_brain.record_regulation_outcome(
+                    context_before=context.phase3_context,
+                    state_after=context.phase3_pred_state,
+                    quality_after=context.phase3_context.quality_before,  # Approximation
                     temp_after=temperature,
-                    expert_after=selected_expert.name if selected_expert else "structural",
-                    turn_id=phase3_turn_id,
+                    expert_after=context.expert.name if context.expert else "structural",
+                    turn_id=context.phase3_turn_id,
                 )
             except Exception:
                 # Silent fail - Phase 3 must never break generation
