@@ -2080,13 +2080,19 @@ def generate_reply(
                 # Generate turn_id for logging (short hash of prompt)
                 turn_id = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
 
-                # MULTILEO: Presence-aware regulation (computes boredom/overwhelm/stuck scores)
-                # Returns adjusted temperature and suggested expert
+                # Extract active theme IDs for Phase 3
+                active_theme_ids: List[int] = []
+                if active_themes and hasattr(active_themes, 'theme_scores'):
+                    active_theme_ids = [theme_id for theme_id, _ in active_themes.theme_scores]
+
+                # MULTILEO: Presence-aware regulation (Phase 3)
+                # Returns adjusted temperature, suggested expert, and semantic hints
                 if hasattr(mathbrain, 'multileo_regulate'):
-                    regulated_temp, suggested_expert_name = mathbrain.multileo_regulate(
+                    regulated_temp, suggested_expert_name, semantic_hints = mathbrain.multileo_regulate(
                         temperature=temperature,
                         expert_name=selected_expert.name if selected_expert else "structural",
                         state=pred_state,
+                        active_theme_ids=active_theme_ids,
                         turn_id=turn_id,
                     )
                     temperature = regulated_temp
@@ -2098,6 +2104,9 @@ def generate_reply(
                             if exp.name == suggested_expert_name:
                                 selected_expert = exp
                                 break
+
+                    # TODO: Phase 3 - Pass semantic_hints to Santa/episodes for islands-aware recall
+                    # For now, semantic_hints are computed but not yet used
                 else:
                     # Fallback to simple Phase 2 logic if multileo_regulate not available
                     predicted_q = mathbrain.predict(pred_state)
