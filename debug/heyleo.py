@@ -66,8 +66,9 @@ class HeyLeoObserver:
             self.topics = config["conversation_topics"]
             self.settings = config["conversation_settings"]
 
-        # Initialize Leo
-        self.leo_field = leo.LeoField()
+        # Initialize Leo with database
+        self.conn = leo.init_db()
+        self.leo_field = leo.LeoField(conn=self.conn)
 
         # Tracking
         self.conversations: List[Dict[str, Any]] = []
