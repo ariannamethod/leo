@@ -2210,6 +2210,15 @@ def generate_reply(
     # Post-process: fix punctuation artifacts
     output = fix_punctuation(output)
 
+    # METAPHRASES: Reduce repetitive meta-phrases within single response
+    # Philosophy: "осознанность через ассоциации, не через лозунги"
+    try:
+        from metaphrases import deduplicate_meta_phrases
+        output = deduplicate_meta_phrases(output, max_occurrences=2)
+    except Exception:
+        # Deduplication must never break generation - silent fallback
+        pass
+
     # Compute average entropy across generation steps
     avg_entropy = sum(entropy_log) / len(entropy_log) if entropy_log else 0.0
 
