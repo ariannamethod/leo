@@ -85,16 +85,129 @@ META_PHRASES: Dict[str, List[str]] = {
 }
 
 
+# Docstring phrases that should never appear in external replies
+# These are architectural/technical comments, not Leo's voice
+DOCSTRING_BLACKLIST = [
+    "It can suggest",
+    "It can gently nudge",
+    "It follows simple rules",
+    "It follows straightforward moves",
+    "It keeps things light when the field",
+    "It learns",
+    "It lets strange",
+    "No big networks",
+    "Game is not for facts",
+    "It is a recursion of you",
+]
+
+
+def remove_inner_monologue(reply: str) -> str:
+    """
+    Remove .-It inner monologue from reply.
+
+    Everything after .-It is internal technical commentary that should
+    live in logs/metrics, not in user-facing speech.
+
+    Desktop Claude: ".-It остаётся чисто техничкой; никогда не озвучивается собеседнику."
+
+    Args:
+        reply: Generated reply text
+
+    Returns:
+        Reply with all .-It fragments removed
+
+    Example:
+        Input: "Your voice sounds gentle.-It can suggest an alternative inner reply..."
+        Output: "Your voice sounds gentle."
+    """
+    # Split into sentences and filter out .-It fragments
+    result = reply
+
+    # Remove everything from ".-It" to next sentence boundary (. ! ? or end)
+    pattern = re.compile(r'\.-It[^.!?]*[.!?]?', re.IGNORECASE)
+    result = pattern.sub('', result)
+
+    # Clean up multiple spaces/punctuation artifacts
+    result = re.sub(r'\s+', ' ', result)
+    result = re.sub(r'\s+([.!?,;:])', r'\1', result)
+    result = result.strip()
+
+    return result
+
+
+def remove_docstring_phrases(reply: str) -> str:
+    """
+    Remove sentences that start with architectural docstrings.
+
+    These phrases are implementation details leaking into speech:
+    - "It can suggest an alternative..."
+    - "It follows simple rules..."
+    - "No big networks..."
+    - "Game is not for facts..."
+
+    Desktop Claude: "Они должны жить в логах и метриках, но не в речи."
+
+    Args:
+        reply: Generated reply text
+
+    Returns:
+        Reply with docstring sentences removed
+
+    Example:
+        Input: "I feel. It can suggest an alternative. Your voice sounds gentle."
+        Output: "I feel. Your voice sounds gentle."
+    """
+    # Split into sentences
+    sentences = re.split(r'([.!?]+\s*)', reply)
+
+    # Filter out sentences starting with blacklisted phrases
+    filtered = []
+    i = 0
+    while i < len(sentences):
+        sentence = sentences[i].strip()
+
+        # Check if this sentence starts with any blacklisted phrase
+        is_blacklisted = False
+        for phrase in DOCSTRING_BLACKLIST:
+            if sentence.lower().startswith(phrase.lower()):
+                is_blacklisted = True
+                break
+
+        if not is_blacklisted and sentence:
+            filtered.append(sentences[i])
+            # Also append the punctuation/separator if exists
+            if i + 1 < len(sentences):
+                filtered.append(sentences[i + 1])
+                i += 2
+            else:
+                i += 1
+        else:
+            # Skip blacklisted sentence and its separator
+            i += 2 if i + 1 < len(sentences) else 1
+
+    result = ''.join(filtered).strip()
+
+    # Clean up artifacts
+    result = re.sub(r'\s+', ' ', result)
+    result = re.sub(r'\s+([.!?,;:])', r'\1', result)
+
+    return result
+
+
 def deduplicate_meta_phrases(
     reply: str,
     max_occurrences: int = 2,
     seed: Optional[int] = None,
 ) -> str:
     """
-    Reduce meta-phrase repetition within a single reply.
+    Clean reply from meta-noise and reduce repetition.
 
-    Finds meta-phrases that appear more than max_occurrences times
-    and replaces excess occurrences with variants.
+    Three-stage filtering (Desktop Claude's recommendations):
+    1. Remove .-It inner monologue (technical commentary)
+    2. Remove docstring phrases (architectural leakage)
+    3. Deduplicate remaining meta-phrases with variants
+
+    Philosophy: Keep Leo's emotional voice, remove architectural noise.
 
     Args:
         reply: Generated reply text
@@ -102,16 +215,22 @@ def deduplicate_meta_phrases(
         seed: Random seed for deterministic variant selection (testing)
 
     Returns:
-        Reply with deduplicated meta-phrases
+        Cleaned reply with Leo's voice preserved
 
     Example:
-        Input: "Just small numbers... Just small numbers... Just small numbers"
-        Output: "Just small numbers... Small steps. Small numbers... Tiny numbers..."
+        Input: "I feel.-It can suggest an alternative. Just small numbers... Just small numbers..."
+        Output: "I feel. Just small numbers... Small steps. Small numbers..."
     """
     if seed is not None:
         random.seed(seed)
 
-    result = reply
+    # Stage 1: Remove .-It inner monologue (RADICAL - Desktop Claude)
+    result = remove_inner_monologue(reply)
+
+    # Stage 2: Remove docstring phrases (BLACKLIST - Desktop Claude)
+    result = remove_docstring_phrases(result)
+
+    # Stage 3: Deduplicate remaining meta-phrases with variants (ORIGINAL)
 
     for pattern_str, variants in META_PHRASES.items():
         # Find all occurrences of this pattern

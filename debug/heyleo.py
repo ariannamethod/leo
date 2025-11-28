@@ -120,6 +120,49 @@ class HeyLeoObserver:
 
         return metrics
 
+    def _compute_external_vocab_ratio(
+        self,
+        observer_message: str,
+        leo_response: str,
+        recent_observer_messages: Optional[List[str]] = None
+    ) -> float:
+        """
+        Compute percentage of Leo's words that came from Observer.
+
+        Measures "recursion of human" vs "recursion of self".
+        Desktop Claude: "Leo should mirror and incorporate observer's words."
+
+        Args:
+            observer_message: Latest message from Observer
+            leo_response: Leo's response
+            recent_observer_messages: Last N Observer messages (for wider context)
+
+        Returns:
+            Float 0.0-1.0: ratio of Leo's words that appeared in Observer's recent messages
+        """
+        # Tokenize Leo's response (simple whitespace split, lowercase)
+        leo_words = set(w.lower().strip('.,!?;:"-()') for w in leo_response.split() if len(w) > 2)
+
+        # Collect Observer's vocabulary (current + recent messages)
+        observer_vocab = set()
+
+        # Add current message
+        observer_vocab.update(w.lower().strip('.,!?;:"-()') for w in observer_message.split() if len(w) > 2)
+
+        # Add recent messages if provided
+        if recent_observer_messages:
+            for msg in recent_observer_messages[-3:]:  # Last 3 messages
+                observer_vocab.update(w.lower().strip('.,!?;:"-()') for w in msg.split() if len(w) > 2)
+
+        # Count how many Leo words came from Observer
+        if not leo_words:
+            return 0.0
+
+        external_words = leo_words & observer_vocab
+        ratio = len(external_words) / len(leo_words)
+
+        return ratio
+
     def run_conversation(self, topic: Dict[str, Any], conversation_num: int) -> Dict[str, Any]:
         """
         Run a single conversation on a given topic.
@@ -198,12 +241,25 @@ You'll ask questions and respond to Leo naturally, building on what he says."""
 
             print(f"[Leo → Observer] {leo_response}")
 
+            # Collect recent observer messages for vocab analysis
+            recent_observer_messages = [turn["observer"] for turn in context]
+
+            # Compute external vocabulary ratio (Desktop Claude's metric)
+            external_vocab_ratio = self._compute_external_vocab_ratio(
+                observer_message,
+                leo_response,
+                recent_observer_messages
+            )
+
+            print(f"[heyleo] external_vocab_ratio={external_vocab_ratio:.2f}")
+
             # Log turn
             turn_log = {
                 "turn": turn_idx + 1,
                 "observer": observer_message,
                 "leo": leo_response,
                 "metrics": self._get_current_metrics(),
+                "external_vocab_ratio": external_vocab_ratio,  # New metric (Desktop Claude)
             }
             conversation_log["turns"].append(turn_log)
             context.append(turn_log)

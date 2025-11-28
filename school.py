@@ -90,9 +90,9 @@ MAX_NOTE_LEN = 4096  # characters
 @dataclass
 class SchoolConfig:
     """Soft limits and gates for echo-questions."""
-    min_question_interval_sec: float = 120.0   # cooldown between questions
-    max_questions_per_run: int = 3            # soft limit per REPL run
-    max_questions_per_hour: int = 10          # global safety net
+    min_question_interval_sec: float = 5.0    # cooldown between questions (was 120.0 - Desktop Claude recommendation)
+    max_questions_per_run: int = 15           # soft limit per REPL run (increased for HeyLeo testing)
+    max_questions_per_hour: int = 30          # global safety net (increased)
     max_token_len: int = 40                   # skip too long strings
 
 
