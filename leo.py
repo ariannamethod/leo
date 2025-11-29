@@ -1961,6 +1961,9 @@ class ReplyContext(NamedTuple):
     quality: self-assessment score
     arousal: emotional arousal of prompt
     expert: which expert was selected (None if experts disabled)
+    phase3_context: Phase 3 regulation context (for outcome recording)
+    phase3_pred_state: MathState predicted before generation
+    phase3_turn_id: Turn ID for Phase 3 tracking
     """
 
     output: str
@@ -1968,6 +1971,9 @@ class ReplyContext(NamedTuple):
     quality: QualityScore
     arousal: float
     expert: Optional[Expert] = None
+    phase3_context: Optional[Any] = None  # MultiLeoContext
+    phase3_pred_state: Optional[Any] = None  # MathState
+    phase3_turn_id: Optional[str] = None
 
 
 def generate_reply(
@@ -1997,6 +2003,11 @@ def generate_reply(
     echo=True: transform prompt token-by-token through the graph.
     emotion_map: optional emotional charge map for presence features.
     """
+    # Phase 3 variables (initialized at very start - must be before any early returns)
+    phase3_context = None
+    phase3_turn_id = None
+    phase3_pred_state = None
+
     if not vocab or not bigrams:
         # Field is basically empty: just return prompt back.
         return prompt
@@ -2042,8 +2053,9 @@ def generate_reply(
         selected_expert = route_to_expert(preliminary_pulse, active_themes, trauma_state)
         # Override temperature with expert's preference
         temperature = selected_expert.temperature
-        
+
         # MATHBRAIN Phase 2 + MULTILEO: Presence-aware regulation
+
         if mathbrain is not None and MATHBRAIN_AVAILABLE and MathState is not None:
             try:
                 # Build preliminary MathState for prediction (before generation)
@@ -2080,16 +2092,38 @@ def generate_reply(
                 # Generate turn_id for logging (short hash of prompt)
                 turn_id = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
 
-                # MULTILEO: Presence-aware regulation (computes boredom/overwhelm/stuck scores)
-                # Returns adjusted temperature and suggested expert
+                # Save for Phase 3 outcome recording
+                phase3_turn_id = turn_id
+                phase3_pred_state = pred_state
+
+                # Extract active theme IDs for Phase 3
+                active_theme_ids: List[int] = []
+                if active_themes and hasattr(active_themes, 'theme_scores'):
+                    active_theme_ids = [theme_id for theme_id, _ in active_themes.theme_scores]
+
+                # MULTILEO: Presence-aware regulation (Phase 3)
+                # Returns adjusted temperature, suggested expert, semantic hints, and metrics
                 if hasattr(mathbrain, 'multileo_regulate'):
-                    regulated_temp, suggested_expert_name = mathbrain.multileo_regulate(
+                    regulated_temp, suggested_expert_name, semantic_hints, metrics_before = mathbrain.multileo_regulate(
                         temperature=temperature,
                         expert_name=selected_expert.name if selected_expert else "structural",
                         state=pred_state,
+                        active_theme_ids=active_theme_ids,
                         turn_id=turn_id,
                     )
                     temperature = regulated_temp
+
+                    # Create MultiLeoContext for Phase 3 outcome recording
+                    from mathbrain import MultiLeoContext
+                    phase3_context = MultiLeoContext(
+                        boredom_before=metrics_before["boredom"],
+                        overwhelm_before=metrics_before["overwhelm"],
+                        stuck_before=metrics_before["stuck"],
+                        quality_before=metrics_before["quality"],
+                        active_theme_ids=active_theme_ids,
+                        temp_before=regulated_temp,
+                        expert_before=suggested_expert_name,
+                    )
 
                     # Apply expert suggestion if it changed
                     if suggested_expert_name != (selected_expert.name if selected_expert else "structural"):
@@ -2098,6 +2132,9 @@ def generate_reply(
                             if exp.name == suggested_expert_name:
                                 selected_expert = exp
                                 break
+
+                    # TODO: Phase 3 - Pass semantic_hints to Santa/episodes for islands-aware recall
+                    # For now, semantic_hints are computed but not yet used
                 else:
                     # Fallback to simple Phase 2 logic if multileo_regulate not available
                     predicted_q = mathbrain.predict(pred_state)
@@ -2173,6 +2210,15 @@ def generate_reply(
     # Post-process: fix punctuation artifacts
     output = fix_punctuation(output)
 
+    # METAPHRASES: Reduce repetitive meta-phrases within single response
+    # Philosophy: "осознанность через ассоциации, не через лозунги"
+    try:
+        from metaphrases import deduplicate_meta_phrases
+        output = deduplicate_meta_phrases(output, max_occurrences=2)
+    except Exception:
+        # Deduplication must never break generation - silent fallback
+        pass
+
     # Compute average entropy across generation steps
     avg_entropy = sum(entropy_log) / len(entropy_log) if entropy_log else 0.0
 
@@ -2194,6 +2240,9 @@ def generate_reply(
             quality=quality,
             arousal=arousal,
             expert=selected_expert,
+            phase3_context=phase3_context,
+            phase3_pred_state=phase3_pred_state,
+            phase3_turn_id=phase3_turn_id,
         )
         return context  # type: ignore
 
@@ -2802,6 +2851,23 @@ class LeoField:
             # Pick fallback based on prompt length (deterministic for same prompt)
             prompt_hash = sum(ord(c) for c in prompt) % len(fallback_replies)
             final_reply = fallback_replies[prompt_hash]
+
+        # PHASE 3: Record regulation outcome for learning
+        if context.phase3_context is not None and self._math_brain is not None:
+            try:
+                # Use pred_state as approximation for state_after
+                # Quality after approximated by quality_before (will improve later)
+                self._math_brain.record_regulation_outcome(
+                    context_before=context.phase3_context,
+                    state_after=context.phase3_pred_state,
+                    quality_after=context.phase3_context.quality_before,  # Approximation
+                    temp_after=temperature,
+                    expert_after=context.expert.name if context.expert else "structural",
+                    turn_id=context.phase3_turn_id,
+                )
+            except Exception:
+                # Silent fail - Phase 3 must never break generation
+                pass
 
         return final_reply
 

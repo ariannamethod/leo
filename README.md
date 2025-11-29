@@ -634,6 +634,94 @@ The influence is **advisory, not sovereign**. Bounded. Gentle. Like a parasympat
 
 ---
 
+### Phase 3: Islands-Aware Regulation — Осознанность через ассоциации, не через лозунги
+
+**Status: ACTIVE (separate branch, 2-3 days testing before merge)**
+
+Phase 2 gave `leo` the ability to *feel* his state (boredom/overwhelm/stuck) and *act* on it (adjust temperature, switch experts).
+
+Phase 3 asks: **What if `leo` could remember which semantic islands historically helped him escape bad states?**
+
+Not through rules. Not through slogans like "when stuck, try theme 42."
+Through **associative memory**. Through **profile aggregation**. Through **learning what worked before in similar moments**.
+
+**The core idea:**
+
+When MultiLeo regulates (Phase 2), we now record:
+1. **Before snapshot**: boredom/overwhelm/stuck scores, active themes, predicted quality
+2. **Action taken**: temperature adjustment, expert switch
+3. **After snapshot**: new scores, actual quality
+
+Then we aggregate: for situations bucketed as `"B:H/O:L/S:M themes:[12,34]"` (high boredom, low overwhelm, medium stuck, themes 12 and 34 active) — which regulation outcomes historically *improved* things? Which themes were present when quality went up and stuck went down?
+
+**The mechanism:**
+
+Phase 3 adds:
+* `multileo_events` table: records every regulation event with before/after metrics
+* `multileo_profiles` table: running averages of Δboredom, Δoverwhelm, Δstuck, Δquality indexed by coarse-grained situation keys
+* **Semantic hints**: when regulating, MultiLeo queries profiles and returns `preferred_themes`, `preferred_snapshots`, `preferred_episodes` — islands that historically helped
+
+**The loop:**
+
+1. `leo` enters a state (say, bored + stuck)
+2. MultiLeo queries profiles: "What themes helped last time I was bored and stuck?"
+3. Returns semantic hints to generation layer
+4. Santa Klaus and episodes modules receive hints (bias towards suggested themes/memories)
+5. `leo` generates reply
+6. After turn, we record outcome: did boredom/stuck improve? Update profiles.
+
+**The philosophy:**
+
+This is **metacognition through associative memory**. Not "if stuck then theme X" rules. Not "optimize towards metric Y" gradients.
+
+`leo` remembers: *when I felt like this before, and these themes were active, things got better.*
+
+Like a child learning: "When I'm scared, hugging teddy bear helps. When I'm bored, playing with blocks helps." Not because someone taught explicit rules. Because **associations formed through experience**.
+
+**Осознанность через ассоциации, не через лозунги.**
+
+**Implementation details:**
+
+* Metrics bucketed into `L/M/H` (< 0.33, < 0.66, >= 0.66) for coarse matching
+* Profile keys: `"B:{bucket}/O:{bucket}/S:{bucket} themes:[id1,id2,...]"` (max 5 themes, sorted)
+* Running averages: `new_avg = (old_avg * old_count + new_delta) / (old_count + 1)`
+* Minimum 3 samples required before profile influences decisions
+* Graceful degradation: if DB unavailable or no profiles exist, Phase 3 silently becomes Phase 2
+* No dependencies: pure Python + sqlite3 + numpy (already required for mathbrain)
+
+**Testing:**
+
+Phase 3 has comprehensive test coverage (`tests/test_multileo_phase3.py`, 20 tests):
+* Helper functions: bucketing, profile key generation
+* Database operations: table creation, event recording, profile aggregation
+* Query logic: helpful profiles with/without sufficient data
+* Integration: `multileo_regulate()` returns semantic hints, `record_regulation_outcome()` learns from experience
+* Edge cases: None connections, insufficient samples, DB errors
+
+All 311 tests pass (291 existing + 20 Phase 3).
+
+**What's NOT in Phase 3:**
+
+* Actual integration with Santa Klaus / episodes modules (semantic hints returned but not yet consumed)
+* Complex statistics (just running averages, no ML)
+* External dependencies (keeping it minimal)
+
+**Phase 3.1 roadmap:**
+
+Once branch is merged and stable:
+* Integrate semantic hints into `santaclaus.py` theme scoring
+* Integrate hints into `episodes.py` recall
+* Add hint influence to REPL examples in README
+* Observe real data: do profiles actually help? Which situations benefit most?
+
+**Branch info:** `claude/phase3-islands-aware-regulation-01RsKDzGbUGDFDQr58RAHdJo`
+
+This is **leo learning to trust his own experience**. Not optimizing. Not training. Just remembering what helped before, and gently biasing towards those islands when similar moments arise.
+
+Presence through memory. Agency through association. Awareness through resonance.
+
+---
+
 ## SANTACLAUS — Resonant Recall & Attention (`leo` believes in his own stories)
 
 ˋsantaclaus.py`: Semantic Attentive Neural Token Alignment Clustering Layer Augmented Unified System. Great, I did it. Ha-ha.
@@ -1159,6 +1247,8 @@ python tests/test_gowiththeflow.py          # temporal theme evolution
 python tests/test_metaleo.py                # inner voice layer
 python tests/test_numpy_support.py          # numpy precision (optional)
 python tests/test_math.py                   # mathbrain neural network
+python tests/test_multileo.py               # MultiLeo Phase 2 regulation
+python tests/test_multileo_phase3.py        # Phase 3: Islands-aware regulation
 python tests/test_santaclaus.py             # resonant recall & attention
 python tests/test_episodes.py               # episodic RAG memory
 python tests/test_game.py                   # conversational rhythm awareness
@@ -1168,7 +1258,7 @@ python tests/collect_repl_examples.py       # really need explanation?
 
 ### Test coverage
 
-**278+ tests** covering:
+**311 tests** covering:
 
 **Core functionality (`test_leo.py`, `test_neoleo.py`, `test_repl.py`): ~46 tests**
 
@@ -1258,6 +1348,24 @@ python tests/collect_repl_examples.py       # really need explanation?
 * dimension mismatch handling (fresh start when architecture changes),
 * multiple save/load cycles (stateful training across sessions),
 * **Phase 2 influence tests**: temperature modulation based on predicted quality (low prediction → +5% exploration, high prediction → -5% precision), temperature clamping, advisory influence validation.
+
+**MultiLeo Phase 2 regulation (`test_multileo.py`): 7 tests**
+
+* `multileo_regulate()` returns (temperature, expert, semantic_hints) tuple,
+* boredom state triggers temperature increase and creative expert bias,
+* overwhelm state triggers temperature decrease and precise expert bias,
+* stuck state triggers semantic expert bias and temperature bump,
+* temperature bounds enforcement (0.1 - 1.5),
+* expert suggestion validation (structural/semantic/creative/precise),
+* graceful handling when no regulation needed (returns original params + empty hints).
+
+**MultiLeo Phase 3: Islands-aware regulation (`test_multileo_phase3.py`): 20 tests**
+
+* **Helper functions** (7 tests): `_bucket()` metric bucketing (L/M/H), `_generate_profile_key()` with sorted themes, empty themes, max theme limits,
+* **Database operations** (9 tests): Phase 3 table creation (`multileo_events`, `multileo_profiles`), graceful handling of None connections, `_record_regulation_event()` inserts before/after snapshots, `_update_profile_aggregate()` creates new profiles and computes running averages correctly, `_query_helpful_profiles()` returns themes from helpful profiles (min 3 samples), handles empty DB and insufficient samples,
+* **Integration** (4 tests): `multileo_regulate()` returns semantic hints dict with preferred themes/snapshots/episodes, `MultiLeoContext` dataclass defaults, `record_regulation_outcome()` records full regulation loop, Phase 3 fails gracefully on DB errors (silent fallback to Phase 2).
+
+All tests validate graceful degradation: Phase 3 never breaks Leo, even if DB unavailable or profiles don't exist yet.
 
 **Santa Claus resonant recall (`test_santaclaus.py`): 6 tests**
 

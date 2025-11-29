@@ -133,7 +133,7 @@ class TestMultiLeoRegulation(unittest.TestCase):
         base_temp = 1.0
         expert = "structural"
 
-        regulated_temp, suggested_expert = self.brain.multileo_regulate(
+        regulated_temp, suggested_expert, semantic_hints, metrics = self.brain.multileo_regulate(
             temperature=base_temp,
             expert_name=expert,
             state=state,
@@ -157,7 +157,7 @@ class TestMultiLeoRegulation(unittest.TestCase):
         base_temp = 0.8
         expert = "structural"
 
-        regulated_temp, suggested_expert = self.brain.multileo_regulate(
+        regulated_temp, suggested_expert, semantic_hints, metrics = self.brain.multileo_regulate(
             temperature=base_temp,
             expert_name=expert,
             state=state,
@@ -181,7 +181,7 @@ class TestMultiLeoRegulation(unittest.TestCase):
         base_temp = 1.2
         expert = "semantic"
 
-        regulated_temp, suggested_expert = self.brain.multileo_regulate(
+        regulated_temp, suggested_expert, semantic_hints, metrics = self.brain.multileo_regulate(
             temperature=base_temp,
             expert_name=expert,
             state=state,
@@ -217,7 +217,7 @@ class TestMultiLeoRegulation(unittest.TestCase):
             )
             self.brain.observe(train_state)
 
-        regulated_temp, suggested_expert = self.brain.multileo_regulate(
+        regulated_temp, suggested_expert, semantic_hints, metrics = self.brain.multileo_regulate(
             temperature=base_temp,
             expert_name=expert,
             state=state,
@@ -237,7 +237,7 @@ class TestMultiLeoRegulation(unittest.TestCase):
         )
         base_temp = 0.3
 
-        regulated_temp, _ = self.brain.multileo_regulate(
+        regulated_temp, _, _, _ = self.brain.multileo_regulate(
             temperature=base_temp,
             expert_name="structural",
             state=state,
@@ -255,7 +255,7 @@ class TestMultiLeoRegulation(unittest.TestCase):
         )
         base_temp = 1.4
 
-        regulated_temp, _ = self.brain.multileo_regulate(
+        regulated_temp, _, _, _ = self.brain.multileo_regulate(
             temperature=base_temp,
             expert_name="structural",
             state=state_bored,
@@ -275,7 +275,7 @@ class TestMultiLeoRegulation(unittest.TestCase):
         )
 
         try:
-            regulated_temp, suggested_expert = self.brain.multileo_regulate(
+            regulated_temp, suggested_expert, semantic_hints, metrics = self.brain.multileo_regulate(
                 temperature=1.0,
                 expert_name="structural",
                 state=state,

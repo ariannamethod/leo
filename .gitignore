@@ -11,6 +11,10 @@ __pycache__/
 *.pyc
 __pycache__/
 
+# DEBUG (Phase 3 testing, temporary):
+debug/.env
+debug/report_*.md
+
 # SCHOOL:
 state/school_bootstrap.json
 

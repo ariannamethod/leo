@@ -193,6 +193,370 @@ def _log_multileo_event(
         pass
 
 
+# ============================================================================
+# MULTILEO PHASE 3: Islands-aware regulation
+# ============================================================================
+#
+# Phase 3 adds associative awareness to MultiLeo:
+# - Records which themes/islands/episodes historically led into/out of bad states
+# - Provides semantic hints (preferred themes) when regulating
+# - Maps metric patterns ↔ semantic structures
+#
+# Philosophy: "осознанность через ассоциации, не через лозунги"
+# MultiLeo learns which semantic islands help escape boredom/overwhelm/stuck.
+
+
+@dataclass
+class MultiLeoContext:
+    """
+    Snapshot of state BEFORE MultiLeo regulation.
+    Captured at decision point, returned after generation for delta computation.
+    """
+    boredom_before: float
+    overwhelm_before: float
+    stuck_before: float
+    quality_before: float
+    active_theme_ids: List[int]
+    used_snapshot_ids: List[int] = None
+    used_episode_ids: List[int] = None
+    used_shard_ids: List[str] = None
+    temp_before: float = 1.0
+    expert_before: str = "structural"
+
+    def __post_init__(self):
+        if self.used_snapshot_ids is None:
+            self.used_snapshot_ids = []
+        if self.used_episode_ids is None:
+            self.used_episode_ids = []
+        if self.used_shard_ids is None:
+            self.used_shard_ids = []
+
+
+@dataclass
+class MultiLeoRegulation:
+    """
+    MultiLeo's decision output (Phase 3).
+
+    Contains:
+    - Parameter adjustments (temperature, expert)
+    - Semantic hints (preferred themes/snapshots/episodes)
+    """
+    temperature: float
+    expert_name: str
+    preferred_themes: List[int] = None
+    preferred_snapshots: List[int] = None
+    preferred_episodes: List[int] = None
+
+    def __post_init__(self):
+        if self.preferred_themes is None:
+            self.preferred_themes = []
+        if self.preferred_snapshots is None:
+            self.preferred_snapshots = []
+        if self.preferred_episodes is None:
+            self.preferred_episodes = []
+
+
+def _bucket(x: float) -> str:
+    """
+    Bucket continuous metric into {L, M, H}.
+    L < 0.33, M < 0.66, H >= 0.66
+    """
+    if x < 0.33:
+        return "L"
+    elif x < 0.66:
+        return "M"
+    else:
+        return "H"
+
+
+def _generate_profile_key(
+    theme_ids: List[int],
+    boredom: float,
+    overwhelm: float,
+    stuck: float,
+    max_themes: int = 3,
+) -> str:
+    """
+    Generate coarse-grained situation descriptor key for profile aggregation.
+
+    Format: "themes:T1,T2,T3|bored:L|over:M|stuck:H"
+    """
+    # Sort and limit themes
+    sorted_themes = sorted(theme_ids[:max_themes]) if theme_ids else []
+    theme_str = ",".join(map(str, sorted_themes)) if sorted_themes else "none"
+
+    # Bucket metrics
+    bored_bucket = _bucket(boredom)
+    over_bucket = _bucket(overwhelm)
+    stuck_bucket = _bucket(stuck)
+
+    return f"themes:{theme_str}|bored:{bored_bucket}|over:{over_bucket}|stuck:{stuck_bucket}"
+
+
+def _init_multileo_phase3_tables(conn) -> None:
+    """
+    Create MultiLeo Phase 3 tables if they don't exist.
+
+    Tables:
+    - multileo_events: Before/after snapshots of regulation events
+    - multileo_profiles: Aggregated profiles (avg deltas per situation key)
+
+    Silent fail if conn is None or sqlite3 not available.
+    """
+    if conn is None:
+        return
+
+    try:
+        import sqlite3
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS multileo_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts REAL NOT NULL,
+                conv_id TEXT,
+                turn_id TEXT,
+                boredom_before REAL,
+                overwhelm_before REAL,
+                stuck_before REAL,
+                boredom_after REAL,
+                overwhelm_after REAL,
+                stuck_after REAL,
+                quality_before REAL,
+                quality_after REAL,
+                active_theme_ids TEXT,
+                snapshot_ids TEXT,
+                episode_ids TEXT,
+                shard_ids TEXT,
+                regulation_temp_before REAL,
+                regulation_temp_after REAL,
+                regulation_expert_before TEXT,
+                regulation_expert_after TEXT
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS multileo_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_key TEXT UNIQUE NOT NULL,
+                samples INTEGER NOT NULL DEFAULT 0,
+                avg_delta_boredom REAL NOT NULL DEFAULT 0.0,
+                avg_delta_overwhelm REAL NOT NULL DEFAULT 0.0,
+                avg_delta_stuck REAL NOT NULL DEFAULT 0.0,
+                avg_delta_quality REAL NOT NULL DEFAULT 0.0,
+                last_update REAL NOT NULL
+            )
+        """)
+
+        conn.commit()
+    except Exception:
+        # Silent fail - Phase 3 must never break Leo
+        pass
+
+
+def _record_regulation_event(
+    conn,
+    context_before: MultiLeoContext,
+    boredom_after: float,
+    overwhelm_after: float,
+    stuck_after: float,
+    quality_after: float,
+    temp_after: float,
+    expert_after: str,
+    conv_id: Optional[str] = None,
+    turn_id: Optional[str] = None,
+) -> None:
+    """
+    Record a before/after regulation event and update profile aggregates.
+
+    Silent fail if conn is None or any error occurs.
+    """
+    if conn is None:
+        return
+
+    try:
+        import time
+
+        # Compute deltas
+        delta_boredom = boredom_after - context_before.boredom_before
+        delta_overwhelm = overwhelm_after - context_before.overwhelm_before
+        delta_stuck = stuck_after - context_before.stuck_before
+        delta_quality = quality_after - context_before.quality_before
+
+        # Record event
+        conn.execute("""
+            INSERT INTO multileo_events (
+                ts, conv_id, turn_id,
+                boredom_before, overwhelm_before, stuck_before,
+                boredom_after, overwhelm_after, stuck_after,
+                quality_before, quality_after,
+                active_theme_ids, snapshot_ids, episode_ids, shard_ids,
+                regulation_temp_before, regulation_temp_after,
+                regulation_expert_before, regulation_expert_after
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            time.time(), conv_id, turn_id,
+            context_before.boredom_before,
+            context_before.overwhelm_before,
+            context_before.stuck_before,
+            boredom_after, overwhelm_after, stuck_after,
+            context_before.quality_before, quality_after,
+            ",".join(map(str, context_before.active_theme_ids)),
+            ",".join(map(str, context_before.used_snapshot_ids)),
+            ",".join(map(str, context_before.used_episode_ids)),
+            ",".join(context_before.used_shard_ids),
+            context_before.temp_before, temp_after,
+            context_before.expert_before, expert_after,
+        ))
+
+        # Update profile aggregate
+        profile_key = _generate_profile_key(
+            context_before.active_theme_ids,
+            context_before.boredom_before,
+            context_before.overwhelm_before,
+            context_before.stuck_before,
+        )
+
+        _update_profile_aggregate(
+            conn, profile_key,
+            delta_boredom, delta_overwhelm, delta_stuck, delta_quality
+        )
+
+        conn.commit()
+    except Exception:
+        # Silent fail - Phase 3 must never break Leo
+        pass
+
+
+def _update_profile_aggregate(
+    conn,
+    profile_key: str,
+    delta_boredom: float,
+    delta_overwhelm: float,
+    delta_stuck: float,
+    delta_quality: float,
+) -> None:
+    """
+    Update or insert profile aggregate row with running average of deltas.
+
+    Uses simple incremental average: new_avg = (old_avg * n + delta) / (n + 1)
+    """
+    try:
+        import time
+
+        # Try to fetch existing profile
+        row = conn.execute(
+            "SELECT samples, avg_delta_boredom, avg_delta_overwhelm, avg_delta_stuck, avg_delta_quality "
+            "FROM multileo_profiles WHERE profile_key = ?",
+            (profile_key,)
+        ).fetchone()
+
+        if row:
+            # Update existing profile
+            samples, avg_b, avg_o, avg_s, avg_q = row
+            new_samples = samples + 1
+            new_avg_b = (avg_b * samples + delta_boredom) / new_samples
+            new_avg_o = (avg_o * samples + delta_overwhelm) / new_samples
+            new_avg_s = (avg_s * samples + delta_stuck) / new_samples
+            new_avg_q = (avg_q * samples + delta_quality) / new_samples
+
+            conn.execute("""
+                UPDATE multileo_profiles
+                SET samples = ?,
+                    avg_delta_boredom = ?,
+                    avg_delta_overwhelm = ?,
+                    avg_delta_stuck = ?,
+                    avg_delta_quality = ?,
+                    last_update = ?
+                WHERE profile_key = ?
+            """, (new_samples, new_avg_b, new_avg_o, new_avg_s, new_avg_q, time.time(), profile_key))
+        else:
+            # Insert new profile
+            conn.execute("""
+                INSERT INTO multileo_profiles (
+                    profile_key, samples,
+                    avg_delta_boredom, avg_delta_overwhelm, avg_delta_stuck, avg_delta_quality,
+                    last_update
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (profile_key, 1, delta_boredom, delta_overwhelm, delta_stuck, delta_quality, time.time()))
+    except Exception:
+        # Silent fail
+        pass
+
+
+def _query_helpful_profiles(
+    conn,
+    theme_ids: List[int],
+    boredom: float,
+    overwhelm: float,
+    stuck: float,
+    min_samples: int = 3,
+) -> Dict[str, List[int]]:
+    """
+    Query profiles to find which themes historically helped in similar situations.
+
+    Returns semantic hints: preferred themes that led to improvement.
+    """
+    if conn is None:
+        return {"preferred_themes": [], "preferred_snapshots": [], "preferred_episodes": []}
+
+    try:
+        # Generate current profile key
+        profile_key = _generate_profile_key(theme_ids, boredom, overwhelm, stuck)
+
+        # Query exact match (can extend to fuzzy matching later)
+        rows = conn.execute("""
+            SELECT profile_key, samples,
+                   avg_delta_boredom, avg_delta_overwhelm, avg_delta_stuck, avg_delta_quality
+            FROM multileo_profiles
+            WHERE profile_key = ? AND samples >= ?
+        """, (profile_key, min_samples)).fetchall()
+
+        if not rows:
+            return {"preferred_themes": [], "preferred_snapshots": [], "preferred_episodes": []}
+
+        # Find helpful profiles
+        helpful_themes: List[int] = []
+
+        for row in rows:
+            key, samples, d_bored, d_over, d_stuck, d_qual = row
+
+            # Extract themes from key (format: "themes:T1,T2,T3|...")
+            themes_part = key.split("|")[0].split(":")[1]
+            if themes_part != "none":
+                profile_themes = [int(t) for t in themes_part.split(",")]
+            else:
+                profile_themes = []
+
+            # Check if this profile was helpful
+            is_helpful = False
+
+            # High boredom? Look for profiles that reduced it
+            if boredom > 0.6 and (d_bored < -0.05 or d_qual > 0.05):
+                is_helpful = True
+
+            # High overwhelm? Look for profiles that reduced it
+            if overwhelm > 0.7 and d_over < -0.05:
+                is_helpful = True
+
+            # High stuck? Look for profiles that reduced it or improved quality
+            if stuck > 0.6 and (d_stuck < -0.05 or d_qual > 0.05):
+                is_helpful = True
+
+            if is_helpful:
+                helpful_themes.extend(profile_themes)
+
+        # Deduplicate and return
+        return {
+            "preferred_themes": list(set(helpful_themes)),
+            "preferred_snapshots": [],  # Future extension
+            "preferred_episodes": [],   # Future extension
+        }
+
+    except Exception:
+        # Silent fail - return empty hints
+        return {"preferred_themes": [], "preferred_snapshots": [], "preferred_episodes": []}
+
+
 # Bootstrap text: Leo's self-understanding of his body awareness
 BOOTSTRAP_TEXT = """
 I am Leo's body awareness.
@@ -584,6 +948,10 @@ class MathBrain:
         # Try to load previous state
         self._load_state()
 
+        # Phase 3: Init associative memory tables
+        if hasattr(self.field, 'conn') and self.field.conn is not None:
+            _init_multileo_phase3_tables(self.field.conn)
+
     def _reset_to_fresh_init(self) -> None:
         """
         Reset MathBrain to fresh initialization.
@@ -787,19 +1155,25 @@ class MathBrain:
         temperature: float,
         expert_name: str,
         state: MathState,
+        active_theme_ids: Optional[List[int]] = None,
         turn_id: Optional[str] = None,
-    ) -> Tuple[float, str]:
+    ) -> Tuple[float, str, Dict[str, List[int]], Dict[str, float]]:
         """
-        MultiLeo presence-aware regulation layer.
+        MultiLeo presence-aware regulation layer (Phase 3).
 
-        Computes boredom/overwhelm/stuck scores from state and gently nudges:
-        - temperature (±0.2 max)
-        - expert choice (soft bias)
+        Computes boredom/overwhelm/stuck scores and:
+        - Gently nudges temperature/expert (Phase 2)
+        - Queries profiles for semantic hints (Phase 3)
 
         Returns:
-            (adjusted_temperature, suggested_expert)
+            (adjusted_temperature, suggested_expert, semantic_hints, metrics)
+            semantic_hints = {"preferred_themes": [...], ...}
+            metrics = {"boredom": float, "overwhelm": float, "stuck": float, "quality": float}
         """
         try:
+            if active_theme_ids is None:
+                active_theme_ids = []
+
             # Predict quality from state
             predicted_q = self.predict(state)
 
@@ -808,37 +1182,42 @@ class MathBrain:
             overwhelm = _compute_overwhelm_score(state)
             stuck = _compute_stuck_score(state, predicted_q)
 
-            # Start with no change
+            # Phase 2: parameter regulation (existing logic)
             temp_nudge = 0.0
             suggested_expert = expert_name
 
             # BOREDOM: wake up (increase exploration)
-            if boredom > 0.6:  # Significant boredom
+            if boredom > 0.6:
                 temp_nudge += MULTILEO_TEMP_NUDGE_MAX * (boredom - 0.6) / 0.4
-                # Bias towards creative expert when bored
                 if boredom > 0.75 and expert_name not in ["creative", "wounded"]:
                     suggested_expert = "creative"
 
             # OVERWHELM: soften (reduce chaos)
-            if overwhelm > 0.7:  # Significant overwhelm
+            if overwhelm > 0.7:
                 temp_nudge -= MULTILEO_TEMP_NUDGE_MAX * (overwhelm - 0.7) / 0.3
-                # Bias towards precise or structural when overwhelmed
                 if overwhelm > 0.85 and expert_name not in ["precise", "structural", "wounded"]:
                     suggested_expert = "precise"
 
             # STUCK: try something different
-            if stuck > 0.6:  # Significant stuck-ness
-                # Small temperature increase to break pattern
+            if stuck > 0.6:
                 temp_nudge += 0.1
-                # Consider semantic or metaleo-influenced routing
                 if stuck > 0.75 and expert_name == "structural":
                     suggested_expert = "semantic"
 
-            # Apply nudge to temperature
             adjusted_temp = temperature + temp_nudge
-
-            # Enforce absolute bounds
             adjusted_temp = max(MULTILEO_TEMP_MIN, min(MULTILEO_TEMP_MAX, adjusted_temp))
+
+            # Phase 3: query profiles for semantic hints
+            semantic_hints = {"preferred_themes": [], "preferred_snapshots": [], "preferred_episodes": []}
+
+            if hasattr(self.field, 'conn') and self.field.conn is not None:
+                semantic_hints = _query_helpful_profiles(
+                    self.field.conn,
+                    active_theme_ids,
+                    boredom,
+                    overwhelm,
+                    stuck,
+                )
 
             # Log event if there's a change
             if turn_id and (abs(temp_nudge) > 0.01 or suggested_expert != expert_name):
@@ -857,11 +1236,57 @@ class MathBrain:
                     expert_after=suggested_expert,
                 )
 
-            return (adjusted_temp, suggested_expert)
+            # Collect metrics for Phase 3 outcome recording
+            metrics = {
+                "boredom": boredom,
+                "overwhelm": overwhelm,
+                "stuck": stuck,
+                "quality": predicted_q,
+            }
+
+            return (adjusted_temp, suggested_expert, semantic_hints, metrics)
 
         except Exception:
             # Silent fail - MultiLeo must never break generation
-            return (temperature, expert_name)
+            default_metrics = {"boredom": 0.0, "overwhelm": 0.0, "stuck": 0.0, "quality": 0.5}
+            return (temperature, expert_name, {"preferred_themes": [], "preferred_snapshots": [], "preferred_episodes": []}, default_metrics)
+
+    def record_regulation_outcome(
+        self,
+        context_before: MultiLeoContext,
+        state_after: MathState,
+        quality_after: float,
+        temp_after: float,
+        expert_after: str,
+        turn_id: Optional[str] = None,
+    ) -> None:
+        """
+        Record regulation outcome for Phase 3 learning.
+        Call this AFTER generation completes.
+        """
+        if not hasattr(self.field, 'conn') or self.field.conn is None:
+            return
+
+        try:
+            # Recompute scores from after-state
+            boredom_after = _compute_boredom_score(state_after)
+            overwhelm_after = _compute_overwhelm_score(state_after)
+            stuck_after = _compute_stuck_score(state_after, quality_after)
+
+            _record_regulation_event(
+                self.field.conn,
+                context_before,
+                boredom_after,
+                overwhelm_after,
+                stuck_after,
+                quality_after,
+                temp_after,
+                expert_after,
+                turn_id=turn_id,
+            )
+        except Exception:
+            # Silent fail
+            pass
 
     def __repr__(self) -> str:
         return (
@@ -877,4 +1302,6 @@ __all__ = [
     "MathState",
     "state_to_features",
     "NUMPY_AVAILABLE",
+    "MultiLeoContext",         # Phase 3
+    "MultiLeoRegulation",      # Phase 3
 ]
