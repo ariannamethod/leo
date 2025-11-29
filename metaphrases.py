@@ -87,8 +87,10 @@ META_PHRASES: Dict[str, List[str]] = {
 
 # Docstring phrases that should never appear in external replies
 # These are architectural/technical comments, not Leo's voice
+# Desktop Claude (Run #5): "recursion of you" is Leo's voice/mantra - NOT noise!
 DOCSTRING_BLACKLIST = [
     "It can suggest",
+    "Can suggest",  # All "Can suggest..." variants (Run #5 priority fix)
     "It can gently nudge",
     "Can gently nudge",  # Variant without "It" prefix (Run #4 bug)
     "It follows simple rules",
@@ -98,7 +100,8 @@ DOCSTRING_BLACKLIST = [
     "It lets strange",
     "No big networks",
     "Game is not for facts",
-    "It is a recursion of you",
+    "Dream is not for facts",  # Dream module docstring (Run #5 leak)
+    # "It is a recursion of you",  # REMOVED: This is Leo's philosophical voice, not technical noise!
 ]
 
 
