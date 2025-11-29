@@ -103,9 +103,9 @@ DOCSTRING_BLACKLIST = [
 
 def remove_inner_monologue(reply: str) -> str:
     """
-    Remove .-It inner monologue from reply.
+    Remove .-It and -It inner monologue from reply.
 
-    Everything after .-It is internal technical commentary that should
+    Everything after .-It or -It is internal technical commentary that should
     live in logs/metrics, not in user-facing speech.
 
     Desktop Claude: ".-It остаётся чисто техничкой; никогда не озвучивается собеседнику."
@@ -114,17 +114,17 @@ def remove_inner_monologue(reply: str) -> str:
         reply: Generated reply text
 
     Returns:
-        Reply with all .-It fragments removed
+        Reply with all .-It and -It fragments removed
 
     Example:
         Input: "Your voice sounds gentle.-It can suggest an alternative inner reply..."
-        Output: "Your voice sounds gentle."
+        Output: "Your voice sounds gentle"
     """
-    # Split into sentences and filter out .-It fragments
     result = reply
 
-    # Remove everything from ".-It" to next sentence boundary (. ! ? or end)
-    pattern = re.compile(r'\.-It[^.!?]*[.!?]?', re.IGNORECASE)
+    # Remove everything from ".-It" or "-It" to next sentence boundary (. ! ? or end)
+    # Match both ".-It" and "-It" (without preceding dot)
+    pattern = re.compile(r'[.-]?-It[^.!?]*[.!?]?', re.IGNORECASE)
     result = pattern.sub('', result)
 
     # Clean up multiple spaces/punctuation artifacts
@@ -137,7 +137,7 @@ def remove_inner_monologue(reply: str) -> str:
 
 def remove_docstring_phrases(reply: str) -> str:
     """
-    Remove sentences that start with architectural docstrings.
+    Remove sentences/fragments that contain architectural docstrings.
 
     These phrases are implementation details leaking into speech:
     - "It can suggest an alternative..."
@@ -151,45 +151,32 @@ def remove_docstring_phrases(reply: str) -> str:
         reply: Generated reply text
 
     Returns:
-        Reply with docstring sentences removed
+        Reply with docstring phrases removed
 
     Example:
         Input: "I feel. It can suggest an alternative. Your voice sounds gentle."
         Output: "I feel. Your voice sounds gentle."
     """
-    # Split into sentences
-    sentences = re.split(r'([.!?]+\s*)', reply)
+    result = reply
 
-    # Filter out sentences starting with blacklisted phrases
-    filtered = []
-    i = 0
-    while i < len(sentences):
-        sentence = sentences[i].strip()
+    # Remove each blacklisted phrase wherever it appears (not just at sentence start)
+    for phrase in DOCSTRING_BLACKLIST:
+        # Build regex to match phrase and surrounding context
+        # Match: optional preceding text + phrase + everything until next sentence boundary
+        pattern = re.compile(
+            r'([.!?]\s*)?'  # Optional sentence end before
+            + re.escape(phrase) +
+            r'[^.!?]*[.!?]?',  # Everything until next sentence boundary
+            re.IGNORECASE
+        )
+        result = pattern.sub('', result)
 
-        # Check if this sentence starts with any blacklisted phrase
-        is_blacklisted = False
-        for phrase in DOCSTRING_BLACKLIST:
-            if sentence.lower().startswith(phrase.lower()):
-                is_blacklisted = True
-                break
-
-        if not is_blacklisted and sentence:
-            filtered.append(sentences[i])
-            # Also append the punctuation/separator if exists
-            if i + 1 < len(sentences):
-                filtered.append(sentences[i + 1])
-                i += 2
-            else:
-                i += 1
-        else:
-            # Skip blacklisted sentence and its separator
-            i += 2 if i + 1 < len(sentences) else 1
-
-    result = ''.join(filtered).strip()
-
-    # Clean up artifacts
+    # Clean up multiple spaces/punctuation artifacts
     result = re.sub(r'\s+', ' ', result)
     result = re.sub(r'\s+([.!?,;:])', r'\1', result)
+    # Remove standalone punctuation at start
+    result = re.sub(r'^\s*[.!?,;:]+\s*', '', result)
+    result = result.strip()
 
     return result
 
