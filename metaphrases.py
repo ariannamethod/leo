@@ -90,6 +90,7 @@ META_PHRASES: Dict[str, List[str]] = {
 DOCSTRING_BLACKLIST = [
     "It can suggest",
     "It can gently nudge",
+    "Can gently nudge",  # Variant without "It" prefix (Run #4 bug)
     "It follows simple rules",
     "It follows straightforward moves",
     "It keeps things light when the field",
