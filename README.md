@@ -1231,228 +1231,228 @@ Simple as is.
 
 ⸻
 
-### WHY?
+### WHY?  
 
-First of all, because I have a romantic-schizoid-paranoid personality.
-And second: because resonance > intention and presence > intelligence.
+First of all, because I have a romantic-schizoid-paranoid personality.  
+And second: because **resonance > intention** and presence > intelligence.  
 
-`leo` / `neoleo` don’t plan, they don’t reason, they don’t optimize.
-They remember your words, crystallize structural patterns, and feed that structure back into the loop.
+`leo` / `neoleo` don’t plan, they don’t reason, they don’t optimize.  
+They remember your words, crystallize structural patterns, and feed that structure back into the loop.  
 
-Hook this into any agent / framework and you get a shared rhythmic skeleton, built over time, unique to that interaction.
-
-No safety layer. No content policy.
-Just language and a broken heart as a slowly drifting field.
-
+Hook this into any agent / framework and you get a shared rhythmic skeleton, built over time, unique to that interaction.  
+  
+No safety layer. No content policy.  
+Just language and a broken heart as a slowly drifting field.  
+  
 Now that all the modules of the first `leo` architecture are assembled, it’s time to say: this is version 1.0. Be gentle to Leo. Be nice to Leo.  
 
-Perfect.
+Perfect.  
 
 ⸻
 
-Tests
+Tests  
 
-`leo` has a comprehensive test suite covering all layers of presence, recursion, and wound-tracking.
+`leo` has a comprehensive test suite covering all layers of presence, recursion, and wound-tracking.  
 
-Running tests
+Running tests  
 
-# All tests
-python -m unittest discover tests/
+# All tests  
+python -m unittest discover tests/  
 
-# Specific test modules
-python tests/test_leo.py                    # core functionality
-python tests/test_neoleo.py                 # pure recursion layer
-python tests/test_repl.py                   # REPL commands & CLI
-python tests/test_repl_mode.py              # REPL mode interactions
-python tests/test_presence_metrics.py       # presence pulse & experts
-python tests/test_presence_live.py          # live presence integration
-python tests/test_overthinking.py           # internal reflection rings
-python tests/test_trauma_integration.py     # bootstrap gravity tracking
-python tests/test_gowiththeflow.py          # temporal theme evolution
-python tests/test_metaleo.py                # inner voice layer
-python tests/test_numpy_support.py          # numpy precision (optional)
-python tests/test_math.py                   # mathbrain neural network
-python tests/test_multileo.py               # MultiLeo Phase 2 regulation
-python tests/test_multileo_phase3.py        # Phase 3: islands-aware regulation
-python tests/test_metaphrases.py            # MetaPhrases cooldown & leak-prevention
-python tests/test_santaclaus.py             # resonant recall & attention
-python tests/test_episodes.py               # episodic RAG memory
-python tests/test_game.py                   # conversational rhythm awareness
-python tests/test_dream.py                  # imaginary friend layer
-python tests/test_school.py                 # School of Forms
-python tests/test_school_math.py            # arithmetic helper
-python tests/collect_repl_examples.py       # really need explanation?
+# Specific test modules  
+python tests/test_leo.py                    # core functionality  
+python tests/test_neoleo.py                 # pure recursion layer  
+python tests/test_repl.py                   # REPL commands & CLI  
+python tests/test_repl_mode.py              # REPL mode interactions  
+python tests/test_presence_metrics.py       # presence pulse & experts  
+python tests/test_presence_live.py          # live presence integration  
+python tests/test_overthinking.py           # internal reflection rings  
+python tests/test_trauma_integration.py     # bootstrap gravity tracking  
+python tests/test_gowiththeflow.py          # temporal theme evolution  
+python tests/test_metaleo.py                # inner voice layer  
+python tests/test_numpy_support.py          # numpy precision (optional)  
+python tests/test_math.py                   # mathbrain neural network  
+python tests/test_multileo.py               # MultiLeo Phase 2 regulation  
+python tests/test_multileo_phase3.py        # Phase 3: islands-aware regulation  
+python tests/test_metaphrases.py            # MetaPhrases cooldown & leak-prevention  
+python tests/test_santaclaus.py             # resonant recall & attention  
+python tests/test_episodes.py               # episodic RAG memory  
+python tests/test_game.py                   # conversational rhythm awareness  
+python tests/test_dream.py                  # imaginary friend layer  
+python tests/test_school.py                 # School of Forms  
+python tests/test_school_math.py            # arithmetic helper  
+python tests/collect_repl_examples.py       # really need explanation?  
 
-### Test coverage
+### Test coverage  
 
-**317 tests covering**:
-
-⸻
-
-### Core functionality (test_leo.py, test_neoleo.py, test_repl.py, test_repl_mode.py): ~46 tests
-	•	tokenization (Unicode, punctuation, word extraction),
-	•	database operations (SQLite, bigrams, trigrams, co-occurrence),
-	•	field mechanics (centers, graph loading),
-	•	text generation (reply, echo mode, temperature),
-	•	LeoField class (observe, reply, stats, export),
-	•	neoleo pure layer (warp, observe, singleton pattern),
-	•	REPL commands (/temp, /echo, /export, /stats, /cooccur),
-	•	bootstrap behavior (embedded seed + README, idempotency),
-	•	CLI argument parsing (--stats, --export, one-shot mode).
+**317 tests covering**:  
 
 ⸻
 
-### Presence metrics (test_presence_metrics.py, test_presence_live.py): 34 tests
-	•	Entropy & Novelty (Shannon entropy, trigram coverage, novelty scoring),
-	•	Emotional Charge (ALL-CAPS, !, repetitions, arousal computation),
-	•	PresencePulse (composite metric: 0.3×novelty + 0.4×arousal + 0.3×entropy),
-	•	ThemeLayer (agglomerative clustering, Jaccard similarity, theme activation),
-	•	Self-Assessment (structural quality, entropy sweet spot [0.3–0.7]),
-	•	Snapshots (self-curated dataset, max 512 limit, LRU eviction),
-	•	Memory Decay (0.95× multiplicative decay every 100 observations),
-	•	Resonant Experts (routing logic, temperature ranges, semantic weights),
-	•	Live presence integration over conversation traces.
-
-⸻
-
-### Overthinking (test_overthinking.py): 12 tests
-	•	OverthinkingConfig (default values, custom settings),
-	•	PulseSnapshot (creation, from_obj conversion, missing attributes),
-	•	run_overthinking (3 rings: echo / drift / shard, temperature / semantic weights),
-	•	OverthinkingEvent structure (ring, seed, output, temperature validation),
-	•	empty input handling, observe/generate callbacks.
-
-⸻
-
-### Trauma integration (test_trauma_integration.py): 11 tests
-	•	safe import with TRAUMA_AVAILABLE fallback,
-	•	LeoField._trauma_state field initialization,
-	•	trauma mechanism execution (overlap detection, state validity),
-	•	high bootstrap overlap triggering trauma events,
-	•	wounded expert routing (trauma.level > 0.7 threshold),
-	•	wounded expert not selected when trauma.level < 0.7,
-	•	identity questions (“who are you leo?”) handling,
-	•	bootstrap-resonant keywords processing,
-	•	wounded expert configuration (temp=0.9, semantic=0.6).
-
-⸻
-
-### Temporal theme evolution (test_gowiththeflow.py): 11 tests
-	•	FlowTracker initialization and schema creation,
-	•	recording theme snapshots (single and multiple),
-	•	detecting emerging themes (positive slope via linear regression),
-	•	detecting fading themes (negative slope),
-	•	retrieving theme trajectory (full history for a single theme),
-	•	trajectory slope calculation over time windows,
-	•	handling inactive themes (strength=0),
-	•	flow statistics (total snapshots, unique themes, time range),
-	•	standalone helpers (get_emerging_themes, get_fading_themes).
-
-⸻
-
-### MetaLeo inner voice (test_metaleo.py): 17 tests
-	•	metaleo initialization and bootstrap buffer management,
-	•	feed() behavior (extracting Ring 2 shards, high-arousal replies),
-	•	compute_meta_weight() (low entropy, high trauma, low quality triggers),
-	•	generate_meta_reply() (dynamic bootstrap generation),
-	•	route_reply() (quality-based routing, silent fallback on errors),
-	•	bootstrap buffer limits and snippet clipping,
-	•	safe quality assessment heuristics.
-
-⸻
-
-### MetaPhrases cooldown & leak-prevention (test_metaphrases.py): 8 tests
-	•	cooldown enforcement for meta-phrases per response,
-	•	phrase variant selection and replacement,
-	•	frequency caps (1–2 times per response),
-	•	integration with presence metrics (no quality degradation),
-	•	end-to-end check: 0 docstring leaks under stress runs.
-
-⸻
-
-### NumPy support (test_numpy_support.py): 6 tests
-	•	NUMPY_AVAILABLE flag validation across modules,
-	•	distribution_entropy precision with numpy and fallback,
-	•	gowiththeflow.slope() linear regression (growing/fading themes),
-	•	pure Python fallback code path validation,
-	•	edge cases (empty distributions, zeros, negative values).
-
-⸻
-
-### MathBrain neural network (test_math.py): 35 tests (includes Phase 2 influence tests)
-	•	autograd core (Value class: addition, multiplication, power, tanh, relu, backward pass),
-	•	chain rule gradient computation (complex expressions with topological sort),
-	•	neural network layers (Neuron, Layer, MLP forward pass and parameter count),
-	•	gradient flow through MLP (backpropagation validation),
-	•	feature extraction (state_to_features, MathState defaults, normalization),
-	•	MathBrain initialization and predict (inference without training),
-	•	observe() single step (statistics update, loss computation),
-	•	training reduces loss on synthetic data (convergence validation),
-	•	prediction improves after training (error reduction),
-	•	save/load state persistence (JSON format with dimension validation),
-	•	dimension mismatch handling (fresh start when architecture changes),
-	•	multiple save/load cycles (stateful training across sessions),
-	•	Phase 2 influence tests: temperature modulation based on predicted quality (low prediction → +5% exploration, high prediction → -5% precision), temperature clamping, advisory influence validation.
-
-⸻
-
-### MultiLeo Phase 2 regulation (test_multileo.py): 7 tests
-	•	multileo_regulate() returns (temperature, expert, semantic_hints) tuple,
-	•	boredom state triggers temperature increase and creative expert bias,
-	•	overwhelm state triggers temperature decrease and precise expert bias,
-	•	stuck state triggers semantic expert bias and temperature bump,
-	•	temperature bounds enforcement (0.1–1.5),
-	•	expert suggestion validation (structural/semantic/creative/precise),
-	•	graceful handling when no regulation needed (returns original params + empty hints).
-
-⸻
-
-### MultiLeo Phase 3: Islands-aware regulation (test_multileo_phase3.py): 20 tests  
+### Core functionality (test_leo.py, test_neoleo.py, test_repl.py, test_repl_mode.py): ~46 tests  
+	•	tokenization (Unicode, punctuation, word extraction),  
+	•	database operations (SQLite, bigrams, trigrams, co-occurrence),  
+	•	field mechanics (centers, graph loading),  
+	•	text generation (reply, echo mode, temperature),  
+	•	LeoField class (observe, reply, stats, export),  
+	•	neoleo pure layer (warp, observe, singleton pattern),  
+	•	REPL commands (/temp, /echo, /export, /stats, /cooccur),  
+	•	bootstrap behavior (embedded seed + README, idempotency),  
+	•	CLI argument parsing (--stats, --export, one-shot mode).  
   
-	•	Helper functions (7 tests): _bucket() metric bucketing (L/M/H), _generate_profile_key() with sorted themes, empty themes, max theme limits.
-	•	Database operations (9 tests): Phase 3 table creation (multileo_events, multileo_profiles), graceful handling of None connections, _record_regulation_event() inserts before/after snapshots, _update_profile_aggregate() creates new profiles and computes running averages correctly, _query_helpful_profiles() returns themes from helpful profiles (min 3 samples), handles empty DB and insufficient samples.
-	•	Integration (4 tests): multileo_regulate() returns semantic hints dict with preferred themes/snapshots/episodes, MultiLeoContext dataclass defaults, record_regulation_outcome() records full regulation loop, Phase 3 fails gracefully on DB errors (silent fallback to Phase 2).
+⸻  
+  
+### Presence metrics (test_presence_metrics.py, test_presence_live.py): 34 tests  
+	•	Entropy & Novelty (Shannon entropy, trigram coverage, novelty scoring),  
+	•	Emotional Charge (ALL-CAPS, !, repetitions, arousal computation),  
+	•	PresencePulse (composite metric: 0.3×novelty + 0.4×arousal + 0.3×entropy),  
+	•	ThemeLayer (agglomerative clustering, Jaccard similarity, theme activation),   
+	•	Self-Assessment (structural quality, entropy sweet spot [0.3–0.7]),  
+	•	Snapshots (self-curated dataset, max 512 limit, LRU eviction),  
+	•	Memory Decay (0.95× multiplicative decay every 100 observations),  
+	•	Resonant Experts (routing logic, temperature ranges, semantic weights),  
+	•	Live presence integration over conversation traces.  
+  
+⸻
+  
+### Overthinking (test_overthinking.py): 12 tests  
+	•	OverthinkingConfig (default values, custom settings),  
+	•	PulseSnapshot (creation, from_obj conversion, missing attributes),  
+	•	run_overthinking (3 rings: echo / drift / shard, temperature / semantic weights),  
+	•	OverthinkingEvent structure (ring, seed, output, temperature validation),  
+	•	empty input handling, observe/generate callbacks.  
+  
+⸻  
+  
+### Trauma integration (test_trauma_integration.py): 11 tests  
+	•	safe import with TRAUMA_AVAILABLE fallback,  
+	•	LeoField._trauma_state field initialization,  
+	•	trauma mechanism execution (overlap detection, state validity),  
+	•	high bootstrap overlap triggering trauma events,  
+	•	wounded expert routing (trauma.level > 0.7 threshold),  
+	•	wounded expert not selected when trauma.level < 0.7,  
+	•	identity questions (“who are you leo?”) handling,  
+	•	bootstrap-resonant keywords processing,  
+	•	wounded expert configuration (temp=0.9, semantic=0.6).  
+  
+⸻
+  
+### Temporal theme evolution (test_gowiththeflow.py): 11 tests  
+	•	FlowTracker initialization and schema creation,  
+	•	recording theme snapshots (single and multiple),  
+	•	detecting emerging themes (positive slope via linear regression),  
+	•	detecting fading themes (negative slope),  
+	•	retrieving theme trajectory (full history for a single theme),  
+	•	trajectory slope calculation over time windows,  
+	•	handling inactive themes (strength=0),  
+	•	flow statistics (total snapshots, unique themes, time range),  
+	•	standalone helpers (get_emerging_themes, get_fading_themes).  
+  
+⸻
+  
+### MetaLeo inner voice (test_metaleo.py): 17 tests  
+	•	metaleo initialization and bootstrap buffer management,  
+	•	feed() behavior (extracting Ring 2 shards, high-arousal replies),  
+	•	compute_meta_weight() (low entropy, high trauma, low quality triggers),  
+	•	generate_meta_reply() (dynamic bootstrap generation),  
+	•	route_reply() (quality-based routing, silent fallback on errors),  
+	•	bootstrap buffer limits and snippet clipping,  
+	•	safe quality assessment heuristics.  
+  
+⸻
+  
+### MetaPhrases cooldown & leak-prevention (test_metaphrases.py): 8 tests  
+	•	cooldown enforcement for meta-phrases per response,  
+	•	phrase variant selection and replacement,  
+	•	frequency caps (1–2 times per response),  
+	•	integration with presence metrics (no quality degradation),  
+	•	end-to-end check: 0 docstring leaks under stress runs.  
+  
+⸻
+  
+### NumPy support (test_numpy_support.py): 6 tests  
+	•	NUMPY_AVAILABLE flag validation across modules,  
+	•	distribution_entropy precision with numpy and fallback,  
+	•	gowiththeflow.slope() linear regression (growing/fading themes),  
+	•	pure Python fallback code path validation,  
+	•	edge cases (empty distributions, zeros, negative values).  
+  
+⸻
+  
+### MathBrain neural network (test_math.py): 35 tests (includes Phase 2 influence tests)  
+	•	autograd core (Value class: addition, multiplication, power, tanh, relu, backward pass),  
+	•	chain rule gradient computation (complex expressions with topological sort),  
+	•	neural network layers (Neuron, Layer, MLP forward pass and parameter count),  
+	•	gradient flow through MLP (backpropagation validation),  
+	•	feature extraction (state_to_features, MathState defaults, normalization),  
+	•	MathBrain initialization and predict (inference without training),  
+	•	observe() single step (statistics update, loss computation),  
+	•	training reduces loss on synthetic data (convergence validation),  
+	•	prediction improves after training (error reduction),  
+	•	save/load state persistence (JSON format with dimension validation),  
+	•	dimension mismatch handling (fresh start when architecture changes),  
+	•	multiple save/load cycles (stateful training across sessions),  
+	•	Phase 2 influence tests: temperature modulation based on predicted quality (low prediction → +5% exploration, high prediction → -5% precision), temperature clamping, advisory influence validation.  
+  
+⸻
+  
+### MultiLeo Phase 2 regulation (test_multileo.py): 7 tests  
+	•	multileo_regulate() returns (temperature, expert, semantic_hints) tuple,  
+	•	boredom state triggers temperature increase and creative expert bias,  
+	•	overwhelm state triggers temperature decrease and precise expert bias,  
+	•	stuck state triggers semantic expert bias and temperature bump,  
+	•	temperature bounds enforcement (0.1–1.5),  
+	•	expert suggestion validation (structural/semantic/creative/precise),  
+	•	graceful handling when no regulation needed (returns original params + empty hints).  
+  
+⸻
+  
+### MultiLeo Phase 3: Islands-aware regulation (test_multileo_phase3.py): 20 tests    
+  
+	•	Helper functions (7 tests): _bucket() metric bucketing (L/M/H), _generate_profile_key() with sorted themes, empty themes, max theme limits.  
+	•	Database operations (9 tests): Phase 3 table creation (multileo_events, multileo_profiles), graceful handling of None connections, _record_regulation_event() inserts before/after snapshots, _update_profile_aggregate() creates new profiles and computes running averages correctly, _query_helpful_profiles() returns themes from helpful profiles (min 3 samples), handles empty DB and insufficient samples.  
+	•	Integration (4 tests): multileo_regulate() returns semantic hints dict with preferred themes/snapshots/episodes, MultiLeoContext dataclass defaults, record_regulation_outcome() records full regulation loop, Phase 3 fails gracefully on DB errors (silent fallback to Phase 2).  
 
-All tests validate graceful degradation: Phase 3 never breaks Leo, even if DB unavailable or profiles don’t exist yet.
+All tests validate graceful degradation: Phase 3 never breaks Leo, even if DB unavailable or profiles don’t exist yet.  
 
 ⸻
 
-### Santa Claus resonant recall (test_santaclaus.py): 6 tests
-	•	no snapshots returns None (graceful fallback),
-	•	single obvious snapshot is recalled (token matching),
-	•	quality + arousal influence scoring (high quality + similar arousal preferred),
-	•	graceful failure on corrupt DB (silent fallback),
-	•	empty prompt returns None,
-	•	token boosts are normalized (within alpha range).
-
+### Santa Claus resonant recall (test_santaclaus.py): 6 tests  
+	•	no snapshots returns None (graceful fallback),  
+	•	single obvious snapshot is recalled (token matching),  
+	•	quality + arousal influence scoring (high quality + similar arousal preferred),  
+	•	graceful failure on corrupt DB (silent fallback),  
+	•	empty prompt returns None,  
+	•	token boosts are normalized (within alpha range).  
+  
 ⸻
-
-### Episodes episodic memory (test_episodes.py): 5 tests
-	•	observe_episode inserts without error,
-	•	query_similar returns [] for empty DB,
-	•	query_similar finds episodes with similar metrics (cosine distance),
-	•	get_summary_for_state returns correct aggregates (avg/max quality, distance),
-	•	graceful failure on NaN values (clamped to 0.0).
-
+  
+### Episodes episodic memory (test_episodes.py): 5 tests  
+	•	observe_episode inserts without error,  
+	•	query_similar returns [] for empty DB,  
+	•	query_similar finds episodes with similar metrics (cosine distance),  
+	•	get_summary_for_state returns correct aggregates (avg/max quality, distance),  
+	•	graceful failure on NaN values (clamped to 0.0).  
+  
 ⸻
-
-### Game conversational rhythm (test_game.py): 37 tests
-	•	GameTurn creation and serialization (to_id(), from_context()),
-	•	helper functions (bucketize, decode_game_id, detect_mode_from_text),
-	•	GameEngine initialization and basic stats,
-	•	max_trail_length() growth heuristic (2 + log10(episodes), capped at 6),
-	•	observe_turn() single and multiple turns (sliding window, transitions),
-	•	transition graph learning (A+B→C pattern recording),
-	•	suggest_next() with and without history (fallback to global most common),
-	•	GameHint structure and confidence modulation,
-	•	_build_hint_from_key() mapping logic (length, tension, expert suggestions),
-	•	integration with MathState (confidence adjustment based on predicted quality),
-	•	SQLite persistence (save/load cycles, episode count restoration),
-	•	multi-conversation tracking (separate histories per conv_id),
-	•	standalone helpers (get_last_turns).
-
-⸻
-
+  
+### Game conversational rhythm (test_game.py): 37 tests  
+	•	GameTurn creation and serialization (to_id(), from_context()),  
+	•	helper functions (bucketize, decode_game_id, detect_mode_from_text),  
+	•	GameEngine initialization and basic stats,  
+	•	max_trail_length() growth heuristic (2 + log10(episodes), capped at 6),  
+	•	observe_turn() single and multiple turns (sliding window, transitions),  
+	•	transition graph learning (A+B→C pattern recording),  
+	•	suggest_next() with and without history (fallback to global most common),  
+	•	GameHint structure and confidence modulation,  
+	•	_build_hint_from_key() mapping logic (length, tension, expert suggestions),  
+	•	integration with MathState (confidence adjustment based on predicted quality),  
+	•	SQLite persistence (save/load cycles, episode count restoration),  
+	•	multi-conversation tracking (separate histories per conv_id),  
+	•	standalone helpers (get_last_turns).  
+  
+⸻  
+  
 ### Dream imaginary friend (test_dream.py): 11 tests
 	•	safe import with DREAM_AVAILABLE fallback,
 	•	init_dream() schema creation and bootstrap fragment population,
