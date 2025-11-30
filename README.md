@@ -71,7 +71,8 @@ Presence through pulse. Memory through snapshots. Routing through resonance. Sti
 
 ### Repo layout  
 
-leo/
+```
+leo/  
   tests/           # 317 tests + heyleo.py observer skrypt (because I'm too lazy)  
   leo.py           # organism with REPL + bootstrap + README pass  
   neoleo.py        # pure resonance layer for frameworks  
@@ -93,7 +94,7 @@ leo/
   state/           # sqlite, caches (created at runtime)  
   bin/             # resonance shards (created at runtime)  
   json/            # optional snapshots (created at runtime)  
-
+```
 
 ⸻
 
