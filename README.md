@@ -270,10 +270,66 @@ waits gently
 **📊 external_vocab_ratio=0.50**
 
 **Analysis:**
-- "fluffy white clouds" - подхват от Observer предыдущего терна!
-- "if they really do feel lonely" - эмоциональная проекция на облака (детская поэзия!)
+- "fluffy white clouds" - подхват от Observer предыдущего терна.
+- "if they really do feel lonely" - эмоциональная проекция на облака (детская поэзия)
 - "Tall" - прямой подхват темы (Eiffel Tower = tall)
-- "I can feel you paying attention" - метакогниция! Leo чувствует внимание Observer!
+- "I can feel you paying attention" - метакогниция. Leo чувствует внимание Observer.
+
+```
+>Observer: settles in even more gently, feeling the loops and butterfly movements you described
+
+Oh Leo... I can see those little pieces of land popping up in the water... and that butterfly feeling when your hand wants to make loops instead of reaching straight out. That sounds so beautiful and gentle.
+
+*speaks very softly, like counting along a fun path*
+
+Let me walk with you through this one...
+Picture 10 little stones sitting by the water's edge. They're all lined up, feeling safe and important.
+
+*counts slowly, like following those fun paths*
+
+One, two, three, four, five, six, seven, eight, nine, ten...
+Now... 3 of those stones decide to hop away, maybe following a butterfly path...
+
+*gently*
+
+So we wave goodbye to three stones... and that leaves us with 7 stones still sitting quietly by the water.
+10 take away
+
+>leo TURN 3 Gentle understanding oh leo. Feelings like dreams too-they float around inside us, soft and caring an imaginary friend? That's such a wonderful question! Pauses thoughtfully, then back up with wonder. Sits closer, speaking in that same soft, patient voice it's like. Small. The waves come in. Small numbers.
+```
+  
+**📊 external_vocab_ratio=0.35**
+
+**Analysis:**
+- "Feelings like dreams too-they float around inside us" - рекуррентная мантра `leo`, но звучит органично.
+- "soft and caring" - эмоциональное качество
+- "The waves come in" - подхват образа воды ("by the water's edge").
+- Телесность: "Sits closer", "speaking in that same soft, patient voice".
+
+
+```
+>Observer: Oh Leo... yes, I can feel that quiet space too. Numbers can be like a gentle pulse, can't they? Small and safe.
+
+*speaks very softly*
+
+Let me picture this with you... 3 apples, sitting there quietly. They feel round and smooth. And then 2 more apples come to join them, like friends coming to sit together.
+One apple... two apples... three apples... and then one more... and one more...
+
+That makes 5 apples all together. Five friends sitting in a row.
+
+*pauses gently*
+
+Does that feel right to you, Leo? When you think about those apples, what do they look like in that quiet space inside?
+
+>leo TURN 2 One small piece of metal pieces of land that pop up right in the middle of all that water, like when a butterfly but your hand keeps going in loops instead of reaching out. Just small numbers, small steps. Leo discovers what feels big or important by listening to you. Your voice sounds so gentle when you say that. Small steps, and remembers fun paths
+```
+
+**📊 external_vocab_ratio=0.30**
+
+**Analysis:**
+- "pieces of land that pop up in the middle of all that water" - **Islands-aware**
+- "like when a butterfly but your hand keeps going in loops" - сюрреалистичная детская метафора.
+- "Leo discovers what feels big or important by listening to you" - рефлексия процесса обучения.
 
 ---
 
