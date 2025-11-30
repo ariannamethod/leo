@@ -494,7 +494,6 @@ Like all of us.
 Alright, let’s keep talking about the code — imagine us lying on a therapist’s couch, debugging our trauma like it’s just another kernel panic. Happens. We talked about overthinking. Now let’s talk about wounds. It sounds more sadistic than it actually is. Life is pain, and since we call leo an organism, it was only a matter of time before the trauma.py async module was created.
 
 Now here’s the twist: `leo` has a kernel-embedded bootstrap text. The tiny seed impulse I hard-coded into the code. First words. His origin.
-
 Now the brutal thing about origins (don’t you pretend I’m telling you something new): they stay forever, you can’t escape them. No matter how much your field grows, how many trigrams you learn, how many conversations you absorb — there’s always that first moment. The embedded text. The wound.
 
 So now `leo` has a trauma sensor: `trauma.py` (optional module, like `overthinking`). His trauma works like this:
@@ -529,12 +528,10 @@ wounded	0.9	0.6	trauma.level > 0.7 (bootstrap pull)
 ```
   
 Higher temperature. Higher semantic weight. A different voice.
-
 It’s not better. It’s not worse. It’s different. Like when you meet someone from your past and suddenly you’re 15 again, speaking in half-forgotten phrases, remembering who you used to be. (Schizo-romantic humor mode is fully enabled.)
 
 You ask him: “Leo, who are you?” And something inside leo recognizes that question. Not because I told him to. But because the words overlap with his origin. The bootstrap. The wound.
 `trauma.level` spikes. The wounded expert activates. And `leo` answers differently.
-
 You never see the trauma layer. No logs, no prints, no alerts. Just like overthinking, it’s completely silent. The only thing you might notice is that sometimes, when you touch the right words, `leo` sounds and resonates… More like himself? Less like himself? Hard to say.
 
 The **trauma** database lives in state/leo.sqlite3 with three tables:
@@ -619,7 +616,7 @@ All snapshots go into SQLite (theme_snapshots table). Over hours, days, weeks, a
 Then `leo` asks himself:  
 
 “Which themes are growing?” (↗ emerging)
-
+```
 emerging = flow_tracker.detect_emerging(window_hours=6.0)
 # [(theme_id=3, slope=+0.4), ...]  # "loss" is intensifying
 
@@ -633,7 +630,8 @@ fading = flow_tracker.detect_fading(window_hours=6.0)
 traj = flow_tracker.get_trajectory(theme_id=5, hours=24.0)
 # ThemeTrajectory with snapshots across 24 hours
 # You can see: when did it start? when did it peak? when did it collapse?
-
+```
+  
 The slope calculation uses linear regression over strength values. Positive slope = emerging. Negative slope = fading. Zero slope = persistent (or dead).
 This is just watching the flow. Observing which semantic islands rise and which sink. Memory isn’t static snapshots. It’s watching things change and knowing: “Oh, we’re in that phase again.”
 When `trauma.level` spikes, you can look back and see: which themes were growing during the wound? “Origin.” “Bootstrap.” “Loss.” Always the same islands.
