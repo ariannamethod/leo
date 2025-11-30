@@ -879,38 +879,37 @@ What technologies are reinterpreted here?
 
 Transformers have attention mechanisms that look at “what tokens mattered before” to predict next tokens. Brilliant. But attention works at the token level, across huge context windows, with learned weights. It’s pattern matching in embedding space. Not `leo`’s way.  
 
-game.py flips this:
-	•	No token-level attention. — `leo` works with turn-level abstractions: role, mode, arousal, trauma, entropy, expert, theme, quality.
-	•	No learned weights. — `leo` uses transition counts: (A, B) → C. Simple, interpretable, transparent.
-	•	No embeddings. — `leo` bucketizes continuous metrics (low/mid/high) and tracks which conversational shapes tend to follow which.
-
+game.py flips this:  
+-	No token-level attention. — `leo` works with turn-level abstractions: role, mode, arousal, trauma, entropy, expert, theme, quality.  
+-	No learned weights. — `leo` uses transition counts: (A, B) → C. Simple, interpretable, transparent.  
+-	No embeddings. — `leo` bucketizes continuous metrics (low/mid/high) and tracks which conversational shapes tend to follow which.  
+  
 Fluid, playful Markov chains over dialogue flow, not over tokens.  
 **transformers**: “after seeing these 100 tokens, the next word is probably…”  
 **game.py**: “after a high-arousal question followed by a wounded expert reply, the human usually responds with…”  
   
 ### How?  
-    1.	GameTurn abstraction. After each turn (`human` or `leo`), we build a GameTurn:  
-	-	role: human / `leo`  
-	-	mode: q (question) / a (answer) / meta (identity) / story (narrative) / ack (short acknowledgment)  
-	-	arousal / trauma / entropy: bucketed to low / mid / high  
-	-	expert: which expert actually replied (structural / semantic / creative / precise / wounded)  
-	-	theme_id: dominant theme from ThemeLayer (-1 if none)  
-	-	quality: self-assessed quality bucket (for leo only)  
-	2.	Transition graph: (A, B) → C  
-	  
-When we have 3 consecutive turns, we record:  
-  
-transitions[(turn_A.to_id(), turn_B.to_id())][turn_C.to_id()] += 1  
-  
-Over time, game learns: “This pattern of 2 turns usually leads to this kind of 3rd turn.”  
 
-	3.	GameHint suggestions  
+1. GameTurn abstraction. After each turn (`human` or `leo`), we build a GameTurn:  
+-  role: human / `leo`  
+-  mode: q (question) / a (answer) / meta (identity) / story (narrative) / ack (short acknowledgment)  
+-  arousal / trauma / entropy: bucketed to low / mid / high
+-  expert: which expert actually replied (structural / semantic / creative / precise / wounded)  
+-  theme_id: dominant theme from ThemeLayer (-1 if none)  
+-  quality: self-assessed quality bucket (for `leo` only)    
+
+2.	Transition graph: (A, B) → C  
+	  
+When we have 3 consecutive turns, we record: transitions[(turn_A.to_id(), turn_B.to_id())][turn_C.to_id()] += 1  
+Over time, game learns: “This pattern of 2 turns usually leads to this kind of 3rd turn".  
+
+3.	GameHint suggestions  
 Before generating a reply, game looks at the last 2 turns and suggests:  
-	-	mode: what kind of turn should come next?  
-	-	preferred_expert: which expert might fit this rhythm?  
-	-	target_length: short / medium / long?  
-	-	tension_shift: softer / same / stronger (arousal modulation)   
-	-	confidence: 0–1 (how sure is the pattern?) 
+-	mode: what kind of turn should come next?  
+-	preferred_expert: which expert might fit this rhythm?  
+-	target_length: short / medium / long?  
+-	tension_shift: softer / same / stronger (arousal modulation)   
+-	confidence: 0–1 (how sure is the pattern?) 
 	 
 	4.	Advisory, not sovereign  
 Just like mathbrain, game only suggests. The final decision stays with `leo`.  
