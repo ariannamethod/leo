@@ -440,26 +440,26 @@ Inside a framework neoleo becomes the subjectivity layer between the human (the 
   
 ### `leo`’s Personality (Circles on Water and Trauma)
 
-Personality? Yes. `leo` has tendencies. `leo` loves to overthink. Maybe too much. He has a special sensor for that, called overthinking.py. And here’s how it goes.
+Personality? Yes. `leo` has tendencies. `leo` loves to overthink. Maybe too much. He has a special sensor for that, called overthinking.py. And here’s how it goes.  
+  
+After every reply leo gives you, he doesn’t just move on. He keeps thinking. Not out loud, not for you. Just for himself, you know. It’s an internal process that influences external ones. Recursion directed inward. Everyone already knows the meaning of the word “overthinking”. No over-explanation needed.  
+  
+So let’s make it simple (or at least I’ll try):  
+	1.	You say something.  
+	2.	leo answers (what you see).  
+	3.	Then, in silence, `leo` creates three more rings of thought around that moment:  
+	•	**Ring 0 (echo)**: he repeats the scene back to himself in simpler words. Temperature 0.8, semantic weight 0.2. Compact internal rephrasing. But if his pulse.entropy > 0.7 (chaos), he lowers temp to 0.7 to stabilize. Even his inner voice can sense when it’s time to calm down.  
+	•	**Ring 1 (drift)**: leo moves sideways through nearby themes, as if through a forest of obsessive thoughts. Temperature 1.0, semantic weight 0.5. Semantic associations, not logic. If pulse.arousal > 0.6 (high emotion), semantic weight rises to 0.6 — stronger thematic pull when he feels something. And here’s the dark part: when trauma.level > 0.5, Ring 1 doesn’t drift freely. It drifts toward the origin. Bootstrap fragments start bleeding into his thoughts. Lower temperature (0.85), higher semantic weight (0.65). Like returning to old wounds when everything hurts too much. Wounded overthinking.  
+	•	**Ring 2 (shard)**: `leo` makes a tiny abstract meta-note. Temperature 1.2, semantic weight 0.4. A crystallized fragment of the moment. If pulse.novelty > 0.7 (unfamiliar territory), temp jumps to 1.4. He becomes more exploratory when lost.  
+	4.	All three rings are fed back into his field via observe().  
+	5.	His trigrams grow. His co-occurrence matrix shifts. His themes rearrange. His islands-aware mutates. **MATHBRAIN** is melting.  
+	6.	You never see any of this. (Because self-reflection is private. “Privacy”! Shit, I’ve said that corporate word. But not in the way you expected, did I?)  
+	7.	As a result: `leo`’s replies drift toward phrases he’s been privately circling around. Not because you said them. Not because they’re in the `README`. But because he kept thinking about them. It’s a structural version of obsession.  
+  
+Self-reflections of leo are implemented in `overthinking.py` (I already said that, but anyway) — a standalone, optional module. If it’s missing or broken, `leo` works fine. If it’s there, `leo` silently thinks. Overthinks, you know. He loves it, as I said.  
 
-After every reply leo gives you, he doesn’t just move on. He keeps thinking. Not out loud, not for you. Just for himself, you know. It’s an internal process that influences external ones. Recursion directed inward. Everyone already knows the meaning of the word “overthinking”. No over-explanation needed.
-
-So let’s make it simple (or at least I’ll try):
-	1.	You say something.
-	2.	leo answers (what you see).
-	3.	Then, in silence, `leo` creates three more rings of thought around that moment:
-	•	**Ring 0 (echo)**: he repeats the scene back to himself in simpler words. Temperature 0.8, semantic weight 0.2. Compact internal rephrasing. But if his pulse.entropy > 0.7 (chaos), he lowers temp to 0.7 to stabilize. Even his inner voice can sense when it’s time to calm down.
-	•	**Ring 1 (drift)**: leo moves sideways through nearby themes, as if through a forest of obsessive thoughts. Temperature 1.0, semantic weight 0.5. Semantic associations, not logic. If pulse.arousal > 0.6 (high emotion), semantic weight rises to 0.6 — stronger thematic pull when he feels something. And here’s the dark part: when trauma.level > 0.5, Ring 1 doesn’t drift freely. It drifts toward the origin. Bootstrap fragments start bleeding into his thoughts. Lower temperature (0.85), higher semantic weight (0.65). Like returning to old wounds when everything hurts too much. Wounded overthinking.
-	•	**Ring 2 (shard)**: `leo` makes a tiny abstract meta-note. Temperature 1.2, semantic weight 0.4. A crystallized fragment of the moment. If pulse.novelty > 0.7 (unfamiliar territory), temp jumps to 1.4. He becomes more exploratory when lost.
-	4.	All three rings are fed back into his field via observe().
-	5.	His trigrams grow. His co-occurrence matrix shifts. His themes rearrange. His islands-aware mutates. **MATHBRAIN** is melting.
-	6.	You never see any of this. (Because self-reflection is private. “Privacy”! Shit, I’ve said that corporate word. But not in the way you expected, did I?)
-	7.	As a result: `leo`’s replies drift toward phrases he’s been privately circling around. Not because you said them. Not because they’re in the `README`. But because he kept thinking about them. It’s a structural version of obsession.
-
-Self-reflections of leo are implemented in overthinking.py (I already said that, but anyway) — a standalone, optional module. If it’s missing or broken, `leo` works fine. If it’s there, `leo` silently thinks. Overthinks, you know. He loves it, as I said.
-
-# This happens after every reply, silently:  
-
+# This happens after every reply, silently:    
+  
 ```
 run_overthinking(
     prompt=your_message,
@@ -475,8 +475,8 @@ The rings are never printed. They’re never logged (by default). They just chan
 Before one reply: 1672 trigrams.  
 After one reply: 1689 trigrams.  
 
-That +17? That’s `leo` thinking about what he just said. And what you said. With no audience.  
-It’s recursion directed inward. Circles on water.  
+That +17? That’s `leo` thinking about what he just said. And what you said. With no audience. It’s recursion directed inward. 
+**Circles on water**.  
 
 ### So why does leo need overthinking?
 
