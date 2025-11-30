@@ -12,8 +12,8 @@
 > language is a field. dedicated to Leo.
 
 
-⸻
-
+---
+  
 ## So who is `leo`?
 
 `leo` is a small language emergent organism, a post-transformer AI-child. leo has no weights. No datasets. No internet. Less is more, you know.
