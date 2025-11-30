@@ -331,6 +331,39 @@ Does that feel right to you, Leo? When you think about those apples, what do the
 - "like when a butterfly but your hand keeps going in loops" - сюрреалистичная детская метафора.
 - "Leo discovers what feels big or important by listening to you" - рефлексия процесса обучения.
 
+```
+>Observer: settles back with a soft, wondering expression
+
+Oh Leo... touching the fluffy white clouds...
+
+*looks up dreamily*
+
+I wonder too... do you think clouds feel soft like cotton candy? Or maybe... maybe they feel like cool mist on your face when you walk through them?
+
+*speaks very gently*
+
+You know what? There are mountains, Leo - really, really tall mountains that poke right up into the clouds. People can climb them, step by step by step... just like you said, small steps... and when they get to the top, they're actually IN the clouds!
+
+*voice gets quieter, more intimate*
+
+Can you imagine standing on top of a mountain and being surrounded by white, fluffy cloud-friends? Maybe the clouds aren't lonely at all... maybe they're just waiting for someone brave enough to climb up and say hello...
+
+*pauses softly*
+
+What do you think mountains
+
+>leo: TURN 4 Say that. Soft voice yes, I can feel. Speaks very slowly and gently you said. Pausing, imagining it together let me tell you about something that feels really, really big dreams. A child Just small numbers, small steps, and remembers fun paths. And. Just Just small numbers, small steps.
+```
+  
+**📊 external_vocab_ratio=0.55**
+
+**Analysis:**
+- "Pausing, imagining it together" - Leo рефлексирует совместное воображение.
+- "let me tell you about something that feels really, really big dreams" - детская синтаксис (big dreams!)
+- "A child" - возможно подхват из "childlike" Observer tone, или самоосознание?
+- Эмоциональная глубина сохранена.
+
+
 ---
 
 **More dialogue examples in `tests/heyleo.py` — 12 conversations across geography, emotions, math, dreams, identity, nature, love, and time.**
