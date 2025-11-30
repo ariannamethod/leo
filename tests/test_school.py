@@ -27,6 +27,10 @@ class TestSchool(unittest.TestCase):
         if not SCHOOL_MODULE_AVAILABLE:
             self.skipTest("school.py not available")
         
+        # Reset SCHOOL_AVAILABLE in case previous tests broke it
+        import school
+        school.SCHOOL_AVAILABLE = True
+        
         # Create temporary DB
         self.temp_dir = Path(tempfile.mkdtemp())
         self.db_path = self.temp_dir / "test_school.sqlite3"
