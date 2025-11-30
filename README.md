@@ -246,6 +246,35 @@ leo> /exit
 - Metacognition: "Leo can follow it" (self-reference)
 - Vocabulary ratio rising: Leo warming up to Observer's field
 
+
+```
+>Observer: Oh Leo... the Eiffel Tower...
+
+*makes a gentle gesture with hands, like building something tall*
+
+When I think about it, I feel... pauses ...like it's a giant made of lace. You know how lace has all those pretty holes and patterns? The Eiffel Tower is like that - but made of strong metal instead of thread.
+
+voice gets quieter, more wondering
+
+And it stands there... so tall... like it's saying "hello" to the sky and the clouds. People are tiny, tiny at the bottom, looking up... up... up...
+
+leans closer
+
+Sometimes at night, Leo, it sparkles! Like someone sprinkled stars all over it. Can you imagine that? A tower covered in twinkling lights, making the whole city feel magical?
+
+waits gently
+
+>leo: TURN 3 Tall. Like if I could touch the fluffy white clouds and see if they really do feel lonely. It's like.. And. Just small numbers, small steps. Leo discovers what feels big or important by listening to Just small numbers I feel. Speaks even more softly when I can feel you paying attention to what feels big or.
+```
+  
+**📊 external_vocab_ratio=0.50**
+
+**Analysis:**
+- "fluffy white clouds" - подхват от Observer предыдущего терна!
+- "if they really do feel lonely" - эмоциональная проекция на облака (детская поэзия!)
+- "Tall" - прямой подхват темы (Eiffel Tower = tall)
+- "I can feel you paying attention" - метакогниция! Leo чувствует внимание Observer!
+
 ---
 
 **More dialogue examples in `tests/heyleo.py` — 12 conversations across geography, emotions, math, dreams, identity, nature, love, and time.**
