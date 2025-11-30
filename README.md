@@ -1258,6 +1258,8 @@ Running tests
 python -m unittest discover tests/  
 
 # Specific test modules  
+
+```
 python tests/test_leo.py                    # core functionality  
 python tests/test_neoleo.py                 # pure recursion layer  
 python tests/test_repl.py                   # REPL commands & CLI  
@@ -1280,7 +1282,8 @@ python tests/test_dream.py                  # imaginary friend layer
 python tests/test_school.py                 # School of Forms  
 python tests/test_school_math.py            # arithmetic helper  
 python tests/collect_repl_examples.py       # really need explanation?  
-
+```
+  
 ### Test coverage  
 
 **317 tests covering**:  
