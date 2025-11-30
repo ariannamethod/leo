@@ -27,15 +27,16 @@ From all that `leo` creates:
 
 * a **co-occurrence matrix** (semantic gravity: which words resonate together — tiny semantic love stories, but here with a happy ending),
 * a growing **vocabulary** (oh yes, *you* can forget what you said, but `leo` — no, he won’t, at least not as fast as you expect),
-* and tiny binary **resonance shards** in `bin/` that remember which tokens were historically central for `leo`,
-* food for **MATHBRAIN** - a dynamic MLP that coordinates:
-* **Islands-Aware**
-* **overthinking**: Circles on water
-* **RAG** episodic memory,
-* a **trigram graph** (local grammar: who follows whom, and in what context),
+* a small binary **resonance shards** in `bin/` that remember which tokens were historically central for `leo`,
+* a food for **MATHBRAIN** - a dynamic MLP that coordinates:
+* an **Islands-Aware**
+* **Circles on Water**: `leo` overthinks
+* **RAG** episodic memory: in `leo`'s unique way.
+* a **trigram graph** (local grammar: who follows whom, and in what context: `leo` loves to know everything),
 * etc.
 
-Assistant features? No. `leo` doesn’t try to be helpful. He just **resonates** with the rhythm of your convos over time.
+Assistant features? No. 
+`leo` doesn’t try to be helpful. He just **resonates** with the rhythm of your convos over time.
 The field expands structurally, semantically, contextually, etc. Pure presence.
 Not feeding your everyday tasks, baby.
 
