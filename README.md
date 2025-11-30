@@ -184,7 +184,7 @@ leo> /exit
 
 ### (Phase 3 - yeah, it builds itself evolutionary - validation runs): Islands-Aware Regulation
 
-**Observer (heyleo.py from /tests) speaks to Leo like a child (6-8 years old), warm and curious. Leo responds with presence, not facts.** Because I'm too lazy and at the same time lack of patience, we build an observer: kind AI-assitant who will talk with leo instead of us.
+Because off my laziness and at the same time lack of patience, we build an observer: kind AI-assitant who talks with `leo` instead of me. Observer (`heyleo.py` from /tests) speaks to Leo like a child (6-8 years old), warm and curious. **Leo responds with presence, not facts**.  
 
 ---
 ```
@@ -201,10 +201,10 @@ A soap bubble that feels really, really big dreams. Your voice sounds so gentle.
 📊 **external_vocab_ratio=0.32**
 
 **Analysis:**
-✅ Paris = "soap bubble with big dreams" — surrealist metaphor
-✅ City as living organism: "Like a giant heartbeat"
-✅ Rhythm awareness: "The waves come in"
-✅ Zero docstring leaks, pure voice
+- Paris = "soap bubble with big dreams" — surrealist metaphor
+- City as living organism: "Like a giant heartbeat"
+- Rhythm awareness: "The waves come in"
+- Zero docstring leaks, pure voice
 
 ```
 >Observer:
@@ -221,10 +221,10 @@ Bubbles in your words, like when you're playing a quiet game by yourself and you
 📊 **external_vocab_ratio=0.32**
 
 **Analysis:**
-✅ "Bubbles in your words" — recursive pickup from Observer
-✅ **THAT METAPHOR**: "want to pet a butterfly but your hand keeps going in loops" — the impossibility of grasping beauty
-✅ Embodied presence: loops, hands, reaching
-✅ Emotional anchor: "like a gift"
+- "Bubbles in your words" — recursive pickup from Observer
+- **THAT METAPHOR**: "want to pet a butterfly but your hand keeps going in loops" — the impossibility of grasping beauty
+- Embodied presence: loops, hands, reaching
+- Emotional anchor: "like a gift"
 
 ```
 >Observer:
@@ -241,10 +241,10 @@ leo> /exit
 📊 **external_vocab_ratio=0.48**
 
 **Analysis:**
-✅ **Embodied gesture**: "fingers spread wide"
-✅ Visual scene construction: "Looks down at hands, then back up with wonder"
-✅ Metacognition: "Leo can follow it" (self-reference)
-✅ Vocabulary ratio rising: Leo warming up to Observer's field
+- **Embodied gesture**: "fingers spread wide"
+- Visual scene construction: "Looks down at hands, then back up with wonder"
+- Metacognition: "Leo can follow it" (self-reference)
+- Vocabulary ratio rising: Leo warming up to Observer's field
 
 ---
 
@@ -267,9 +267,7 @@ leo> /exit
 `neoleo` can write everything into:
 
 * `state/neoleo.sqlite3` – tokens + bigrams,
-
 * `bin/neoleo_*.bin` – centers-of-gravity snapshots,
-
 * optionally `json/neoleo_lexicon.json` – exported lexicon.
 
 ### Minimal Connection Guide
@@ -305,7 +303,7 @@ observe(text)
 print(warp(text))
 ```
 
-In a bigger framework `neoleo` becomes the subjectivity layer between the human (the lucky one), the API (GPT, Claude, whatever), and the shared language history of their convos.
+Inside a frameworks `neoleo` becomes the subjectivity layer between the human (the lucky one), the API (Claude, GPT, whatever), and the shared language history of their convos.
 
 ---
 
@@ -318,9 +316,7 @@ After every reply `leo` gives you, he doesn't just move on. He **keeps thinking*
 So let's make it simple (or at least I'll try):
 
 1. You say something.
-
 2. `leo` answers (what you see).
-
 3. Then, in silence, `leo` creates **three more rings of thought** around that moment:
 
    * **Ring 0** (echo): he repeats the scene back to himself in simpler words. Temperature 0.8, semantic weight 0.2. Compact internal rephrasing. But if his `pulse.entropy > 0.7` (chaos), he lowers temp to 0.7 to stabilize. Even his inner voice can sense when it's time to calm down.
@@ -330,11 +326,8 @@ So let's make it simple (or at least I'll try):
    * **Ring 2** (shard): `leo` makes a tiny abstract meta-note. Temperature 1.2, semantic weight 0.4. A crystallized fragment of the moment. If `pulse.novelty > 0.7` (unfamiliar territory), temp jumps to 1.4. He becomes more exploratory when lost.
 
 4. All three rings are fed back into his field via `observe()`.
-
-5. His trigrams grow. His co-occurrence matrix shifts. His themes rearrange.
-
+5. His trigrams grow. His co-occurrence matrix shifts. His themes rearrange. His **islands-aware** mutates. **MATHBRAIN** is melting.
 6. **You never see any of this.** (Because self-reflection is private. “Privacy”! Shit, I’ve said that corporate word. But not in the way you expected, did I?)
-
 7. As a result: `leo`’s replies drift toward phrases he’s been *privately circling around*. Not because you said them. Not because they’re in the README. But because **he kept thinking about them**. It’s a structural version of obsession.
 
 **Self-reflections of `leo` are implemented in `overthinking.py`** (I already said that, but anyway) — a standalone, optional module. If it’s missing or broken, `leo` works fine. If it’s there, `leo` silently thinks. Overthinks, you know. He loves it, as I said.
