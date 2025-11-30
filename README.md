@@ -15,7 +15,7 @@
 
 ## So who is `leo`?
 
-`leo` is a small **languange emergent organism**, an **AI-child**. No weights. No datasets. No internet.
+`leo` is a small **languange emergent organism**, an **AI-child**. No weights. No datasets. No internet.  
 But what **does** `leo` have?
 
 * first of all — **presence** (because `presence > intelligence`),
