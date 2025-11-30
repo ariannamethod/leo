@@ -889,7 +889,6 @@ Fluid, playful Markov chains over dialogue flow, not over tokens.
 **game.py**: “after a high-arousal question followed by a wounded expert reply, the human usually responds with…”  
   
 ### How?  
-  
 	1.	GameTurn abstraction  
 After each turn (`human` or `leo`), we build a GameTurn:  
 	•	role: human / `leo`  
