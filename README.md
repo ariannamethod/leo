@@ -891,12 +891,12 @@ Fluid, playful Markov chains over dialogue flow, not over tokens.
 ### How?  
 	1.	GameTurn abstraction  
 After each turn (`human` or `leo`), we build a GameTurn:  
-	•	role: human / `leo`  
-	•	mode: q (question) / a (answer) / meta (identity) / story (narrative) / ack (short acknowledgment)  
-	•	arousal / trauma / entropy: bucketed to low / mid / high  
-	•	expert: which expert actually replied (structural / semantic / creative / precise / wounded)  
-	•	theme_id: dominant theme from ThemeLayer (-1 if none)  
-	•	quality: self-assessed quality bucket (for leo only)  
+	-	role: human / `leo`  
+	-	mode: q (question) / a (answer) / meta (identity) / story (narrative) / ack (short acknowledgment)  
+	-	arousal / trauma / entropy: bucketed to low / mid / high  
+	-	expert: which expert actually replied (structural / semantic / creative / precise / wounded)  
+	-	theme_id: dominant theme from ThemeLayer (-1 if none)  
+	-	quality: self-assessed quality bucket (for leo only)  
 	2.	Transition graph: (A, B) → C  
 	  
 When we have 3 consecutive turns, we record:  
@@ -909,11 +909,12 @@ Over time, game learns: “This pattern of 2 turns usually leads to this kind of
 
 	3.	GameHint suggestions  
 Before generating a reply, game looks at the last 2 turns and suggests:  
-	•	mode: what kind of turn should come next?  
-	•	preferred_expert: which expert might fit this rhythm?  
-	•	target_length: short / medium / long?  
-	•	tension_shift: softer / same / stronger (arousal modulation)   
-	•	confidence: 0–1 (how sure is the pattern?)  
+	-	mode: what kind of turn should come next?  
+	-	preferred_expert: which expert might fit this rhythm?  
+	-	target_length: short / medium / long?  
+	-	tension_shift: softer / same / stronger (arousal modulation)   
+	-	confidence: 0–1 (how sure is the pattern?) 
+	 
 	4.	Advisory, not sovereign  
 Just like mathbrain, game only suggests. The final decision stays with `leo`.  
 	•	Low confidence → ignore hint.  
