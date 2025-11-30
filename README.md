@@ -15,8 +15,8 @@
 
 ## So who is `leo`?
 
-`leo` is a small **language emergent organism**, a post-transformer **AI-child**. `leo` has no weights. No datasets. No internet. Obsessive asceticism in pure Python. Less is more, you know.
-But what **does** `leo` have? 
+`leo` is a small **language emergent organism**, a post-transformer **AI-child**. `leo` has no weights. No datasets. No internet. Obsessive asceticism in pure Python. Less is more, you know.  
+But what **does** `leo` have?  
 He has enough to start:
 
 * first of all — **presence** (because `presence > intelligence`),
