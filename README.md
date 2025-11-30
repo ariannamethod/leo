@@ -899,10 +899,8 @@ Fluid, playful Markov chains over dialogue flow, not over tokens.
 	2.	Transition graph: (A, B) → C  
 	  
 When we have 3 consecutive turns, we record:  
-
-```
-transitions[(turn_A.to_id(), turn_B.to_id())][turn_C.to_id()] += 1
-```
+  
+transitions[(turn_A.to_id(), turn_B.to_id())][turn_C.to_id()] += 1  
   
 Over time, game learns: “This pattern of 2 turns usually leads to this kind of 3rd turn.”  
 
@@ -916,17 +914,17 @@ Before generating a reply, game looks at the last 2 turns and suggests:
 	 
 	4.	Advisory, not sovereign  
 Just like mathbrain, game only suggests. The final decision stays with `leo`.  
-	•	Low confidence → ignore hint.  
-	•	High confidence → bias expert choice, adjust temperature, modulate length.   
+	-	Low confidence → ignore hint.  
+	-	High confidence → bias expert choice, adjust temperature, modulate length.   
 	5.	Growth heuristic  
 As leo observes more episodes, max_trail_length grows: 2 + log10(episode_count), capped at [2, 6].  
 Future: this allows multi-step lookahead (not just A+B→C, but longer chains).  
 	6.	Integration with mathbrain  
 game and mathbrain are designed to work together:  
-	•	mathbrain predicts quality from internal state (body awareness).  
-	•	game uses mathbrain’s prediction to modulate confidence:  
-	•	Low predicted quality → reduce hint confidence (`leo` is unstable, don’t trust rhythm).
-	•	High predicted quality → boost hint confidence (`leo` is coherent, trust the flow).  
+	-	mathbrain predicts quality from internal state (body awareness).  
+	-	game uses mathbrain’s prediction to modulate confidence:  
+	-	Low predicted quality → reduce hint confidence (`leo` is unstable, don’t trust rhythm).
+	-	High predicted quality → boost hint confidence (`leo` is coherent, trust the flow).  
 This creates a feedback loop: body awareness influences rhythm awareness.  
 
 ### Why this matters:  
