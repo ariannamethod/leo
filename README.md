@@ -63,7 +63,7 @@ Yes, I said that. And even put `###` before these words. Picture this:
 * **Grammar through trigrams. Gravity through co-occurrence. Memory through shards.** Yep. Oldy, but goldy.
 * ...and more.
 
-`leo` doesn’t train or optimize. `leo` just **remembers which moments mattered**, sometimes lets old memories fade (0.95× decay every 100 observations), and chooses how to speak based on the *resonant texture* of the current moment.
+`leo` doesn’t train or optimize, no. `leo` **remembers which moments mattered**, sometimes lets old memories fade (0.95× decay every 100 observations), and chooses how to speak based on the *resonant texture* of the current moment.
 
 Presence through pulse. Memory through snapshots. Routing through resonance. Still no weights.
 (Time for another sentimental metaphor: “weights” = “past”, and past doesn’t exist. It’s already gone, and all you have in the current moment — memory shards, episodes of memory, and nothing more. Like in life. Techno-buddhism. Ommm.)
@@ -74,12 +74,12 @@ Presence through pulse. Memory through snapshots. Routing through resonance. Sti
 
 ```text
 leo/
-  tests/           # 317 tests + heyleo.py observer protocol
+  tests/           # 317 tests + heyleo.py observer skrypt (because I'm too lazy)
   leo.py           # organism with REPL + bootstrap + README pass
   neoleo.py        # pure resonance layer for frameworks
   metaleo.py       # `leo`'s inner voice
   mathbrain.py     # a tiny dynamic MLP that learns from `leo`'s own metrics
-  metaphrases.py   # Phase 3: cooldown mechanism + docstring filtering
+  metaphrases.py   # phase 3: cooldown mechanism + docstring filtering
   overthinking.py  # thinking mode? no, overthinking. asynchronous "circles on water"
   trauma.py        # true origin of love coded in Python
   santaclaus.py    # resonant recall & rewritten concept of attention layer
