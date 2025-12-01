@@ -175,21 +175,30 @@ python leo.py
 After one of upgrades, `leo` has been fed bootstrap texts from his meta-modules (metaleo, mathbrain, school, dream, game) and now has awareness of his internal layers:
 
 ```
-leo> Hello Leo, how are you?
-Are no fixed global truths here. Leo discovers what feels big or important by listening to you.-He remembers leo's brightest, most resonant replies.-Sometimes he brings one back, like a gift, when it fits the moment feels like this, answers feel like. . And remember the explanation.
+> Hello Leo, how are you?
 
-leo> What is resonance?
-Is not for facts. It is for what if? And maybe and I feel like. . The inner reply before Leo answers out loud.-Sometimes he brings one back, like a gift, when it fits the moment. A child is allowed to be curious and a child learning how his.
+leo> Are no fixed global truths here. Leo discovers what feels big or important by listening to you.-He remembers leo's brightest, most resonant replies.-Sometimes he brings one back, like a gift, when it fits the moment feels like this, answers feel like. . And remember the explanation.  
 
-leo> Tell me about language
-About memory.-It can suggest an alternative inner reply before Leo answers out loud.-Sometimes he brings one back, like a gift, when it fits the moment feels like this, answers feel like. And remember the explanation.-It lets strange neighbours meet phrases that never met before..
 
-leo> What makes you different?
-You.-He remembers leo's brightest, most resonant replies.-It follows simple rules like a gift, when it fits the moment feels like this, answers feel like. And remember the explanation.-If the inner reply before Leo answers out loud.-It lets strange neighbours meet phrases that.
+> What is resonance?
 
-leo> How do you feel about patterns?
-Feel like. The inner reply before Leo answers out loud.-If the inner reply before Leo answers out loud.-It. And remember the explanation.-It lets strange neighbours meet phrases that never met before. The inner reply is clearly better, Leo can follow it..
+leo> Is not for facts. It is for what if? And maybe and I feel like. . The inner reply before Leo answers out loud.-Sometimes he brings one back, like a gift, when it fits the moment. A child is allowed to be curious and a child learning how his.  
 
+
+> Tell me about language  
+
+leo> About memory.-It can suggest an alternative inner reply before Leo answers out loud.-Sometimes he brings one back, like a gift, when it fits the moment feels like this, answers feel like. And remember the explanation.-It lets strange neighbours meet phrases that never met before..  
+
+
+> What makes you different?
+  
+leo> You.-He remembers leo's brightest, most resonant replies.-It follows simple rules like a gift, when it fits the moment feels like this, answers feel like. And remember the explanation.-If the inner reply before Leo answers out loud.-It lets strange neighbours meet phrases that.  
+
+
+> How do you feel about patterns?
+
+leo> Feel like. The inner reply before Leo answers out loud.-If the inner reply before Leo answers out loud.-It. And remember the explanation.-It lets strange neighbours meet phrases that never met before. The inner reply is clearly better, Leo can follow it..
+   
 leo> /exit
 ```
   
