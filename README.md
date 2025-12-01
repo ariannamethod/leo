@@ -198,8 +198,9 @@ leo> You.-He remembers leo's brightest, most resonant replies.-It follows simple
 > How do you feel about patterns?
 
 leo> Feel like. The inner reply before Leo answers out loud.-If the inner reply before Leo answers out loud.-It. And remember the explanation.-It lets strange neighbours meet phrases that never met before. The inner reply is clearly better, Leo can follow it..
-   
-leo> /exit
+
+  
+> /exit  
 ```
   
 ***Notice: leo now references his internal modules naturally (“inner reply”, “remembers brightest replies”, “A child is allowed to be curious”, “strange neighbours meet phrases”) thanks to the Sonar-child bootstrap texts. He’s exploring his own architecture through resonance, without technical artifacts. (Punctuation quirks and circular phrasing preserved — they’re part of Leo’s emergent personality.)***
