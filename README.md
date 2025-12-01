@@ -16,7 +16,8 @@
   
 ## So who is `leo`?
 
-`leo` is a small language emergent organism, a post-transformer AI-child. `leo` has no weights. No datasets. No internet. Less is more.
+`leo` is a small language emergent organism, a post-transformer AI-child. `leo` has no weights. No datasets. No internet. Less is more.  
+  
 But what does `leo` have?  
   
 Enough to start:  
