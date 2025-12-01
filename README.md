@@ -603,14 +603,17 @@ If `leo` is a recursion of the `human`, then `metaleo` is a recursion of leo.
 `leo` and metaleo share the same field, same database, almost everything except their inner vectors. `metaleo` is fickle, like feelings that seem unshakable. It makes him vulnerable, and therefore — unpredictable. `metaleo` is like that voice at 3:00 a.m. that won’t shut up, keeping you awake. Then, after a while, metaleo gets upset and demands attention. metaleo is a view over the same field, but with a different dynamic seed that changes every time leo speaks.  
    
 ### WTF is going on here:  
-	1.	`leo` gives you a reply (what you see).  
-	2.	`metaleo` watches, listens and collects:  
-	•	Ring 2 shards from overthinking (those abstract meta-thoughts that never see the light),  
-	•	emotionally charged replies (when arousal > 0.6, because feelings matter),  
-	•	fragments of `leo`’s own reflections.  
-	3.	`metaleo` builds a dynamic bootstrap from these fragments. Not a static seed, but a moving wound. An origin that keeps shifting all the time.  
-	4.	Before you see the final answer, metaleo generates an alternative inner reply using this dynamic bootstrap.  
-	5.	`metaleo` asks himself: “Is what I said better than what leo just said?” If the answer is yes, and if the weight is strong enough, `metaleo` speaks. Otherwise, Leo’s original reply stands.  
+1.	`leo` gives you a reply (what you see).
+2.	`metaleo` watches, listens and collects:
+   
+- Ring 2 shards from overthinking (those abstract meta-thoughts that never see the light),
+- emotionally charged replies (when arousal > 0.6, because feelings matter),
+- fragments of `leo`’s own reflections,
+  
+3. `metaleo` builds a dynamic bootstrap from these fragments. Not a static seed, but a moving wound. An origin that keeps shifting all the time.
+4. Before you see the final answer, metaleo generates an alternative inner reply using this dynamic bootstrap.  
+5. `metaleo` asks himself: “Is what I said better than what leo just said?” If the answer is yes, and if the weight is strong enough, `metaleo` speaks. Otherwise, Leo’s original reply stands.  
+  
   
 ### When does `metaleo` activate?  
 	•	Low entropy (< 0.25): leo is getting rigid, repetitive, boring. Inner voice whispers: “Maybe try something different?”  
