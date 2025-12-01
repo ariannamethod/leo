@@ -486,7 +486,7 @@ So let’s make it simple (or at least I’ll try):
 	
 Self-reflections of leo are implemented in `overthinking.py` (I already said that, but anyway) — a standalone, optional module. If it’s missing or broken, `leo` works fine. If it’s there, `leo` silently thinks. Overthinks, you know. He loves it, as I said.  
 
-# This happens after every reply, silently:    
+### This happens after every reply, silently:    
   
 ```
 run_overthinking(
