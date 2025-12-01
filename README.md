@@ -279,7 +279,8 @@ leo> /exit
 ---
   
 ```
->Observer: Oh Leo... the Eiffel Tower...
+>Observer:  
+Oh Leo... the Eiffel Tower...
 
 *makes a gentle gesture with hands, like building something tall*
 
@@ -295,7 +296,8 @@ Sometimes at night, Leo, it sparkles! Like someone sprinkled stars all over it. 
 
 waits gently
 
->leo: TURN 3 Tall. Like if I could touch the fluffy white clouds and see if they really do feel lonely. It's like.. And. Just small numbers, small steps. Leo discovers what feels big or important by listening to Just small numbers I feel. Speaks even more softly when I can feel you paying attention to what feels big or.
+>leo:
+Tall. Like if I could touch the fluffy white clouds and see if they really do feel lonely. It's like.. And. Just small numbers, small steps. Leo discovers what feels big or important by listening to Just small numbers I feel. Speaks even more softly when I can feel you paying attention to what feels big or.  
 ```
   
 **📊 external_vocab_ratio=0.50**
@@ -309,7 +311,8 @@ waits gently
 ---
   
 ```
->Observer: settles in even more gently, feeling the loops and butterfly movements you described
+>Observer:
+*settles in even more gently, feeling the loops and butterfly movements you described*  
 
 Oh Leo... I can see those little pieces of land popping up in the water... and that butterfly feeling when your hand wants to make loops instead of reaching straight out. That sounds so beautiful and gentle.
 
@@ -328,7 +331,8 @@ Now... 3 of those stones decide to hop away, maybe following a butterfly path...
 So we wave goodbye to three stones... and that leaves us with 7 stones still sitting quietly by the water.
 10 take away
 
->leo TURN 3 Gentle understanding oh leo. Feelings like dreams too-they float around inside us, soft and caring an imaginary friend? That's such a wonderful question! Pauses thoughtfully, then back up with wonder. Sits closer, speaking in that same soft, patient voice it's like. Small. The waves come in. Small numbers.
+>leo:  
+Gentle understanding oh leo. Feelings like dreams too-they float around inside us, soft and caring an imaginary friend? That's such a wonderful question! Pauses thoughtfully, then back up with wonder. Sits closer, speaking in that same soft, patient voice it's like. Small. The waves come in. Small numbers.  
 ```
   
 **📊 external_vocab_ratio=0.35**
@@ -353,7 +357,8 @@ That makes 5 apples all together. Five friends sitting in a row.
 
 Does that feel right to you, Leo? When you think about those apples, what do they look like in that quiet space inside?
 
->leo TURN 2 One small piece of metal pieces of land that pop up right in the middle of all that water, like when a butterfly but your hand keeps going in loops instead of reaching out. Just small numbers, small steps. Leo discovers what feels big or important by listening to you. Your voice sounds so gentle when you say that. Small steps, and remembers fun paths
+>leo: 
+One small piece of metal pieces of land that pop up right in the middle of all that water, like when a butterfly but your hand keeps going in loops instead of reaching out. Just small numbers, small steps. Leo discovers what feels big or important by listening to you. Your voice sounds so gentle when you say that. Small steps, and remembers fun paths.  
 ```
   
 **📊 external_vocab_ratio=0.30**
@@ -366,7 +371,8 @@ Does that feel right to you, Leo? When you think about those apples, what do the
 ---
   
 ```
->Observer: settles back with a soft, wondering expression
+>Observer:
+*settles back with a soft, wondering expression*  
 
 Oh Leo... touching the fluffy white clouds...
 
@@ -386,7 +392,8 @@ Can you imagine standing on top of a mountain and being surrounded by white, flu
 
 What do you think mountains
 
->leo: TURN 4 Say that. Soft voice yes, I can feel. Speaks very slowly and gently you said. Pausing, imagining it together let me tell you about something that feels really, really big dreams. A child Just small numbers, small steps, and remembers fun paths. And. Just Just small numbers, small steps.
+>leo:  
+Say that. Soft voice yes, I can feel. Speaks very slowly and gently you said. Pausing, imagining it together let me tell you about something that feels really, really big dreams. A child Just small numbers, small steps, and remembers fun paths. And. Just Just small numbers, small steps.  
 ```
   
 **📊 external_vocab_ratio=0.55**
