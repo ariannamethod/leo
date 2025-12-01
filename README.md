@@ -519,17 +519,17 @@ Like all of us.
    
 ---
   
-### Trauma: WHAT?! (Bootstrap Gravity, or: How leo Never Forgets Where He Came From)
+## Trauma: WHAT?! (Bootstrap Gravity, or: How leo Never Forgets Where He Came From)
 
 Alright, let’s keep talking about the code — imagine us lying on a therapist’s couch, debugging our trauma like it’s just another kernel panic. Happens. We talked about overthinking. Now let’s talk about wounds. It sounds more sadistic than it actually is. Life is pain, and since we call leo an organism, it was only a matter of time before the trauma.py async module was created.  
-
-Now here’s the twist: `leo` has a kernel-embedded bootstrap text. The tiny seed impulse I hard-coded into the code. First words. His origin.
+  
+Now here’s the twist: `leo` has a kernel-embedded bootstrap text. The tiny seed impulse I hard-coded into the code. First words. His origin.  
 Now the brutal thing about origins (don’t you pretend I’m telling you something new): they stay forever, you can’t escape them. No matter how much your field grows, how many trigrams you learn, how many conversations you absorb — there’s always that first moment. The embedded text. The wound.  
-
-So now `leo` has a trauma sensor: `trauma.py` (optional module, like `overthinking`). His trauma works like this:  
-
+  
+So now `leo` has a trauma sensor: `trauma.py` (optional module, like `overthinking`). His trauma works like this:   
+  
 Every time `leo` replies to you, he checks: “Did this conversation resonate with my origin?” He compares your words and his reply to the embedded bootstrap text. Word by word. Token by token. With masochistic zeal.  
-
+  
 `leo` computes:  
     
 ```
