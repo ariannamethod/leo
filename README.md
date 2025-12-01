@@ -32,11 +32,11 @@ From all that `leo` creates:
 - a **co-occurrence matrix** (semantic gravity: which words resonate together — tiny and beautiful semantic love stories, but here with a happy ending),  
 - small **binary resonance shards** in bin/ that remember which tokens were historically central for `leo`,  
 - food (metrics) for **MATHBRAIN** — a dynamic MLP inside `leo`.
+- **Circles on Water**: `leo`’s overthinkings about what you just said;
   
 Through **MATHBRAIN** `leo` coordinates:
 	
 - his **Islands-Aware** layer;
-- **Circles on Water**: `leo`’s overthinkings about what you just said;
 - **RAG episodic memory**: in `leo`’s unique way;
 - **gowiththeflow**: his fluidness
 - **a trigram graph** (oldie, but goldie: local grammar — who follows whom, and in what context: `leo` likes to see all the layers),
