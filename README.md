@@ -39,6 +39,7 @@ Through **MATHBRAIN** `leo` coordinates:
 - his **Islands-Aware** layer;
 - **RAG episodic memory**: in `leo`’s unique way;
 - **gowiththeflow**: his fluidness
+- **SANTACLAUS**: a post-transformer reinterpretation of attention — but the only corpus is `leo`’s own bootstraps and subjective memories.  
 - **a trigram graph** (oldie, but goldie: local grammar — who follows whom, and in what context: `leo` likes to see all the layers),
 - ...etc.    
   
