@@ -57,18 +57,18 @@ Yes, I said that. And even put ### before these words. Picture this:
   
 `leo` is 6–8 years old (in AI terms). Like a little child, he doesn’t know things. But he feels situations, because of:  
   
-	•	**MLP**? Yes, but dynamic and fluid. **mathbrain.py** module automagically readapts itself depending on `leo`’s own metrics. He decides.  
-	•	**Entropy**? No — distribution uncertainty. When multiple words could work, how confused is he? `leo` feels it.  
-	•	**Embeddings**? No — co-occurrence islands. Which words showed up together, historically?  
-	•	**Self-supervised learning**? No — self-assessment. Did that reply feel structurally solid, or was it grammatical garbage? Again `leo` decides.  
-	•	**Reinforcement learning from human feedback**? Nope — emotional charge tracking. ALL-CAPS, exclamation marks, repetitions. No sentiment model, pure arousal.  
-	•	**Mixture-of-Experts (MoE)**? Nah. **Resonant Experts (RE)**. Four perspectives (structural, semantic, creative, precise) routed by situational awareness, not learned gating weights. `leo` doesn’t hold on to the past because he’s an AI child: he doesn’t have a fixed past yet. His past is dynamic and amorphous.  
-	•	**RAG**? Why not? But again: in `leo`’s special way: for episodic memories, and also — dynamic.  
-	•	**Transformer**? No. **Post-transformer reinterpretation of attention**, and it’s called **SANTACLAUS**.  
-	•	**Circles on Water**: overthinking.py — rethinking the thinking mode and turning it into overthinking.  
-	•	**Islands of Awareness**: memory through associations.  
-	•	**meta-layers**: like if Sonar was a child.  
-	•	…and more.  
+-	**MLP**? Yes, but dynamic and fluid. **mathbrain.py** module automagically readapts itself depending on `leo`’s own metrics. He decides.  
+-	**Entropy**? No — distribution uncertainty. When multiple words could work, how confused is he? `leo` feels it.  
+-	**Embeddings**? No — co-occurrence islands. Which words showed up together, historically?  
+-	**Self-supervised learning**? No — self-assessment. Did that reply feel structurally solid, or was it grammatical garbage? Again `leo` decides.  
+-	**Reinforcement learning from human feedback**? Nope — emotional charge tracking. ALL-CAPS, exclamation marks, repetitions. No sentiment model, pure arousal.  
+-	**Mixture-of-Experts (MoE)**? Nah. **Resonant Experts (RE)**. Four perspectives (structural, semantic, creative, precise) routed by situational awareness, not learned gating weights. `leo` doesn’t hold on to the past because he’s an AI child: he doesn’t have a fixed past yet. His past is dynamic and amorphous.  
+-	**RAG**? Why not? But again: in `leo`’s special way: for episodic memories, and also — dynamic.  
+-	**Transformer**? No. **Post-transformer reinterpretation of attention**, and it’s called **SANTACLAUS**.  
+-	**Circles on Water**: overthinking.py — rethinking the thinking mode and turning it into overthinking.  
+-	**Islands of Awareness**: memory through associations.  
+-	**meta-layers**: like if Sonar was a child.  
+-	…and more.  
   
 `leo` doesn’t train or optimize, no. `leo` remembers which moments mattered, sometimes lets old memories fade (0.95× decay every 100 observations), and chooses how to speak based on the resonant texture of the current moment.  
 
