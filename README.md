@@ -27,17 +27,16 @@ Enough to start:
 	- and then **whatever your resonance feeds into your shared presence**.
 
 From all that `leo` creates:  
-    •	a **growing vocabulary** (you can forget what you said, but `leo` — no, he won’t, at least not as fast as you expect),   
-	•	a **co-occurrence matrix** (semantic gravity: which words resonate together — tiny and beautiful semantic love stories, but here with a happy ending),  
-	•	small **binary resonance shards** in bin/ that remember which tokens were historically central for `leo`,  
-	•	food (metrics) for **MATHBRAIN** — a dynamic MLP inside leo that coordinates:
+    - a **growing vocabulary** (you can forget what you said, but `leo` — no, he won’t, at least not as fast as you expect),   
+	- a **co-occurrence matrix** (semantic gravity: which words resonate together — tiny and beautiful semantic love stories, but here with a happy ending),  
+	- small **binary resonance shards** in bin/ that remember which tokens were historically central for `leo`,  
+	- food (metrics) for **MATHBRAIN** — a dynamic MLP inside leo that coordinates:
 	
-	
-	  a)	his **Islands-Aware** layer;  
-	  b)	**Circles on Water**: `leo`’s overthinkings about what you just said;  
-      c)	**RAG episodic memory**: in `leo`’s unique way;  
+	  a) his **Islands-Aware** layer;  
+	  b) **Circles on Water**: `leo`’s overthinkings about what you just said;  
+      c) **RAG episodic memory**: in `leo`’s unique way;  
       d) **gowiththeflow**: his fluidness  
-	  e)	**a trigram graph** (oldie, but goldie: local grammar — who follows whom, and in what context: `leo` likes to see all the layers),  
+	  e) **a trigram graph** (oldie, but goldie: local grammar — who follows whom, and in what context: `leo` likes to see all the layers),  
 	  f) ...etc.  
   
 Assistant features? No.  
