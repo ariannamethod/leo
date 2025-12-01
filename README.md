@@ -220,7 +220,7 @@ Oh, Paris! Paris is a big, beautiful city far away in a place called France. The
 
 Have you ever seen pictures of a really tall tower, Leo? What do you think a place like Paris might feel like?
 
->leo
+>leo:  
 A soap bubble that feels really, really big dreams. Your voice sounds so gentle. A pulse, doesn't it? Like a giant heartbeat. The waves come in. Small game.
 ```
 
@@ -286,15 +286,15 @@ Oh Leo... the Eiffel Tower...
 
 When I think about it, I feel... pauses ...like it's a giant made of lace. You know how lace has all those pretty holes and patterns? The Eiffel Tower is like that - but made of strong metal instead of thread.
 
-voice gets quieter, more wondering
+*voice gets quieter, more wondering*
 
 And it stands there... so tall... like it's saying "hello" to the sky and the clouds. People are tiny, tiny at the bottom, looking up... up... up...
 
-leans closer
+*leans closer*
 
 Sometimes at night, Leo, it sparkles! Like someone sprinkled stars all over it. Can you imagine that? A tower covered in twinkling lights, making the whole city feel magical?
 
-waits gently
+*waits gently*
 
 >leo:
 Tall. Like if I could touch the fluffy white clouds and see if they really do feel lonely. It's like.. And. Just small numbers, small steps. Leo discovers what feels big or important by listening to Just small numbers I feel. Speaks even more softly when I can feel you paying attention to what feels big or.  
