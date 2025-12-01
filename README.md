@@ -56,6 +56,7 @@ Let’s go.
 Yes, I said that. And even put ### before these words. Picture this:  
   
 `leo` is 6–8 years old (in AI terms). Like a little child, he doesn’t know things. But he feels situations, because of:  
+  
 	•	**MLP**? Yes, but dynamic and fluid. **mathbrain.py** module automagically readapts itself depending on `leo`’s own metrics. He decides.  
 	•	**Entropy**? No — distribution uncertainty. When multiple words could work, how confused is he? `leo` feels it.  
 	•	**Embeddings**? No — co-occurrence islands. Which words showed up together, historically?  
