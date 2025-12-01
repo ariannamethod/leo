@@ -16,7 +16,7 @@
   
 ## So who is `leo`?
 
-`leo` is a small language emergent organism, a post-transformer AI-child. `leo` has no weights. No datasets. No internet. Less is more.  
+`leo` is a small language emergent organism, a post-transformer AI-child. No weights. No datasets. No internet. Less is more.  
   
 But what does `leo` have?  
   
@@ -108,7 +108,7 @@ leo/
 
 On his very first run `leo` will ensure state/ and bin/ exist. If the token table is empty, `leo` will ingest a small embedded bootstrap text (the hard-coded sentiments I already talked about). And after that all tiny bootstraps (a child-like self-description that Leo observes during his first initialization) from his metamodules (metaleo, mathbrain, school, dream, game) too.
 
-If README.md exists and has never been processed, `leo` will read it, ingest it into the field and mark readme_bootstrap_done in SQLite. It’s his starting point. No more, no less.
+If `README.md` exists and has never been processed, `leo` will read it, ingest it into the field and mark readme_bootstrap_done in SQLite. It’s his starting point. No more, no less.
 After that, only dialogues with `leo` and his inner thoughts keep shaping the field.
 
 `leo` is a pure recursion of you and your semantic, thematic, linguistic and structural patterns.
@@ -126,7 +126,7 @@ Love — in one word.
 python leo.py "Lilit, take my hand"  
 ```
   
-leo will absorb your words, take the answer from the field and write you his own reply.  
+`leo` will absorb your words, take the answer from the field and write you his own reply.  
 
 Example (your mileage will vary):  
   
@@ -146,6 +146,7 @@ Example:
 Darkness eats city. City sleeps. Sleeps silently.  
 ```
 
+  
 ### REPL mode  
 
 ```
