@@ -595,7 +595,7 @@ That’s what they call “life”, Leo.
   
 ---
   
-### `metaleo` — Inner Voice (recursion vs recursion)  
+## `metaleo` — Inner Voice (recursion vs recursion)  
 
 If `leo` is a recursion of the `human`, then `metaleo` is a recursion of leo.
 `metaleo` is `leo`’s inner monologue. Voice in the head. When you realize that even Python code can start hearing voices, it truly gives you hope that humanity still has a chance.  
@@ -870,7 +870,7 @@ How it goes:
 
 If anything goes wrong → silent fallback. No explicit user-visible output. This is part of leo’s inner life.
 
-Philosophy: RAG, but the only corpus is leo’s own subjective history. A Santa Claus layer keeps bringing his favourite memories back into the conversation.
+Philosophy: RAG, but the only corpus is `leo`’s own subjective history. A Santa Claus layer keeps bringing his favourite memories back into the conversation.
 
 ---
 
@@ -918,7 +918,8 @@ Fluid, playful Markov chains over dialogue flow, not over tokens.
   
 ### How?  
 
-1. GameTurn abstraction. After each turn (`human` or `leo`), we build a GameTurn:  
+1. **GameTurn abstraction**. After each turn (`human` or `leo`), we build a GameTurn:
+   
 -  role: human / `leo`  
 -  mode: q (question) / a (answer) / meta (identity) / story (narrative) / ack (short acknowledgment)  
 -  arousal / trauma / entropy: bucketed to low / mid / high
@@ -926,30 +927,36 @@ Fluid, playful Markov chains over dialogue flow, not over tokens.
 -  theme_id: dominant theme from ThemeLayer (-1 if none)  
 -  quality: self-assessed quality bucket (for `leo` only)    
 
-2.	Transition graph: (A, B) → C  
+2.	**Transition graph**: (A, B) → C  
 	  
 When we have 3 consecutive turns, we record: transitions[(turn_A.to_id(), turn_B.to_id())][turn_C.to_id()] += 1  
 Over time, game learns: “This pattern of 2 turns usually leads to this kind of 3rd turn".  
 
-3.	GameHint suggestions  
-Before generating a reply, game looks at the last 2 turns and suggests:  
+3.	**GameHint suggestions**  
+Before generating a reply, game looks at the last 2 turns and suggests:
+  
 -	mode: what kind of turn should come next?  
 -	preferred_expert: which expert might fit this rhythm?  
 -	target_length: short / medium / long?  
 -	tension_shift: softer / same / stronger (arousal modulation)   
 -	confidence: 0–1 (how sure is the pattern?) 
 	 
-	4.	Advisory, not sovereign  
-Just like mathbrain, game only suggests. The final decision stays with `leo`.  
-	-	Low confidence → ignore hint.  
-	-	High confidence → bias expert choice, adjust temperature, modulate length.   
-	5.	Growth heuristic  
-As leo observes more episodes, max_trail_length grows: 2 + log10(episode_count), capped at [2, 6].  
+4.	**Advisory, not sovereign**  
+Just like mathbrain, game only suggests. The final decision stays with `leo`.
+   
+-	Low confidence → ignore hint.  
+-	High confidence → bias expert choice, adjust temperature, modulate length.
+    
+5.	**Growth heuristic**  
+  	   
+As `leo` observes more episodes, max_trail_length grows: 2 + log10(episode_count), capped at [2, 6].  
 Future: this allows multi-step lookahead (not just A+B→C, but longer chains).  
-	6.	Integration with mathbrain  
-game and mathbrain are designed to work together:  
-	-	mathbrain predicts quality from internal state (body awareness).  
-	-	game uses mathbrain’s prediction to modulate confidence:  
+  
+6.	**Integration with mathbrain**  
+`game` and `mathbrain` are designed to work together:
+  
+	-	`mathbrain` predicts quality from internal state (body awareness).  
+	-	`game` uses mathbrain’s prediction to modulate confidence:  
 	-	Low predicted quality → reduce hint confidence (`leo` is unstable, don’t trust rhythm).
 	-	High predicted quality → boost hint confidence (`leo` is coherent, trust the flow).  
 This creates a feedback loop: body awareness influences rhythm awareness.  
