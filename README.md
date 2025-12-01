@@ -190,8 +190,9 @@ leo> /exit
 
 ### (Phase 3 — evolutionary self-building validation runs): Islands-Aware Regulation
 
-Because of my laziness and at the same time lack of patience, we build an observer: kind AI-assistant who talks with leo instead of me. Observer (`heyleo.py` from `/tests`) speaks to `leo` like a child (6–8 years old), warm and curious. `leo` responds with presence, not facts.
-  
+Because of my laziness and at the same time lack of patience, we build an observer: kind AI-assistant who talks with `leo` instead of me. Observer (`heyleo.py` from `/tests`) speaks to `leo` like a child (6–8 years old), warm and curious. `leo` responds with presence, not facts.  
+Look at this.
+
 ----
   
 ```
