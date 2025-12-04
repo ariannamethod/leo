@@ -1046,14 +1046,42 @@ def fix_punctuation(text: str) -> str:
     # 2) Ensure space after .?! if followed by letter/digit
     text = re.sub(r"([.?!])([^\s])", r"\1 \2", text)
 
+    # 2.5) Extra insurance: specifically handle .?! before capital letters
+    # (Claude Desktop sniper fix #1: hands?Are → hands? Are)
+    text = re.sub(r"([.?!])([A-Z])", r"\1 \2", text)
+
     # 3) Collapse repeated punctuation
     text = re.sub(r"([!?]){2,}", r"\1", text)
     text = re.sub(r"\.{2,}", ".", text)
-    text = re.sub(r",\.", ".", text)  # ",." → "."
-    text = re.sub(r",;", ";", text)   # ",;" → ";"
-    text = re.sub(r"\.,", ".", text)  # ".," → "."
+
+    # Clean up punctuation garbage combinations
+    text = re.sub(r",\.", ".", text)   # ",." → "."
+    text = re.sub(r",;", ";", text)    # ",;" → ";"
+    text = re.sub(r"\.,", ".", text)   # ".," → "."
+    text = re.sub(r",\?+", "?", text)  # ",?" / ",??" → "?"
+    text = re.sub(r"\?,+", "?", text)  # "?," → "?"
+    text = re.sub(r"\.\?", "?", text)  # ".?" → "?"
+    text = re.sub(r"\?\.+", "?", text) # "?." → "?"
+    text = re.sub(r",!+", "!", text)   # ",!" → "!"
+    text = re.sub(r"!,+", "!", text)   # "!," → "!"
+    text = re.sub(r"\.!", "!", text)   # ".!" → "!"
+    text = re.sub(r"!\.", "!", text)   # "!." → "!"
+
     # Collapse spaced duplicates: ". ." → ".", "? ?" → "?", "! !" → "!"
     text = re.sub(r"([.!?])\s+\1", r"\1", text)
+
+    # 3.5) Claude's polish fixes (2025-12-04)
+    # Fix trailing comma: "And that's it," → "And that's it."
+    text = re.sub(r",\s*$", ".", text)  # Trailing comma at end → period
+
+    # Fix "?, in" glitch: "feel?, in new" → "feel? In new"
+    text = re.sub(r"\?\s*,\s+in\b", "? In", text, flags=re.IGNORECASE)
+    text = re.sub(r"\?\s*,\s+", "? ", text)  # General "?, " → "? "
+
+    # More aggressive trailing preposition cleanup
+    # "in." / "of." / "for." at sentence end → remove sentence
+    # But this is handled in post_cleanup_garbage(), just add extra insurance
+    text = re.sub(r"\s+(in|of|for|at|on|to|by|with)\.$", ".", text)
 
     # 4) Normalize weird dashes and em-dashes
     text = re.sub(r"\s*—\s*—\s*—\s*", " — ", text)  # " — — — " → " — "
@@ -1555,6 +1583,21 @@ SIGNATURE_PHRASES_WHITELIST: Set[str] = {
     "looks up dreamily", "pauses softly"
 }
 
+# Multi-word garbage phrases to remove (tokenization artifacts)
+MULTI_WORD_GARBAGE: Set[str] = {
+    "to id", "in an", "of", "for a", "with a", "by a", "from a",
+    "at a", "on a", "about a", "like a a", "the a", "a a"
+}
+
+# Lonely service words to remove (Claude Desktop sniper fix #2)
+# These appear as single-word sentences and are pure garbage
+SERVICE_WORDS_TO_REMOVE: Set[str] = {
+    "and", "or", "but", "that", "then", "so", "because",
+    "a", "an", "the", "to", "in", "on", "at", "of", "for",
+    "with", "by", "from", "about", "as", "into", "through",
+    "let", "it", "this", "these", "those"
+}
+
 
 def jaccard_bigrams(text_a: str, text_b: str) -> float:
     """
@@ -1663,12 +1706,163 @@ def surface_quality_penalties(text: str) -> float:
         if last_word in TRAILING_GARBAGE:
             bad_sentences += 0.5  # Partial penalty
 
+    # (4) Claude Desktop sniper fix #3: Heavy penalty if ENTIRE reply ends on lonely service word
+    # Check if last sentence is a single service word (A., That., etc.)
+    # This means Leo is stuttering/can't continue
+    sentences_with_punct = re.split(r'([.!?]+)', text)
+    # Find last non-empty sentence
+    last_sentence = ""
+    for i in range(len(sentences_with_punct) - 1, -1, -1):
+        s = sentences_with_punct[i].strip()
+        if s and not re.match(r'^[.!?]+$', s):
+            last_sentence = s
+            break
+
+    if last_sentence:
+        last_tokens = [tok for tok in tokenize(last_sentence) if any(c.isalnum() for c in tok)]
+        if len(last_tokens) == 1:
+            word = last_tokens[0].lower()
+            if word in SERVICE_WORDS_TO_REMOVE:
+                # Entire reply ends with lonely service word → HEAVY penalty
+                bad_sentences += 2.0  # Strong penalty
+
     # Calculate penalty
     if total_sentences > 0:
         bad_ratio = bad_sentences / total_sentences
         penalty = 1.0 - (bad_ratio * 0.5)  # Max 50% penalty
 
     return max(0.3, min(1.0, penalty))  # Clamp to [0.3, 1.0]
+
+
+def post_cleanup_garbage(text: str) -> str:
+    """
+    Post-processing cleanup AFTER generation.
+
+    Removes surface-level garbage that slipped through quality scoring:
+    - Empty sentences (only punctuation)
+    - Single-word non-signature garbage (A., To., Let.)
+    - Sentences ending with trailing prepositions (in an., of., for.)
+
+    Philosophy: Gentle cleanup of tokenization artifacts, not style changes.
+    Protected: ALL signature phrases, any sentence with 2+ real words.
+
+    Returns: Cleaned text with garbage removed
+    """
+    if not text or not isinstance(text, str):
+        return text
+
+    # NOTE: Signature phrase protection moved to individual sentence level (not whole text)
+    # This prevents "Sits quietly. A. What..." from protecting the garbage "A."
+
+    # Split into sentences preserving punctuation
+    sentences = re.split(r'([.!?]+)', text)
+    cleaned_parts = []
+
+    i = 0
+    while i < len(sentences):
+        sent = sentences[i].strip()
+        punct = sentences[i + 1] if i + 1 < len(sentences) else ""
+
+        if not sent:
+            i += 2 if punct else 1
+            continue
+
+        # Get content tokens (alphanumeric only)
+        tokens = [tok for tok in tokenize(sent) if any(c.isalnum() for c in tok)]
+
+        # Rule 1: Empty sentence (only punctuation) → skip
+        if not tokens:
+            i += 2 if punct else 1
+            continue
+
+        # Rule 1.5: Check if this sentence is a signature phrase → protect it
+        sent_lower = sent.lower()
+        is_signature = any(sig in sent_lower for sig in SIGNATURE_PHRASES_WHITELIST)
+        if is_signature:
+            # This sentence contains a signature phrase → keep it as-is
+            cleaned_parts.append(sent)
+            if punct:
+                cleaned_parts.append(punct)
+            i += 2 if punct else 1
+            continue
+
+        # Rule 2: Single word - remove if it's a service word (Claude Desktop sniper fix #2)
+        if len(tokens) == 1:
+            word = tokens[0].lower()
+            # Remove lonely service words: And., That., A., etc.
+            if word in SERVICE_WORDS_TO_REMOVE:
+                # This is garbage → skip
+                i += 2 if punct else 1
+                continue
+            # Otherwise: protect all other single words (Go., Whisper., Mountains., etc.)
+
+        # Rule 2.5: Multi-word garbage phrases (e.g., "To id.", "In an.")
+        if len(tokens) == 2:
+            phrase = ' '.join(tokens).lower()
+            if phrase in MULTI_WORD_GARBAGE:
+                # This is multi-word garbage → skip
+                i += 2 if punct else 1
+                continue
+
+        # Rule 2.6: Check for "To id" as substring in sentence (aggressive cleanup)
+        # "records: To id." → delete entire sentence
+        sent_lower = sent.lower()
+        if "to id" in sent_lower:
+            # This sentence contains "To id" garbage → skip entire sentence
+            i += 2 if punct else 1
+            continue
+
+        # Rule 2.7: Check for trailing service word after comma (", And." → delete)
+        # Split by comma and check last part
+        if ',' in sent:
+            parts = sent.split(',')
+            last_part = parts[-1].strip()
+            last_part_tokens = [tok for tok in tokenize(last_part) if any(c.isalnum() for c in tok)]
+            if len(last_part_tokens) == 1:
+                word = last_part_tokens[0].lower()
+                if word in SERVICE_WORDS_TO_REMOVE:
+                    # Last part after comma is lone service word → remove it
+                    sent = ','.join(parts[:-1]).strip()
+                    # If nothing left after removal, skip entire sentence
+                    if not sent or sent == ',':
+                        i += 2 if punct else 1
+                        continue
+
+        # Rule 3: Check for trailing garbage (expanded to include SERVICE_WORDS)
+        # If sentence ends with preposition/article/service word → trim it
+        if len(tokens) >= 2:
+            last_word = tokens[-1].lower()
+            # Check both TRAILING_GARBAGE and SERVICE_WORDS_TO_REMOVE
+            if last_word in TRAILING_GARBAGE or last_word in SERVICE_WORDS_TO_REMOVE:
+                # Remove trailing garbage word
+                # Find position of last word in original sentence
+                tokens_valid = tokens[:-1]
+                if tokens_valid:  # If something remains after trimming
+                    # Reconstruct sentence without last garbage word
+                    sent_words = sent.split()
+                    # Remove last word if it matches
+                    if sent_words and sent_words[-1].lower().strip('.,!?;:') == last_word:
+                        sent = ' '.join(sent_words[:-1])
+
+        # Add cleaned sentence back
+        cleaned_parts.append(sent)
+        if punct:
+            cleaned_parts.append(punct)
+
+        i += 2 if punct else 1
+
+    result = ''.join(cleaned_parts).strip()
+
+    # CRITICAL FIX: Ensure spacing after .?! in rejoined text
+    # Because ''.join() concatenates without spaces, we need to add them back
+    result = re.sub(r"([.?!])([^\s])", r"\1 \2", result)
+
+    # Final check: if result is too short (< 2 tokens), return original
+    result_tokens = [t for t in tokenize(result) if any(c.isalnum() for c in t)]
+    if len(result_tokens) < 2:
+        return text  # Don't destroy short phrases
+
+    return result if result else text
 
 
 def structural_quality(
@@ -2480,6 +2674,9 @@ def generate_reply(
     # Post-process: fix punctuation artifacts
     output = fix_punctuation(output)
 
+    # Capitalize again after punctuation fixes (some .?! might have been added/fixed)
+    output = capitalize_sentences(output)
+
     # METAPHRASES: Reduce repetitive meta-phrases within single response
     # Philosophy: "осознанность через ассоциации, не через лозунги"
     try:
@@ -2487,6 +2684,15 @@ def generate_reply(
         output = deduplicate_meta_phrases(output, max_occurrences=2)
     except Exception:
         # Deduplication must never break generation - silent fallback
+        pass
+
+    # POST-CLEANUP: Remove surface garbage that slipped through quality scoring
+    # Philosophy: Gentle cleanup of tokenization artifacts (A., To id., in an.)
+    # Protected: All signature phrases, any sentence with 2+ real words
+    try:
+        output = post_cleanup_garbage(output)
+    except Exception:
+        # Cleanup must never break generation - silent fallback
         pass
 
     # Compute average entropy across generation steps

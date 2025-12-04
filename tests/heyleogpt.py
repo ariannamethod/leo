@@ -185,8 +185,7 @@ class HeyLeoGPTObserver:
             # Check for Observer phrase spam (anti-spam for "give me an image" etc.)
             recent_observer_phrases = [t.get('observer', '') for t in context[-3:]]  # Last 3 turns
             image_request_count = sum(1 for msg in recent_observer_phrases
-                                     if 'give me an image' in msg.lower() or
-                                        'give me one of your strange images' in msg.lower())
+                                     if 'give me' in msg.lower() and 'image' in msg.lower())
 
             # Build anti-spam instructions if needed
             anti_spam_note = ""
