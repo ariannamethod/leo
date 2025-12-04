@@ -110,6 +110,14 @@ except ImportError:
     MathState = None  # type: ignore
     MATHBRAIN_AVAILABLE = False
 
+# Safe import: mathbrain_phase4 module (Island bridges learning system)
+try:
+    from mathbrain_phase4 import MathBrainPhase4
+    MATHBRAIN_PHASE4_AVAILABLE = True
+except ImportError:
+    MathBrainPhase4 = None  # type: ignore
+    MATHBRAIN_PHASE4_AVAILABLE = False
+
 # Safe import: santaclaus module is optional
 try:
     from santaclaus import SantaKlaus, SantaContext
@@ -2357,6 +2365,15 @@ class LeoField:
             except Exception:
                 # Silent fail — MathBrain must never break Leo
                 self._math_brain = None
+        # MATHBRAIN PHASE 4: Island bridges learning (optional)
+        self._math_brain_phase4: Optional[Any] = None
+        if MATHBRAIN_PHASE4_AVAILABLE and MathBrainPhase4 is not None:
+            try:
+                phase4_db_path = STATE_DIR / "mathbrain_phase4.db"
+                self._math_brain_phase4 = MathBrainPhase4(db_path=phase4_db_path)
+            except Exception:
+                # Silent fail — MathBrain Phase 4 must never break Leo
+                self._math_brain_phase4 = None
         # SANTACLAUS: resonant recall (optional)
         self.santa: Optional[Any] = None
         if SANTACLAUS_AVAILABLE and SantaKlaus is not None:
