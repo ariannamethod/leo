@@ -18,6 +18,13 @@ import re
 import random
 from typing import Dict, List, Optional
 
+# Safe import: punct_cleanup module (optional garbage cleanup)
+try:
+    from punct_cleanup import cleanup_punctuation
+    PUNCT_CLEANUP_AVAILABLE = True
+except ImportError:
+    PUNCT_CLEANUP_AVAILABLE = False
+
 
 # Meta-phrase patterns and their variants
 # Each phrase has 2-3 variants that preserve Leo's voice
@@ -269,15 +276,17 @@ def deduplicate_meta_phrases(
     reply: str,
     max_occurrences: int = 2,
     seed: Optional[int] = None,
+    mode: str = "NORMAL",
 ) -> str:
     """
     Clean reply from meta-noise and reduce repetition.
 
-    Four-stage filtering (Desktop Claude's recommendations + loop analysis):
+    Five-stage filtering (Desktop Claude's recommendations + loop analysis):
     1. Remove toxic n-grams (loop-causing structural patterns)
     2. Remove .-It inner monologue (technical commentary)
     3. Remove docstring phrases (architectural leakage)
     4. Deduplicate remaining meta-phrases with variants
+    5. Clean up punctuation garbage (optional, gentle)
 
     Philosophy: Keep Leo's emotional voice, remove architectural noise and loops.
 
@@ -285,6 +294,7 @@ def deduplicate_meta_phrases(
         reply: Generated reply text
         max_occurrences: Max times a phrase can appear (default 2)
         seed: Random seed for deterministic variant selection (testing)
+        mode: Cleanup mode - "NORMAL", "SOFT_GROUNDING", or "GROUNDING_HARD"
 
     Returns:
         Cleaned reply with Leo's voice preserved
@@ -304,6 +314,11 @@ def deduplicate_meta_phrases(
 
     # Stage 3: Remove docstring phrases (BLACKLIST - Desktop Claude)
     result = remove_docstring_phrases(result)
+
+    # Stage 3.5: Replace technical artifacts with natural language
+    # school_of_forms → school (keep meaning, remove tech formatting)
+    result = re.sub(r'\bschool_of_forms\b', 'school', result, flags=re.IGNORECASE)
+    result = re.sub(r'\bschool-of-forms\b', 'school', result, flags=re.IGNORECASE)
 
     # Stage 4: Deduplicate remaining meta-phrases with variants (ORIGINAL)
 
@@ -328,6 +343,14 @@ def deduplicate_meta_phrases(
             # Need to re-find remaining matches since positions changed
             # (This is inefficient but safe and clear)
             matches = list(pattern.finditer(result))
+
+    # Stage 5: Clean up punctuation garbage (OPTIONAL - gentle sweep)
+    if PUNCT_CLEANUP_AVAILABLE:
+        try:
+            result = cleanup_punctuation(result, mode=mode)
+        except Exception:
+            # Silent fallback - keep result as-is if cleanup fails
+            pass
 
     return result
 
