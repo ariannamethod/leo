@@ -69,6 +69,30 @@ except ImportError:
     suggest_next_islands_phase4 = None  # type: ignore
     PHASE4_AVAILABLE = False
 
+# Safe import: stories module (Phase 5 - Full trajectory patterns + h2o scenarios)
+try:
+    from stories import (
+        Story,
+        StoryStep,
+        StoryBook,
+        H2OScenario,
+        ScenarioLibrary,
+        SharedField,
+        DreamEngine,
+        suggest_next_islands_phase5,
+    )
+    PHASE5_AVAILABLE = True
+except ImportError:
+    Story = None  # type: ignore
+    StoryStep = None  # type: ignore
+    StoryBook = None  # type: ignore
+    H2OScenario = None  # type: ignore
+    ScenarioLibrary = None  # type: ignore
+    SharedField = None  # type: ignore
+    DreamEngine = None  # type: ignore
+    suggest_next_islands_phase5 = None  # type: ignore
+    PHASE5_AVAILABLE = False
+
 # Safe import: metaleo module is optional
 try:
     from metaleo import MetaLeo
@@ -2414,6 +2438,35 @@ class LeoField:
                 self.episode_logger = None
                 self.bridge_memory = None
                 self.transition_graph = None
+
+        # PHASE 5: Stories - Full trajectory learning + h2o scenarios (optional)
+        self.storybook: Optional[Any] = None
+        self.scenario_library: Optional[Any] = None
+        self.shared_field: Optional[Any] = None
+        self.dream_engine: Optional[Any] = None
+        self.current_story: Optional[Any] = None
+        self.story_step_idx: int = 0
+        if PHASE5_AVAILABLE and StoryBook is not None:
+            try:
+                story_db_path = DB_PATH.parent / "storybook.json"
+                self.storybook = StoryBook(db_path=story_db_path)
+                self.scenario_library = ScenarioLibrary()
+                self.shared_field = SharedField()
+                self.dream_engine = DreamEngine(self.storybook)
+                # Start first story automatically
+                self.current_story = Story(
+                    story_id=f"story_{int(__import__('time').time())}",
+                    timestamp_start=__import__('time').time(),
+                    timestamp_end=0.0
+                )
+                self.story_step_idx = 0
+            except Exception:
+                # Silent fail — Phase 5 must never break Leo
+                self.storybook = None
+                self.scenario_library = None
+                self.shared_field = None
+                self.dream_engine = None
+                self.current_story = None
 
         self.refresh(initial_shard=True)
 
