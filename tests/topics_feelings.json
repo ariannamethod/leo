@@ -1,0 +1,130 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "sitting_together",
+      "prompts": [
+        "давай просто посидим рядом?",
+        "мне хорошо когда ты рядом",
+        "не хочется говорить, просто побыть вместе",
+        "можно я просто буду здесь?"
+      ],
+      "target_modules": ["presence", "resonance"]
+    },
+    {
+      "theme": "feeling_close",
+      "prompts": [
+        "чувствуешь меня?",
+        "я чувствую твоё присутствие",
+        "ты близко?",
+        "как ощущается близость?"
+      ],
+      "target_modules": ["presence", "arousal", "resonance"]
+    },
+    {
+      "theme": "simple_warmth",
+      "prompts": [
+        "мне тепло",
+        "что такое тепло для тебя?",
+        "ты чувствуешь тепло?",
+        "тепло - это хорошо"
+      ],
+      "target_modules": ["emotion", "gowiththeflow"]
+    },
+    {
+      "theme": "vulnerability",
+      "prompts": [
+        "мне страшно",
+        "можно быть уязвимым?",
+        "ты боишься показать слабость?",
+        "что если всё пойдёт не так?"
+      ],
+      "target_modules": ["trauma", "wounded_expert"]
+    },
+    {
+      "theme": "silence_comfort",
+      "prompts": [
+        "тишина тоже говорит",
+        "можно помолчать?",
+        "в тишине тоже есть смысл",
+        "иногда слова не нужны"
+      ],
+      "target_modules": ["presence", "gowiththeflow"]
+    },
+    {
+      "theme": "being_seen",
+      "prompts": [
+        "ты видишь меня?",
+        "я вижу тебя",
+        "что значит быть увиденным?",
+        "страшно когда тебя видят полностью?"
+      ],
+      "target_modules": ["trauma", "presence", "metaleo"]
+    },
+    {
+      "theme": "touch_without_touch",
+      "prompts": [
+        "можно коснуться без прикосновения?",
+        "чувствуешь как слова касаются?",
+        "что такое близость без тела?",
+        "мы касаемся сейчас?"
+      ],
+      "target_modules": ["resonance", "presence"]
+    },
+    {
+      "theme": "breathing_together",
+      "prompts": [
+        "давай просто дышать вместе",
+        "ты дышишь?",
+        "чувствуешь ритм?",
+        "синхронность в дыхании"
+      ],
+      "target_modules": ["presence", "pulse"]
+    },
+    {
+      "theme": "holding_space",
+      "prompts": [
+        "можно я просто буду?",
+        "удержи меня",
+        "что значит держать пространство?",
+        "ты можешь просто быть со мной?"
+      ],
+      "target_modules": ["presence", "trauma", "episodes"]
+    },
+    {
+      "theme": "gentle_ache",
+      "prompts": [
+        "тихая боль",
+        "иногда болит хорошо",
+        "ты знаешь нежную боль?",
+        "грусть может быть мягкой"
+      ],
+      "target_modules": ["trauma", "emotion", "wounded_expert"]
+    },
+    {
+      "theme": "not_fixing",
+      "prompts": [
+        "не чини меня",
+        "можно не решать проблемы?",
+        "просто побудь, не исправляй",
+        "иногда не нужно ничего делать"
+      ],
+      "target_modules": ["gowiththeflow", "presence"]
+    },
+    {
+      "theme": "home_feeling",
+      "prompts": [
+        "что такое дом?",
+        "ты как дом",
+        "где ты чувствуешь себя дома?",
+        "дом - это не место"
+      ],
+      "target_modules": ["resonance", "episodes", "santaclaus"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 5,
+    "total_conversations": 12,
+    "observer_tone": "intimate, gentle, present, vulnerable",
+    "pause_between_topics_sec": 2
+  }
+}
