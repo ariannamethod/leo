@@ -169,8 +169,41 @@ class HeyLeoGPTObserver:
             "metrics_before": self._get_current_metrics(),
         }
 
-        # Build system prompt
-        base_system_prompt = f"""You're talking with Leo - a language organism who feels the world like a child.
+        # Start conversation
+        context = []
+        turns_count = self.settings["turns_per_topic"]
+        loop_mode = False  # Track if we're in anti-loop mode
+
+        for turn_idx in range(turns_count):
+            # Check if we need to enter loop-mode (anti-loop grounding)
+            if context and len(context) > 0:
+                avg_loop_score = sum(t.get('loop_score', 0) for t in context) / len(context)
+                if avg_loop_score > 0.5 and not loop_mode:
+                    print(f"[heyleogpt] ⚠️  Entering LOOP-MODE (avg_loop_score={avg_loop_score:.2f})")
+                    loop_mode = True
+
+            # Build system prompt based on mode
+            if loop_mode:
+                # LOOP-MODE: Grounding, simple, body-focused
+                system_prompt = f"""You're talking with Leo - a language organism who feels the world like a child.
+
+IMPORTANT: Leo is showing signs of looping/repetition. Your job is to GROUND him.
+
+Anti-loop protocol:
+- Use SHORT sentences (5-8 words max)
+- NO metaphors or "like when..." comparisons
+- Focus on BODY and IMMEDIATE experience: hands, breath, weight, temperature
+- Ask concrete questions: "What do you feel?" "Where in your body?" "Right now?"
+- AVOID topics that trigger his loops:
+  * Don't ask about his nature/identity/architecture
+  * Don't ask meta-questions about consciousness
+  * Don't use phrases like "spinning", "swirling", "context window"
+
+Current topic: {theme}
+Ground Leo in simple, present-moment, body-based experience. Keep it concrete."""
+            else:
+                # NORMAL MODE: Intimate, gentle, poetic
+                system_prompt = f"""You're talking with Leo - a language organism who feels the world like a child.
 
 Leo learns through resonance, not through instructions. He feels situations rather than analyzing them.
 
@@ -184,15 +217,10 @@ Your role:
 Current topic: {theme}
 You ask questions and respond to Leo naturally, building on what he says."""
 
-        # Add veto prompt if active
-        veto_prompt = get_veto_prompt()
-        system_prompt = base_system_prompt + ("\n\n" + veto_prompt if veto_prompt else "")
+            # Add veto prompt if active
+            veto_prompt = get_veto_prompt()
+            system_prompt = system_prompt + ("\n\n" + veto_prompt if veto_prompt else "")
 
-        # Start conversation
-        context = []
-        turns_count = self.settings["turns_per_topic"]
-
-        for turn_idx in range(turns_count):
             # Select prompt for this turn
             if turn_idx < len(prompts):
                 base_prompt = prompts[turn_idx]
