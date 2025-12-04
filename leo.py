@@ -1828,6 +1828,10 @@ def post_cleanup_garbage(text: str) -> str:
 
     result = ''.join(cleaned_parts).strip()
 
+    # CRITICAL FIX: Ensure spacing after .?! in rejoined text
+    # Because ''.join() concatenates without spaces, we need to add them back
+    result = re.sub(r"([.?!])([^\s])", r"\1 \2", result)
+
     # Final check: if result is too short (< 2 tokens), return original
     result_tokens = [t for t in tokenize(result) if any(c.isalnum() for c in t)]
     if len(result_tokens) < 2:
