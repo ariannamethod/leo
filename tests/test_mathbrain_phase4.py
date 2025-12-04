@@ -50,7 +50,7 @@ def phase4(temp_db):
 # MATH HELPERS
 # ============================================================================
 
-class TestCosingSimilarity:
+class TestCosineSimilarity:
     """Tests for cosine_similarity function."""
 
     def test_identical_vectors(self):

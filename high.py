@@ -279,8 +279,7 @@ class HighMathEngine:
             if i < len(sentence_parts) - 1:
                 # Анализируем длину фраз и контекст
                 current_length = len(part.split())
-                next_length = len(sentence_parts[i + 1].split())
-                
+
                 # Вероятность запятой на основе длины
                 comma_probability = 1 / (1 + math.exp(-(current_length - 3)))
                 
