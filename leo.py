@@ -120,11 +120,10 @@ except ImportError:
 
 # Safe import: santaclaus module is optional
 try:
-    from santaclaus import SantaKlaus, SantaContext
+    from santaclaus import SantaKlaus
     SANTACLAUS_AVAILABLE = True
 except ImportError:
     SantaKlaus = None  # type: ignore
-    SantaContext = None  # type: ignore
     SANTACLAUS_AVAILABLE = False
 
 # Safe import: episodes module is optional
