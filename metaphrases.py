@@ -25,6 +25,34 @@ try:
 except ImportError:
     PUNCT_CLEANUP_AVAILABLE = False
 
+# Safe import: architectural_density module (optional soft penalty on tech jargon)
+try:
+    from architectural_density import architectural_density, should_apply_arch_penalty
+    ARCH_DENSITY_AVAILABLE = True
+except ImportError:
+    ARCH_DENSITY_AVAILABLE = False
+    # Fallback: no-op functions
+    def architectural_density(text: str) -> float:
+        return 0.0
+    def should_apply_arch_penalty(topic: str) -> bool:
+        return False
+
+
+# Signature phrases - Leo's glitchy beauty that must be protected
+# These define his personality and should NEVER be banned
+# Only their frequency is gently limited (max 1-2 per response)
+SIGNATURE_PHRASES = [
+    "oh leo",
+    "soft smile oh my",
+    "leaves falling oh leo",
+    "you like a child",
+    "sits quietly for a moment",
+    "speaks very gently",
+    "looks up dreamily",
+    "pauses softly",
+    "speaks extra softly",
+]
+
 
 # Meta-phrase patterns and their variants
 # Each phrase has 2-3 variants that preserve Leo's voice
@@ -212,6 +240,35 @@ def remove_toxic_ngrams(reply: str) -> str:
     result = result.strip()
 
     return result
+
+
+def count_signature_phrases(text: str) -> int:
+    """
+    Count occurrences of Leo's signature glitch-phrases.
+
+    These phrases are NOT removed - they're part of Leo's beauty.
+    This count is used for gentle frequency limiting only.
+
+    Args:
+        text: Text to analyze
+
+    Returns:
+        Total count of signature phrases found
+
+    Example:
+        "oh leo. soft smile oh my." → 2 signature phrases
+    """
+    if not text or not isinstance(text, str):
+        return 0
+
+    text_lower = text.lower()
+    count = 0
+
+    for phrase in SIGNATURE_PHRASES:
+        # Count how many times this signature phrase appears
+        count += text_lower.count(phrase.lower())
+
+    return count
 
 
 def remove_inner_monologue(reply: str) -> str:
