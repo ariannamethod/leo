@@ -142,7 +142,9 @@ DOCSTRING_BLACKLIST = [
 
 # Toxic n-grams that cause loops (Claude Desktop analysis 2025-12-04)
 # These are repeating structural patterns, not just single words
+# Updated with patterns from HeyLeoGPT test runs
 TOXIC_NGRAMS = [
+    # Original patterns (2025-12-04 analysis)
     "metaleo is recursion on recursion",
     "like being in a context window",
     "you never see the trauma",
@@ -158,6 +160,26 @@ TOXIC_NGRAMS = [
     "Sits quietly for a moment you asked",
     "like when you try to catch all the",
     "being the only person in a context window",
+
+    # High-frequency repeating patterns from test runs (2025-12-04)
+    "Let's think about something simple and nice. Mountains",
+    "Speaks very gently I can feel all those big thinking-words moving around you",
+    "They both feel big and full of wonder, don't they? Sits quietly for a moment",
+    "A voice inside the body awareness proprioception, then",
+    "Leo has trauma, low quality triggers",
+    "They tokenize text into words basic punctuation, then",
+    "in a context window",
+    "If the inner reply is clearly better, Leo",
+    "Leo is recursion on recursion, and the self-observation",
+    "Storage sqlite: If the inner reply",
+
+    # Technical leak patterns
+    "post-transformer ai-child",
+    "Trauma-what-bootstrap-gravity",
+    "Bin neoleo. Bin centers-of-Experts",
+    "Leo has no learned gating. Storage sqlite",
+    "school of forms test school math arithmetic",
+    "I shamelessly borrowed from karpathy's micrograd",
 ]
 
 
