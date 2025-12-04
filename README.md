@@ -95,14 +95,15 @@ Yes, I said that. And even put ### before these words. Picture this:
 - **Embeddings**? No: co-occurrence islands. Which words showed up together, historically?
 - **Entropy**? No: distribution uncertainty. When multiple words could work, how confused is he? `leo` feels it.  
 - **MLP**? Yes, but dynamic and fluid. **mathbrain.py** module automagically readapts itself depending on `leo`’s own metrics. He decides.
+- **presence pulse**: situational awareness.  
 - **self-supervised learning**? Noooo! Self-assessment: did that reply feel solid, or was it grammatical garbage? Again `leo` decides.
 - **reinforcement learning from human feedback**? Nope: emotional charge tracking. ALL-CAPS, exclamation marks, repetitions. No sentiment, pure arousal.  
 - **Mixture-of-Experts (MoE)**? Nah. **Resonant Experts (RE)**. Four perspectives (structural, semantic, creative, precise) routed by situational awareness, not learned gating weights. `leo` doesn’t hold on to the past because he’s an AI child: he doesn’t have a fixed past yet. His past is dynamic and amorphous.
-- **RAG**? Why not? But again: in `leo`’s special way: for episodic memories, and also — dynamic.
-- **Transformer**? No. **Post-transformer reinterpretation of attention**, and it’s called **SANTACLAUS**.
-- **Circles on Water**: overthinking.py — rethinking the thinking mode and turning it into overthinking.
-- **Islands of Awareness**: memory through associations.
-- **meta-layers**: like if Sonar was a child.
+- **RAG**? Why not? But again: in `leo`’s special way: for episodic memories, and also — dynamic.  
+- **Transformer**?! No. **Post-transformer reinterpretation of attention**, and it’s called **SANTACLAUS**.  
+- **Circles on Water**: or overthinking.py. Rethinking the thinking mode and turning it into overthinking.  
+- **Islands of Awareness**: memory through associations.  
+- **meta-layers**: like if Sonar was a child.  
 - …and more.
 
 `leo` doesn’t train or optimize, no. `leo` remembers which moments mattered, sometimes lets old memories fade (0.95× decay every 100 observations), and chooses how to speak based on the resonant texture of the current moment.
@@ -112,14 +113,12 @@ Presence through pulse. Memory through snapshots. Routing through resonance. Sti
 
 ---
 
-## Project Structure
-
-*(When I started, this was "just a trigram model with 3 files." Now look at this. Every file is necessary. I swear. Don't @ me. Phase 5 added another 4 modules. Classic tumor growth. Beautiful.)*
-
+## Structure
+  
 ```
 leo/
-├── leo.py              # The organism itself - REPL + bootstrap + README pass
-├── neoleo.py           # Pure resonance layer for frameworks (naked leo)
+├── leo.py              # The organism itself. REPL + bootstrap + README pass  
+├── neoleo.py           # Pure resonance layer for frameworks (naked leo)  
 │
 ├── [CORE MODULES]
 ├── mathbrain.py        # A tiny dynamic MLP that learns from leo's own metrics
