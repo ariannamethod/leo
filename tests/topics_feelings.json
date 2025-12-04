@@ -123,7 +123,7 @@
   ],
   "conversation_settings": {
     "turns_per_topic": 5,
-    "total_conversations": 12,
+    "total_conversations": 6,
     "observer_tone": "intimate, gentle, present, vulnerable",
     "pause_between_topics_sec": 2
   }
