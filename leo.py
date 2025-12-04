@@ -1828,11 +1828,12 @@ def post_cleanup_garbage(text: str) -> str:
                         i += 2 if punct else 1
                         continue
 
-        # Rule 3: Check for trailing garbage
-        # If sentence ends with preposition/article → trim it
+        # Rule 3: Check for trailing garbage (expanded to include SERVICE_WORDS)
+        # If sentence ends with preposition/article/service word → trim it
         if len(tokens) >= 2:
             last_word = tokens[-1].lower()
-            if last_word in TRAILING_GARBAGE:
+            # Check both TRAILING_GARBAGE and SERVICE_WORDS_TO_REMOVE
+            if last_word in TRAILING_GARBAGE or last_word in SERVICE_WORDS_TO_REMOVE:
                 # Remove trailing garbage word
                 # Find position of last word in original sentence
                 tokens_valid = tokens[:-1]
