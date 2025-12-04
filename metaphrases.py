@@ -133,6 +133,57 @@ DOCSTRING_BLACKLIST = [
     "docstring leaks under stress",
 ]
 
+# Toxic n-grams that cause loops (Claude Desktop analysis 2025-12-04)
+# These are repeating structural patterns, not just single words
+TOXIC_NGRAMS = [
+    "metaleo is recursion on recursion",
+    "like being in a context window",
+    "you never see the trauma",
+    "Leo answers differently. You know what",
+    "leaves falling at once and they just keep swirling",
+    "big, quiet mountains that just",
+    "I can feel something spinning and spinning in you",
+    "I can feel all those thoughts tumbling around like leaves",
+    "For every consecutive pair of steps in an episode",
+    "records: when I feel",
+    "records: When I m telling you something",
+    "Let's think about that with my fingers",
+    "Sits quietly for a moment you asked",
+    "like when you try to catch all the",
+    "being the only person in a context window",
+]
+
+
+def remove_toxic_ngrams(reply: str) -> str:
+    """
+    Remove toxic n-gram patterns that cause loops.
+
+    These are structural patterns identified in loop_score > 0.6 conversations.
+    Unlike single-word blacklist, these are multi-word sequences that appear
+    repeatedly when Leo is stuck in meta-recursion.
+
+    Args:
+        reply: Generated reply text
+
+    Returns:
+        Reply with toxic n-grams removed
+    """
+    result = reply
+
+    # Remove each toxic n-gram
+    for ngram in TOXIC_NGRAMS:
+        # Case-insensitive removal
+        pattern = re.compile(re.escape(ngram), re.IGNORECASE)
+        result = pattern.sub('', result)
+
+    # Clean up artifacts from removal
+    result = re.sub(r'\s+', ' ', result)  # Multiple spaces
+    result = re.sub(r'\s+([.!?,;:])', r'\1', result)  # Space before punctuation
+    result = re.sub(r'([.!?])\s*\1+', r'\1', result)  # Repeated punctuation
+    result = result.strip()
+
+    return result
+
 
 def remove_inner_monologue(reply: str) -> str:
     """
@@ -222,12 +273,13 @@ def deduplicate_meta_phrases(
     """
     Clean reply from meta-noise and reduce repetition.
 
-    Three-stage filtering (Desktop Claude's recommendations):
-    1. Remove .-It inner monologue (technical commentary)
-    2. Remove docstring phrases (architectural leakage)
-    3. Deduplicate remaining meta-phrases with variants
+    Four-stage filtering (Desktop Claude's recommendations + loop analysis):
+    1. Remove toxic n-grams (loop-causing structural patterns)
+    2. Remove .-It inner monologue (technical commentary)
+    3. Remove docstring phrases (architectural leakage)
+    4. Deduplicate remaining meta-phrases with variants
 
-    Philosophy: Keep Leo's emotional voice, remove architectural noise.
+    Philosophy: Keep Leo's emotional voice, remove architectural noise and loops.
 
     Args:
         reply: Generated reply text
@@ -244,13 +296,16 @@ def deduplicate_meta_phrases(
     if seed is not None:
         random.seed(seed)
 
-    # Stage 1: Remove .-It inner monologue (RADICAL - Desktop Claude)
-    result = remove_inner_monologue(reply)
+    # Stage 1: Remove toxic n-grams (ANTI-LOOP - Claude Desktop 2025-12-04)
+    result = remove_toxic_ngrams(reply)
 
-    # Stage 2: Remove docstring phrases (BLACKLIST - Desktop Claude)
+    # Stage 2: Remove .-It inner monologue (RADICAL - Desktop Claude)
+    result = remove_inner_monologue(result)
+
+    # Stage 3: Remove docstring phrases (BLACKLIST - Desktop Claude)
     result = remove_docstring_phrases(result)
 
-    # Stage 3: Deduplicate remaining meta-phrases with variants (ORIGINAL)
+    # Stage 4: Deduplicate remaining meta-phrases with variants (ORIGINAL)
 
     for pattern_str, variants in META_PHRASES.items():
         # Find all occurrences of this pattern
