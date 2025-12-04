@@ -1049,9 +1049,20 @@ def fix_punctuation(text: str) -> str:
     # 3) Collapse repeated punctuation
     text = re.sub(r"([!?]){2,}", r"\1", text)
     text = re.sub(r"\.{2,}", ".", text)
-    text = re.sub(r",\.", ".", text)  # ",." → "."
-    text = re.sub(r",;", ";", text)   # ",;" → ";"
-    text = re.sub(r"\.,", ".", text)  # ".," → "."
+
+    # Clean up punctuation garbage combinations
+    text = re.sub(r",\.", ".", text)   # ",." → "."
+    text = re.sub(r",;", ";", text)    # ",;" → ";"
+    text = re.sub(r"\.,", ".", text)   # ".," → "."
+    text = re.sub(r",\?+", "?", text)  # ",?" / ",??" → "?"
+    text = re.sub(r"\?,+", "?", text)  # "?," → "?"
+    text = re.sub(r"\.\?", "?", text)  # ".?" → "?"
+    text = re.sub(r"\?\.+", "?", text) # "?." → "?"
+    text = re.sub(r",!+", "!", text)   # ",!" → "!"
+    text = re.sub(r"!,+", "!", text)   # "!," → "!"
+    text = re.sub(r"\.!", "!", text)   # ".!" → "!"
+    text = re.sub(r"!\.", "!", text)   # "!." → "!"
+
     # Collapse spaced duplicates: ". ." → ".", "? ?" → "?", "! !" → "!"
     text = re.sub(r"([.!?])\s+\1", r"\1", text)
 
