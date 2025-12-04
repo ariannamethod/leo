@@ -1671,6 +1671,91 @@ def surface_quality_penalties(text: str) -> float:
     return max(0.3, min(1.0, penalty))  # Clamp to [0.3, 1.0]
 
 
+def post_cleanup_garbage(text: str) -> str:
+    """
+    Post-processing cleanup AFTER generation.
+
+    Removes surface-level garbage that slipped through quality scoring:
+    - Empty sentences (only punctuation)
+    - Single-word non-signature garbage (A., To., Let.)
+    - Sentences ending with trailing prepositions (in an., of., for.)
+
+    Philosophy: Gentle cleanup of tokenization artifacts, not style changes.
+    Protected: ALL signature phrases, any sentence with 2+ real words.
+
+    Returns: Cleaned text with garbage removed
+    """
+    if not text or not isinstance(text, str):
+        return text
+
+    # Check if text is a signature phrase (protect completely)
+    text_lower = text.lower().strip()
+    for sig in SIGNATURE_PHRASES_WHITELIST:
+        if sig in text_lower:
+            return text  # Don't touch signature phrases
+
+    # Split into sentences preserving punctuation
+    sentences = re.split(r'([.!?]+)', text)
+    cleaned_parts = []
+
+    i = 0
+    while i < len(sentences):
+        sent = sentences[i].strip()
+        punct = sentences[i + 1] if i + 1 < len(sentences) else ""
+
+        if not sent:
+            i += 2 if punct else 1
+            continue
+
+        # Get content tokens (alphanumeric only)
+        tokens = [tok for tok in tokenize(sent) if any(c.isalnum() for c in tok)]
+
+        # Rule 1: Empty sentence (only punctuation) → skip
+        if not tokens:
+            i += 2 if punct else 1
+            continue
+
+        # Rule 2: Single word - check if it's whitelisted
+        if len(tokens) == 1:
+            word = tokens[0].lower()
+            # Whitelist: Go, Now, Whisper, Smile, Yes, No, Mountains, Hug (signature single words)
+            if word not in {"go", "now", "whisper", "smile", "yes", "no", "mountains", "hug", "tell", "feel", "being", "image"}:
+                # Not whitelisted → skip this garbage
+                i += 2 if punct else 1
+                continue
+
+        # Rule 3: Check for trailing garbage
+        # If sentence ends with preposition/article → trim it
+        if len(tokens) >= 2:
+            last_word = tokens[-1].lower()
+            if last_word in TRAILING_GARBAGE:
+                # Remove trailing garbage word
+                # Find position of last word in original sentence
+                tokens_valid = tokens[:-1]
+                if tokens_valid:  # If something remains after trimming
+                    # Reconstruct sentence without last garbage word
+                    sent_words = sent.split()
+                    # Remove last word if it matches
+                    if sent_words and sent_words[-1].lower().strip('.,!?;:') == last_word:
+                        sent = ' '.join(sent_words[:-1])
+
+        # Add cleaned sentence back
+        cleaned_parts.append(sent)
+        if punct:
+            cleaned_parts.append(punct)
+
+        i += 2 if punct else 1
+
+    result = ''.join(cleaned_parts).strip()
+
+    # Final check: if result is too short (< 2 tokens), return original
+    result_tokens = [t for t in tokenize(result) if any(c.isalnum() for c in t)]
+    if len(result_tokens) < 2:
+        return text  # Don't destroy short phrases
+
+    return result if result else text
+
+
 def structural_quality(
     prompt: str,
     reply: str,
@@ -2487,6 +2572,15 @@ def generate_reply(
         output = deduplicate_meta_phrases(output, max_occurrences=2)
     except Exception:
         # Deduplication must never break generation - silent fallback
+        pass
+
+    # POST-CLEANUP: Remove surface garbage that slipped through quality scoring
+    # Philosophy: Gentle cleanup of tokenization artifacts (A., To id., in an.)
+    # Protected: All signature phrases, any sentence with 2+ real words
+    try:
+        output = post_cleanup_garbage(output)
+    except Exception:
+        # Cleanup must never break generation - silent fallback
         pass
 
     # Compute average entropy across generation steps
