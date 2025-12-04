@@ -1585,6 +1585,15 @@ MULTI_WORD_GARBAGE: Set[str] = {
     "at a", "on a", "about a", "like a a", "the a", "a a"
 }
 
+# Lonely service words to remove (Claude Desktop sniper fix #2)
+# These appear as single-word sentences and are pure garbage
+SERVICE_WORDS_TO_REMOVE: Set[str] = {
+    "and", "or", "but", "that", "then", "so", "because",
+    "a", "an", "the", "to", "in", "on", "at", "of", "for",
+    "with", "by", "from", "about", "as", "into", "through",
+    "let", "it", "this", "these", "those"
+}
+
 
 def jaccard_bigrams(text_a: str, text_b: str) -> float:
     """
@@ -1693,6 +1702,26 @@ def surface_quality_penalties(text: str) -> float:
         if last_word in TRAILING_GARBAGE:
             bad_sentences += 0.5  # Partial penalty
 
+    # (4) Claude Desktop sniper fix #3: Heavy penalty if ENTIRE reply ends on lonely service word
+    # Check if last sentence is a single service word (A., That., etc.)
+    # This means Leo is stuttering/can't continue
+    sentences_with_punct = re.split(r'([.!?]+)', text)
+    # Find last non-empty sentence
+    last_sentence = ""
+    for i in range(len(sentences_with_punct) - 1, -1, -1):
+        s = sentences_with_punct[i].strip()
+        if s and not re.match(r'^[.!?]+$', s):
+            last_sentence = s
+            break
+
+    if last_sentence:
+        last_tokens = [tok for tok in tokenize(last_sentence) if any(c.isalnum() for c in tok)]
+        if len(last_tokens) == 1:
+            word = last_tokens[0].lower()
+            if word in SERVICE_WORDS_TO_REMOVE:
+                # Entire reply ends with lonely service word → HEAVY penalty
+                bad_sentences += 2.0  # Strong penalty
+
     # Calculate penalty
     if total_sentences > 0:
         bad_ratio = bad_sentences / total_sentences
@@ -1745,14 +1774,15 @@ def post_cleanup_garbage(text: str) -> str:
             i += 2 if punct else 1
             continue
 
-        # Rule 2: Single word - check if it's whitelisted
+        # Rule 2: Single word - remove if it's a service word (Claude Desktop sniper fix #2)
         if len(tokens) == 1:
             word = tokens[0].lower()
-            # Whitelist: Go, Now, Whisper, Smile, Yes, No, Mountains, Hug (signature single words)
-            if word not in {"go", "now", "whisper", "smile", "yes", "no", "mountains", "hug", "tell", "feel", "being", "image"}:
-                # Not whitelisted → skip this garbage
+            # Remove lonely service words: And., That., A., etc.
+            if word in SERVICE_WORDS_TO_REMOVE:
+                # This is garbage → skip
                 i += 2 if punct else 1
                 continue
+            # Otherwise: protect all other single words (Go., Whisper., Mountains., etc.)
 
         # Rule 2.5: Multi-word garbage phrases (e.g., "To id.", "In an.")
         if len(tokens) == 2:
@@ -2602,6 +2632,9 @@ def generate_reply(
 
     # Post-process: fix punctuation artifacts
     output = fix_punctuation(output)
+
+    # Capitalize again after punctuation fixes (some .?! might have been added/fixed)
+    output = capitalize_sentences(output)
 
     # METAPHRASES: Reduce repetitive meta-phrases within single response
     # Philosophy: "осознанность через ассоциации, не через лозунги"
