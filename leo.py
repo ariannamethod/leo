@@ -2601,6 +2601,32 @@ class LeoField:
                 # Silent fail — Phase 4 must never break Leo
                 phase4_suggestions = None
 
+        # PHASE 5: Stories - Get suggestions from full trajectory patterns + h2o scenarios
+        phase5_suggestions: Optional[List[str]] = None
+        if self.storybook is not None and PHASE5_AVAILABLE and suggest_next_islands_phase5 is not None:
+            try:
+                # Reuse metrics from Phase 4
+                if current_metrics and active_islands_now:
+                    phase5_suggestions = suggest_next_islands_phase5(
+                        metrics_now=current_metrics,
+                        active_islands_now=active_islands_now,
+                        storybook=self.storybook,
+                        scenario_library=self.scenario_library,
+                        shared_field=self.shared_field,
+                        min_similarity=0.6,
+                        temperature=0.7,
+                    )
+            except Exception:
+                # Silent fail — Phase 5 must never break Leo
+                phase5_suggestions = None
+
+        # Combine Phase 4 + Phase 5 suggestions (Phase 5 takes priority)
+        combined_suggestions = None
+        if phase5_suggestions:
+            combined_suggestions = phase5_suggestions
+        elif phase4_suggestions:
+            combined_suggestions = phase4_suggestions
+
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
             self.bigrams,
@@ -2621,7 +2647,7 @@ class LeoField:
             trauma_state=self._trauma_state,
             token_boosts=token_boosts,
             mathbrain=self._math_brain,  # Pass mathbrain for Phase 2 influence
-            phase4_suggestions=phase4_suggestions,  # Pass Phase 4 suggestions for bridge learning
+            phase4_suggestions=combined_suggestions,  # Pass Phase 4+5 combined suggestions
         )
 
         # Store presence metrics
