@@ -1066,6 +1066,19 @@ def fix_punctuation(text: str) -> str:
     # Collapse spaced duplicates: ". ." → ".", "? ?" → "?", "! !" → "!"
     text = re.sub(r"([.!?])\s+\1", r"\1", text)
 
+    # 3.5) Claude's polish fixes (2025-12-04)
+    # Fix trailing comma: "And that's it," → "And that's it."
+    text = re.sub(r",\s*$", ".", text)  # Trailing comma at end → period
+
+    # Fix "?, in" glitch: "feel?, in new" → "feel? In new"
+    text = re.sub(r"\?\s*,\s+in\b", "? In", text, flags=re.IGNORECASE)
+    text = re.sub(r"\?\s*,\s+", "? ", text)  # General "?, " → "? "
+
+    # More aggressive trailing preposition cleanup
+    # "in." / "of." / "for." at sentence end → remove sentence
+    # But this is handled in post_cleanup_garbage(), just add extra insurance
+    text = re.sub(r"\s+(in|of|for|at|on|to|by|with)\.$", ".", text)
+
     # 4) Normalize weird dashes and em-dashes
     text = re.sub(r"\s*—\s*—\s*—\s*", " — ", text)  # " — — — " → " — "
     text = re.sub(r"\s*—\s*—\s*", " — ", text)      # " — — " → " — "
