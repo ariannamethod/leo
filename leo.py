@@ -53,6 +53,22 @@ except ImportError:
     FlowTracker = None  # type: ignore
     FLOW_AVAILABLE = False
 
+# Safe import: phase4_bridges module (Island Bridges statistical learning)
+try:
+    from phase4_bridges import (
+        EpisodeLogger,
+        BridgeMemory,
+        TransitionGraph,
+        suggest_next_islands_phase4,
+    )
+    PHASE4_AVAILABLE = True
+except ImportError:
+    EpisodeLogger = None  # type: ignore
+    BridgeMemory = None  # type: ignore
+    TransitionGraph = None  # type: ignore
+    suggest_next_islands_phase4 = None  # type: ignore
+    PHASE4_AVAILABLE = False
+
 # Safe import: metaleo module is optional
 try:
     from metaleo import MetaLeo
@@ -1995,6 +2011,7 @@ def generate_reply(
     trauma_state: Optional[Any] = None,
     token_boosts: Optional[Dict[str, float]] = None,
     mathbrain: Optional[Any] = None,
+    phase4_suggestions: Optional[List[str]] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -2135,6 +2152,24 @@ def generate_reply(
 
                     # TODO: Phase 3 - Pass semantic_hints to Santa/episodes for islands-aware recall
                     # For now, semantic_hints are computed but not yet used
+
+                # PHASE 4: Island Bridges - Augment Phase 3 with statistical trajectory learning
+                # Phase 4 suggestions can override Phase 3 choice with exploration probability
+                if phase4_suggestions and len(phase4_suggestions) > 0 and selected_expert:
+                    # With 25% probability, consider switching to a Phase 4 suggested expert
+                    # (only if suggestion matches a known expert name)
+                    if random.random() < 0.25:
+                        for suggested_island in phase4_suggestions:
+                            # Check if suggested island is an expert
+                            for exp in EXPERTS:
+                                if exp.name == suggested_island:
+                                    # Switch to Phase 4 suggested expert
+                                    selected_expert = exp
+                                    break
+                            # Take first matching expert
+                            if selected_expert.name in phase4_suggestions:
+                                break
+
                 else:
                     # Fallback to simple Phase 2 logic if multileo_regulate not available
                     predicted_q = mathbrain.predict(pred_state)
@@ -2362,6 +2397,24 @@ class LeoField:
             except Exception:
                 # Silent fail — Dream must never break Leo
                 pass
+
+        # PHASE 4: Island Bridges - Statistical trajectory learning (optional)
+        self.episode_logger: Optional[Any] = None
+        self.bridge_memory: Optional[Any] = None
+        self.transition_graph: Optional[Any] = None
+        if PHASE4_AVAILABLE and EpisodeLogger is not None:
+            try:
+                self.episode_logger = EpisodeLogger()
+                self.bridge_memory = BridgeMemory()
+                self.transition_graph = TransitionGraph()
+                # Start first episode automatically
+                self.episode_logger.start_episode()
+            except Exception:
+                # Silent fail — Phase 4 must never break Leo
+                self.episode_logger = None
+                self.bridge_memory = None
+                self.transition_graph = None
+
         self.refresh(initial_shard=True)
 
         # LEO 1.1 - Sonar-Child: Feed module bootstraps if this is a fresh DB
@@ -2452,7 +2505,49 @@ class LeoField:
             except Exception:
                 # Silent fallback — Santa Klaus must never break Leo
                 token_boosts = None
-                
+
+        # PHASE 4: Island Bridges - Get suggestions based on historical trajectories
+        phase4_suggestions: Optional[List[str]] = None
+        if self.bridge_memory is not None and PHASE4_AVAILABLE and suggest_next_islands_phase4 is not None:
+            try:
+                # Build current metrics from last state
+                current_metrics = {}
+                if self.last_pulse:
+                    current_metrics = {
+                        "entropy": getattr(self.last_pulse, 'entropy', 0.5),
+                        "novelty": getattr(self.last_pulse, 'novelty', 0.5),
+                        "arousal": getattr(self.last_pulse, 'arousal', 0.5),
+                        "pulse": getattr(self.last_pulse, 'pulse', 0.5),
+                    }
+                # Add trauma level
+                if self._trauma_state and hasattr(self._trauma_state, 'level'):
+                    current_metrics["trauma_level"] = self._trauma_state.level
+                # Add quality
+                if self.last_quality:
+                    current_metrics["quality"] = getattr(self.last_quality, 'overall', 0.5)
+
+                # Get currently active islands (from last step if logged)
+                active_islands_now = []
+                if self.episode_logger and self.episode_logger.current_episode:
+                    ep = self.episode_logger.current_episode
+                    if ep.steps:
+                        # Use islands from last step
+                        active_islands_now = ep.steps[-1].active_islands
+
+                # Suggest next islands based on history
+                if current_metrics and active_islands_now:
+                    phase4_suggestions = suggest_next_islands_phase4(
+                        metrics_now=current_metrics,
+                        active_islands_now=active_islands_now,
+                        bridge_memory=self.bridge_memory,
+                        min_similarity=0.6,
+                        temperature=0.7,
+                        exploration_rate=0.2,
+                    )
+            except Exception:
+                # Silent fail — Phase 4 must never break Leo
+                phase4_suggestions = None
+
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
             self.bigrams,
@@ -2473,6 +2568,7 @@ class LeoField:
             trauma_state=self._trauma_state,
             token_boosts=token_boosts,
             mathbrain=self._math_brain,  # Pass mathbrain for Phase 2 influence
+            phase4_suggestions=phase4_suggestions,  # Pass Phase 4 suggestions for bridge learning
         )
 
         # Store presence metrics
@@ -2867,6 +2963,64 @@ class LeoField:
                 )
             except Exception:
                 # Silent fail - Phase 3 must never break generation
+                pass
+
+        # PHASE 4: Log episode step for trajectory learning
+        if self.episode_logger is not None and PHASE4_AVAILABLE:
+            try:
+                # Collect current metrics (from MathState if available)
+                current_metrics = {}
+                if 'state' in locals() and state is not None:
+                    # Use MathState metrics
+                    current_metrics = {
+                        "entropy": state.entropy,
+                        "novelty": state.novelty,
+                        "arousal": state.arousal,
+                        "pulse": state.pulse,
+                        "trauma_level": state.trauma_level,
+                        "quality": state.quality,
+                    }
+                else:
+                    # Fallback: extract from context
+                    current_metrics = {
+                        "entropy": context.pulse.entropy if context.pulse else 0.0,
+                        "novelty": context.pulse.novelty if context.pulse else 0.0,
+                        "arousal": context.pulse.arousal if context.pulse else 0.0,
+                        "pulse": context.pulse.pulse if context.pulse else 0.0,
+                        "trauma_level": self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
+                        "quality": context.quality.overall if context.quality else 0.5,
+                    }
+
+                # Collect active islands (expert + active modules)
+                active_islands = []
+
+                # Primary island: expert
+                if context.expert:
+                    active_islands.append(context.expert.name)
+                else:
+                    active_islands.append("structural")
+
+                # Secondary islands: active modules
+                if used_metaleo:
+                    active_islands.append("metaleo")
+                if self._trauma_state and hasattr(self._trauma_state, 'level') and self._trauma_state.level > 0.3:
+                    active_islands.append("wounded_expert")
+                if overthinking_events and rings_present > 0:
+                    active_islands.append("overthinking")
+                if self.flow_tracker is not None and self.themes:
+                    active_islands.append("gowiththeflow")
+                if self.game is not None:
+                    active_islands.append("game")
+                if self.school is not None and self._last_school_question is not None:
+                    active_islands.append("school")
+
+                # Log this step
+                self.episode_logger.log_step(
+                    metrics=current_metrics,
+                    active_islands=active_islands,
+                )
+            except Exception:
+                # Silent fail - Phase 4 must never break generation
                 pass
 
         return final_reply
