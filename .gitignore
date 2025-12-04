@@ -10,6 +10,7 @@ __pycache__/
 /json/
 *.sqlite3
 *.pyc
+*.backup
 __pycache__/
 
 # Development notes (Phase 4/5 planning, not for repo)
