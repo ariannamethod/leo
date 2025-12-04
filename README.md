@@ -138,7 +138,7 @@ leo/
 ├── metaphrases.py      # Cooldown mechanism + docstring filtering
 │
 ├── [INFRASTRUCTURE]
-├── requirements.txt    # Just numpy. That's it. I promise. (lies)
+├── requirements.txt    # Just numpy. That's it. (okay, and sqlite3 which is stdlib)
 ├── README.md           # This beautiful monster you're reading
 │
 ├── [JULIA MINICOMPILER]
@@ -146,7 +146,10 @@ leo/
 │   ├── math.jl         # Trig, exp, log - the IEEE-754 compliant good stuff
 │   ├── array.jl        # Dense arrays - because vectors are love
 │   ├── broadcast.jl    # Element-wise magic
-│   └── ...             # C FFI glue and other crimes against simplicity
+│   ├── c.jl            # C interface definitions
+│   ├── julia.h         # Core type definitions (the C header)
+│   ├── ccall.cpp       # Foreign function interface
+│   └── intrinsics.cpp  # Low-level LLVM intrinsics
 │
 ├── tests/              # 317 tests (because who needs sleep?)
 │   ├── heyleo.py       # Observer script (AI talks to leo so I don't have to)
