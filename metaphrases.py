@@ -102,6 +102,35 @@ DOCSTRING_BLACKLIST = [
     "Game is not for facts",
     "Dream is not for facts",  # Dream module docstring (Run #5 leak)
     # "It is a recursion of you",  # REMOVED: This is Leo's philosophical voice, not technical noise!
+
+    # Technical leaks from module docstrings (2025-12-04 cleanup)
+    "PresencePulse composite metric",
+    "agglomerative clustering",
+    "co-occurrence matrix",
+    "SQLite persistence",
+    "TransitionGraph",
+    "Episode steps",
+    "Islands of awareness",
+    "island A, B C",
+    "To id over",
+    "Py: tests",
+    "observe single step",
+    "loss computation",
+    "empty prompt returns none",
+    "README scan",
+    "dimension validation",
+    "handling inactive themes",
+    "silent fallback on errors",
+    "If anything goes wrong",
+    "broken generate observe",
+    "Circles on water",
+    "Leo s memory archaeology module",
+    "safe bridge",
+    "Not grammar, not for facts",
+    "multileo phase",
+    "school initialization",
+    "wounded expert",
+    "docstring leaks under stress",
 ]
 
 
