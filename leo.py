@@ -1566,6 +1566,12 @@ SIGNATURE_PHRASES_WHITELIST: Set[str] = {
     "looks up dreamily", "pauses softly"
 }
 
+# Multi-word garbage phrases to remove (tokenization artifacts)
+MULTI_WORD_GARBAGE: Set[str] = {
+    "to id", "in an", "of", "for a", "with a", "by a", "from a",
+    "at a", "on a", "about a", "like a a", "the a", "a a"
+}
+
 
 def jaccard_bigrams(text_a: str, text_b: str) -> float:
     """
@@ -1732,6 +1738,14 @@ def post_cleanup_garbage(text: str) -> str:
             # Whitelist: Go, Now, Whisper, Smile, Yes, No, Mountains, Hug (signature single words)
             if word not in {"go", "now", "whisper", "smile", "yes", "no", "mountains", "hug", "tell", "feel", "being", "image"}:
                 # Not whitelisted → skip this garbage
+                i += 2 if punct else 1
+                continue
+
+        # Rule 2.5: Multi-word garbage phrases (e.g., "To id.", "In an.")
+        if len(tokens) == 2:
+            phrase = ' '.join(tokens).lower()
+            if phrase in MULTI_WORD_GARBAGE:
+                # This is multi-word garbage → skip
                 i += 2 if punct else 1
                 continue
 
