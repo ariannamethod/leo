@@ -84,7 +84,7 @@ class HeyLeoGPTObserver:
         """Call OpenAI GPT API to generate observer's message."""
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 max_tokens=200,
                 temperature=0.8,
                 messages=[
