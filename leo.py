@@ -1046,6 +1046,10 @@ def fix_punctuation(text: str) -> str:
     # 2) Ensure space after .?! if followed by letter/digit
     text = re.sub(r"([.?!])([^\s])", r"\1 \2", text)
 
+    # 2.5) Extra insurance: specifically handle .?! before capital letters
+    # (Claude Desktop sniper fix #1: hands?Are → hands? Are)
+    text = re.sub(r"([.?!])([A-Z])", r"\1 \2", text)
+
     # 3) Collapse repeated punctuation
     text = re.sub(r"([!?]){2,}", r"\1", text)
     text = re.sub(r"\.{2,}", ".", text)
@@ -1747,11 +1751,8 @@ def post_cleanup_garbage(text: str) -> str:
     if not text or not isinstance(text, str):
         return text
 
-    # Check if text is a signature phrase (protect completely)
-    text_lower = text.lower().strip()
-    for sig in SIGNATURE_PHRASES_WHITELIST:
-        if sig in text_lower:
-            return text  # Don't touch signature phrases
+    # NOTE: Signature phrase protection moved to individual sentence level (not whole text)
+    # This prevents "Sits quietly. A. What..." from protecting the garbage "A."
 
     # Split into sentences preserving punctuation
     sentences = re.split(r'([.!?]+)', text)
@@ -1771,6 +1772,17 @@ def post_cleanup_garbage(text: str) -> str:
 
         # Rule 1: Empty sentence (only punctuation) → skip
         if not tokens:
+            i += 2 if punct else 1
+            continue
+
+        # Rule 1.5: Check if this sentence is a signature phrase → protect it
+        sent_lower = sent.lower()
+        is_signature = any(sig in sent_lower for sig in SIGNATURE_PHRASES_WHITELIST)
+        if is_signature:
+            # This sentence contains a signature phrase → keep it as-is
+            cleaned_parts.append(sent)
+            if punct:
+                cleaned_parts.append(punct)
             i += 2 if punct else 1
             continue
 
