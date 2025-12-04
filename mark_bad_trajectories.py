@@ -17,7 +17,7 @@ def mark_bad_trajectories():
     """Mark 6 validation dialogues as bad-ending trajectories."""
 
     # Path to storybook database
-    db_path = Path("examples/stories/stories.json")
+    db_path = Path("examples/stories/bad_endings.json")
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     storybook = StoryBook(db_path=db_path)
