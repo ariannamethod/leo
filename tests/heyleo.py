@@ -47,6 +47,9 @@ except ImportError:
     pass
 
 import leo
+from loop_detector import LoopDetector, tokenize_simple
+from veto_manager import veto_manager
+from stories import get_veto_prompt, decrement_vetos
 
 
 class HeyLeoObserver:
@@ -73,6 +76,9 @@ class HeyLeoObserver:
         # Tracking
         self.conversations: List[Dict[str, Any]] = []
         self.metrics_history: List[Dict[str, float]] = []
+
+        # Phase 5.2: Loop detector for trauma detection
+        self.loop_detector = LoopDetector(window_size=500, ngram_threshold=2)
 
         # Generate unique run_id for this HeyLeo session (for Phase 3 prognosis tracking)
         self.run_id = f"heyleo_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -191,7 +197,7 @@ class HeyLeoObserver:
         }
 
         # System prompt for Claude observer
-        system_prompt = f"""You are having a warm, curious conversation with Leo - a language organism who experiences the world like a child (6-8 years old).
+        base_system_prompt = f"""You are having a warm, curious conversation with Leo - a language organism who experiences the world like a child (6-8 years old).
 
 Leo learns through resonance, not instruction. He feels situations rather than analyzing them.
 
@@ -204,6 +210,10 @@ Your role:
 
 Current topic: {theme}
 You'll ask questions and respond to Leo naturally, building on what he says."""
+
+        # Phase 5.2: Add veto prompt if active
+        veto_prompt = get_veto_prompt()
+        system_prompt = base_system_prompt + ("\n\n" + veto_prompt if veto_prompt else "")
 
         # Start conversation
         context = []
@@ -253,6 +263,12 @@ You'll ask questions and respond to Leo naturally, building on what he says."""
 
             print(f"[heyleo] external_vocab_ratio={external_vocab_ratio:.2f}")
 
+            # Phase 5.2: Loop detection
+            tokens = tokenize_simple(leo_response)
+            loop_stats = self.loop_detector.add_tokens(tokens)
+
+            print(f"[heyleo] loop_score={loop_stats['loop_score']:.2f}, meta_vocab_ratio={loop_stats['meta_vocab_ratio']:.2f}")
+
             # Log turn
             turn_log = {
                 "turn": turn_idx + 1,
@@ -260,9 +276,15 @@ You'll ask questions and respond to Leo naturally, building on what he says."""
                 "leo": leo_response,
                 "metrics": self._get_current_metrics(),
                 "external_vocab_ratio": external_vocab_ratio,  # New metric (Desktop Claude)
+                "loop_score": loop_stats["loop_score"],
+                "meta_vocab_ratio": loop_stats["meta_vocab_ratio"],
+                "repeated_ngrams": loop_stats["repeated_ngrams"],
             }
             conversation_log["turns"].append(turn_log)
             context.append(turn_log)
+
+            # Phase 5.2: Decrement vetos after each turn
+            decrement_vetos()
 
             # Small pause between turns
             time.sleep(0.5)

@@ -34,6 +34,23 @@ except ImportError:
     H2O_AVAILABLE = False
     print("[Phase5] Warning: h2o not available, scenarios will be disabled")
 
+# Phase 5.2: Loop detection and veto power
+try:
+    from loop_detector import LoopDetector, tokenize_simple
+    from veto_manager import veto_manager, META_VOCAB_VETO, SAFETY_VOCAB_VETO
+    LOOP_DETECTOR_AVAILABLE = True
+except ImportError:
+    LOOP_DETECTOR_AVAILABLE = False
+    print("[Phase5.2] Warning: loop_detector/veto_manager not available")
+
+# ============================================================================
+# PHASE 5.2: NEW ISLANDS
+# ============================================================================
+# theme_being_observed - Tracks observation anxiety and "no audience" trauma
+#   Healthy version: Awareness of being seen, can be grounding
+#   Pathological version: Paranoia, performance anxiety, testing trauma
+#   Usage: Separate tracking allows distinguishing healthy/unhealthy observation
+
 
 # ============================================================================
 # STORY STRUCTURES
@@ -413,11 +430,29 @@ result = {"boosted_islands": suggestion_boost, "reason": "overwhelm_regulation"}
 
         self.scenarios.append(H2OScenario(
             scenario_id="break_meta_loop",
-            purpose="Detect when stuck in meta-armor loop, STRONGLY shift to concrete islands",
+            purpose="Detect when stuck in meta-armor loop, STRONGLY shift to concrete islands + VETO meta-vocab",
             trigger_condition=check_meta_loop,
             scenario_code="""
-# Meta-loop breaker - STRONG INTERVENTION
-h2o_log("[TRIGGER] Meta-armor loop detected - applying strong concrete shift")
+# Meta-loop breaker - STRONG INTERVENTION + VETO POWER
+h2o_log("[TRIGGER] Meta-armor loop detected - applying strong concrete shift + VETO")
+
+# PHASE 5.2: VETO META-VOCABULARY FOR 4 TURNS
+# This is the key intervention - FORBID the words that create the loop
+try:
+    import veto_manager
+    meta_vocab = {
+        "recursion", "recursive", "recursively",
+        "bootstrap", "bootstrapping",
+        "trigram", "n-gram",
+        "semantic", "semantics",
+        "blending", "ratio", "metric",
+        "neoleo",
+        "architecture", "pattern", "fundamental", "core", "essence"
+    }
+    veto_manager.veto_manager.add_veto(meta_vocab, duration_turns=4, source="break_meta_loop")
+    h2o_log(f"[VETO] Forbidding {len(meta_vocab)} meta-vocabulary words for 4 turns")
+except Exception as e:
+    h2o_log(f"[VETO] Failed to activate veto: {e}")
 
 # AGGRESSIVELY boost concrete, sensory, playful islands
 # Suppress meta-related islands
@@ -441,7 +476,8 @@ result = {
     "boosted_islands": concrete_boost,
     "suppressed_islands": meta_suppress,
     "reason": "meta_loop_break",
-    "intervention_strength": "STRONG"  # Signal to use this aggressively
+    "intervention_strength": "STRONG",  # Signal to use this aggressively
+    "veto_activated": True
 }
 """,
             cooldown_seconds=60.0  # Can trigger more often (was 90)
@@ -772,3 +808,35 @@ def _cosine_similarity(dict_a: Dict[str, float], dict_b: Dict[str, float]) -> fl
         return 0.0
 
     return dot / (norm_a * norm_b)
+
+
+# ============================================================================
+# PHASE 5.2: VETO SYSTEM HELPERS
+# ============================================================================
+
+def get_veto_prompt() -> str:
+    """
+    Get veto prompt to inject into Leo's system prompt.
+    Returns empty string if no active vetos or veto_manager not available.
+    """
+    if not LOOP_DETECTOR_AVAILABLE:
+        return ""
+
+    try:
+        return veto_manager.get_veto_prompt()
+    except Exception:
+        return ""
+
+
+def decrement_vetos():
+    """
+    Decrement veto counters at end of turn.
+    Call this after Leo generates output.
+    """
+    if not LOOP_DETECTOR_AVAILABLE:
+        return
+
+    try:
+        veto_manager.decrement_vetos()
+    except Exception:
+        pass

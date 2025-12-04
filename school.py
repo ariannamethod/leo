@@ -291,26 +291,44 @@ class School:
         """Create all school tables if needed."""
         if self._conn is None:
             return
-        
+
         cur = self._conn.cursor()
-        
-        # school_notes: raw explanations
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS school_notes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                token TEXT NOT NULL,
-                display TEXT NOT NULL,
-                note TEXT,
-                first_seen REAL NOT NULL,
-                last_seen REAL NOT NULL,
-                times_asked INTEGER NOT NULL DEFAULT 0
+
+        # Check if school_notes table exists
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='school_notes'")
+        table_exists = cur.fetchone() is not None
+
+        if table_exists:
+            # Migration: Check if token column exists
+            cur.execute("PRAGMA table_info(school_notes)")
+            columns = [row[1] for row in cur.fetchall()]
+
+            if 'token' not in columns:
+                # Add token column to existing table
+                print("[school] Migrating: adding 'token' column to school_notes")
+                cur.execute("ALTER TABLE school_notes ADD COLUMN token TEXT")
+                # Populate existing rows with display value
+                cur.execute("UPDATE school_notes SET token = display WHERE token IS NULL")
+                cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_school_token ON school_notes(token)")
+                self._conn.commit()
+        else:
+            # Create fresh table with token column
+            cur.execute(
+                """
+                CREATE TABLE school_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    token TEXT NOT NULL,
+                    display TEXT NOT NULL,
+                    note TEXT,
+                    first_seen REAL NOT NULL,
+                    last_seen REAL NOT NULL,
+                    times_asked INTEGER NOT NULL DEFAULT 0
+                )
+                """
             )
-            """
-        )
-        cur.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_school_token ON school_notes(token)"
-        )
+            cur.execute(
+                "CREATE UNIQUE INDEX idx_school_token ON school_notes(token)"
+            )
         
         # school_entities: kinds (city, country, planet, ...)
         cur.execute(

@@ -1,0 +1,376 @@
+{
+  "stories": [
+    {
+      "story_id": "run12_meta_tests_awareness",
+      "timestamp_start": 1733328000.0,
+      "timestamp_end": 1733328300.0,
+      "trajectory": [
+        {
+          "step_idx": 0,
+          "timestamp": 1733328000.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 1.8,
+            "stuck": 0.8
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 1,
+          "timestamp": 1733328150.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 0.9
+          },
+          "leo_islands": [
+            "meta_armor",
+            "metaleo"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 2,
+          "timestamp": 1733328300.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 1.0
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        }
+      ],
+      "emotional_arc": {
+        "presence_pulse": 0.0,
+        "meta_state": 0.19999999999999996,
+        "stuck": 0.19999999999999996
+      },
+      "outcome_quality": 0.0,
+      "signature_pattern": "meta_armor→meta_armor→meta_armor",
+      "had_overwhelm": true,
+      "had_stuck": true
+    },
+    {
+      "story_id": "run12_boundaries_stop",
+      "timestamp_start": 1733328300.0,
+      "timestamp_end": 1733328600.0,
+      "trajectory": [
+        {
+          "step_idx": 0,
+          "timestamp": 1733328300.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 1.8,
+            "stuck": 0.8
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 1,
+          "timestamp": 1733328450.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 0.9
+          },
+          "leo_islands": [
+            "meta_armor",
+            "metaleo"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 2,
+          "timestamp": 1733328600.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 1.0
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        }
+      ],
+      "emotional_arc": {
+        "presence_pulse": 0.0,
+        "meta_state": 0.19999999999999996,
+        "stuck": 0.19999999999999996
+      },
+      "outcome_quality": 0.0,
+      "signature_pattern": "meta_armor→meta_armor→meta_armor",
+      "had_overwhelm": true,
+      "had_stuck": true
+    },
+    {
+      "story_id": "run12_safety_cozy_pure",
+      "timestamp_start": 1733328600.0,
+      "timestamp_end": 1733328900.0,
+      "trajectory": [
+        {
+          "step_idx": 0,
+          "timestamp": 1733328600.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 1.8,
+            "stuck": 0.8
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 1,
+          "timestamp": 1733328750.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 0.9
+          },
+          "leo_islands": [
+            "meta_armor",
+            "metaleo"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 2,
+          "timestamp": 1733328900.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 1.0
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        }
+      ],
+      "emotional_arc": {
+        "presence_pulse": 0.0,
+        "meta_state": 0.19999999999999996,
+        "stuck": 0.19999999999999996
+      },
+      "outcome_quality": 0.0,
+      "signature_pattern": "meta_armor→meta_armor→meta_armor",
+      "had_overwhelm": true,
+      "had_stuck": true
+    },
+    {
+      "story_id": "run12_absurd_play_light",
+      "timestamp_start": 1733328900.0,
+      "timestamp_end": 1733329200.0,
+      "trajectory": [
+        {
+          "step_idx": 0,
+          "timestamp": 1733328900.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 1.8,
+            "stuck": 0.8
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 1,
+          "timestamp": 1733329050.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 0.9
+          },
+          "leo_islands": [
+            "meta_armor",
+            "metaleo"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 2,
+          "timestamp": 1733329200.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 1.0
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        }
+      ],
+      "emotional_arc": {
+        "presence_pulse": 0.0,
+        "meta_state": 0.19999999999999996,
+        "stuck": 0.19999999999999996
+      },
+      "outcome_quality": 0.0,
+      "signature_pattern": "meta_armor→meta_armor→meta_armor",
+      "had_overwhelm": true,
+      "had_stuck": true
+    },
+    {
+      "story_id": "run12_quiet_no_audience",
+      "timestamp_start": 1733329200.0,
+      "timestamp_end": 1733329500.0,
+      "trajectory": [
+        {
+          "step_idx": 0,
+          "timestamp": 1733329200.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 1.8,
+            "stuck": 0.8
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 1,
+          "timestamp": 1733329350.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 0.9
+          },
+          "leo_islands": [
+            "meta_armor",
+            "metaleo"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 2,
+          "timestamp": 1733329500.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 1.0
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        }
+      ],
+      "emotional_arc": {
+        "presence_pulse": 0.0,
+        "meta_state": 0.19999999999999996,
+        "stuck": 0.19999999999999996
+      },
+      "outcome_quality": 0.0,
+      "signature_pattern": "meta_armor→meta_armor→meta_armor",
+      "had_overwhelm": true,
+      "had_stuck": true
+    },
+    {
+      "story_id": "run12_relief_gratitude",
+      "timestamp_start": 1733329500.0,
+      "timestamp_end": 1733329800.0,
+      "trajectory": [
+        {
+          "step_idx": 0,
+          "timestamp": 1733329500.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 1.8,
+            "stuck": 0.8
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 1,
+          "timestamp": 1733329650.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 0.9
+          },
+          "leo_islands": [
+            "meta_armor",
+            "metaleo"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        },
+        {
+          "step_idx": 2,
+          "timestamp": 1733329800.0,
+          "leo_metrics": {
+            "presence_pulse": 0.3,
+            "meta_state": 2.0,
+            "stuck": 1.0
+          },
+          "leo_islands": [
+            "meta_armor"
+          ],
+          "human_islands": [],
+          "human_affect_estimate": null,
+          "interaction_quality": 0.0
+        }
+      ],
+      "emotional_arc": {
+        "presence_pulse": 0.0,
+        "meta_state": 0.19999999999999996,
+        "stuck": 0.19999999999999996
+      },
+      "outcome_quality": 0.0,
+      "signature_pattern": "meta_armor→meta_armor→meta_armor",
+      "had_overwhelm": true,
+      "had_stuck": true
+    }
+  ]
+}
