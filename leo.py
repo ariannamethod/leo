@@ -1804,6 +1804,30 @@ def post_cleanup_garbage(text: str) -> str:
                 i += 2 if punct else 1
                 continue
 
+        # Rule 2.6: Check for "To id" as substring in sentence (aggressive cleanup)
+        # "records: To id." → delete entire sentence
+        sent_lower = sent.lower()
+        if "to id" in sent_lower:
+            # This sentence contains "To id" garbage → skip entire sentence
+            i += 2 if punct else 1
+            continue
+
+        # Rule 2.7: Check for trailing service word after comma (", And." → delete)
+        # Split by comma and check last part
+        if ',' in sent:
+            parts = sent.split(',')
+            last_part = parts[-1].strip()
+            last_part_tokens = [tok for tok in tokenize(last_part) if any(c.isalnum() for c in tok)]
+            if len(last_part_tokens) == 1:
+                word = last_part_tokens[0].lower()
+                if word in SERVICE_WORDS_TO_REMOVE:
+                    # Last part after comma is lone service word → remove it
+                    sent = ','.join(parts[:-1]).strip()
+                    # If nothing left after removal, skip entire sentence
+                    if not sent or sent == ',':
+                        i += 2 if punct else 1
+                        continue
+
         # Rule 3: Check for trailing garbage
         # If sentence ends with preposition/article → trim it
         if len(tokens) >= 2:
