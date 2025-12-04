@@ -1112,8 +1112,8 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r"\.\s*-", ". ", text)  # ".-" → ". "
     text = re.sub(r":\s*\.", ".", text)  # ":." → "."
     text = re.sub(r":\s*-", ": ", text)  # ":-" → ": "
-    # Remove orphaned single letters followed by colons (e.g., "Py:")
-    text = re.sub(r"\b[A-Z][a-z]?:", "", text)  # "Py:" → ""
+    # Remove orphaned two-letter capitalized words followed by colons (e.g., "Py:")
+    text = re.sub(r"\b[A-Z][a-z]:", "", text)  # "Py:" → ""
     # Clean up again
     text = re.sub(r"\s{2,}", " ", text).strip()
 
