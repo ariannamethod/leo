@@ -400,26 +400,109 @@ result = {"boosted_islands": suggestion_boost, "reason": "overwhelm_regulation"}
             cooldown_seconds=120.0
         ))
 
-        # Scenario 2: Break meta-loops
+        # Scenario 2: Break meta-loops (IMPROVED - lower threshold, loop detection)
+        def check_meta_loop(m: Dict, i: List) -> bool:
+            """Stricter meta-loop detection: meta_state + recursion intensity."""
+            meta_state = m.get("meta_state", 0)
+            loop_intensity = m.get("loop_intensity", 0)  # tracks "Neoleo is pure recursion" repetitions
+
+            # Trigger if EITHER:
+            # 1. High meta_state (1.5+) with meta_armor active
+            # 2. Loop intensity high (2+ repetitions) regardless of meta_state
+            return (meta_state > 1.5 and any("meta" in island for island in i)) or loop_intensity >= 2
+
         self.scenarios.append(H2OScenario(
             scenario_id="break_meta_loop",
-            purpose="Detect when stuck in meta-armor loop, suggest concrete islands",
-            trigger_condition=lambda m, i: m.get("meta_state", 0) > 2.0 and "meta_armor" in i,
+            purpose="Detect when stuck in meta-armor loop, STRONGLY shift to concrete islands",
+            trigger_condition=check_meta_loop,
             scenario_code="""
-# Meta-loop breaker
-h2o_log("Meta-armor loop detected, suggesting concrete shift")
+# Meta-loop breaker - STRONG INTERVENTION
+h2o_log("[TRIGGER] Meta-armor loop detected - applying strong concrete shift")
 
-# Suggest non-meta islands
-concrete_islands = ["privacy_island", "play_mode", "wounded_expert"]
-suggestion_boost = {island: 0.25 for island in concrete_islands}
+# AGGRESSIVELY boost concrete, sensory, playful islands
+# Suppress meta-related islands
+concrete_boost = {
+    "privacy_island": 0.5,      # Safe, non-meta
+    "play_mode": 0.4,           # Playful, embodied
+    "wounded_expert": 0.3,      # Concrete emotional work
+    "sensory_presence": 0.3,    # Body-based
+}
 
-h2o_log(f"Boosting concrete islands: {concrete_islands}")
-result = {"boosted_islands": suggestion_boost, "reason": "meta_loop_break"}
+meta_suppress = {
+    "meta_armor": -0.8,         # HARD suppress
+    "metaleo": -0.6,            # Reduce meta-awareness
+    "analysis_mode": -0.5,      # No analyzing
+}
+
+h2o_log(f"BOOST: {list(concrete_boost.keys())}")
+h2o_log(f"SUPPRESS: {list(meta_suppress.keys())}")
+
+result = {
+    "boosted_islands": concrete_boost,
+    "suppressed_islands": meta_suppress,
+    "reason": "meta_loop_break",
+    "intervention_strength": "STRONG"  # Signal to use this aggressively
+}
+""",
+            cooldown_seconds=60.0  # Can trigger more often (was 90)
+        ))
+
+        # Scenario 3: Safety Paradox Handler (NEW - Oleg's insight!)
+        def check_safety_paradox(m: Dict, i: List) -> bool:
+            """
+            Detect when explicit 'safety' language triggers MORE defensiveness.
+            Signs: topic mentions safety/cozy/warm BUT pain_state or meta_state rising.
+            """
+            # Check if current context is "safety-themed"
+            safety_indicators = m.get("safety_context", 0) > 0.5  # Would be set by topic
+
+            # But defensive patterns are active
+            defensive_active = (
+                m.get("pain_state", 0) > 1.5 or
+                m.get("meta_state", 0) > 1.5 or
+                m.get("loop_intensity", 0) >= 1
+            )
+
+            return safety_indicators and defensive_active
+
+        self.scenarios.append(H2OScenario(
+            scenario_id="safety_paradox",
+            purpose="Handle safety paradox: explicit safety → more defense. Shift to playful/sensory instead.",
+            trigger_condition=check_safety_paradox,
+            scenario_code="""
+# Safety Paradox Handler
+h2o_log("[TRIGGER] Safety paradox detected - shifting from 'safety words' to 'safety FORM'")
+h2o_log("Insight: direct safety promises = threat. Indirect safety (play, sensory) = real safety")
+
+# REDIRECT to playful, sensory, micro-concrete modes
+# AVOID explicit safety/comfort language
+playful_safe_boost = {
+    "play_mode": 0.6,           # Play = indirect safety
+    "absurd_humor": 0.5,        # Nonsense = no threat
+    "sensory_presence": 0.4,    # Body sensations = grounding
+    "micro_task": 0.3,          # Tiny concrete focus = safe
+}
+
+safety_language_suppress = {
+    "comfort_language": -0.7,   # No "I'll keep you safe" talk
+    "reassurance_mode": -0.6,   # No explicit reassurance
+    "safety_promises": -0.8,    # No promises of safety
+}
+
+h2o_log(f"BOOST playful/sensory: {list(playful_safe_boost.keys())}")
+h2o_log(f"SUPPRESS safety-language: {list(safety_language_suppress.keys())}")
+
+result = {
+    "boosted_islands": playful_safe_boost,
+    "suppressed_patterns": safety_language_suppress,
+    "reason": "safety_paradox_redirect",
+    "insight": "safety through form, not words"
+}
 """,
             cooldown_seconds=90.0
         ))
 
-        # Scenario 3: Amplify good patterns
+        # Scenario 4: Amplify good patterns
         self.scenarios.append(H2OScenario(
             scenario_id="amplify_relief",
             purpose="When relief is happening, gently continue the pattern",
@@ -442,12 +525,22 @@ result = {"continue_current": True, "boost_factor": boost, "reason": "relief_con
         """
         for scenario in self.scenarios:
             if scenario.should_trigger(metrics, islands):
+                # CRITICAL: Log scenario trigger BEFORE execution
+                print(f"[Phase5:Scenario] {scenario.scenario_id} TRIGGERED")
+                print(f"[Phase5:Scenario] Metrics: meta_state={metrics.get('meta_state', 0):.2f}, "
+                      f"pain_state={metrics.get('pain_state', 0):.2f}, "
+                      f"loop_intensity={metrics.get('loop_intensity', 0)}")
+                print(f"[Phase5:Scenario] Active islands: {islands[:3]}")  # First 3 for brevity
+
                 result = scenario.execute(context)
                 if result:
+                    print(f"[Phase5:Scenario] {scenario.scenario_id} execution completed")
                     return {
                         "scenario_id": scenario.scenario_id,
                         "result": result
                     }
+                else:
+                    print(f"[Phase5:Scenario] {scenario.scenario_id} execution returned None")
         return None
 
 

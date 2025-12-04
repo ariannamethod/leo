@@ -2620,12 +2620,32 @@ class LeoField:
                 # Silent fail — Phase 5 must never break Leo
                 phase5_suggestions = None
 
-        # Combine Phase 4 + Phase 5 suggestions (Phase 5 takes priority)
+        # Combine Phase 4 + Phase 5 suggestions (BLEND, not override)
+        # Phase 4 = local statistics (what usually comes next)
+        # Phase 5 = trajectory patterns (what story fits this moment)
+        # Blend: Phase 5 weights re-prioritize Phase 4 suggestions
         combined_suggestions = None
-        if phase5_suggestions:
+
+        if phase5_suggestions and phase4_suggestions:
+            # BOTH available: blend them!
+            # Phase 5 provides "trajectory confidence" - how sure we are about story pattern
+            # If confident in story pattern, use Phase 5 more
+            # If uncertain, rely more on Phase 4 statistics
+
+            # For now: use Phase 5 primarily, but keep Phase 4 as backup options
+            # TODO: implement proper weighted blend in Phase 5.1
+            combined_suggestions = phase5_suggestions + phase4_suggestions[:2]  # Top 2 from Phase 4
+            print(f"[Phase5:Blend] Combined {len(phase5_suggestions)} Phase5 + {len(phase4_suggestions[:2])} Phase4 suggestions")
+
+        elif phase5_suggestions:
+            # Only Phase 5 available
             combined_suggestions = phase5_suggestions
+            print(f"[Phase5:Blend] Using {len(phase5_suggestions)} Phase5 suggestions only")
+
         elif phase4_suggestions:
+            # Only Phase 4 available
             combined_suggestions = phase4_suggestions
+            print(f"[Phase5:Blend] Using {len(phase4_suggestions)} Phase4 suggestions only (Phase5 unavailable)")
 
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
