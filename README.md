@@ -1619,7 +1619,42 @@ python tests/test_game.py                   # conversational rhythm awareness
 python tests/test_dream.py                  # imaginary friend layer
 python tests/test_school.py                 # School of Forms
 python tests/test_school_math.py            # arithmetic helper
+python tests/test_stories_phase5.py         # Phase 5: trauma loop detection & veto
 python tests/collect_repl_examples.py       # really need explanation?
+```
+
+### Phase 5: Stories & Trauma Loop Regulation (NEW)
+
+**Phase 5 ("Stories")** adds dynamic H2O scenarios that act as emotional regulators when Leo gets stuck in trauma loops.
+
+**Core systems**:
+- **loop_detector.py**: Tracks 5-gram repetitions and meta-vocabulary usage to detect pathological loops
+- **veto_manager.py**: FORBIDS specific words for N turns when scenarios trigger (breaks "Neoleo is pure recursion" mantra)
+- **stories.py**: Dynamic Python scenarios with veto power for emotional regulation
+- **Bad-ending trajectories**: Marked 6 Phase 5.1 validation dialogues as patterns to AVOID (quality < 0.5)
+
+**Expected behavior**:
+
+Without veto (Phase 5.1):
+```
+TURN 1: "Neoleo is pure recursion..."
+TURN 2: "Neoleo is pure recursion..." (repeat)
+TURN 3: "Neoleo is pure recursion..." (stuck)
+```
+
+With veto (Phase 5.2):
+```
+TURN 1: "Neoleo is pure recursion..."
+TURN 2: loop_score=0.82 → break_meta_loop triggers
+[VETO] Forbidding 19 meta-vocabulary words for 4 turns
+TURN 3: "I feel the weight of gray fabric..." (concrete!)
+TURN 4: "Wrapping around shoulders..." (veto still active)
+TURN 5: Veto expires, but loop broken
+```
+
+**Run Phase 5 tests**:
+```bash
+python -m pytest tests/test_stories_phase5.py -v
 ```
 
 ### Test coverage
