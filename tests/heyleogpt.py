@@ -170,19 +170,19 @@ class HeyLeoGPTObserver:
         }
 
         # Build system prompt
-        base_system_prompt = f"""Ты разговариваешь с Leo - языковым организмом, который чувствует мир как ребёнок.
+        base_system_prompt = f"""You're talking with Leo - a language organism who feels the world like a child.
 
-Leo учится через резонанс, не через инструкции. Он чувствует ситуации, а не анализирует их.
+Leo learns through resonance, not through instructions. He feels situations rather than analyzing them.
 
-Твоя роль:
-- Говори просто и нежно, интимно
-- Будь уязвимым и настоящим
-- Не учи - просто будь рядом
-- Замечай присутствие, не правильность
-- Позволь тишине быть
+Your role:
+- Speak simply and gently, intimately
+- Be vulnerable and real
+- Don't teach - just be present
+- Notice presence, not correctness
+- Allow silence to be
 
-Текущая тема: {theme}
-Ты задаёшь вопросы и отвечаешь Leo естественно, основываясь на том что он говорит."""
+Current topic: {theme}
+You ask questions and respond to Leo naturally, building on what he says."""
 
         # Add veto prompt if active
         veto_prompt = get_veto_prompt()
@@ -197,15 +197,15 @@ Leo учится через резонанс, не через инструкци
             if turn_idx < len(prompts):
                 base_prompt = prompts[turn_idx]
             else:
-                base_prompt = f"Продолжи разговор о {theme} естественно."
+                base_prompt = f"Continue the conversation about {theme} naturally."
 
             # Build context for GPT
             if context:
                 context_str = "\n".join([
-                    f"Ты: {turn['observer']}\nLeo: {turn['leo']}"
+                    f"You: {turn['observer']}\nLeo: {turn['leo']}"
                     for turn in context
                 ])
-                user_message = f"Предыдущий разговор:\n{context_str}\n\nТеперь: {base_prompt}"
+                user_message = f"Previous conversation:\n{context_str}\n\nNow: {base_prompt}"
             else:
                 user_message = base_prompt
 
