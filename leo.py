@@ -190,6 +190,18 @@ except ImportError:
     np = None  # type: ignore
     NUMPY_AVAILABLE = False
 
+# Safe import: architectural_density module (soft penalty on tech jargon in soft topics)
+try:
+    from architectural_density import architectural_density, should_apply_arch_penalty, SOFT_TOPICS
+    ARCH_DENSITY_AVAILABLE = True
+except ImportError:
+    ARCH_DENSITY_AVAILABLE = False
+    SOFT_TOPICS = set()  # type: ignore
+    def architectural_density(text: str) -> float:  # type: ignore
+        return 0.0
+    def should_apply_arch_penalty(topic: str) -> bool:  # type: ignore
+        return False
+
 # ============================================================================
 # PATHS
 # ============================================================================
@@ -1514,6 +1526,151 @@ def activate_themes_for_prompt(
     return ActiveThemes(theme_scores=theme_scores, active_words=active_words)
 
 
+# ============================================================================
+# QUALITY UTILITIES - Surface cleanup and imagery detection
+# ============================================================================
+
+# Sensory/imagery words for soft topics
+IMAGERY_WORDS: Set[str] = {
+    "hands", "breath", "leaves", "mountains", "water", "snow", "blanket",
+    "hug", "child", "river", "sky", "sun", "warm", "cold", "wind", "forest",
+    "sea", "eyes", "smile", "heart", "light", "shadow", "whisper", "touch",
+    "feet", "ground", "air", "voice", "silence", "moment", "softly", "gently",
+    "spiral", "image", "color", "shape", "feel", "body", "skin", "breeze",
+    "tree", "star", "moon", "rain", "stone", "bird", "flower", "grass",
+    "stream", "hill", "valley", "cloud", "snow globe", "falling", "floating"
+}
+
+# Serve words that indicate surface garbage
+TRAILING_GARBAGE: Set[str] = {
+    "and", "or", "but", "because", "then", "so",
+    "in", "on", "at", "of", "for", "a", "an", "the", "to"
+}
+
+# Signature phrases that should NEVER be penalized
+SIGNATURE_PHRASES_WHITELIST: Set[str] = {
+    "soft smile oh my", "oh leo", "like a child", "you like a child",
+    "leaves falling oh leo", "go on", "whisper", "now", "smile",
+    "sits quietly for a moment", "speaks very gently", "speaks extra softly",
+    "looks up dreamily", "pauses softly"
+}
+
+
+def jaccard_bigrams(text_a: str, text_b: str) -> float:
+    """
+    Compute Jaccard similarity of bigrams between two texts.
+    Used for echo detection: if reply mirrors prompt structure, similarity > 0.5.
+
+    Returns: float [0.0, 1.0] where higher = more similar structure
+    """
+    if not text_a or not text_b:
+        return 0.0
+
+    tokens_a = tokenize(text_a)
+    tokens_b = tokenize(text_b)
+
+    if len(tokens_a) < 2 or len(tokens_b) < 2:
+        return 0.0
+
+    # Build bigram sets
+    bigrams_a = set((tokens_a[i], tokens_a[i+1]) for i in range(len(tokens_a) - 1))
+    bigrams_b = set((tokens_b[i], tokens_b[i+1]) for i in range(len(tokens_b) - 1))
+
+    if not bigrams_a or not bigrams_b:
+        return 0.0
+
+    intersection = len(bigrams_a & bigrams_b)
+    union = len(bigrams_a | bigrams_b)
+
+    return intersection / union if union > 0 else 0.0
+
+
+def imagery_ratio(text: str) -> float:
+    """
+    Calculate ratio of sensory/imagery words in text.
+    Used for soft topics: bonus if reply contains real images, not architecture.
+
+    Returns: float [0.0, 1.0] where higher = more imagery
+    """
+    if not text:
+        return 0.0
+
+    tokens = tokenize(text)
+    if not tokens:
+        return 0.0
+
+    # Count imagery words
+    imagery_count = sum(1 for tok in tokens if tok.lower() in IMAGERY_WORDS)
+
+    return imagery_count / len(tokens)
+
+
+def surface_quality_penalties(text: str) -> float:
+    """
+    Detect surface-level garbage without touching Leo's glitch-poetry.
+
+    Penalties for:
+    - Empty sentences (only punctuation)
+    - Single-word non-signature sentences (A., To., etc.)
+    - Sentences ending on trailing garbage words (in an., of., for., etc.)
+
+    Protected:
+    - Signature phrases: "soft smile oh my", "Go on.", etc.
+    - Any sentence with 3+ content words
+
+    Returns: penalty multiplier [0.0, 1.0] where 1.0 = no penalty, 0.5 = heavy penalty
+    """
+    if not text or not isinstance(text, str):
+        return 1.0
+
+    # Check if text is a signature phrase (protect completely)
+    text_lower = text.lower().strip()
+    for sig in SIGNATURE_PHRASES_WHITELIST:
+        if sig in text_lower:
+            return 1.0  # No penalty for signature phrases
+
+    # Split into sentences
+    sentences = re.split(r'[.!?]+', text)
+
+    penalty = 1.0
+    bad_sentences = 0
+    total_sentences = 0
+
+    for sent in sentences:
+        sent = sent.strip()
+        if not sent:
+            continue
+
+        total_sentences += 1
+
+        # Get content tokens (alphanumeric only)
+        tokens = [tok for tok in tokenize(sent) if any(c.isalnum() for c in tok)]
+
+        # (1) Empty sentence (only punctuation)
+        if not tokens:
+            bad_sentences += 1
+            continue
+
+        # (2) Single word that's not whitelisted
+        if len(tokens) == 1:
+            word = tokens[0].lower()
+            # Allow: Go, Now, Whisper, Smile, etc. (signature single words)
+            if word not in {"go", "now", "whisper", "smile", "yes", "no"}:
+                bad_sentences += 0.5  # Partial penalty
+
+        # (3) Sentence ending on garbage word
+        last_word = tokens[-1].lower() if tokens else ""
+        if last_word in TRAILING_GARBAGE:
+            bad_sentences += 0.5  # Partial penalty
+
+    # Calculate penalty
+    if total_sentences > 0:
+        bad_ratio = bad_sentences / total_sentences
+        penalty = 1.0 - (bad_ratio * 0.5)  # Max 50% penalty
+
+    return max(0.3, min(1.0, penalty))  # Clamp to [0.3, 1.0]
+
+
 def structural_quality(
     prompt: str,
     reply: str,
@@ -1588,6 +1745,19 @@ def structural_quality(
             elif coverage < 0.6:
                 score *= 0.8  # moderate support
 
+    # (5) Echo detection: penalize structural mirroring of prompt
+    # "Give me an image" → "Give me an image. To id." (bad!)
+    echo_sim = jaccard_bigrams(prompt, reply)
+    if echo_sim > 0.5:
+        # Strong echo - reply mirrors prompt structure
+        echo_penalty = 1.0 - (echo_sim - 0.5)  # 0.5→1.0, 1.0→0.5
+        score *= max(0.4, echo_penalty)
+
+    # (6) Surface quality: penalize garbage like "A.", "in an.", etc.
+    # But protect signature phrases: "soft smile oh my", "Go on.", etc.
+    surface_mult = surface_quality_penalties(reply)
+    score *= surface_mult
+
     # Clamp to [0, 1]
     return max(0.0, min(1.0, score))
 
@@ -1611,6 +1781,7 @@ def compute_quality_score(
     reply: str,
     avg_entropy: float,
     trigrams: Dict[Tuple[str, str], Dict[str, int]],
+    current_topic: Optional[str] = None,
 ) -> QualityScore:
     """
     Compute overall quality score for a reply.
@@ -1618,9 +1789,13 @@ def compute_quality_score(
     Combines:
     - structural quality (50%)
     - entropy score (50%)
+    - imagery bonus (for soft topics)
+    - architectural density penalty (for soft topics)
 
     Entropy is mapped: middle range [0.3-0.7] is best (interesting but coherent),
     very low or very high entropy → penalty.
+
+    current_topic: optional topic name for soft-topic-specific scoring
     """
     structural = structural_quality(prompt, reply, trigrams)
 
@@ -1639,6 +1814,24 @@ def compute_quality_score(
 
     # Combined quality (equal weights)
     overall = 0.5 * structural + 0.5 * entropy_quality
+
+    # Apply topic-specific adjustments (only if current_topic provided)
+    if current_topic and ARCH_DENSITY_AVAILABLE:
+        # (1) Imagery bonus for soft topics
+        # Reward sensory/concrete images over abstract architecture
+        if should_apply_arch_penalty(current_topic):
+            img_ratio = imagery_ratio(reply)
+            if img_ratio > 0.1:  # At least some imagery present
+                imagery_bonus = img_ratio * 0.15  # Max +15% bonus
+                overall = min(1.0, overall + imagery_bonus)
+
+        # (2) Architectural density penalty for soft topics
+        # Penalize tech jargon in intimate themes
+        if should_apply_arch_penalty(current_topic):
+            arch_density = architectural_density(reply)
+            if arch_density > 0.15:  # Significant tech jargon
+                arch_penalty = (arch_density - 0.15) * 0.3  # Progressive penalty
+                overall = max(0.0, overall - arch_penalty)
 
     return QualityScore(
         structural=structural, entropy=entropy_quality, overall=overall

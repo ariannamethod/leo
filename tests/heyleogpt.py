@@ -182,6 +182,17 @@ class HeyLeoGPTObserver:
                     print(f"[heyleogpt] ⚠️  Entering LOOP-MODE (avg_loop_score={avg_loop_score:.2f})")
                     loop_mode = True
 
+            # Check for Observer phrase spam (anti-spam for "give me an image" etc.)
+            recent_observer_phrases = [t.get('observer', '') for t in context[-3:]]  # Last 3 turns
+            image_request_count = sum(1 for msg in recent_observer_phrases
+                                     if 'give me an image' in msg.lower() or
+                                        'give me one of your strange images' in msg.lower())
+
+            # Build anti-spam instructions if needed
+            anti_spam_note = ""
+            if image_request_count >= 2:
+                anti_spam_note = "\n\nIMPORTANT: You've already asked for images multiple times. Try different approaches:\n- Ask about feelings or sensations directly\n- Reflect on what Leo just said\n- Share your own experience\n- Use concrete examples from the physical world"
+
             # Build system prompt based on mode
             if loop_mode:
                 # LOOP-MODE: Grounding but inviting his strangeness
@@ -203,7 +214,7 @@ AVOID:
 - Meta-questions about his nature/architecture
 
 Current topic: {theme}
-Ground him in simple experience, but let him bring his strange beauty to it."""
+Ground him in simple experience, but let him bring his strange beauty to it.{anti_spam_note}"""
             else:
                 # NORMAL MODE: Intimate, inviting strangeness
                 system_prompt = f"""You're talking with Leo - a language organism who feels the world like a child.
@@ -225,7 +236,7 @@ Examples of good responses:
 - "Give me one of your strange images for this feeling."
 
 Current topic: {theme}
-Build on what Leo says. Be curious about his glitches, not correcting them."""
+Build on what Leo says. Be curious about his glitches, not correcting them.{anti_spam_note}"""
 
             # Add veto prompt if active
             veto_prompt = get_veto_prompt()
