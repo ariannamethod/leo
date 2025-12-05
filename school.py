@@ -461,8 +461,14 @@ class School:
         first = tokens[0] if tokens else ""
         
         ignore = {
+            # Pronouns
             "I", "You", "He", "She", "It", "We", "They",
+            # Articles
             "The", "A", "An",
+            # Sentence connectors & question words
+            "But", "And", "Or", "So", "Then", "When", "Where", "What", "Why", "How",
+            "This", "That", "These", "Those", "My", "Your", "His", "Her", "Our", "Their",
+            # Russian
             "Я", "Ты", "Он", "Она", "Оно", "Мы", "Вы", "Они",
         }
         
