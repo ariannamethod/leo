@@ -1786,6 +1786,13 @@ def post_cleanup_garbage(text: str) -> str:
             i += 2 if punct else 1
             continue
 
+        # Rule 1.7: Em-dash meta-garbage at sentence start (— The-flow, — Leo-talks, etc.)
+        # These are internal technical comments leaking into replies
+        if sent.startswith('—') or sent.startswith('–') or sent.startswith('-'):
+            # Skip entire sentence starting with dash/em-dash
+            i += 2 if punct else 1
+            continue
+
         # Rule 2: Single word - remove if it's a service word (Claude Desktop sniper fix #2)
         if len(tokens) == 1:
             word = tokens[0].lower()
