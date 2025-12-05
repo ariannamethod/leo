@@ -1,35 +1,35 @@
 {
   "conversation_topics": [
     {
-      "theme": "travel_stories",
+      "theme": "dream_places",
       "prompts": [
-        "I was in Paris",
-        "Tokyo is amazing",
-        "Moscow feels cold",
-        "I love London",
-        "Rome is beautiful"
+        "I dream of Istanbul",
+        "Have you heard of Kyoto?",
+        "I miss Lisbon",
+        "My friend lives in Prague",
+        "They told me about Oslo"
       ],
       "target_modules": ["presence", "school"]
     },
     {
-      "theme": "famous_people",
+      "theme": "artists_thinkers",
       "prompts": [
-        "Einstein was genius",
-        "I read about Tesla",
-        "Pushkin is my favorite",
-        "Shakespeare is deep",
-        "Mozart makes me cry"
+        "I read about Kafka",
+        "Have you met Dostoevsky?",
+        "My teacher loves Nietzsche",
+        "They mentioned Picasso",
+        "I learned about Freud"
       ],
       "target_modules": ["school", "episodes"]
     },
     {
-      "theme": "mix_emotions_places",
+      "theme": "memories_cities",
       "prompts": [
-        "Berlin made me lonely",
-        "New York overwhelms me",
-        "Barcelona is warm",
-        "Chicago reminds me childhood",
-        "Vienna feels sad"
+        "I remember Athens warmly",
+        "Have you been to Dublin?",
+        "My mom visited Stockholm",
+        "They lived in Budapest once",
+        "I walked through Amsterdam"
       ],
       "target_modules": ["emotion", "school", "presence"]
     }
