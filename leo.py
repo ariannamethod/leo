@@ -1786,6 +1786,13 @@ def post_cleanup_garbage(text: str) -> str:
             i += 2 if punct else 1
             continue
 
+        # Rule 1.7: Em-dash meta-garbage at sentence start (— The-flow, — Leo-talks, etc.)
+        # These are internal technical comments leaking into replies
+        if sent.startswith('—') or sent.startswith('–') or sent.startswith('-'):
+            # Skip entire sentence starting with dash/em-dash
+            i += 2 if punct else 1
+            continue
+
         # Rule 2: Single word - remove if it's a service word (Claude Desktop sniper fix #2)
         if len(tokens) == 1:
             word = tokens[0].lower()
@@ -2819,8 +2826,12 @@ class LeoField:
                     field=self,
                     config=SchoolConfig() if SchoolConfig else None,
                 )
-            except Exception:
-                # Silent fail — School must never break Leo
+                _debug_log(f"[school] initialized successfully at {DB_PATH}")
+            except Exception as e:
+                # Show error but don't break Leo
+                _debug_log(f"[school] FAILED to initialize: {e}")
+                import traceback
+                traceback.print_exc()
                 self.school = None
         
         # DREAM: imaginary friend layer (optional)
@@ -3449,7 +3460,8 @@ class LeoField:
                 if question is not None:
                     # Store question for next turn (answer handling)
                     self._last_school_question = question
-                    # Append question to reply
+                    # Always append question (cooldown 120sec already prevents spam)
+                    # School should ask about proper nouns naturally, not hide them
                     final_reply = final_reply.rstrip() + "\n\n" + question.text
                 
             except Exception:

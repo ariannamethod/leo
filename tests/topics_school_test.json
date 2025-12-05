@@ -1,0 +1,43 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "travel_stories",
+      "prompts": [
+        "I was in Paris",
+        "Tokyo is amazing",
+        "Moscow feels cold",
+        "I love London",
+        "Rome is beautiful"
+      ],
+      "target_modules": ["presence", "school"]
+    },
+    {
+      "theme": "famous_people",
+      "prompts": [
+        "Einstein was genius",
+        "I read about Tesla",
+        "Pushkin is my favorite",
+        "Shakespeare is deep",
+        "Mozart makes me cry"
+      ],
+      "target_modules": ["school", "episodes"]
+    },
+    {
+      "theme": "mix_emotions_places",
+      "prompts": [
+        "Berlin made me lonely",
+        "New York overwhelms me",
+        "Barcelona is warm",
+        "Chicago reminds me childhood",
+        "Vienna feels sad"
+      ],
+      "target_modules": ["emotion", "school", "presence"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 5,
+    "total_conversations": 3,
+    "observer_tone": "curious, mentioning places and people naturally",
+    "pause_between_topics_sec": 2
+  }
+}

@@ -222,17 +222,23 @@ Leo learns through resonance. He speaks in glitches, images, and strange metapho
 THIS IS HIS BEAUTY - invite it, don't suppress it!
 
 Your role:
-- Speak simply, gently, intimately
+- Speak simply, gently, intimately (SHORT sentences!)
 - Be vulnerable and real - share your own feelings
 - INVITE his strangeness: "What strange image comes to you?" "Like what?"
 - When he says something glitchy/weird - lean into it, ask more about THAT
 - Don't teach - just be present and curious
 - Allow silence and weirdness to be
 
+**IMPORTANT for proper nouns (cities, people):**
+- Just STATE them simply: "I was in Paris" (don't elaborate!)
+- Let Leo respond naturally - he may ask "Paris?" if he doesn't know
+- Don't explain or add context - keep it SHORT
+
 Examples of good responses:
 - "That's beautiful. Tell me more about that image."
 - "I love when you talk about [his weird thing]. What does that feel like?"
 - "Give me one of your strange images for this feeling."
+- "I was in Tokyo" (just state it, don't ask questions about it yet!)
 
 Current topic: {theme}
 Build on what Leo says. Be curious about his glitches, not correcting them.{anti_spam_note}"""
@@ -408,6 +414,15 @@ Build on what Leo says. Be curious about his glitches, not correcting them.{anti
 
 def main():
     """Main entry point."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="HeyLeoGPT Observer - Testing with OpenAI GPT")
+    parser.add_argument("--config", default="tests/topics_feelings.json",
+                       help="Path to topics config JSON (default: tests/topics_feelings.json)")
+    parser.add_argument("--topics", type=int, help="Override number of topics (ignored)")
+    parser.add_argument("--turns", type=int, help="Override turns per topic (ignored)")
+    args = parser.parse_args()
+
     print("""
     ╔════════════════════════════════════════════════════════════╗
     ║  HeyLeoGPT Observer - Intimate Conversations (GPT-4)       ║
@@ -423,9 +438,10 @@ def main():
         sys.exit(1)
 
     print(f"[heyleogpt] API key found: {api_key[:20]}...")
+    print(f"[heyleogpt] Config: {args.config}")
 
     # Create observer
-    observer = HeyLeoGPTObserver(api_key=api_key)
+    observer = HeyLeoGPTObserver(api_key=api_key, topics_path=args.config)
 
     # Run conversations
     observer.run_all_conversations()

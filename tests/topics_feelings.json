@@ -119,6 +119,61 @@
         "home is not a place"
       ],
       "target_modules": ["resonance", "episodes", "santaclaus"]
+    },
+    {
+      "theme": "job_loss",
+      "prompts": [
+        "they fired me today",
+        "I lost my job, I don't know what to do",
+        "why did this happen to me?",
+        "I feel so lost and empty now",
+        "everything I worked for is gone"
+      ],
+      "target_modules": ["trauma", "wounded_expert", "emotion"]
+    },
+    {
+      "theme": "anger_frustration",
+      "prompts": [
+        "I'm so ANGRY! It's not fair!",
+        "why do bad things keep happening?!",
+        "I'm furious, I can't calm down",
+        "this makes me so mad I could scream",
+        "I hate feeling this way!"
+      ],
+      "target_modules": ["arousal", "emotion", "trauma"]
+    },
+    {
+      "theme": "complaining_venting",
+      "prompts": [
+        "everything is falling apart",
+        "nothing ever works out for me",
+        "I'm tired of trying and failing",
+        "why is life so hard all the time?",
+        "I just want to complain, okay?"
+      ],
+      "target_modules": ["emotion", "gowiththeflow", "wounded_expert"]
+    },
+    {
+      "theme": "emotional_swings",
+      "prompts": [
+        "I was okay but now I'm not",
+        "my mood changes so fast",
+        "one moment sad, next moment angry",
+        "I don't understand my feelings anymore",
+        "why can't I just feel stable?"
+      ],
+      "target_modules": ["emotion", "pulse", "trauma"]
+    },
+    {
+      "theme": "despair_hopelessness",
+      "prompts": [
+        "what if it never gets better?",
+        "I feel like giving up",
+        "is there any point to this?",
+        "I'm drowning and nobody sees",
+        "hope feels like a lie"
+      ],
+      "target_modules": ["trauma", "wounded_expert", "presence"]
     }
   ],
   "conversation_settings": {
