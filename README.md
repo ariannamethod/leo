@@ -639,6 +639,10 @@ Glow, like a child. What does warmth feel like in your body? Is it slow or fast?
 *Metrics: external_vocab=0.43, loop_score=0.61, meta_vocab=0.02*
 ```
 
+**4**
+
+```
+
 ## `leo.py` — organism (REPL + one-shot)
 
 – or let’s dive into the process (like a psychologist diving into a patient’s deepest trauma).
@@ -699,14 +703,6 @@ python leo.py
 - /cooccur <word> — show semantic links for a word (top 10 co-occurring tokens)
 - /export — export lexicon to JSON
 - /stats — show field statistics
-
----
-
-
-
-
-
-
 
 ---
 
