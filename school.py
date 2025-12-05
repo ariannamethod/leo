@@ -90,9 +90,9 @@ MAX_NOTE_LEN = 4096  # characters
 @dataclass
 class SchoolConfig:
     """Soft limits and gates for echo-questions."""
-    min_question_interval_sec: float = 5.0     # cooldown between questions (5s for testing, was 120.0)
-    max_questions_per_run: int = 10            # soft limit per REPL run (increased for testing)
-    max_questions_per_hour: int = 20           # global safety net (increased for testing)
+    min_question_interval_sec: float = 120.0   # cooldown between questions (2 min - Desktop Claude recommendation)
+    max_questions_per_run: int = 10            # soft limit per REPL run
+    max_questions_per_hour: int = 20           # global safety net
     max_token_len: int = 40                    # skip too long strings
 
 
@@ -137,7 +137,8 @@ class School:
         self.config = config or SchoolConfig()
         self._questions_this_run = 0
         # Initialize to allow first question immediately (cooldown satisfied)
-        self._last_question_ts = time.time() - 200.0  # 200 seconds ago
+        # Set to far in past so cooldown check passes: now - (-huge) = huge > min_interval
+        self._last_question_ts = -999999.0  # Essentially infinity ago
         self._last_token_asked: Optional[str] = None
         
         # Create persistent connection with WAL and timeout
@@ -170,26 +171,21 @@ class School:
         Returns SchoolQuestion or None.
         """
         if not SCHOOL_AVAILABLE:
-            print(f"[school] SCHOOL_AVAILABLE=False", file=sys.stderr)
             return None
 
         if not human_text or not human_text.strip():
-            print(f"[school] empty human_text", file=sys.stderr)
             return None
 
         ts = now if now is not None else time.time()
 
         if not self._can_ask_now(ts, math_state, pulse):
-            print(f"[school] _can_ask_now=False (cooldown={ts - self._last_question_ts:.1f}s)", file=sys.stderr)
             return None
 
         candidates = self._extract_candidates(human_text)
-        print(f"[school] extracted {len(candidates)} candidates: {candidates[:3]}", file=sys.stderr)
         if not candidates:
             return None
 
         token, display = self._pick_new_token(candidates)
-        print(f"[school] picked token={token}, display={display}", file=sys.stderr)
         if token is None:
             return None
         
@@ -390,15 +386,15 @@ class School:
     ) -> bool:
         """Rate limiting + simple trauma/arousal gate."""
         cfg = self.config
-        
+
         # 1) Cooldown
         if now - self._last_question_ts < cfg.min_question_interval_sec:
             return False
-        
+
         # 2) Per-run limit
         if self._questions_this_run >= cfg.max_questions_per_run:
             return False
-        
+
         # 3) Per-hour limit
         if self._conn is None:
             return False
@@ -412,39 +408,38 @@ class School:
             count = cur.fetchone()[0]
             if count >= cfg.max_questions_per_hour:
                 return False
-        except sqlite3.OperationalError as e:
-            print(f"[school] sqlite operational error: {e}", file=sys.stderr)
+        except sqlite3.OperationalError:
             return False
-        except Exception as e:
-            print(f"[school] unexpected error checking per-hour limit: {e}", file=sys.stderr)
+        except Exception:
             return False
-        
+
         # 4) MathState gates (if available)
         if math_state is not None and MATH_AVAILABLE:
             trauma = float(getattr(math_state, "trauma_level", 0.0) or 0.0)
             arousal = float(getattr(math_state, "arousal", 0.0) or 0.0)
             entropy = float(getattr(math_state, "entropy", 0.0) or 0.0)
             quality = float(getattr(math_state, "quality", 0.5) or 0.5)
-            
-            # Don't ask if trauma too high
-            if trauma > 0.7:
+
+            # Don't ask if trauma too high (raised to 0.99 - Leo's normal baseline is ~0.8-0.96)
+            # Only block on extreme trauma (panic, existential crisis)
+            if trauma > 0.99:
                 return False
-            
+
             # Don't ask if arousal too high (panic/hysteria)
             if arousal > 0.85:
                 return False
-            
+
             # Skip if state is too flat/dead
             if entropy < 0.02 and quality < 0.3:
                 return False
-        
+
         # 5) Pulse gates (if provided, fallback to MathState)
         if pulse is not None:
-            if pulse.trauma > 0.7:
+            if pulse.trauma > 0.99:
                 return False
             if pulse.arousal > 0.9:
                 return False
-        
+
         return True
     
     def _extract_candidates(self, text: str) -> List[Tuple[str, str]]:
