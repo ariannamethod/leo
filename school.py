@@ -90,9 +90,9 @@ MAX_NOTE_LEN = 4096  # characters
 @dataclass
 class SchoolConfig:
     """Soft limits and gates for echo-questions."""
-    min_question_interval_sec: float = 120.0   # cooldown between questions (Desktop Claude recommendation - was 5.0 for testing)
-    max_questions_per_run: int = 5             # soft limit per REPL run (reduced from 15 - too spammy)
-    max_questions_per_hour: int = 15           # global safety net (reduced from 30)
+    min_question_interval_sec: float = 5.0     # cooldown between questions (5s for testing, was 120.0)
+    max_questions_per_run: int = 10            # soft limit per REPL run (increased for testing)
+    max_questions_per_hour: int = 20           # global safety net (increased for testing)
     max_token_len: int = 40                    # skip too long strings
 
 
@@ -136,7 +136,8 @@ class School:
         self.field = field
         self.config = config or SchoolConfig()
         self._questions_this_run = 0
-        self._last_question_ts = 0.0
+        # Initialize to allow first question immediately (cooldown satisfied)
+        self._last_question_ts = time.time() - 200.0  # 200 seconds ago
         self._last_token_asked: Optional[str] = None
         
         # Create persistent connection with WAL and timeout
@@ -165,25 +166,30 @@ class School:
     ) -> Optional[SchoolQuestion]:
         """
         Inspect human_text and (rarely) suggest a short question.
-        
+
         Returns SchoolQuestion or None.
         """
         if not SCHOOL_AVAILABLE:
+            print(f"[school] SCHOOL_AVAILABLE=False", file=sys.stderr)
             return None
-        
+
         if not human_text or not human_text.strip():
+            print(f"[school] empty human_text", file=sys.stderr)
             return None
-        
+
         ts = now if now is not None else time.time()
-        
+
         if not self._can_ask_now(ts, math_state, pulse):
+            print(f"[school] _can_ask_now=False (cooldown={ts - self._last_question_ts:.1f}s)", file=sys.stderr)
             return None
-        
+
         candidates = self._extract_candidates(human_text)
+        print(f"[school] extracted {len(candidates)} candidates: {candidates[:3]}", file=sys.stderr)
         if not candidates:
             return None
-        
+
         token, display = self._pick_new_token(candidates)
+        print(f"[school] picked token={token}, display={display}", file=sys.stderr)
         if token is None:
             return None
         

@@ -2826,8 +2826,12 @@ class LeoField:
                     field=self,
                     config=SchoolConfig() if SchoolConfig else None,
                 )
-            except Exception:
-                # Silent fail — School must never break Leo
+                _debug_log(f"[school] initialized successfully at {DB_PATH}")
+            except Exception as e:
+                # Show error but don't break Leo
+                _debug_log(f"[school] FAILED to initialize: {e}")
+                import traceback
+                traceback.print_exc()
                 self.school = None
         
         # DREAM: imaginary friend layer (optional)
