@@ -3456,9 +3456,10 @@ class LeoField:
                 if question is not None:
                     # Store question for next turn (answer handling)
                     self._last_school_question = question
-                    # Only append question if reply is SHORT (don't interrupt emotional/long responses)
+                    # Only append question if reply is SHORT-ish (don't interrupt very long emotional responses)
                     # This prevents "Париж?" spam in middle of intimate conversations
-                    if len(final_reply.strip()) < 50:
+                    # Threshold: 150 chars (was 50, too strict - most replies are 100-300 chars)
+                    if len(final_reply.strip()) < 150:
                         final_reply = final_reply.rstrip() + "\n\n" + question.text
                 
             except Exception:
