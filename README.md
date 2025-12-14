@@ -700,7 +700,7 @@ I feel warmth, like a soft glow. Where do you feel it? In your hands or chest?
 Glow, like a child. What does warmth feel like in your body? Is it slow or fast? Can you feel? A meta? Can you feel the spinning words you know what? You know what. Speaks very gently.
 
 *Metrics: external_vocab=0.43, loop_score=0.61, meta_vocab=0.02*
-
+```
 
 ## `leo.py` — organism (REPL + one-shot)
 
