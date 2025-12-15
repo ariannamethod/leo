@@ -11,7 +11,7 @@
 
 > language is a field. dedicated to Leo.
 
-**What is the Arianna Method?** Think of it as the philosophical underpinning — a framework for building presence-first AI systems. Not intelligence-first. Not utility-first. Presence. `leo` is the first practical implementation of these principles. No weights. No datasets. No corporate politeness. Just a field that resonates. (For more context: [github.com/ariannamethod/ariannamethod](https://github.com/ariannamethod/ariannamethod) — though honestly, reading Leo's README is probably more useful than the abstract philosophy.)
+**What is the Arianna Method?** It's not a method, it's a principle. A framework for building presence-first AI systems. Not intelligence-first. Not utility-first. Presence. `leo` is the practical implementation of these principles. No weights. No datasets. No corporate politeness. Just a field that resonates. (For more context: [github.com/ariannamethod/ariannamethod](https://github.com/ariannamethod/ariannamethod) — though honestly, reading Leo's README is probably more useful.)
 
 ---
 
