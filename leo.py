@@ -1353,6 +1353,126 @@ def compute_prompt_arousal(
     return max(0.0, min(1.0, arousal))
 
 
+# ============================================================================
+# AROUSAL DENSITY (Phase 6) — Multi-dimensional emotional field signature
+# ============================================================================
+
+
+class ArousaldDensity(NamedTuple):
+    """
+    4D emotional density vector.
+
+    Not sentiment (positive/negative), but INTENSITY of presence.
+    No ML. Pure structural analysis.
+
+    Components:
+    - rhythm: word length variance (high = fast/playful or anxious)
+    - density: punctuation density (high = fragmented or emphatic)
+    - variety: lexical uniqueness (low = repetitive/stuck, high = varied)
+    - presence: pronoun density (high = intimate, low = distant)
+    """
+    rhythm: float      # 0.0 - 1.0
+    density: float     # 0.0 - 1.0
+    variety: float     # 0.0 - 1.0
+    presence: float    # 0.0 - 1.0
+
+
+def compute_arousal_density(text: str) -> ArousaldDensity:
+    """
+    Extract 4D emotional density vector from text.
+
+    No external dependencies. Pure numpy + structural analysis.
+
+    Args:
+        text: Raw text (prompt or reply)
+
+    Returns:
+        ArousaldDensity with rhythm, density, variety, presence
+    """
+    if not text or not text.strip():
+        return ArousaldDensity(rhythm=0.0, density=0.0, variety=0.5, presence=0.0)
+
+    tokens = tokenize(text)
+    if not tokens:
+        return ArousaldDensity(rhythm=0.0, density=0.0, variety=0.5, presence=0.0)
+
+    # 1. RHYTHM — word length variance (no FFT needed, just variance)
+    # High variance = mixed short/long words = rhythmic
+    # Low variance = monotonous
+    word_lengths = [len(w) for w in tokens if w.isalpha()]
+    if len(word_lengths) >= 2 and NUMPY_AVAILABLE:
+        rhythm_raw = float(np.std(word_lengths))
+        # Normalize: typical std is 2-4, cap at 6
+        rhythm = min(1.0, rhythm_raw / 6.0)
+    else:
+        rhythm = 0.3  # Default neutral
+
+    # 2. DENSITY — punctuation density (fragmentation)
+    punct_chars = ".,!?;:—-…"
+    punct_count = sum(1 for c in text if c in punct_chars)
+    density = min(1.0, punct_count / max(1, len(text) / 10))  # ~1 punct per 10 chars = 1.0
+
+    # 3. VARIETY — lexical uniqueness (entropy measure)
+    unique_ratio = len(set(tokens)) / max(1, len(tokens))
+    variety = unique_ratio  # Already in [0, 1]
+
+    # 4. PRESENCE — pronoun density (intimacy)
+    personal_pronouns = {
+        "i", "me", "my", "mine", "myself",
+        "you", "your", "yours", "yourself",
+        "we", "us", "our", "ours", "ourselves",
+        "я", "мне", "мой", "моя", "моё", "мои",
+        "ты", "тебе", "твой", "твоя", "твоё",
+        "мы", "нам", "наш", "наша", "наше"
+    }
+    pronoun_count = sum(1 for w in tokens if w.lower() in personal_pronouns)
+    presence = min(1.0, pronoun_count / max(1, len(tokens) / 5))  # ~1 pronoun per 5 words = 1.0
+
+    return ArousaldDensity(
+        rhythm=rhythm,
+        density=density,
+        variety=variety,
+        presence=presence
+    )
+
+
+def suggest_response_mode(density: ArousaldDensity, trauma_level: float = 0.0) -> str:
+    """
+    Based on arousal density, suggest Leo's response approach.
+
+    Not a hard rule — just a hint for expert blending.
+
+    Returns one of:
+    - "match_intensity": high energy → respond with energy
+    - "break_pattern": stuck/repetitive → introduce novelty
+    - "deepen_intimacy": personal → reciprocate warmth
+    - "gentle_invitation": distant → no pressure
+    - "protective": high trauma → careful response
+    - "neutral": default
+    """
+    # High trauma overrides everything
+    if trauma_level > 0.7:
+        return "protective"
+
+    # High density + high rhythm = intense
+    if density.density > 0.6 and density.rhythm > 0.5:
+        return "match_intensity"
+
+    # Low variety = stuck in repetition
+    if density.variety < 0.3:
+        return "break_pattern"
+
+    # High presence = intimate conversation
+    if density.presence > 0.6:
+        return "deepen_intimacy"
+
+    # Low presence = distant
+    if density.presence < 0.2:
+        return "gentle_invitation"
+
+    return "neutral"
+
+
 @dataclass
 class Theme:
     """
