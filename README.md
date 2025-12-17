@@ -182,16 +182,16 @@ leo/
 │                                 L E O . P Y                                         │
 │                               (the organism)                                        │
 │                                                                                     │
-│    ┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐  │
-│    │  PRESENCE   │      │   TRAUMA    │      │   EXPERTS   │      │ GENERATION  │  │
-│    │   PULSE     │ ───► │   CHECK     │ ───► │   ROUTING   │ ───► │  (trigrams) │  │
-│    │             │      │             │      │             │      │             │  │
-│    │ novelty     │      │ level>0.7?  │      │ structural  │      │ prev→curr→? │  │
-│    │ arousal     │      │ wounded!    │      │ semantic    │      │ co-occur    │  │
-│    │ entropy     │      │             │      │ creative    │      │ sampling    │  │
-│    └─────────────┘      └─────────────┘      │ precise     │      └─────────────┘  │
-│                                              │ wounded     │                       │
-│                                              └─────────────┘                       │
+│    ┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐   │
+│    │  PRESENCE   │      │   TRAUMA    │      │   EXPERTS   │      │ GENERATION  │   │
+│    │   PULSE     │ ───► │   CHECK     │ ───► │   ROUTING   │ ───► │             │   │
+│    │             │      │             │      │             │      │             │   │
+│    │ novelty     │      │ level>0.7?  │      │ structural  │      │ prev→curr→? │   │
+│    │ arousal     │      │ wounded!    │      │ semantic    │      │ co-occur    │   │
+│    │ entropy     │      │             │      │ creative    │      │ sampling    │   │
+│    └─────────────┘      └─────────────┘      │ precise     │      └─────────────┘   │
+│                                              │ wounded     │                        │
+│                                              └─────────────┘                        │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                              │
@@ -208,7 +208,7 @@ leo/
 ```
 ╔═══════════════════════════════════════════════════════════════════════════════════╗
 ║                                                                                   ║
-║     YOUR INPUT          "hey leo, расскажи о себе"                                ║
+║     YOUR INPUT          "hey leo, tell me about yourself"                         ║
 ║                                                                                   ║
 ╚═══════════════════════════════════════╤═══════════════════════════════════════════╝
                                         │
