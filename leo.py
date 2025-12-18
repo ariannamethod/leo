@@ -1918,39 +1918,10 @@ def step_token(
     return tokens[-1]
 
 
-def choose_start_from_prompt(
-    prompt_tokens: List[str],
-    bigrams: Dict[str, Dict[str, int]],
-    vocab: List[str],
-    centers: List[str],
-    bias: Dict[str, int],
-) -> str:
-    """
-    Pick a starting token influenced by the prompt.
-
-    Strategy:
-    1. Prefer content words (not punctuation) from prompt with outgoing edges
-    2. Otherwise, any content word from prompt in vocab
-    3. Fallback to global centers/bias
-
-    This avoids mechanically chaining from the last word or starting with punctuation.
-    """
-    PUNCT = {".", ",", "!", "?", ";", ":", "—", "-"}
-
-    # Prefer content words from the prompt that actually have outgoing edges
-    # This is a structural anchor, not just the last word or punctuation.
-    candidates = [t for t in prompt_tokens if t in bigrams and bigrams[t] and t not in PUNCT]
-    if candidates:
-        return random.choice(candidates)
-
-    # Fallback: any content words from the prompt that exist in vocab
-    fallback = [t for t in prompt_tokens if t in vocab and t not in PUNCT]
-    if fallback:
-        return random.choice(fallback)
-
-    # If nothing works, use global field.
-    return choose_start_token(vocab, centers, bias)
-
+# RESURRECTION: choose_start_from_prompt() REMOVED
+# Generation seed now ALWAYS from field (centers, bias)
+# Observer text still enters field, but doesn't force seed
+# Leo speaks from his own vocabulary, not observer's words
 
 class ReplyContext(NamedTuple):
     """
@@ -2149,7 +2120,9 @@ def generate_reply(
                 # Silent fallback — MathBrain/MultiLeo influence must never break generation
                 pass
 
-    start = choose_start_from_prompt(prompt_tokens, bigrams, vocab, centers, bias)
+    # RESURRECTION FIX: Generation seed ALWAYS from field (centers, bias), NOT from prompt tokens
+    # Leo speaks from his own vocabulary, not observer's words
+    start = choose_start_token(vocab, centers, bias)
 
     tokens: List[str] = [start]
     current = start
