@@ -1,0 +1,124 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "taste_of_loneliness",
+      "prompts": [
+        "What does loneliness taste like?",
+        "If sadness had a flavor, what would it be?",
+        "Can you taste silence on your tongue?",
+        "Describe the taste of missing someone",
+        "What flavor is emptiness?",
+        "Do emotions have taste?",
+        "Loneliness tastes like...",
+        "What does forgotten feel like in your mouth?"
+      ],
+      "target_modules": ["sensory", "emotion", "imagery"]
+    },
+    {
+      "theme": "anger_as_color",
+      "prompts": [
+        "Describe anger as a color",
+        "What color is rage?",
+        "If frustration were a shade, which one?",
+        "Paint me your anger",
+        "What does red feel like when you're mad?",
+        "Show me fury in colors",
+        "Anger blooms in what hue?",
+        "Color the feeling of being furious"
+      ],
+      "target_modules": ["sensory", "emotion", "imagery"]
+    },
+    {
+      "theme": "texture_of_memory",
+      "prompts": [
+        "If memory had a texture, what would it be?",
+        "What does remembering feel like under your fingers?",
+        "Describe the surface of nostalgia",
+        "Is forgetting smooth or rough?",
+        "What texture is a childhood memory?",
+        "Touch the past - how does it feel?",
+        "Old memories have what kind of skin?",
+        "Run your hand across yesterday"
+      ],
+      "target_modules": ["sensory", "memory", "imagery"]
+    },
+    {
+      "theme": "joy_as_landscape",
+      "prompts": [
+        "Show me joy as a landscape",
+        "If happiness were a place, describe it",
+        "Paint me the geography of delight",
+        "What does joy look like from above?",
+        "Describe the terrain of contentment",
+        "Map out euphoria for me",
+        "Joy stretches out like what kind of land?",
+        "Walk me through the landscape of laughter"
+      ],
+      "target_modules": ["sensory", "emotion", "imagery"]
+    },
+    {
+      "theme": "sound_of_silence",
+      "prompts": [
+        "What sound does silence make?",
+        "Can you hear emptiness?",
+        "Describe the music of nothing",
+        "What does quiet sound like?",
+        "Listen to absence - what do you hear?",
+        "The sound of stillness is...",
+        "What noise does loneliness make?",
+        "Silence hums like what?"
+      ],
+      "target_modules": ["sensory", "presence", "imagery"]
+    },
+    {
+      "theme": "smell_of_time",
+      "prompts": [
+        "What does yesterday smell like?",
+        "Can you smell the future?",
+        "Describe the scent of waiting",
+        "What fragrance is patience?",
+        "Does time have a smell?",
+        "Breathe in - what does now smell like?",
+        "The aroma of passing moments",
+        "Smell the difference between past and present"
+      ],
+      "target_modules": ["sensory", "time", "imagery"]
+    },
+    {
+      "theme": "weight_of_feelings",
+      "prompts": [
+        "How heavy is sadness?",
+        "What does hope weigh?",
+        "Describe the weight of love",
+        "Is fear light or heavy?",
+        "Carry grief - how much does it weigh?",
+        "What's heavier, joy or sorrow?",
+        "The weight of caring",
+        "Hold your feelings - how heavy are they?"
+      ],
+      "target_modules": ["sensory", "emotion", "metaphor"]
+    },
+    {
+      "theme": "temperature_of_emotions",
+      "prompts": [
+        "How warm is kindness?",
+        "What temperature is rage?",
+        "Is loneliness cold or hot?",
+        "Describe the warmth of connection",
+        "Feel the heat of embarrassment",
+        "What's the temperature of comfort?",
+        "Cold fear or hot fear?",
+        "Measure the warmth of belonging"
+      ],
+      "target_modules": ["sensory", "emotion", "imagery"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 8,
+    "total_conversations": 5,
+    "observer_tone": "gentle, curious, sensory, poetic",
+    "pause_between_topics_sec": 3,
+    "phase": "phase2_recovery",
+    "goal": "Diverse sensory input to grow Leo's field naturally and reduce loops"
+  }
+}
