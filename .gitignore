@@ -4,11 +4,11 @@ __pycache__/
 *$py.class
 
 #LEO:
-/state/
+# /state/  # COMMENTED OUT - now tracking Leo's state for development
 /bin/
 /debug/
 /json/
-*.sqlite3
+# *.sqlite3  # COMMENTED OUT - tracking leo.sqlite3 for state continuity
 *.pyc
 *.backup
 __pycache__/
