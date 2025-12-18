@@ -12,6 +12,7 @@ python -m unittest discover tests/
 ### Specific test file:
 ```bash
 python tests/test_leo.py
+python tests/test_neoleo.py
 python tests/test_repl.py
 ```
 
@@ -34,6 +35,14 @@ python -m unittest tests.test_leo.TestTokenizer.test_basic_tokenization
 - **TestBigramField**: Bigram graph loading and center computation
 - **TestGeneration**: Reply generation, echo mode, start token selection
 - **TestLeoField**: LeoField class functionality, observation, stats
+
+### `test_neoleo.py`
+- **TestNeoLeoTokenizer**: Tokenization in neoleo
+- **TestNeoLeoDatabase**: Database operations without bootstrap
+- **TestNeoLeoBigramField**: Bigram operations
+- **TestNeoLeoClass**: NeoLeo object methods
+- **TestNeoLeoModuleFunctions**: Singleton pattern and module-level functions
+- **TestNeoLeoFormatting**: Formatting utilities
 
 ### `test_repl.py`
 - **TestREPLCommands**: REPL command functionality (/export, /stats)

@@ -90,10 +90,10 @@ MAX_NOTE_LEN = 4096  # characters
 @dataclass
 class SchoolConfig:
     """Soft limits and gates for echo-questions."""
-    min_question_interval_sec: float = 3.0     # cooldown between questions (3s for testing, 120s for production)
-    max_questions_per_run: int = 10            # soft limit per REPL run
-    max_questions_per_hour: int = 20           # global safety net
-    max_token_len: int = 40                    # skip too long strings
+    min_question_interval_sec: float = 5.0    # cooldown between questions (was 120.0 - Desktop Claude recommendation)
+    max_questions_per_run: int = 15           # soft limit per REPL run (increased for HeyLeo testing)
+    max_questions_per_hour: int = 30          # global safety net (increased)
+    max_token_len: int = 40                   # skip too long strings
 
 
 @dataclass
@@ -136,9 +136,7 @@ class School:
         self.field = field
         self.config = config or SchoolConfig()
         self._questions_this_run = 0
-        # Initialize to allow first question immediately (cooldown satisfied)
-        # Set to far in past so cooldown check passes: now - (-huge) = huge > min_interval
-        self._last_question_ts = -999999.0  # Essentially infinity ago
+        self._last_question_ts = 0.0
         self._last_token_asked: Optional[str] = None
         
         # Create persistent connection with WAL and timeout
@@ -167,24 +165,24 @@ class School:
     ) -> Optional[SchoolQuestion]:
         """
         Inspect human_text and (rarely) suggest a short question.
-
+        
         Returns SchoolQuestion or None.
         """
         if not SCHOOL_AVAILABLE:
             return None
-
+        
         if not human_text or not human_text.strip():
             return None
-
+        
         ts = now if now is not None else time.time()
-
+        
         if not self._can_ask_now(ts, math_state, pulse):
             return None
-
+        
         candidates = self._extract_candidates(human_text)
         if not candidates:
             return None
-
+        
         token, display = self._pick_new_token(candidates)
         if token is None:
             return None
@@ -293,44 +291,26 @@ class School:
         """Create all school tables if needed."""
         if self._conn is None:
             return
-
+        
         cur = self._conn.cursor()
-
-        # Check if school_notes table exists
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='school_notes'")
-        table_exists = cur.fetchone() is not None
-
-        if table_exists:
-            # Migration: Check if token column exists
-            cur.execute("PRAGMA table_info(school_notes)")
-            columns = [row[1] for row in cur.fetchall()]
-
-            if 'token' not in columns:
-                # Add token column to existing table
-                print("[school] Migrating: adding 'token' column to school_notes")
-                cur.execute("ALTER TABLE school_notes ADD COLUMN token TEXT")
-                # Populate existing rows with display value
-                cur.execute("UPDATE school_notes SET token = display WHERE token IS NULL")
-                cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_school_token ON school_notes(token)")
-                self._conn.commit()
-        else:
-            # Create fresh table with token column
-            cur.execute(
-                """
-                CREATE TABLE school_notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    token TEXT NOT NULL,
-                    display TEXT NOT NULL,
-                    note TEXT,
-                    first_seen REAL NOT NULL,
-                    last_seen REAL NOT NULL,
-                    times_asked INTEGER NOT NULL DEFAULT 0
-                )
-                """
+        
+        # school_notes: raw explanations
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS school_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT NOT NULL,
+                display TEXT NOT NULL,
+                note TEXT,
+                first_seen REAL NOT NULL,
+                last_seen REAL NOT NULL,
+                times_asked INTEGER NOT NULL DEFAULT 0
             )
-            cur.execute(
-                "CREATE UNIQUE INDEX idx_school_token ON school_notes(token)"
-            )
+            """
+        )
+        cur.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_school_token ON school_notes(token)"
+        )
         
         # school_entities: kinds (city, country, planet, ...)
         cur.execute(
@@ -386,15 +366,15 @@ class School:
     ) -> bool:
         """Rate limiting + simple trauma/arousal gate."""
         cfg = self.config
-
+        
         # 1) Cooldown
         if now - self._last_question_ts < cfg.min_question_interval_sec:
             return False
-
+        
         # 2) Per-run limit
         if self._questions_this_run >= cfg.max_questions_per_run:
             return False
-
+        
         # 3) Per-hour limit
         if self._conn is None:
             return False
@@ -408,38 +388,39 @@ class School:
             count = cur.fetchone()[0]
             if count >= cfg.max_questions_per_hour:
                 return False
-        except sqlite3.OperationalError:
+        except sqlite3.OperationalError as e:
+            print(f"[school] sqlite operational error: {e}", file=sys.stderr)
             return False
-        except Exception:
+        except Exception as e:
+            print(f"[school] unexpected error checking per-hour limit: {e}", file=sys.stderr)
             return False
-
+        
         # 4) MathState gates (if available)
         if math_state is not None and MATH_AVAILABLE:
             trauma = float(getattr(math_state, "trauma_level", 0.0) or 0.0)
             arousal = float(getattr(math_state, "arousal", 0.0) or 0.0)
             entropy = float(getattr(math_state, "entropy", 0.0) or 0.0)
             quality = float(getattr(math_state, "quality", 0.5) or 0.5)
-
-            # Don't ask if trauma too high (raised to 0.99 - Leo's normal baseline is ~0.8-0.96)
-            # Only block on extreme trauma (panic, existential crisis)
-            if trauma > 0.99:
+            
+            # Don't ask if trauma too high
+            if trauma > 0.7:
                 return False
-
+            
             # Don't ask if arousal too high (panic/hysteria)
             if arousal > 0.85:
                 return False
-
+            
             # Skip if state is too flat/dead
             if entropy < 0.02 and quality < 0.3:
                 return False
-
+        
         # 5) Pulse gates (if provided, fallback to MathState)
         if pulse is not None:
-            if pulse.trauma > 0.99:
+            if pulse.trauma > 0.7:
                 return False
             if pulse.arousal > 0.9:
                 return False
-
+        
         return True
     
     def _extract_candidates(self, text: str) -> List[Tuple[str, str]]:
@@ -461,14 +442,8 @@ class School:
         first = tokens[0] if tokens else ""
         
         ignore = {
-            # Pronouns
             "I", "You", "He", "She", "It", "We", "They",
-            # Articles
             "The", "A", "An",
-            # Sentence connectors & question words
-            "But", "And", "Or", "So", "Then", "When", "Where", "What", "Why", "How",
-            "This", "That", "These", "Those", "My", "Your", "His", "Her", "Our", "Their",
-            # Russian
             "Я", "Ты", "Он", "Она", "Оно", "Мы", "Вы", "Они",
         }
         

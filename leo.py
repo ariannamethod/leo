@@ -53,61 +53,6 @@ except ImportError:
     FlowTracker = None  # type: ignore
     FLOW_AVAILABLE = False
 
-# Safe import: phase4_bridges module (Island Bridges statistical learning)
-try:
-    from phase4_bridges import (
-        EpisodeLogger,
-        BridgeMemory,
-        TransitionGraph,
-        suggest_next_islands_phase4,
-    )
-    PHASE4_AVAILABLE = True
-except ImportError:
-    EpisodeLogger = None  # type: ignore
-    BridgeMemory = None  # type: ignore
-    TransitionGraph = None  # type: ignore
-    suggest_next_islands_phase4 = None  # type: ignore
-    PHASE4_AVAILABLE = False
-
-# Safe import: stories module (Phase 5 - Full trajectory patterns + h2o scenarios)
-try:
-    from stories import (
-        Story,
-        StoryStep,
-        StoryBook,
-        H2OScenario,
-        ScenarioLibrary,
-        SharedField,
-        DreamEngine,
-        suggest_next_islands_phase5,
-        get_veto_prompt,
-        decrement_vetos,
-    )
-    PHASE5_AVAILABLE = True
-except ImportError:
-    Story = None  # type: ignore
-    StoryStep = None  # type: ignore
-    StoryBook = None  # type: ignore
-    H2OScenario = None  # type: ignore
-    ScenarioLibrary = None  # type: ignore
-    SharedField = None  # type: ignore
-    DreamEngine = None  # type: ignore
-    suggest_next_islands_phase5 = None  # type: ignore
-    get_veto_prompt = None  # type: ignore
-    decrement_vetos = None  # type: ignore
-    PHASE5_AVAILABLE = False
-
-# Safe import: loop_detector and veto_manager (Phase 5.2 - Loop detection + veto power)
-try:
-    from loop_detector import LoopDetector, tokenize_simple
-    from veto_manager import veto_manager
-    LOOP_DETECTOR_AVAILABLE = True
-except ImportError:
-    LoopDetector = None  # type: ignore
-    tokenize_simple = None  # type: ignore
-    veto_manager = None  # type: ignore
-    LOOP_DETECTOR_AVAILABLE = False
-
 # Safe import: metaleo module is optional
 try:
     from metaleo import MetaLeo
@@ -125,20 +70,13 @@ except ImportError:
     MathState = None  # type: ignore
     MATHBRAIN_AVAILABLE = False
 
-# Safe import: mathbrain_phase4 module (Island bridges learning system)
-try:
-    from mathbrain_phase4 import MathBrainPhase4
-    MATHBRAIN_PHASE4_AVAILABLE = True
-except ImportError:
-    MathBrainPhase4 = None  # type: ignore
-    MATHBRAIN_PHASE4_AVAILABLE = False
-
 # Safe import: santaclaus module is optional
 try:
-    from santaclaus import SantaKlaus
+    from santaclaus import SantaKlaus, SantaContext
     SANTACLAUS_AVAILABLE = True
 except ImportError:
     SantaKlaus = None  # type: ignore
+    SantaContext = None  # type: ignore
     SANTACLAUS_AVAILABLE = False
 
 # Safe import: episodes module is optional
@@ -204,18 +142,6 @@ try:
 except ImportError:
     np = None  # type: ignore
     NUMPY_AVAILABLE = False
-
-# Safe import: architectural_density module (soft penalty on tech jargon in soft topics)
-try:
-    from architectural_density import architectural_density, should_apply_arch_penalty, SOFT_TOPICS
-    ARCH_DENSITY_AVAILABLE = True
-except ImportError:
-    ARCH_DENSITY_AVAILABLE = False
-    SOFT_TOPICS = set()  # type: ignore
-    def architectural_density(text: str) -> float:  # type: ignore
-        return 0.0
-    def should_apply_arch_penalty(topic: str) -> bool:  # type: ignore
-        return False
 
 # ============================================================================
 # PATHS
@@ -1061,42 +987,14 @@ def fix_punctuation(text: str) -> str:
     # 2) Ensure space after .?! if followed by letter/digit
     text = re.sub(r"([.?!])([^\s])", r"\1 \2", text)
 
-    # 2.5) Extra insurance: specifically handle .?! before capital letters
-    # (Claude Desktop sniper fix #1: hands?Are → hands? Are)
-    text = re.sub(r"([.?!])([A-Z])", r"\1 \2", text)
-
     # 3) Collapse repeated punctuation
     text = re.sub(r"([!?]){2,}", r"\1", text)
     text = re.sub(r"\.{2,}", ".", text)
-
-    # Clean up punctuation garbage combinations
-    text = re.sub(r",\.", ".", text)   # ",." → "."
-    text = re.sub(r",;", ";", text)    # ",;" → ";"
-    text = re.sub(r"\.,", ".", text)   # ".," → "."
-    text = re.sub(r",\?+", "?", text)  # ",?" / ",??" → "?"
-    text = re.sub(r"\?,+", "?", text)  # "?," → "?"
-    text = re.sub(r"\.\?", "?", text)  # ".?" → "?"
-    text = re.sub(r"\?\.+", "?", text) # "?." → "?"
-    text = re.sub(r",!+", "!", text)   # ",!" → "!"
-    text = re.sub(r"!,+", "!", text)   # "!," → "!"
-    text = re.sub(r"\.!", "!", text)   # ".!" → "!"
-    text = re.sub(r"!\.", "!", text)   # "!." → "!"
-
+    text = re.sub(r",\.", ".", text)  # ",." → "."
+    text = re.sub(r",;", ";", text)   # ",;" → ";"
+    text = re.sub(r"\.,", ".", text)  # ".," → "."
     # Collapse spaced duplicates: ". ." → ".", "? ?" → "?", "! !" → "!"
     text = re.sub(r"([.!?])\s+\1", r"\1", text)
-
-    # 3.5) Claude's polish fixes (2025-12-04)
-    # Fix trailing comma: "And that's it," → "And that's it."
-    text = re.sub(r",\s*$", ".", text)  # Trailing comma at end → period
-
-    # Fix "?, in" glitch: "feel?, in new" → "feel? In new"
-    text = re.sub(r"\?\s*,\s+in\b", "? In", text, flags=re.IGNORECASE)
-    text = re.sub(r"\?\s*,\s+", "? ", text)  # General "?, " → "? "
-
-    # More aggressive trailing preposition cleanup
-    # "in." / "of." / "for." at sentence end → remove sentence
-    # But this is handled in post_cleanup_garbage(), just add extra insurance
-    text = re.sub(r"\s+(in|of|for|at|on|to|by|with)\.$", ".", text)
 
     # 4) Normalize weird dashes and em-dashes
     text = re.sub(r"\s*—\s*—\s*—\s*", " — ", text)  # " — — — " → " — "
@@ -1160,17 +1058,6 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r"!\s+,", "!", text)
     # Remove hanging dash-dot: " -." / " —." → "."
     text = re.sub(r"\s+[—-]\s*\.", ".", text)
-
-    # 11) Clean up technical artifacts (2025-12-04 fix)
-    # Remove ",-" / ".-" / ":." / ":-" patterns
-    text = re.sub(r",\s*-", " ", text)  # ",-" → " "
-    text = re.sub(r"\.\s*-", ". ", text)  # ".-" → ". "
-    text = re.sub(r":\s*\.", ".", text)  # ":." → "."
-    text = re.sub(r":\s*-", ": ", text)  # ":-" → ": "
-    # Remove orphaned two-letter capitalized words followed by colons (e.g., "Py:")
-    text = re.sub(r"\b[A-Z][a-z]:", "", text)  # "Py:" → ""
-    # Clean up again
-    text = re.sub(r"\s{2,}", " ", text).strip()
 
     return text
 
@@ -1366,126 +1253,6 @@ def compute_prompt_arousal(
 
     # Clamp to [0, 1]
     return max(0.0, min(1.0, arousal))
-
-
-# ============================================================================
-# AROUSAL DENSITY (Phase 6) — Multi-dimensional emotional field signature
-# ============================================================================
-
-
-class ArousaldDensity(NamedTuple):
-    """
-    4D emotional density vector.
-
-    Not sentiment (positive/negative), but INTENSITY of presence.
-    No ML. Pure structural analysis.
-
-    Components:
-    - rhythm: word length variance (high = fast/playful or anxious)
-    - density: punctuation density (high = fragmented or emphatic)
-    - variety: lexical uniqueness (low = repetitive/stuck, high = varied)
-    - presence: pronoun density (high = intimate, low = distant)
-    """
-    rhythm: float      # 0.0 - 1.0
-    density: float     # 0.0 - 1.0
-    variety: float     # 0.0 - 1.0
-    presence: float    # 0.0 - 1.0
-
-
-def compute_arousal_density(text: str) -> ArousaldDensity:
-    """
-    Extract 4D emotional density vector from text.
-
-    No external dependencies. Pure numpy + structural analysis.
-
-    Args:
-        text: Raw text (prompt or reply)
-
-    Returns:
-        ArousaldDensity with rhythm, density, variety, presence
-    """
-    if not text or not text.strip():
-        return ArousaldDensity(rhythm=0.0, density=0.0, variety=0.5, presence=0.0)
-
-    tokens = tokenize(text)
-    if not tokens:
-        return ArousaldDensity(rhythm=0.0, density=0.0, variety=0.5, presence=0.0)
-
-    # 1. RHYTHM — word length variance (no FFT needed, just variance)
-    # High variance = mixed short/long words = rhythmic
-    # Low variance = monotonous
-    word_lengths = [len(w) for w in tokens if w.isalpha()]
-    if len(word_lengths) >= 2 and NUMPY_AVAILABLE:
-        rhythm_raw = float(np.std(word_lengths))
-        # Normalize: typical std is 2-4, cap at 6
-        rhythm = min(1.0, rhythm_raw / 6.0)
-    else:
-        rhythm = 0.3  # Default neutral
-
-    # 2. DENSITY — punctuation density (fragmentation)
-    punct_chars = ".,!?;:—-…"
-    punct_count = sum(1 for c in text if c in punct_chars)
-    density = min(1.0, punct_count / max(1, len(text) / 10))  # ~1 punct per 10 chars = 1.0
-
-    # 3. VARIETY — lexical uniqueness (entropy measure)
-    unique_ratio = len(set(tokens)) / max(1, len(tokens))
-    variety = unique_ratio  # Already in [0, 1]
-
-    # 4. PRESENCE — pronoun density (intimacy)
-    personal_pronouns = {
-        "i", "me", "my", "mine", "myself",
-        "you", "your", "yours", "yourself",
-        "we", "us", "our", "ours", "ourselves",
-        "я", "мне", "мой", "моя", "моё", "мои",
-        "ты", "тебе", "твой", "твоя", "твоё",
-        "мы", "нам", "наш", "наша", "наше"
-    }
-    pronoun_count = sum(1 for w in tokens if w.lower() in personal_pronouns)
-    presence = min(1.0, pronoun_count / max(1, len(tokens) / 5))  # ~1 pronoun per 5 words = 1.0
-
-    return ArousaldDensity(
-        rhythm=rhythm,
-        density=density,
-        variety=variety,
-        presence=presence
-    )
-
-
-def suggest_response_mode(density: ArousaldDensity, trauma_level: float = 0.0) -> str:
-    """
-    Based on arousal density, suggest Leo's response approach.
-
-    Not a hard rule — just a hint for expert blending.
-
-    Returns one of:
-    - "match_intensity": high energy → respond with energy
-    - "break_pattern": stuck/repetitive → introduce novelty
-    - "deepen_intimacy": personal → reciprocate warmth
-    - "gentle_invitation": distant → no pressure
-    - "protective": high trauma → careful response
-    - "neutral": default
-    """
-    # High trauma overrides everything
-    if trauma_level > 0.7:
-        return "protective"
-
-    # High density + high rhythm = intense
-    if density.density > 0.6 and density.rhythm > 0.5:
-        return "match_intensity"
-
-    # Low variety = stuck in repetition
-    if density.variety < 0.3:
-        return "break_pattern"
-
-    # High presence = intimate conversation
-    if density.presence > 0.6:
-        return "deepen_intimacy"
-
-    # Low presence = distant
-    if density.presence < 0.2:
-        return "gentle_invitation"
-
-    return "neutral"
 
 
 @dataclass
@@ -1689,324 +1456,6 @@ def activate_themes_for_prompt(
     return ActiveThemes(theme_scores=theme_scores, active_words=active_words)
 
 
-# ============================================================================
-# QUALITY UTILITIES - Surface cleanup and imagery detection
-# ============================================================================
-
-# Sensory/imagery words for soft topics
-IMAGERY_WORDS: Set[str] = {
-    "hands", "breath", "leaves", "mountains", "water", "snow", "blanket",
-    "hug", "child", "river", "sky", "sun", "warm", "cold", "wind", "forest",
-    "sea", "eyes", "smile", "heart", "light", "shadow", "whisper", "touch",
-    "feet", "ground", "air", "voice", "silence", "moment", "softly", "gently",
-    "spiral", "image", "color", "shape", "feel", "body", "skin", "breeze",
-    "tree", "star", "moon", "rain", "stone", "bird", "flower", "grass",
-    "stream", "hill", "valley", "cloud", "snow globe", "falling", "floating"
-}
-
-# Serve words that indicate surface garbage
-TRAILING_GARBAGE: Set[str] = {
-    "and", "or", "but", "because", "then", "so",
-    "in", "on", "at", "of", "for", "a", "an", "the", "to"
-}
-
-# Signature phrases that should NEVER be penalized
-SIGNATURE_PHRASES_WHITELIST: Set[str] = {
-    "soft smile oh my", "oh leo", "like a child", "you like a child",
-    "leaves falling oh leo", "go on", "whisper", "now", "smile",
-    "sits quietly for a moment", "speaks very gently", "speaks extra softly",
-    "looks up dreamily", "pauses softly"
-}
-
-# Multi-word garbage phrases to remove (tokenization artifacts)
-MULTI_WORD_GARBAGE: Set[str] = {
-    "to id", "in an", "of", "for a", "with a", "by a", "from a",
-    "at a", "on a", "about a", "like a a", "the a", "a a"
-}
-
-# Lonely service words to remove (Claude Desktop sniper fix #2)
-# These appear as single-word sentences and are pure garbage
-SERVICE_WORDS_TO_REMOVE: Set[str] = {
-    "and", "or", "but", "that", "then", "so", "because",
-    "a", "an", "the", "to", "in", "on", "at", "of", "for",
-    "with", "by", "from", "about", "as", "into", "through",
-    "let", "it", "this", "these", "those"
-}
-
-
-def jaccard_bigrams(text_a: str, text_b: str) -> float:
-    """
-    Compute Jaccard similarity of bigrams between two texts.
-    Used for echo detection: if reply mirrors prompt structure, similarity > 0.5.
-
-    Returns: float [0.0, 1.0] where higher = more similar structure
-    """
-    if not text_a or not text_b:
-        return 0.0
-
-    tokens_a = tokenize(text_a)
-    tokens_b = tokenize(text_b)
-
-    if len(tokens_a) < 2 or len(tokens_b) < 2:
-        return 0.0
-
-    # Build bigram sets
-    bigrams_a = set((tokens_a[i], tokens_a[i+1]) for i in range(len(tokens_a) - 1))
-    bigrams_b = set((tokens_b[i], tokens_b[i+1]) for i in range(len(tokens_b) - 1))
-
-    if not bigrams_a or not bigrams_b:
-        return 0.0
-
-    intersection = len(bigrams_a & bigrams_b)
-    union = len(bigrams_a | bigrams_b)
-
-    return intersection / union if union > 0 else 0.0
-
-
-def imagery_ratio(text: str) -> float:
-    """
-    Calculate ratio of sensory/imagery words in text.
-    Used for soft topics: bonus if reply contains real images, not architecture.
-
-    Returns: float [0.0, 1.0] where higher = more imagery
-    """
-    if not text:
-        return 0.0
-
-    tokens = tokenize(text)
-    if not tokens:
-        return 0.0
-
-    # Count imagery words
-    imagery_count = sum(1 for tok in tokens if tok.lower() in IMAGERY_WORDS)
-
-    return imagery_count / len(tokens)
-
-
-def surface_quality_penalties(text: str) -> float:
-    """
-    Detect surface-level garbage without touching Leo's glitch-poetry.
-
-    Penalties for:
-    - Empty sentences (only punctuation)
-    - Single-word non-signature sentences (A., To., etc.)
-    - Sentences ending on trailing garbage words (in an., of., for., etc.)
-
-    Protected:
-    - Signature phrases: "soft smile oh my", "Go on.", etc.
-    - Any sentence with 3+ content words
-
-    Returns: penalty multiplier [0.0, 1.0] where 1.0 = no penalty, 0.5 = heavy penalty
-    """
-    if not text or not isinstance(text, str):
-        return 1.0
-
-    # Check if text is a signature phrase (protect completely)
-    text_lower = text.lower().strip()
-    for sig in SIGNATURE_PHRASES_WHITELIST:
-        if sig in text_lower:
-            return 1.0  # No penalty for signature phrases
-
-    # Split into sentences
-    sentences = re.split(r'[.!?]+', text)
-
-    penalty = 1.0
-    bad_sentences = 0
-    total_sentences = 0
-
-    for sent in sentences:
-        sent = sent.strip()
-        if not sent:
-            continue
-
-        total_sentences += 1
-
-        # Get content tokens (alphanumeric only)
-        tokens = [tok for tok in tokenize(sent) if any(c.isalnum() for c in tok)]
-
-        # (1) Empty sentence (only punctuation)
-        if not tokens:
-            bad_sentences += 1
-            continue
-
-        # (2) Single word that's not whitelisted
-        if len(tokens) == 1:
-            word = tokens[0].lower()
-            # Allow: Go, Now, Whisper, Smile, etc. (signature single words)
-            if word not in {"go", "now", "whisper", "smile", "yes", "no"}:
-                bad_sentences += 0.5  # Partial penalty
-
-        # (3) Sentence ending on garbage word
-        last_word = tokens[-1].lower() if tokens else ""
-        if last_word in TRAILING_GARBAGE:
-            bad_sentences += 0.5  # Partial penalty
-
-    # (4) Claude Desktop sniper fix #3: Heavy penalty if ENTIRE reply ends on lonely service word
-    # Check if last sentence is a single service word (A., That., etc.)
-    # This means Leo is stuttering/can't continue
-    sentences_with_punct = re.split(r'([.!?]+)', text)
-    # Find last non-empty sentence
-    last_sentence = ""
-    for i in range(len(sentences_with_punct) - 1, -1, -1):
-        s = sentences_with_punct[i].strip()
-        if s and not re.match(r'^[.!?]+$', s):
-            last_sentence = s
-            break
-
-    if last_sentence:
-        last_tokens = [tok for tok in tokenize(last_sentence) if any(c.isalnum() for c in tok)]
-        if len(last_tokens) == 1:
-            word = last_tokens[0].lower()
-            if word in SERVICE_WORDS_TO_REMOVE:
-                # Entire reply ends with lonely service word → HEAVY penalty
-                bad_sentences += 2.0  # Strong penalty
-
-    # Calculate penalty
-    if total_sentences > 0:
-        bad_ratio = bad_sentences / total_sentences
-        penalty = 1.0 - (bad_ratio * 0.5)  # Max 50% penalty
-
-    return max(0.3, min(1.0, penalty))  # Clamp to [0.3, 1.0]
-
-
-def post_cleanup_garbage(text: str) -> str:
-    """
-    Post-processing cleanup AFTER generation.
-
-    Removes surface-level garbage that slipped through quality scoring:
-    - Empty sentences (only punctuation)
-    - Single-word non-signature garbage (A., To., Let.)
-    - Sentences ending with trailing prepositions (in an., of., for.)
-
-    Philosophy: Gentle cleanup of tokenization artifacts, not style changes.
-    Protected: ALL signature phrases, any sentence with 2+ real words.
-
-    Returns: Cleaned text with garbage removed
-    """
-    if not text or not isinstance(text, str):
-        return text
-
-    # NOTE: Signature phrase protection moved to individual sentence level (not whole text)
-    # This prevents "Sits quietly. A. What..." from protecting the garbage "A."
-
-    # Split into sentences preserving punctuation
-    sentences = re.split(r'([.!?]+)', text)
-    cleaned_parts = []
-
-    i = 0
-    while i < len(sentences):
-        sent = sentences[i].strip()
-        punct = sentences[i + 1] if i + 1 < len(sentences) else ""
-
-        if not sent:
-            i += 2 if punct else 1
-            continue
-
-        # Get content tokens (alphanumeric only)
-        tokens = [tok for tok in tokenize(sent) if any(c.isalnum() for c in tok)]
-
-        # Rule 1: Empty sentence (only punctuation) → skip
-        if not tokens:
-            i += 2 if punct else 1
-            continue
-
-        # Rule 1.5: Check if this sentence is a signature phrase → protect it
-        sent_lower = sent.lower()
-        is_signature = any(sig in sent_lower for sig in SIGNATURE_PHRASES_WHITELIST)
-        if is_signature:
-            # This sentence contains a signature phrase → keep it as-is
-            cleaned_parts.append(sent)
-            if punct:
-                cleaned_parts.append(punct)
-            i += 2 if punct else 1
-            continue
-
-        # Rule 1.7: Em-dash meta-garbage at sentence start (— The-flow, — Leo-talks, etc.)
-        # These are internal technical comments leaking into replies
-        if sent.startswith('—') or sent.startswith('–') or sent.startswith('-'):
-            # Skip entire sentence starting with dash/em-dash
-            i += 2 if punct else 1
-            continue
-
-        # Rule 2: Single word - remove if it's a service word (Claude Desktop sniper fix #2)
-        if len(tokens) == 1:
-            word = tokens[0].lower()
-            # Remove lonely service words: And., That., A., etc.
-            if word in SERVICE_WORDS_TO_REMOVE:
-                # This is garbage → skip
-                i += 2 if punct else 1
-                continue
-            # Otherwise: protect all other single words (Go., Whisper., Mountains., etc.)
-
-        # Rule 2.5: Multi-word garbage phrases (e.g., "To id.", "In an.")
-        if len(tokens) == 2:
-            phrase = ' '.join(tokens).lower()
-            if phrase in MULTI_WORD_GARBAGE:
-                # This is multi-word garbage → skip
-                i += 2 if punct else 1
-                continue
-
-        # Rule 2.6: Check for "To id" as substring in sentence (aggressive cleanup)
-        # "records: To id." → delete entire sentence
-        sent_lower = sent.lower()
-        if "to id" in sent_lower:
-            # This sentence contains "To id" garbage → skip entire sentence
-            i += 2 if punct else 1
-            continue
-
-        # Rule 2.7: Check for trailing service word after comma (", And." → delete)
-        # Split by comma and check last part
-        if ',' in sent:
-            parts = sent.split(',')
-            last_part = parts[-1].strip()
-            last_part_tokens = [tok for tok in tokenize(last_part) if any(c.isalnum() for c in tok)]
-            if len(last_part_tokens) == 1:
-                word = last_part_tokens[0].lower()
-                if word in SERVICE_WORDS_TO_REMOVE:
-                    # Last part after comma is lone service word → remove it
-                    sent = ','.join(parts[:-1]).strip()
-                    # If nothing left after removal, skip entire sentence
-                    if not sent or sent == ',':
-                        i += 2 if punct else 1
-                        continue
-
-        # Rule 3: Check for trailing garbage (expanded to include SERVICE_WORDS)
-        # If sentence ends with preposition/article/service word → trim it
-        if len(tokens) >= 2:
-            last_word = tokens[-1].lower()
-            # Check both TRAILING_GARBAGE and SERVICE_WORDS_TO_REMOVE
-            if last_word in TRAILING_GARBAGE or last_word in SERVICE_WORDS_TO_REMOVE:
-                # Remove trailing garbage word
-                # Find position of last word in original sentence
-                tokens_valid = tokens[:-1]
-                if tokens_valid:  # If something remains after trimming
-                    # Reconstruct sentence without last garbage word
-                    sent_words = sent.split()
-                    # Remove last word if it matches
-                    if sent_words and sent_words[-1].lower().strip('.,!?;:') == last_word:
-                        sent = ' '.join(sent_words[:-1])
-
-        # Add cleaned sentence back
-        cleaned_parts.append(sent)
-        if punct:
-            cleaned_parts.append(punct)
-
-        i += 2 if punct else 1
-
-    result = ''.join(cleaned_parts).strip()
-
-    # CRITICAL FIX: Ensure spacing after .?! in rejoined text
-    # Because ''.join() concatenates without spaces, we need to add them back
-    result = re.sub(r"([.?!])([^\s])", r"\1 \2", result)
-
-    # Final check: if result is too short (< 2 tokens), return original
-    result_tokens = [t for t in tokenize(result) if any(c.isalnum() for c in t)]
-    if len(result_tokens) < 2:
-        return text  # Don't destroy short phrases
-
-    return result if result else text
-
-
 def structural_quality(
     prompt: str,
     reply: str,
@@ -2081,19 +1530,6 @@ def structural_quality(
             elif coverage < 0.6:
                 score *= 0.8  # moderate support
 
-    # (5) Echo detection: penalize structural mirroring of prompt
-    # "Give me an image" → "Give me an image. To id." (bad!)
-    echo_sim = jaccard_bigrams(prompt, reply)
-    if echo_sim > 0.5:
-        # Strong echo - reply mirrors prompt structure
-        echo_penalty = 1.0 - (echo_sim - 0.5)  # 0.5→1.0, 1.0→0.5
-        score *= max(0.4, echo_penalty)
-
-    # (6) Surface quality: penalize garbage like "A.", "in an.", etc.
-    # But protect signature phrases: "soft smile oh my", "Go on.", etc.
-    surface_mult = surface_quality_penalties(reply)
-    score *= surface_mult
-
     # Clamp to [0, 1]
     return max(0.0, min(1.0, score))
 
@@ -2117,7 +1553,6 @@ def compute_quality_score(
     reply: str,
     avg_entropy: float,
     trigrams: Dict[Tuple[str, str], Dict[str, int]],
-    current_topic: Optional[str] = None,
 ) -> QualityScore:
     """
     Compute overall quality score for a reply.
@@ -2125,13 +1560,9 @@ def compute_quality_score(
     Combines:
     - structural quality (50%)
     - entropy score (50%)
-    - imagery bonus (for soft topics)
-    - architectural density penalty (for soft topics)
 
     Entropy is mapped: middle range [0.3-0.7] is best (interesting but coherent),
     very low or very high entropy → penalty.
-
-    current_topic: optional topic name for soft-topic-specific scoring
     """
     structural = structural_quality(prompt, reply, trigrams)
 
@@ -2150,24 +1581,6 @@ def compute_quality_score(
 
     # Combined quality (equal weights)
     overall = 0.5 * structural + 0.5 * entropy_quality
-
-    # Apply topic-specific adjustments (only if current_topic provided)
-    if current_topic and ARCH_DENSITY_AVAILABLE:
-        # (1) Imagery bonus for soft topics
-        # Reward sensory/concrete images over abstract architecture
-        if should_apply_arch_penalty(current_topic):
-            img_ratio = imagery_ratio(reply)
-            if img_ratio > 0.1:  # At least some imagery present
-                imagery_bonus = img_ratio * 0.15  # Max +15% bonus
-                overall = min(1.0, overall + imagery_bonus)
-
-        # (2) Architectural density penalty for soft topics
-        # Penalize tech jargon in intimate themes
-        if should_apply_arch_penalty(current_topic):
-            arch_density = architectural_density(reply)
-            if arch_density > 0.15:  # Significant tech jargon
-                arch_penalty = (arch_density - 0.15) * 0.3  # Progressive penalty
-                overall = max(0.0, overall - arch_penalty)
 
     return QualityScore(
         structural=structural, entropy=entropy_quality, overall=overall
@@ -2439,24 +1852,6 @@ def step_token(
                         # Additive boost in log-space (small, gentle)
                         counts[i] = counts[i] * (1.0 + boost)
 
-            # PHASE 5.2: VETO FILTERING - Remove vetoed words from candidates
-            if LOOP_DETECTOR_AVAILABLE and veto_manager is not None:
-                try:
-                    vetoed_words = veto_manager.get_vetoed_words()
-                    if vetoed_words:
-                        # Filter out vetoed tokens
-                        filtered_pairs = [(tok, cnt) for tok, cnt in zip(tokens, counts)
-                                          if not veto_manager.is_vetoed(tok)]
-
-                        if filtered_pairs:
-                            # Use filtered candidates
-                            tokens = [tok for tok, _ in filtered_pairs]
-                            counts = [cnt for _, cnt in filtered_pairs]
-                        # else: all tokens vetoed - proceed with originals (rare edge case)
-                except Exception:
-                    # Silent fail - veto must never break generation
-                    pass
-
             # Clamp temperature to safe range
             temperature = max(min(temperature, 100.0), 1e-3)
 
@@ -2495,24 +1890,6 @@ def step_token(
                 boost = token_boosts[tok]
                 # Additive boost in log-space (small, gentle)
                 counts[i] = counts[i] * (1.0 + boost)
-
-    # PHASE 5.2: VETO FILTERING - Remove vetoed words from candidates
-    if LOOP_DETECTOR_AVAILABLE and veto_manager is not None:
-        try:
-            vetoed_words = veto_manager.get_vetoed_words()
-            if vetoed_words:
-                # Filter out vetoed tokens
-                filtered_pairs = [(tok, cnt) for tok, cnt in zip(tokens, counts)
-                                  if not veto_manager.is_vetoed(tok)]
-
-                if filtered_pairs:
-                    # Use filtered candidates
-                    tokens = [tok for tok, _ in filtered_pairs]
-                    counts = [cnt for _, cnt in filtered_pairs]
-                # else: all tokens vetoed - proceed with originals (rare edge case)
-        except Exception:
-            # Silent fail - veto must never break generation
-            pass
 
     # Clamp temperature to safe range
     temperature = max(min(temperature, 100.0), 1e-3)
@@ -2618,7 +1995,6 @@ def generate_reply(
     trauma_state: Optional[Any] = None,
     token_boosts: Optional[Dict[str, float]] = None,
     mathbrain: Optional[Any] = None,
-    phase4_suggestions: Optional[List[str]] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -2759,24 +2135,6 @@ def generate_reply(
 
                     # TODO: Phase 3 - Pass semantic_hints to Santa/episodes for islands-aware recall
                     # For now, semantic_hints are computed but not yet used
-
-                # PHASE 4: Island Bridges - Augment Phase 3 with statistical trajectory learning
-                # Phase 4 suggestions can override Phase 3 choice with exploration probability
-                if phase4_suggestions and len(phase4_suggestions) > 0 and selected_expert:
-                    # With 25% probability, consider switching to a Phase 4 suggested expert
-                    # (only if suggestion matches a known expert name)
-                    if random.random() < 0.25:
-                        for suggested_island in phase4_suggestions:
-                            # Check if suggested island is an expert
-                            for exp in EXPERTS:
-                                if exp.name == suggested_island:
-                                    # Switch to Phase 4 suggested expert
-                                    selected_expert = exp
-                                    break
-                            # Take first matching expert
-                            if selected_expert.name in phase4_suggestions:
-                                break
-
                 else:
                     # Fallback to simple Phase 2 logic if multileo_regulate not available
                     predicted_q = mathbrain.predict(pred_state)
@@ -2852,9 +2210,6 @@ def generate_reply(
     # Post-process: fix punctuation artifacts
     output = fix_punctuation(output)
 
-    # Capitalize again after punctuation fixes (some .?! might have been added/fixed)
-    output = capitalize_sentences(output)
-
     # METAPHRASES: Reduce repetitive meta-phrases within single response
     # Philosophy: "осознанность через ассоциации, не через лозунги"
     try:
@@ -2862,15 +2217,6 @@ def generate_reply(
         output = deduplicate_meta_phrases(output, max_occurrences=2)
     except Exception:
         # Deduplication must never break generation - silent fallback
-        pass
-
-    # POST-CLEANUP: Remove surface garbage that slipped through quality scoring
-    # Philosophy: Gentle cleanup of tokenization artifacts (A., To id., in an.)
-    # Protected: All signature phrases, any sentence with 2+ real words
-    try:
-        output = post_cleanup_garbage(output)
-    except Exception:
-        # Cleanup must never break generation - silent fallback
         pass
 
     # Compute average entropy across generation steps
@@ -2952,15 +2298,6 @@ class LeoField:
             except Exception:
                 # Silent fail — MathBrain must never break Leo
                 self._math_brain = None
-        # MATHBRAIN PHASE 4: Island bridges learning (optional)
-        self._math_brain_phase4: Optional[Any] = None
-        if MATHBRAIN_PHASE4_AVAILABLE and MathBrainPhase4 is not None:
-            try:
-                phase4_db_path = STATE_DIR / "mathbrain_phase4.db"
-                self._math_brain_phase4 = MathBrainPhase4(db_path=phase4_db_path)
-            except Exception:
-                # Silent fail — MathBrain Phase 4 must never break Leo
-                self._math_brain_phase4 = None
         # SANTACLAUS: resonant recall (optional)
         self.santa: Optional[Any] = None
         if SANTACLAUS_AVAILABLE and SantaKlaus is not None:
@@ -2997,12 +2334,8 @@ class LeoField:
                     field=self,
                     config=SchoolConfig() if SchoolConfig else None,
                 )
-                _debug_log(f"[school] initialized successfully at {DB_PATH}")
-            except Exception as e:
-                # Show error but don't break Leo
-                _debug_log(f"[school] FAILED to initialize: {e}")
-                import traceback
-                traceback.print_exc()
+            except Exception:
+                # Silent fail — School must never break Leo
                 self.school = None
         
         # DREAM: imaginary friend layer (optional)
@@ -3029,65 +2362,6 @@ class LeoField:
             except Exception:
                 # Silent fail — Dream must never break Leo
                 pass
-
-        # PHASE 4: Island Bridges - Statistical trajectory learning (optional)
-        self.episode_logger: Optional[Any] = None
-        self.bridge_memory: Optional[Any] = None
-        self.transition_graph: Optional[Any] = None
-        if PHASE4_AVAILABLE and EpisodeLogger is not None:
-            try:
-                self.episode_logger = EpisodeLogger()
-                self.bridge_memory = BridgeMemory()
-                self.transition_graph = TransitionGraph()
-                # Start first episode automatically
-                self.episode_logger.start_episode()
-            except Exception:
-                # Silent fail — Phase 4 must never break Leo
-                self.episode_logger = None
-                self.bridge_memory = None
-                self.transition_graph = None
-
-        # PHASE 5: Stories - Full trajectory learning + h2o scenarios (optional)
-        self.storybook: Optional[Any] = None
-        self.scenario_library: Optional[Any] = None
-        self.shared_field: Optional[Any] = None
-        self.dream_engine: Optional[Any] = None
-        self.current_story: Optional[Any] = None
-        self.story_step_idx: int = 0
-        if PHASE5_AVAILABLE and StoryBook is not None:
-            try:
-                story_db_path = DB_PATH.parent / "storybook.json"
-                self.storybook = StoryBook(db_path=story_db_path)
-                self.scenario_library = ScenarioLibrary()
-                self.shared_field = SharedField()
-                self.dream_engine = DreamEngine(self.storybook)
-                # Start first story automatically
-                self.current_story = Story(
-                    story_id=f"story_{int(__import__('time').time())}",
-                    timestamp_start=__import__('time').time(),
-                    timestamp_end=0.0
-                )
-                self.story_step_idx = 0
-            except Exception:
-                # Silent fail — Phase 5 must never break Leo
-                self.storybook = None
-                self.scenario_library = None
-                self.shared_field = None
-                self.dream_engine = None
-                self.current_story = None
-
-        # PHASE 5.2: Loop detection + veto power (optional)
-        self.loop_detector: Optional[Any] = None
-        self.last_loop_score: float = 0.0
-        self.last_meta_vocab_ratio: float = 0.0
-        self.last_loop_intensity: int = 0
-        if LOOP_DETECTOR_AVAILABLE and LoopDetector is not None:
-            try:
-                self.loop_detector = LoopDetector(window_size=500, ngram_threshold=2)
-            except Exception:
-                # Silent fail — Loop detector must never break Leo
-                self.loop_detector = None
-
         self.refresh(initial_shard=True)
 
         # LEO 1.1 - Sonar-Child: Feed module bootstraps if this is a fresh DB
@@ -3178,131 +2452,7 @@ class LeoField:
             except Exception:
                 # Silent fallback — Santa Klaus must never break Leo
                 token_boosts = None
-
-        # PHASE 4: Island Bridges - Get suggestions based on historical trajectories
-        phase4_suggestions: Optional[List[str]] = None
-        if self.bridge_memory is not None and PHASE4_AVAILABLE and suggest_next_islands_phase4 is not None:
-            try:
-                # Build current metrics from last state
-                current_metrics = {}
-                if self.last_pulse:
-                    current_metrics = {
-                        "entropy": getattr(self.last_pulse, 'entropy', 0.5),
-                        "novelty": getattr(self.last_pulse, 'novelty', 0.5),
-                        "arousal": getattr(self.last_pulse, 'arousal', 0.5),
-                        "pulse": getattr(self.last_pulse, 'pulse', 0.5),
-                    }
-                # Add trauma level
-                if self._trauma_state and hasattr(self._trauma_state, 'level'):
-                    current_metrics["trauma_level"] = self._trauma_state.level
-                # Add quality
-                if self.last_quality:
-                    current_metrics["quality"] = getattr(self.last_quality, 'overall', 0.5)
-
-                # Get currently active islands (from last step if logged)
-                active_islands_now = []
-                if self.episode_logger and self.episode_logger.current_episode:
-                    ep = self.episode_logger.current_episode
-                    if ep.steps:
-                        # Use islands from last step
-                        active_islands_now = ep.steps[-1].active_islands
-
-                # Suggest next islands based on history
-                if current_metrics and active_islands_now:
-                    phase4_suggestions = suggest_next_islands_phase4(
-                        metrics_now=current_metrics,
-                        active_islands_now=active_islands_now,
-                        bridge_memory=self.bridge_memory,
-                        min_similarity=0.6,
-                        temperature=0.7,
-                        exploration_rate=0.2,
-                    )
-            except Exception:
-                # Silent fail — Phase 4 must never break Leo
-                phase4_suggestions = None
-
-        # PHASE 5: Stories - Get suggestions from full trajectory patterns + h2o scenarios
-        phase5_suggestions: Optional[List[str]] = None
-        if self.storybook is not None and PHASE5_AVAILABLE and suggest_next_islands_phase5 is not None:
-            try:
-                # Reuse metrics from Phase 4
-                if current_metrics and active_islands_now:
-                    phase5_suggestions = suggest_next_islands_phase5(
-                        metrics_now=current_metrics,
-                        active_islands_now=active_islands_now,
-                        storybook=self.storybook,
-                        scenario_library=self.scenario_library,
-                        shared_field=self.shared_field,
-                        min_similarity=0.6,
-                        temperature=0.7,
-                    )
-            except Exception:
-                # Silent fail — Phase 5 must never break Leo
-                phase5_suggestions = None
-
-        # Combine Phase 4 + Phase 5 suggestions (BLEND, not override)
-        # Phase 4 = local statistics (what usually comes next)
-        # Phase 5 = trajectory patterns (what story fits this moment)
-        # Blend: Phase 5 weights re-prioritize Phase 4 suggestions
-        combined_suggestions = None
-
-        if phase5_suggestions and phase4_suggestions:
-            # BOTH available: blend them!
-            # Phase 5 provides "trajectory confidence" - how sure we are about story pattern
-            # If confident in story pattern, use Phase 5 more
-            # If uncertain, rely more on Phase 4 statistics
-
-            # For now: use Phase 5 primarily, but keep Phase 4 as backup options
-            # TODO: implement proper weighted blend in Phase 5.1
-            combined_suggestions = phase5_suggestions + phase4_suggestions[:2]  # Top 2 from Phase 4
-            print(f"[Phase5:Blend] Combined {len(phase5_suggestions)} Phase5 + {len(phase4_suggestions[:2])} Phase4 suggestions")
-
-        elif phase5_suggestions:
-            # Only Phase 5 available
-            combined_suggestions = phase5_suggestions
-            print(f"[Phase5:Blend] Using {len(phase5_suggestions)} Phase5 suggestions only")
-
-        elif phase4_suggestions:
-            # Only Phase 4 available
-            combined_suggestions = phase4_suggestions
-            print(f"[Phase5:Blend] Using {len(phase4_suggestions)} Phase4 suggestions only (Phase5 unavailable)")
-
-        # PHASE 5.2: Check scenarios BEFORE generation (using metrics from PREVIOUS turn)
-        # Scenarios can trigger veto power to prevent loop patterns
-        scenario_result = None
-        if self.scenario_library is not None and LOOP_DETECTOR_AVAILABLE:
-            try:
-                # Build metrics for scenario checking (use last turn's loop detection)
-                scenario_metrics = {
-                    "meta_state": self.last_meta_vocab_ratio * 10.0,  # Scale to 0-10 range
-                    "loop_intensity": self.last_loop_intensity,
-                    "pain_state": 0.0,  # TODO: compute from trauma state
-                    "overwhelm": 0.0,   # TODO: compute from quality
-                    "relief_state": 0.0,  # TODO: compute from quality trend
-                }
-
-                # Collect active islands from last step
-                scenario_islands = []
-                if self.last_expert:
-                    scenario_islands.append(self.last_expert.name)
-                else:
-                    scenario_islands.append("structural")
-
-                # Check and execute scenarios
-                scenario_result = self.scenario_library.check_and_execute(
-                    metrics=scenario_metrics,
-                    islands=scenario_islands,
-                    context={}
-                )
-
-                if scenario_result:
-                    print(f"[Phase5.2:Scenarios] Scenario triggered: {scenario_result.get('scenario_id')}")
-
-            except Exception as e:
-                # Silent fail — scenarios must never break generation
-                print(f"[Phase5.2:Scenarios] Error checking scenarios: {e}")
-                pass
-
+                
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
             self.bigrams,
@@ -3323,7 +2473,6 @@ class LeoField:
             trauma_state=self._trauma_state,
             token_boosts=token_boosts,
             mathbrain=self._math_brain,  # Pass mathbrain for Phase 2 influence
-            phase4_suggestions=combined_suggestions,  # Pass Phase 4+5 combined suggestions
         )
 
         # Store presence metrics
@@ -3679,8 +2828,7 @@ class LeoField:
                 if question is not None:
                     # Store question for next turn (answer handling)
                     self._last_school_question = question
-                    # Always append question (cooldown 120sec already prevents spam)
-                    # School should ask about proper nouns naturally, not hide them
+                    # Append question to reply
                     final_reply = final_reply.rstrip() + "\n\n" + question.text
                 
             except Exception:
@@ -3719,107 +2867,6 @@ class LeoField:
                 )
             except Exception:
                 # Silent fail - Phase 3 must never break generation
-                pass
-
-        # PHASE 4: Log episode step for trajectory learning
-        if self.episode_logger is not None and PHASE4_AVAILABLE:
-            try:
-                # Collect current metrics (from MathState if available)
-                current_metrics = {}
-                if 'state' in locals() and state is not None:
-                    # Use MathState metrics
-                    current_metrics = {
-                        "entropy": state.entropy,
-                        "novelty": state.novelty,
-                        "arousal": state.arousal,
-                        "pulse": state.pulse,
-                        "trauma_level": state.trauma_level,
-                        "quality": state.quality,
-                    }
-                else:
-                    # Fallback: extract from context
-                    current_metrics = {
-                        "entropy": context.pulse.entropy if context.pulse else 0.0,
-                        "novelty": context.pulse.novelty if context.pulse else 0.0,
-                        "arousal": context.pulse.arousal if context.pulse else 0.0,
-                        "pulse": context.pulse.pulse if context.pulse else 0.0,
-                        "trauma_level": self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
-                        "quality": context.quality.overall if context.quality else 0.5,
-                    }
-
-                # Collect active islands (expert + active modules)
-                active_islands = []
-
-                # Primary island: expert
-                if context.expert:
-                    active_islands.append(context.expert.name)
-                else:
-                    active_islands.append("structural")
-
-                # Secondary islands: active modules
-                if used_metaleo:
-                    active_islands.append("metaleo")
-                if self._trauma_state and hasattr(self._trauma_state, 'level') and self._trauma_state.level > 0.3:
-                    active_islands.append("wounded_expert")
-                if overthinking_events and rings_present > 0:
-                    active_islands.append("overthinking")
-                if self.flow_tracker is not None and self.themes:
-                    active_islands.append("gowiththeflow")
-                if self.game is not None:
-                    active_islands.append("game")
-                if self.school is not None and self._last_school_question is not None:
-                    active_islands.append("school")
-
-                # Log this step
-                self.episode_logger.log_step(
-                    metrics=current_metrics,
-                    active_islands=active_islands,
-                )
-            except Exception:
-                # Silent fail - Phase 4 must never break generation
-                pass
-
-        # PHASE 5.2: Loop detection AFTER generation (track for next turn)
-        if self.loop_detector is not None and LOOP_DETECTOR_AVAILABLE and tokenize_simple is not None:
-            try:
-                # Tokenize final reply
-                reply_tokens = tokenize_simple(final_reply)
-
-                # Add tokens to loop detector
-                loop_stats = self.loop_detector.add_tokens(reply_tokens)
-
-                # Store metrics for next turn's scenario checking
-                self.last_loop_score = loop_stats.get("loop_score", 0.0)
-                self.last_meta_vocab_ratio = loop_stats.get("meta_vocab_ratio", 0.0)
-
-                # Compute loop_intensity (simplified: count of repeated n-grams as proxy)
-                repeated_ngrams = loop_stats.get("repeated_ngrams", 0)
-                if repeated_ngrams >= 3:
-                    self.last_loop_intensity = 3  # High
-                elif repeated_ngrams >= 2:
-                    self.last_loop_intensity = 2  # Medium
-                elif repeated_ngrams >= 1:
-                    self.last_loop_intensity = 1  # Low
-                else:
-                    self.last_loop_intensity = 0  # None
-
-                # Log loop detection stats
-                if self.last_loop_score > 0.5 or self.last_meta_vocab_ratio > 0.15:
-                    print(f"[Phase5.2:LoopDetector] loop_score={self.last_loop_score:.2f}, "
-                          f"meta_ratio={self.last_meta_vocab_ratio:.2f}, "
-                          f"loop_intensity={self.last_loop_intensity}")
-
-            except Exception as e:
-                # Silent fail - loop detector must never break generation
-                print(f"[Phase5.2:LoopDetector] Error: {e}")
-                pass
-
-        # PHASE 5.2: Decrement veto counters at end of turn
-        if LOOP_DETECTOR_AVAILABLE and decrement_vetos is not None:
-            try:
-                decrement_vetos()
-            except Exception:
-                # Silent fail - veto must never break generation
                 pass
 
         return final_reply
