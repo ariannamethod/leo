@@ -80,6 +80,8 @@ try:
         SharedField,
         DreamEngine,
         suggest_next_islands_phase5,
+        get_veto_prompt,
+        decrement_vetos,
     )
     PHASE5_AVAILABLE = True
 except ImportError:
@@ -91,7 +93,20 @@ except ImportError:
     SharedField = None  # type: ignore
     DreamEngine = None  # type: ignore
     suggest_next_islands_phase5 = None  # type: ignore
+    get_veto_prompt = None  # type: ignore
+    decrement_vetos = None  # type: ignore
     PHASE5_AVAILABLE = False
+
+# Safe import: loop_detector and veto_manager (Phase 5.2 - Loop detection + veto power)
+try:
+    from loop_detector import LoopDetector, tokenize_simple
+    from veto_manager import veto_manager
+    LOOP_DETECTOR_AVAILABLE = True
+except ImportError:
+    LoopDetector = None  # type: ignore
+    tokenize_simple = None  # type: ignore
+    veto_manager = None  # type: ignore
+    LOOP_DETECTOR_AVAILABLE = False
 
 # Safe import: metaleo module is optional
 try:
@@ -2424,6 +2439,24 @@ def step_token(
                         # Additive boost in log-space (small, gentle)
                         counts[i] = counts[i] * (1.0 + boost)
 
+            # PHASE 5.2: VETO FILTERING - Remove vetoed words from candidates
+            if LOOP_DETECTOR_AVAILABLE and veto_manager is not None:
+                try:
+                    vetoed_words = veto_manager.get_vetoed_words()
+                    if vetoed_words:
+                        # Filter out vetoed tokens
+                        filtered_pairs = [(tok, cnt) for tok, cnt in zip(tokens, counts)
+                                          if not veto_manager.is_vetoed(tok)]
+
+                        if filtered_pairs:
+                            # Use filtered candidates
+                            tokens = [tok for tok, _ in filtered_pairs]
+                            counts = [cnt for _, cnt in filtered_pairs]
+                        # else: all tokens vetoed - proceed with originals (rare edge case)
+                except Exception:
+                    # Silent fail - veto must never break generation
+                    pass
+
             # Clamp temperature to safe range
             temperature = max(min(temperature, 100.0), 1e-3)
 
@@ -2462,6 +2495,24 @@ def step_token(
                 boost = token_boosts[tok]
                 # Additive boost in log-space (small, gentle)
                 counts[i] = counts[i] * (1.0 + boost)
+
+    # PHASE 5.2: VETO FILTERING - Remove vetoed words from candidates
+    if LOOP_DETECTOR_AVAILABLE and veto_manager is not None:
+        try:
+            vetoed_words = veto_manager.get_vetoed_words()
+            if vetoed_words:
+                # Filter out vetoed tokens
+                filtered_pairs = [(tok, cnt) for tok, cnt in zip(tokens, counts)
+                                  if not veto_manager.is_vetoed(tok)]
+
+                if filtered_pairs:
+                    # Use filtered candidates
+                    tokens = [tok for tok, _ in filtered_pairs]
+                    counts = [cnt for _, cnt in filtered_pairs]
+                # else: all tokens vetoed - proceed with originals (rare edge case)
+        except Exception:
+            # Silent fail - veto must never break generation
+            pass
 
     # Clamp temperature to safe range
     temperature = max(min(temperature, 100.0), 1e-3)
@@ -3025,6 +3076,18 @@ class LeoField:
                 self.dream_engine = None
                 self.current_story = None
 
+        # PHASE 5.2: Loop detection + veto power (optional)
+        self.loop_detector: Optional[Any] = None
+        self.last_loop_score: float = 0.0
+        self.last_meta_vocab_ratio: float = 0.0
+        self.last_loop_intensity: int = 0
+        if LOOP_DETECTOR_AVAILABLE and LoopDetector is not None:
+            try:
+                self.loop_detector = LoopDetector(window_size=500, ngram_threshold=2)
+            except Exception:
+                # Silent fail — Loop detector must never break Leo
+                self.loop_detector = None
+
         self.refresh(initial_shard=True)
 
         # LEO 1.1 - Sonar-Child: Feed module bootstraps if this is a fresh DB
@@ -3203,6 +3266,42 @@ class LeoField:
             # Only Phase 4 available
             combined_suggestions = phase4_suggestions
             print(f"[Phase5:Blend] Using {len(phase4_suggestions)} Phase4 suggestions only (Phase5 unavailable)")
+
+        # PHASE 5.2: Check scenarios BEFORE generation (using metrics from PREVIOUS turn)
+        # Scenarios can trigger veto power to prevent loop patterns
+        scenario_result = None
+        if self.scenario_library is not None and LOOP_DETECTOR_AVAILABLE:
+            try:
+                # Build metrics for scenario checking (use last turn's loop detection)
+                scenario_metrics = {
+                    "meta_state": self.last_meta_vocab_ratio * 10.0,  # Scale to 0-10 range
+                    "loop_intensity": self.last_loop_intensity,
+                    "pain_state": 0.0,  # TODO: compute from trauma state
+                    "overwhelm": 0.0,   # TODO: compute from quality
+                    "relief_state": 0.0,  # TODO: compute from quality trend
+                }
+
+                # Collect active islands from last step
+                scenario_islands = []
+                if self.last_expert:
+                    scenario_islands.append(self.last_expert.name)
+                else:
+                    scenario_islands.append("structural")
+
+                # Check and execute scenarios
+                scenario_result = self.scenario_library.check_and_execute(
+                    metrics=scenario_metrics,
+                    islands=scenario_islands,
+                    context={}
+                )
+
+                if scenario_result:
+                    print(f"[Phase5.2:Scenarios] Scenario triggered: {scenario_result.get('scenario_id')}")
+
+            except Exception as e:
+                # Silent fail — scenarios must never break generation
+                print(f"[Phase5.2:Scenarios] Error checking scenarios: {e}")
+                pass
 
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
@@ -3678,6 +3777,49 @@ class LeoField:
                 )
             except Exception:
                 # Silent fail - Phase 4 must never break generation
+                pass
+
+        # PHASE 5.2: Loop detection AFTER generation (track for next turn)
+        if self.loop_detector is not None and LOOP_DETECTOR_AVAILABLE and tokenize_simple is not None:
+            try:
+                # Tokenize final reply
+                reply_tokens = tokenize_simple(final_reply)
+
+                # Add tokens to loop detector
+                loop_stats = self.loop_detector.add_tokens(reply_tokens)
+
+                # Store metrics for next turn's scenario checking
+                self.last_loop_score = loop_stats.get("loop_score", 0.0)
+                self.last_meta_vocab_ratio = loop_stats.get("meta_vocab_ratio", 0.0)
+
+                # Compute loop_intensity (simplified: count of repeated n-grams as proxy)
+                repeated_ngrams = loop_stats.get("repeated_ngrams", 0)
+                if repeated_ngrams >= 3:
+                    self.last_loop_intensity = 3  # High
+                elif repeated_ngrams >= 2:
+                    self.last_loop_intensity = 2  # Medium
+                elif repeated_ngrams >= 1:
+                    self.last_loop_intensity = 1  # Low
+                else:
+                    self.last_loop_intensity = 0  # None
+
+                # Log loop detection stats
+                if self.last_loop_score > 0.5 or self.last_meta_vocab_ratio > 0.15:
+                    print(f"[Phase5.2:LoopDetector] loop_score={self.last_loop_score:.2f}, "
+                          f"meta_ratio={self.last_meta_vocab_ratio:.2f}, "
+                          f"loop_intensity={self.last_loop_intensity}")
+
+            except Exception as e:
+                # Silent fail - loop detector must never break generation
+                print(f"[Phase5.2:LoopDetector] Error: {e}")
+                pass
+
+        # PHASE 5.2: Decrement veto counters at end of turn
+        if LOOP_DETECTOR_AVAILABLE and decrement_vetos is not None:
+            try:
+                decrement_vetos()
+            except Exception:
+                # Silent fail - veto must never break generation
                 pass
 
         return final_reply
