@@ -4,17 +4,12 @@ __pycache__/
 *$py.class
 
 #LEO:
-# /state/  # COMMENTED OUT - now tracking Leo's state for development
+/state/
 /bin/
-/debug/
 /json/
-# *.sqlite3  # COMMENTED OUT - tracking leo.sqlite3 for state continuity
+*.sqlite3
 *.pyc
-*.backup
 __pycache__/
-
-# Development notes (Phase 4/5 planning, not for repo)
-/dev_notes/
 
 # DEBUG (Phase 3 testing, temporary):
 debug/.env

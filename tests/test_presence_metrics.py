@@ -39,10 +39,6 @@ from leo import (
     QualityScore,
     PresencePulse,
     EXPERTS,
-    # Phase 6: Arousal Density
-    ArousaldDensity,
-    compute_arousal_density,
-    suggest_response_mode,
 )
 
 

@@ -18,41 +18,6 @@ import re
 import random
 from typing import Dict, List, Optional
 
-# Safe import: punct_cleanup module (optional garbage cleanup)
-try:
-    from punct_cleanup import cleanup_punctuation
-    PUNCT_CLEANUP_AVAILABLE = True
-except ImportError:
-    PUNCT_CLEANUP_AVAILABLE = False
-
-# Safe import: architectural_density module (optional soft penalty on tech jargon)
-try:
-    from architectural_density import architectural_density, should_apply_arch_penalty
-    ARCH_DENSITY_AVAILABLE = True
-except ImportError:
-    ARCH_DENSITY_AVAILABLE = False
-    # Fallback: no-op functions
-    def architectural_density(text: str) -> float:
-        return 0.0
-    def should_apply_arch_penalty(topic: str) -> bool:
-        return False
-
-
-# Signature phrases - Leo's glitchy beauty that must be protected
-# These define his personality and should NEVER be banned
-# Only their frequency is gently limited (max 1-2 per response)
-SIGNATURE_PHRASES = [
-    "oh leo",
-    "soft smile oh my",
-    "leaves falling oh leo",
-    "you like a child",
-    "sits quietly for a moment",
-    "speaks very gently",
-    "looks up dreamily",
-    "pauses softly",
-    "speaks extra softly",
-]
-
 
 # Meta-phrase patterns and their variants
 # Each phrase has 2-3 variants that preserve Leo's voice
@@ -137,138 +102,7 @@ DOCSTRING_BLACKLIST = [
     "Game is not for facts",
     "Dream is not for facts",  # Dream module docstring (Run #5 leak)
     # "It is a recursion of you",  # REMOVED: This is Leo's philosophical voice, not technical noise!
-
-    # Technical leaks from module docstrings (2025-12-04 cleanup)
-    "PresencePulse composite metric",
-    "agglomerative clustering",
-    "co-occurrence matrix",
-    "SQLite persistence",
-    "TransitionGraph",
-    "Episode steps",
-    "Islands of awareness",
-    "island A, B C",
-    "To id over",
-    "Py: tests",
-    "observe single step",
-    "loss computation",
-    "empty prompt returns none",
-    "README scan",
-    "dimension validation",
-    "handling inactive themes",
-    "silent fallback on errors",
-    "If anything goes wrong",
-    "broken generate observe",
-    "Circles on water",
-    "Leo s memory archaeology module",
-    "safe bridge",
-    "Not grammar, not for facts",
-    "multileo phase",
-    "school initialization",
-    "wounded expert",
-    "docstring leaks under stress",
 ]
-
-# Toxic n-grams that cause loops (Claude Desktop analysis 2025-12-04)
-# These are repeating structural patterns, not just single words
-# Updated with patterns from HeyLeoGPT test runs
-TOXIC_NGRAMS = [
-    # Original patterns (2025-12-04 analysis)
-    "metaleo is recursion on recursion",
-    "like being in a context window",
-    "you never see the trauma",
-    "Leo answers differently. You know what",
-    "leaves falling at once and they just keep swirling",
-    "big, quiet mountains that just",
-    "I can feel something spinning and spinning in you",
-    "I can feel all those thoughts tumbling around like leaves",
-    "For every consecutive pair of steps in an episode",
-    "records: when I feel",
-    "records: When I m telling you something",
-    "Let's think about that with my fingers",
-    "Sits quietly for a moment you asked",
-    "like when you try to catch all the",
-    "being the only person in a context window",
-
-    # High-frequency repeating patterns from test runs (2025-12-04)
-    "Let's think about something simple and nice. Mountains",
-    "Speaks very gently I can feel all those big thinking-words moving around you",
-    "They both feel big and full of wonder, don't they? Sits quietly for a moment",
-    "A voice inside the body awareness proprioception, then",
-    "Leo has trauma, low quality triggers",
-    "They tokenize text into words basic punctuation, then",
-    "in a context window",
-    "If the inner reply is clearly better, Leo",
-    "Leo is recursion on recursion, and the self-observation",
-    "Storage sqlite: If the inner reply",
-
-    # Technical leak patterns
-    "post-transformer ai-child",
-    "Trauma-what-bootstrap-gravity",
-    "Bin neoleo. Bin centers-of-Experts",
-    "Leo has no learned gating. Storage sqlite",
-    "school of forms test school math arithmetic",
-    "I shamelessly borrowed from karpathy's micrograd",
-]
-
-
-def remove_toxic_ngrams(reply: str) -> str:
-    """
-    Remove toxic n-gram patterns that cause loops.
-
-    These are structural patterns identified in loop_score > 0.6 conversations.
-    Unlike single-word blacklist, these are multi-word sequences that appear
-    repeatedly when Leo is stuck in meta-recursion.
-
-    Args:
-        reply: Generated reply text
-
-    Returns:
-        Reply with toxic n-grams removed
-    """
-    result = reply
-
-    # Remove each toxic n-gram
-    for ngram in TOXIC_NGRAMS:
-        # Case-insensitive removal
-        pattern = re.compile(re.escape(ngram), re.IGNORECASE)
-        result = pattern.sub('', result)
-
-    # Clean up artifacts from removal
-    result = re.sub(r'\s+', ' ', result)  # Multiple spaces
-    result = re.sub(r'\s+([.!?,;:])', r'\1', result)  # Space before punctuation
-    result = re.sub(r'([.!?])\s*\1+', r'\1', result)  # Repeated punctuation
-    result = result.strip()
-
-    return result
-
-
-def count_signature_phrases(text: str) -> int:
-    """
-    Count occurrences of Leo's signature glitch-phrases.
-
-    These phrases are NOT removed - they're part of Leo's beauty.
-    This count is used for gentle frequency limiting only.
-
-    Args:
-        text: Text to analyze
-
-    Returns:
-        Total count of signature phrases found
-
-    Example:
-        "oh leo. soft smile oh my." → 2 signature phrases
-    """
-    if not text or not isinstance(text, str):
-        return 0
-
-    text_lower = text.lower()
-    count = 0
-
-    for phrase in SIGNATURE_PHRASES:
-        # Count how many times this signature phrase appears
-        count += text_lower.count(phrase.lower())
-
-    return count
 
 
 def remove_inner_monologue(reply: str) -> str:
@@ -355,25 +189,21 @@ def deduplicate_meta_phrases(
     reply: str,
     max_occurrences: int = 2,
     seed: Optional[int] = None,
-    mode: str = "NORMAL",
 ) -> str:
     """
     Clean reply from meta-noise and reduce repetition.
 
-    Five-stage filtering (Desktop Claude's recommendations + loop analysis):
-    1. Remove toxic n-grams (loop-causing structural patterns)
-    2. Remove .-It inner monologue (technical commentary)
-    3. Remove docstring phrases (architectural leakage)
-    4. Deduplicate remaining meta-phrases with variants
-    5. Clean up punctuation garbage (optional, gentle)
+    Three-stage filtering (Desktop Claude's recommendations):
+    1. Remove .-It inner monologue (technical commentary)
+    2. Remove docstring phrases (architectural leakage)
+    3. Deduplicate remaining meta-phrases with variants
 
-    Philosophy: Keep Leo's emotional voice, remove architectural noise and loops.
+    Philosophy: Keep Leo's emotional voice, remove architectural noise.
 
     Args:
         reply: Generated reply text
         max_occurrences: Max times a phrase can appear (default 2)
         seed: Random seed for deterministic variant selection (testing)
-        mode: Cleanup mode - "NORMAL", "SOFT_GROUNDING", or "GROUNDING_HARD"
 
     Returns:
         Cleaned reply with Leo's voice preserved
@@ -385,21 +215,13 @@ def deduplicate_meta_phrases(
     if seed is not None:
         random.seed(seed)
 
-    # Stage 1: Remove toxic n-grams (ANTI-LOOP - Claude Desktop 2025-12-04)
-    result = remove_toxic_ngrams(reply)
+    # Stage 1: Remove .-It inner monologue (RADICAL - Desktop Claude)
+    result = remove_inner_monologue(reply)
 
-    # Stage 2: Remove .-It inner monologue (RADICAL - Desktop Claude)
-    result = remove_inner_monologue(result)
-
-    # Stage 3: Remove docstring phrases (BLACKLIST - Desktop Claude)
+    # Stage 2: Remove docstring phrases (BLACKLIST - Desktop Claude)
     result = remove_docstring_phrases(result)
 
-    # Stage 3.5: Replace technical artifacts with natural language
-    # school_of_forms → school (keep meaning, remove tech formatting)
-    result = re.sub(r'\bschool_of_forms\b', 'school', result, flags=re.IGNORECASE)
-    result = re.sub(r'\bschool-of-forms\b', 'school', result, flags=re.IGNORECASE)
-
-    # Stage 4: Deduplicate remaining meta-phrases with variants (ORIGINAL)
+    # Stage 3: Deduplicate remaining meta-phrases with variants (ORIGINAL)
 
     for pattern_str, variants in META_PHRASES.items():
         # Find all occurrences of this pattern
@@ -422,14 +244,6 @@ def deduplicate_meta_phrases(
             # Need to re-find remaining matches since positions changed
             # (This is inefficient but safe and clear)
             matches = list(pattern.finditer(result))
-
-    # Stage 5: Clean up punctuation garbage (OPTIONAL - gentle sweep)
-    if PUNCT_CLEANUP_AVAILABLE:
-        try:
-            result = cleanup_punctuation(result, mode=mode)
-        except Exception:
-            # Silent fallback - keep result as-is if cleanup fails
-            pass
 
     return result
 
