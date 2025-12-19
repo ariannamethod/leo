@@ -4,10 +4,10 @@ __pycache__/
 *$py.class
 
 #LEO:
-/state/
+# NOTE: /state/ is intentionally NOT gitignored in this restoration branch
+# so we can observe Leo's field development during testing
 /bin/
 /json/
-*.sqlite3
 *.pyc
 __pycache__/
 
