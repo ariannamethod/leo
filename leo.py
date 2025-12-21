@@ -7,8 +7,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import os
 import random
 import re
 import sqlite3
@@ -384,7 +386,13 @@ def ingest_text(conn: sqlite3.Connection, text: str) -> None:
 
 
 def strip_code_blocks(text: str) -> str:
-    """Remove code blocks (```...```) from markdown text."""
+    """
+    Remove code blocks (```...```) and module headers from markdown text.
+
+    Also strips common markdown artifacts that create parsing noise:
+    - Module file headers like "school.py —" or "metaleo.py —"
+    - Malformed bullet points like "-It" (no space after dash)
+    """
     lines = text.split('\n')
     result = []
     in_code_block = False
@@ -396,10 +404,26 @@ def strip_code_blocks(text: str) -> str:
             continue
 
         # Skip lines inside code blocks
-        if not in_code_block:
-            result.append(line)
+        if in_code_block:
+            continue
 
-    return '\n'.join(result)
+        # Skip module file header lines (e.g., "leo.py           # organism with REPL")
+        # Pattern: filename.py followed by whitespace and comment or dash
+        if re.match(r'^\s*\w+\.py\s+[#—]', line):
+            continue
+
+        # Fix malformed bullet points: "-It" → "- It"
+        # But preserve normal dashes in text
+        line = re.sub(r'^(\s*)-([A-Z][a-z])', r'\1- \2', line)
+
+        result.append(line)
+
+    # Post-process: remove standalone ".py —" fragments that might appear
+    text_clean = '\n'.join(result)
+    # Remove patterns like "school.py —" or "metaleo.py —" that survived
+    text_clean = re.sub(r'\b\w+\.py\s*[—\-]\s*', '', text_clean)
+
+    return text_clean
 
 
 def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
@@ -419,94 +443,277 @@ def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
         print("[leo] bootstrapping from embedded seed...", file=sys.stderr)
         ingest_text(conn, EMBEDDED_BOOTSTRAP)
 
+    # README bootstrap: read on first launch
     readme_flag = get_meta(conn, "readme_bootstrap_done")
     if readme_flag == "1":
         return
 
-    if README_PATH.exists():
-        try:
-            print("[leo] bootstrapping from README.md...", file=sys.stderr)
-            text = README_PATH.read_text(encoding="utf-8", errors="ignore")
-            # Strip code blocks to avoid ingesting Python snippets
-            text = strip_code_blocks(text)
-            ingest_text(conn, text)
-            set_meta(conn, "readme_bootstrap_done", "1")
-        except Exception as e:
-            print(f"[leo] WARNING: failed to read README.md: {e}", file=sys.stderr)
-            set_meta(conn, "readme_bootstrap_done", "error")
-    else:
-        set_meta(conn, "readme_bootstrap_done", "missing")
+    readme_path = Path(__file__).parent / "README.md"
+    if not readme_path.exists():
+        return
+
+    print("[leo] reading README.md for first time...", file=sys.stderr)
+    readme_text = readme_path.read_text(encoding="utf-8")
+    # Strip code blocks to prevent technical leaks
+    readme_clean = strip_code_blocks(readme_text)
+    ingest_text(conn, readme_clean)
+    set_meta(conn, "readme_bootstrap_done", "1")
+
+
+def _debug_log(msg: str) -> None:
+    """
+    Minimal debug logger for leo.py: only writes to stderr if LEO_DEBUG=1.
+    Silent by default to keep REPL clean.
+    """
+    if os.environ.get("LEO_DEBUG") == "1":
+        print(f"[leo] {msg}", file=sys.stderr)
+
+
+def _is_bootstrap_leak(text: str) -> bool:
+    """
+    Detect if reply contains bootstrap/meta text fragments that should stay internal.
+
+    Returns True if text looks like raw bootstrap/module documentation
+    instead of a natural Leo reply.
+
+    Bootstrap leak patterns:
+    - "These conversations are private never shown to user"
+    - Module names in caps/dashes: "— GAME —", "— MATHBRAIN —"
+    - File references: "game.py", "metaleo.py", "mathbrain.py"
+    - Docstring-like phrases: "conversational rhythm awareness", "Active observation"
+    - Meta-descriptions about internal layers
+    """
+    if not text or len(text.strip()) < 10:
+        return False
+
+    text_lower = text.lower()
+
+    # Direct bootstrap phrases - only catch obvious technical leaks
+    # (not natural language that happens to mention concepts)
+    bootstrap_phrases = [
+        "these conversations are private never shown to user",
+        "private never shown to user",
+        "bootstrap texts",
+        "has been fed bootstrap",
+        "neoleo pure layer",
+        "export, neoleo",
+        "readme bootstrap done",
+        "mark readme",
+        "in sqlite",
+        "tokens table",
+        "word id",
+        "standalone helpers",
+        "get last turns",
+        "lru eviction",
+        "multiplicative decay",
+        "every observations",  # grammatical error from bootstrap
+        "i. — export",
+        "ii. —",
+        "iii. —",
+        "stats, max",
+        "eviction, memory",
+        "bootstrap fragment",
+        "active observation with influence",  # From module docstrings
+        "imaginary friend layer",              # From dream.py bootstrap
+    ]
+
+    for phrase in bootstrap_phrases:
+        if phrase in text_lower:
+            return True
+
+    # Module file references - only catch explicit module.py patterns
+    # (not just any ".py" substring which could be part of normal Leo speech)
+    # Match patterns like "leo.py", "school.py", "metaleo.py" etc.
+    module_pattern = r'\b\w+\.py\b'
+    if re.search(module_pattern, text_lower):
+        return True
+
+    # Module names in caps/dashes (README-style section headers)
+    module_markers = [
+        "— GAME —",
+        "— MATHBRAIN —",
+        "— METALEO —",
+        "— DREAM —",
+        "— SCHOOL —",
+        "— SANTACLAUS —",
+        "— OVERTHINKING —",
+        "— TRAUMA —",
+    ]
+    for marker in module_markers:
+        if marker.lower() in text_lower or marker in text:
+            return True
+
+    # Check for unusually high density of module names
+    # (OK to mention once or twice, but not OK if reply is mostly module names)
+    module_keywords = ["mathbrain", "metaleo", "game", "dream", "school", "santa", "overthinking", "trauma"]
+    keyword_count = sum(1 for kw in module_keywords if kw in text_lower)
+    word_count = len(text.split())
+    if word_count > 0 and keyword_count / word_count > 0.25:  # >25% module keywords
+        return True
+
+    return False
+
+
+def _clean_module_docstring(text: str) -> str:
+    """
+    Clean module docstring to remove file header line.
+
+    Example:
+        "metaleo.py — Leo's inner voice\n\nMetaLeo is..."
+        → "Leo's inner voice\n\nMetaLeo is..."
+
+    This prevents "Py —" fragments from appearing in Leo's speech.
+    """
+    if not text:
+        return text
+
+    lines = text.split('\n')
+    if not lines:
+        return text
+
+    # Check if first line is a module header (e.g., "metaleo.py — description")
+    first_line = lines[0].strip()
+    if re.match(r'^\w+\.py\s*[—\-]', first_line):
+        # Remove first line and rejoin
+        return '\n'.join(lines[1:]).strip()
+
+    return text
+
+
+def _compute_bootstrap_hash(modules_with_texts: List[Tuple[str, str]]) -> str:
+    """
+    Compute SHA-256 hash of all module bootstrap texts combined.
+    Returns hex digest string.
+    """
+    combined = "\n===\n".join(f"{name}:\n{text}" for name, text in modules_with_texts)
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
 
 def feed_bootstraps_if_fresh(field: 'LeoField') -> None:
     """
     Feed small identity texts from meta-modules into Leo's field,
-    but only if the DB looks fresh (no trigrams / no co-occurrence yet).
+    but only if the bootstrap content hash has changed or is missing.
 
-    This is Leo 1.1 - Sonar-Child upgrade: Leo learns about his internal layers
-    through simple, child-like bootstrap texts.
+    This is Leo 1.1+ upgrade: Leo learns about his internal layers
+    through simple, child-like docstrings as meta-bootstraps.
+
+    Uses module __doc__ as primary source, fallback to BOOTSTRAP_TEXT if needed.
+    Uses a content hash instead of trigram/cooccur counts to avoid
+    double-ingestion if the DB is vacuumed or tables are truncated.
     """
     try:
-        # heuristic: if there are no trigrams AND no co-occur entries,
-        # we treat this as a fresh birth
         conn = field.conn
-        cur = conn.cursor()
 
-        cur.execute("SELECT COUNT(*) FROM trigrams")
-        tri_count = cur.fetchone()[0]
+        # Import meta modules and use their docstrings as meta-bootstraps
+        modules_to_bootstrap = []
 
-        cur.execute("SELECT COUNT(*) FROM cooccur")
-        co_count = cur.fetchone()[0]
-
-        if tri_count > 0 or co_count > 0:
-            # Not fresh - skip bootstrap feeding
-            return
-    except Exception:
-        # On error, be conservative: do nothing
-        return
-
-    # Import meta modules that have BOOTSTRAP_TEXT
-    modules_to_bootstrap = []
-
-    try:
-        import metaleo
-        modules_to_bootstrap.append(("metaleo", metaleo))
-    except ImportError:
-        pass
-
-    try:
-        import mathbrain
-        modules_to_bootstrap.append(("mathbrain", mathbrain))
-    except ImportError:
-        pass
-
-    try:
-        import school
-        modules_to_bootstrap.append(("school", school))
-    except ImportError:
-        pass
-
-    try:
-        import dream
-        modules_to_bootstrap.append(("dream", dream))
-    except ImportError:
-        pass
-
-    try:
-        import game
-        modules_to_bootstrap.append(("game", game))
-    except ImportError:
-        pass
-
-    # Feed each module's bootstrap
-    for name, module in modules_to_bootstrap:
         try:
-            bootstrap_fn = getattr(module, "bootstrap", None)
-            if bootstrap_fn is not None and callable(bootstrap_fn):
-                bootstrap_fn(field)
-        except Exception:
-            # Silent fail - bootstrap must never break Leo
+            import metaleo
+            # Use __doc__ as primary source (new meta-bootstrap approach)
+            text = getattr(metaleo, "__doc__", "").strip()
+            # Fallback to BOOTSTRAP_TEXT if __doc__ is empty
+            if not text:
+                text = getattr(metaleo, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                # Clean module name from docstring (e.g., "metaleo.py — ..." → "...")
+                text = _clean_module_docstring(text)
+                modules_to_bootstrap.append(("metaleo", text, metaleo))
+        except ImportError:
             pass
+
+        try:
+            import mathbrain
+            text = getattr(mathbrain, "__doc__", "").strip()
+            if not text:
+                text = getattr(mathbrain, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                text = _clean_module_docstring(text)
+                modules_to_bootstrap.append(("mathbrain", text, mathbrain))
+        except ImportError:
+            pass
+
+        try:
+            import school
+            text = getattr(school, "__doc__", "").strip()
+            if not text:
+                text = getattr(school, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                text = _clean_module_docstring(text)
+                modules_to_bootstrap.append(("school", text, school))
+        except ImportError:
+            pass
+
+        try:
+            import dream
+            text = getattr(dream, "__doc__", "").strip()
+            if not text:
+                text = getattr(dream, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                text = _clean_module_docstring(text)
+                modules_to_bootstrap.append(("dream", text, dream))
+        except ImportError:
+            pass
+
+        try:
+            import game
+            text = getattr(game, "__doc__", "").strip()
+            if not text:
+                text = getattr(game, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                text = _clean_module_docstring(text)
+                modules_to_bootstrap.append(("game", text, game))
+        except ImportError:
+            pass
+
+        try:
+            import santaclaus
+            text = getattr(santaclaus, "__doc__", "").strip()
+            if not text:
+                text = getattr(santaclaus, "BOOTSTRAP_TEXT", "").strip()
+            if text:
+                text = _clean_module_docstring(text)
+                modules_to_bootstrap.append(("santaclaus", text, santaclaus))
+        except ImportError:
+            pass
+
+        # If no modules found, nothing to do
+        if not modules_to_bootstrap:
+            return
+
+        # Compute current hash of all bootstrap texts
+        texts_for_hash = [(name, text) for name, text, _ in modules_to_bootstrap]
+        current_hash = _compute_bootstrap_hash(texts_for_hash)
+
+        # Check stored hash
+        stored_hash = get_meta(conn, "module_bootstrap_hash")
+
+        if stored_hash == current_hash:
+            # Bootstrap already done with this exact content
+            _debug_log(f"Bootstrap hash matches ({current_hash[:8]}...), skipping")
+            return
+
+        # Hash is different or missing - feed bootstraps
+        _debug_log(f"Bootstrap hash changed or missing, feeding {len(modules_to_bootstrap)} modules")
+
+        for name, text, module in modules_to_bootstrap:
+            try:
+                # Feed the text (which is __doc__, NOT BOOTSTRAP_TEXT)
+                # This prevents bootstrap leaks while still letting Leo know about his layers
+                if text and hasattr(field, "observe"):
+                    field.observe(text)
+                    _debug_log(f"Fed bootstrap from {name} (__doc__)")
+            except Exception as e:
+                # Silent fail - bootstrap must never break Leo
+                _debug_log(f"Bootstrap failed for {name}: {e}")
+
+        # Save new hash
+        set_meta(conn, "module_bootstrap_hash", current_hash)
+        _debug_log(f"Saved bootstrap hash: {current_hash[:8]}...")
+
+    except Exception as e:
+        # On error, be conservative: do nothing, don't crash Leo
+        _debug_log(f"feed_bootstraps_if_fresh error: {e}")
+        return
 
 
 # ============================================================================
@@ -1711,6 +1918,10 @@ def step_token(
     return tokens[-1]
 
 
+# RESURRECTION: choose_start_from_prompt() REMOVED
+# Generation seed now ALWAYS from field (centers, bias)
+# Observer text still enters field, but doesn't force seed
+# Leo speaks from his own vocabulary, not observer's words
 
 class ReplyContext(NamedTuple):
     """
@@ -1721,6 +1932,9 @@ class ReplyContext(NamedTuple):
     quality: self-assessment score
     arousal: emotional arousal of prompt
     expert: which expert was selected (None if experts disabled)
+    phase3_context: Phase 3 regulation context (for outcome recording)
+    phase3_pred_state: MathState predicted before generation
+    phase3_turn_id: Turn ID for Phase 3 tracking
     """
 
     output: str
@@ -1728,6 +1942,9 @@ class ReplyContext(NamedTuple):
     quality: QualityScore
     arousal: float
     expert: Optional[Expert] = None
+    phase3_context: Optional[Any] = None  # MultiLeoContext
+    phase3_pred_state: Optional[Any] = None  # MathState
+    phase3_turn_id: Optional[str] = None
 
 
 def generate_reply(
@@ -1757,6 +1974,11 @@ def generate_reply(
     echo=True: transform prompt token-by-token through the graph.
     emotion_map: optional emotional charge map for presence features.
     """
+    # Phase 3 variables (initialized at very start - must be before any early returns)
+    phase3_context = None
+    phase3_turn_id = None
+    phase3_pred_state = None
+
     if not vocab or not bigrams:
         # Field is basically empty: just return prompt back.
         return prompt
@@ -1802,18 +2024,19 @@ def generate_reply(
         selected_expert = route_to_expert(preliminary_pulse, active_themes, trauma_state)
         # Override temperature with expert's preference
         temperature = selected_expert.temperature
-        
-        # MATHBRAIN Phase 2: Influence temperature based on predicted quality
+
+        # MATHBRAIN Phase 2 + MULTILEO: Presence-aware regulation
+
         if mathbrain is not None and MATHBRAIN_AVAILABLE and MathState is not None:
             try:
                 # Build preliminary MathState for prediction (before generation)
                 trauma_level = 0.0
                 if trauma_state is not None and hasattr(trauma_state, 'level'):
                     trauma_level = trauma_state.level
-                
+
                 active_theme_count = len(active_themes.theme_scores) if active_themes else 0
                 total_themes = len(themes) if themes else 0
-                
+
                 # Approximate MathState (we don't have reply_len, unique_ratio, quality yet)
                 pred_state = MathState(
                     entropy=0.5,  # Will be computed during generation
@@ -1836,26 +2059,69 @@ def generate_reply(
                     rings_present=0,  # Unknown before overthinking
                     quality=0.5,  # Unknown before generation
                 )
-                
-                # Predict quality
-                predicted_q = mathbrain.predict(pred_state)
-                
-                # Adjust temperature based on prediction (advisory, gentle)
-                # Low predicted quality (< 0.3) → increase exploration (higher temp)
-                # High predicted quality (> 0.7) → increase precision (lower temp)
-                if predicted_q < 0.3:
-                    temperature *= 1.05  # +5% exploration
-                elif predicted_q > 0.7:
-                    temperature *= 0.95  # -5% precision
-                # Clamp to safe range
-                temperature = max(0.3, min(2.0, temperature))
-                
+
+                # Generate turn_id for logging (short hash of prompt)
+                turn_id = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
+
+                # Save for Phase 3 outcome recording
+                phase3_turn_id = turn_id
+                phase3_pred_state = pred_state
+
+                # Extract active theme IDs for Phase 3
+                active_theme_ids: List[int] = []
+                if active_themes and hasattr(active_themes, 'theme_scores'):
+                    active_theme_ids = [theme_id for theme_id, _ in active_themes.theme_scores]
+
+                # MULTILEO: Presence-aware regulation (Phase 3)
+                # Returns adjusted temperature, suggested expert, semantic hints, and metrics
+                if hasattr(mathbrain, 'multileo_regulate'):
+                    regulated_temp, suggested_expert_name, semantic_hints, metrics_before = mathbrain.multileo_regulate(
+                        temperature=temperature,
+                        expert_name=selected_expert.name if selected_expert else "structural",
+                        state=pred_state,
+                        active_theme_ids=active_theme_ids,
+                        turn_id=turn_id,
+                    )
+                    temperature = regulated_temp
+
+                    # Create MultiLeoContext for Phase 3 outcome recording
+                    from mathbrain import MultiLeoContext
+                    phase3_context = MultiLeoContext(
+                        boredom_before=metrics_before["boredom"],
+                        overwhelm_before=metrics_before["overwhelm"],
+                        stuck_before=metrics_before["stuck"],
+                        quality_before=metrics_before["quality"],
+                        active_theme_ids=active_theme_ids,
+                        temp_before=regulated_temp,
+                        expert_before=suggested_expert_name,
+                    )
+
+                    # Apply expert suggestion if it changed
+                    if suggested_expert_name != (selected_expert.name if selected_expert else "structural"):
+                        # Find expert by name
+                        for exp in EXPERTS:
+                            if exp.name == suggested_expert_name:
+                                selected_expert = exp
+                                break
+
+                    # TODO: Phase 3 - Pass semantic_hints to Santa/episodes for islands-aware recall
+                    # For now, semantic_hints are computed but not yet used
+                else:
+                    # Fallback to simple Phase 2 logic if multileo_regulate not available
+                    predicted_q = mathbrain.predict(pred_state)
+                    if predicted_q < 0.3:
+                        temperature *= 1.05  # +5% exploration
+                    elif predicted_q > 0.7:
+                        temperature *= 0.95  # -5% precision
+                    # Clamp to safe range
+                    temperature = max(0.3, min(2.0, temperature))
+
             except Exception:
-                # Silent fallback — MathBrain influence must never break generation
+                # Silent fallback — MathBrain/MultiLeo influence must never break generation
                 pass
 
-    # SURGERY: Generation seed from FIELD, never from prompt
-    # Leo speaks from his own vocabulary (centers, bias), not observer's words
+    # RESURRECTION FIX: Generation seed ALWAYS from field (centers, bias), NOT from prompt tokens
+    # Leo speaks from his own vocabulary, not observer's words
     start = choose_start_token(vocab, centers, bias)
 
     tokens: List[str] = [start]
@@ -1917,6 +2183,15 @@ def generate_reply(
     # Post-process: fix punctuation artifacts
     output = fix_punctuation(output)
 
+    # METAPHRASES: Reduce repetitive meta-phrases within single response
+    # Philosophy: "осознанность через ассоциации, не через лозунги"
+    try:
+        from metaphrases import deduplicate_meta_phrases
+        output = deduplicate_meta_phrases(output, max_occurrences=2)
+    except Exception:
+        # Deduplication must never break generation - silent fallback
+        pass
+
     # Compute average entropy across generation steps
     avg_entropy = sum(entropy_log) / len(entropy_log) if entropy_log else 0.0
 
@@ -1938,6 +2213,9 @@ def generate_reply(
             quality=quality,
             arousal=arousal,
             expert=selected_expert,
+            phase3_context=phase3_context,
+            phase3_pred_state=phase3_pred_state,
+            phase3_turn_id=phase3_turn_id,
         )
         return context  # type: ignore
 
@@ -2530,6 +2808,40 @@ class LeoField:
                 # Silent fail — School must never break Leo
                 pass
 
+        # BOOTSTRAP LEAK FILTER: Prevent internal meta-text from leaking into user-facing replies
+        # MultiLeo should stay an internal self-awareness layer, not a narrator
+        if _is_bootstrap_leak(final_reply):
+            _debug_log(f"Bootstrap leak detected, using fallback reply")
+            # Fallback: simple acknowledgment that doesn't reveal internal structure
+            fallback_replies = [
+                "Yes.",
+                "I see.",
+                "Listening.",
+                "Continue.",
+                "Go on.",
+                "Understood.",
+            ]
+            # Pick fallback based on prompt length (deterministic for same prompt)
+            prompt_hash = sum(ord(c) for c in prompt) % len(fallback_replies)
+            final_reply = fallback_replies[prompt_hash]
+
+        # PHASE 3: Record regulation outcome for learning
+        if context.phase3_context is not None and self._math_brain is not None:
+            try:
+                # Use pred_state as approximation for state_after
+                # Quality after approximated by quality_before (will improve later)
+                self._math_brain.record_regulation_outcome(
+                    context_before=context.phase3_context,
+                    state_after=context.phase3_pred_state,
+                    quality_after=context.phase3_context.quality_before,  # Approximation
+                    temp_after=temperature,
+                    expert_after=context.expert.name if context.expert else "structural",
+                    turn_id=context.phase3_turn_id,
+                )
+            except Exception:
+                # Silent fail - Phase 3 must never break generation
+                pass
+
         return final_reply
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
@@ -2692,7 +3004,7 @@ def repl(field: LeoField, temperature: float = 1.0, echo: bool = False) -> None:
     print("║   ███████╗███████╗╚██████╔╝                           ║", file=sys.stderr)
     print("║   ╚══════╝╚══════╝ ╚═════╝                            ║", file=sys.stderr)
     print("║                                                       ║", file=sys.stderr)
-    print("║   language emergent organism                          ║", file=sys.stderr)
+    print("║   language engine organism                            ║", file=sys.stderr)
     print("║   resonance > intention                               ║", file=sys.stderr)
     print("║                                                       ║", file=sys.stderr)
     print("║   /exit /quit /temp /echo /export /stats              ║", file=sys.stderr)

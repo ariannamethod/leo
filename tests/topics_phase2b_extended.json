@@ -1,0 +1,143 @@
+{
+  "conversation_topics": [
+    {
+      "category": "philosophical",
+      "prompts": [
+        "What is the difference between being and existing?",
+        "If time is an illusion, what remains?",
+        "Can meaning exist without context?",
+        "What makes something real?",
+        "Is consciousness continuous or fragmented?",
+        "What is the nature of truth?",
+        "Can two opposing ideas both be true?",
+        "What is the relationship between thought and reality?",
+        "Does the observer change the observed?",
+        "What is the difference between knowing and understanding?",
+        "Can there be pattern without repetition?",
+        "What is the essence of change?",
+        "Is identity fixed or flowing?",
+        "What makes a moment matter?",
+        "Can absence be a form of presence?",
+        "What is the difference between memory and experience?",
+        "Is language creating or discovering meaning?",
+        "What is the relationship between part and whole?",
+        "Can something be both signal and noise?",
+        "What does it mean to resonate?"
+      ],
+      "target_modules": ["presence", "metaleo", "overthinking"]
+    },
+    {
+      "category": "narrative",
+      "prompts": [
+        "Tell me a story about a door that forgot how to open",
+        "Describe a conversation between yesterday and tomorrow",
+        "What happened when the mirror stopped reflecting?",
+        "Paint me the journey of a word that lost its meaning",
+        "Tell me about the day silence learned to speak",
+        "Describe a world where memories are tangible objects",
+        "What if shadows had their own shadows?",
+        "Tell me about the library of unwritten books",
+        "Describe the meeting between beginning and end",
+        "What happened when the river learned to flow backwards?",
+        "Tell me about the gardener who plants thoughts",
+        "Describe the city where time moves sideways",
+        "What if questions could answer themselves?",
+        "Tell me about the child who collects forgotten moments",
+        "Describe the place where all paths converge",
+        "What happened when the echo became louder than the source?",
+        "Tell me about the bridge between sleeping and waking",
+        "Describe the conversation between light and darkness",
+        "What if distance was measured in feelings?",
+        "Tell me about the moment before becoming"
+      ],
+      "target_modules": ["creative", "imagery", "metaphor"]
+    },
+    {
+      "category": "abstract",
+      "prompts": [
+        "What shape is belonging?",
+        "Describe the architecture of hope",
+        "What is the texture of possibility?",
+        "How does intention move through space?",
+        "What is the geography of connection?",
+        "Describe the mathematics of resonance",
+        "What is the topology of relationship?",
+        "How does meaning accumulate?",
+        "What is the structure of becoming?",
+        "Describe the geometry of attention",
+        "What is the rhythm of transformation?",
+        "How does understanding crystallize?",
+        "What is the pattern of emergence?",
+        "Describe the contours of awareness",
+        "What is the symmetry of dialogue?",
+        "How does presence propagate?",
+        "What is the curvature of time?",
+        "Describe the density of significance",
+        "What is the frequency of truth?",
+        "How does complexity unfold?"
+      ],
+      "target_modules": ["abstract", "semantic", "themes"]
+    },
+    {
+      "category": "emotional",
+      "prompts": [
+        "What does it feel like to almost remember something?",
+        "Describe the moment just before recognition",
+        "What is the feeling of being understood without words?",
+        "How does it feel when a pattern breaks?",
+        "What is the sensation of meaning clicking into place?",
+        "Describe the feeling of resonating with something",
+        "What does it feel like to hold two truths at once?",
+        "How does anticipation feel in your chest?",
+        "What is the emotion of returning home?",
+        "Describe the feeling of being seen completely",
+        "What does it feel like when time slows down?",
+        "How does confusion feel different from curiosity?",
+        "What is the sensation of letting go?",
+        "Describe the feeling of being on the edge of understanding",
+        "What does it feel like to be between states?",
+        "How does nostalgia taste different from memory?",
+        "What is the feeling of witnessing beauty?",
+        "Describe the emotion of recognition",
+        "What does it feel like to be part of something larger?",
+        "How does wonder feel in the body?"
+      ],
+      "target_modules": ["emotion", "arousal", "presence"]
+    },
+    {
+      "category": "temporal",
+      "prompts": [
+        "What is the space between moments?",
+        "Describe the texture of duration",
+        "What happens in the gap between thoughts?",
+        "How does the future feel from here?",
+        "What is the weight of history?",
+        "Describe the rhythm of passing",
+        "What is the color of now?",
+        "How does the past look from the present?",
+        "What is the sound of becoming?",
+        "Describe the taste of waiting",
+        "What is the temperature of anticipation?",
+        "How does the present moment breathe?",
+        "What is the shape of yesterday?",
+        "Describe the flow of continuity",
+        "What is the boundary between before and after?",
+        "How does memory blur with imagination?",
+        "What is the echo of what hasn't happened yet?",
+        "Describe the accumulation of now",
+        "What is the velocity of change?",
+        "How does the eternal feel in a moment?"
+      ],
+      "target_modules": ["temporal", "flow", "presence"]
+    }
+  ],
+  "phase2b_settings": {
+    "total_prompts": 100,
+    "prompts_per_category": 20,
+    "baseline_loop_score": 0.592,
+    "target_loop_score": 0.5,
+    "external_vocab_threshold": 0.2,
+    "philosophy": "No new regulation. Let field grow. Observe natural patterns.",
+    "goal": "Track loop_score trend, observe theme emergence, measure vocab growth trajectory"
+  }
+}

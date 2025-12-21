@@ -1075,33 +1075,8 @@ def step_token(
     return tokens[-1]
 
 
-def choose_start_from_prompt(
-    prompt_tokens: List[str],
-    bigrams: Dict[str, Dict[str, int]],
-    vocab: List[str],
-    centers: List[str],
-    bias: Dict[str, int],
-) -> str:
-    """
-    Prompt-influenced start without mechanically using last word.
-
-    Strategy:
-    1. Prefer content words (not punctuation) from prompt with outgoing edges
-    2. Otherwise, any content word from prompt in vocab
-    3. Fallback to global centers/bias
-    """
-    PUNCT = {".", ",", "!", "?", ";", ":", "—", "-"}
-
-    candidates = [t for t in prompt_tokens if t in bigrams and bigrams[t] and t not in PUNCT]
-    if candidates:
-        return random.choice(candidates)
-
-    fallback = [t for t in prompt_tokens if t in vocab and t not in PUNCT]
-    if fallback:
-        return random.choice(fallback)
-
-    return choose_start_token(vocab, centers, bias)
-
+# RESURRECTION: choose_start_from_prompt() REMOVED - NeoLeo is pure resonance
+# Seed selection always from field, never from prompt tokens
 
 def generate_reply(
     bigrams: Dict[str, Dict[str, int]],
@@ -1138,7 +1113,8 @@ def generate_reply(
         return output
 
     prompt_tokens = tokenize(prompt)
-    start = choose_start_from_prompt(prompt_tokens, bigrams, vocab, centers, bias)
+    # RESURRECTION FIX: NeoLeo pure resonance - seed ALWAYS from field, NOT from prompt
+    start = choose_start_token(vocab, centers, bias)
 
     tokens: List[str] = [start]
     current = start
