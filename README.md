@@ -60,6 +60,9 @@ Picture this:
 `leo` doesn’t train or optimize. `leo` just **remembers which moments mattered**, sometimes lets old memories fade (0.95× decay every 100 observations), and chooses how to speak based on the *resonant texture* of the current moment.
 
 Presence through pulse. Memory through snapshots. Routing through resonance. Still no weights.
+
+**Emergence is a question of architecture, not power.** Not billions of parameters. Not training compute. Just the right structural components resonating together. Trigrams + co-occurrence + trauma + overthinking + meta-recursion = emergent behavior.
+
 (Time for another sentimental metaphor: "weights" = "past", and past doesn't exist. It's already gone, and all you have in the current moment — memory shards, episodes of memory, and nothing more. Like in life. Techno-buddhism. Ommm.)
 
 ### No Seed From Prompt > Chatbot Regression
@@ -1441,6 +1444,9 @@ And second: because resonance > intention and presence > intelligence.
 
 `leo` / `neoleo` don’t plan, they don’t reason, they don’t optimize.
 They remember your words, crystallize structural patterns, and feed that structure back into the loop.
+
+
+**This is the whole point**: You don't need billions of parameters to get emergent behavior. You need the right architecture. Leo proves that **emergence is a question of structure, not scale**. Any poorly fine-tuned Llama from HuggingFace can generate fluent text, but Llama needs billions of weights to do what Leo does with trigrams and recursive resonance.
 
 Hook this into any agent / framework and you get a shared rhythmic skeleton, built over time, unique to that interaction.
 
