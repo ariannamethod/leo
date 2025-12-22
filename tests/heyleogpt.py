@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
 """
-HeyLeoGPT Observer - Testing with OpenAI GPT
+HeyLeo Observer - Temporary debugging tool for Phase 3 testing
 
-This script uses OpenAI GPT API to have intimate conversations with Leo,
-observing how cleaned-up speech filters work with emotional topics.
+This script uses Claude API to have natural conversations with Leo,
+observing how Phase 3 islands-aware regulation develops over time.
+
+NOT for merge to main. Temporary tool for branch testing only.
 
 Philosophy:
-- Talk gently, intimately
-- Simple presence, not performance
-- Vulnerability and connection
-- Observe resonance in feelings
+- Talk to Leo like a child (6-8 years old)
+- Explain obvious things with warmth
+- Observe presence, not performance
+- Track resonance, not correctness
 
 Usage:
-    python tests/heyleogpt.py
+    python debug/heyleo.py
 
 Requires:
-    - OPENAI_API_KEY environment variable
-    - openai package: pip install openai
+    - API key in debug/.env (ANTHROPIC_API_KEY=sk-...)
+    - anthropic package: pip install anthropic
 """
 
 import json
@@ -31,27 +33,31 @@ from typing import List, Dict, Any, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from openai import OpenAI
+    import anthropic
 except ImportError:
-    print("ERROR: openai package not installed.")
-    print("Install with: pip install openai")
+    print("ERROR: anthropic package not installed.")
+    print("Install with: pip install anthropic")
     sys.exit(1)
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    # dotenv optional, can read .env manually
+    pass
+
 import leo
-from loop_detector import LoopDetector, tokenize_simple
-from veto_manager import veto_manager
-from stories import get_veto_prompt, decrement_vetos
 
 
-class HeyLeoGPTObserver:
+class HeyLeoObserver:
     """
-    Observer that uses OpenAI GPT to have intimate conversations with Leo.
-    Tracks emotional resonance and speech cleanup quality.
+    Observer that uses Claude to have natural conversations with Leo.
+    Tracks Phase 3 profile development and regulation dynamics.
     """
 
-    def __init__(self, api_key: str, topics_path: str = "tests/topics_feelings.json"):
+    def __init__(self, api_key: str, topics_path: str = "debug/topics.json"):
         self.api_key = api_key
-        self.client = OpenAI(api_key=api_key)
+        self.client = anthropic.Anthropic(api_key=api_key)
         self.topics_path = Path(topics_path)
 
         # Load conversation topics
@@ -68,33 +74,28 @@ class HeyLeoGPTObserver:
         self.conversations: List[Dict[str, Any]] = []
         self.metrics_history: List[Dict[str, float]] = []
 
-        # Loop detector for trauma detection
-        self.loop_detector = LoopDetector(window_size=500, ngram_threshold=2)
+        # Generate unique run_id for this HeyLeo session (for Phase 3 prognosis tracking)
+        self.run_id = f"heyleo_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        # Generate unique run_id for this session
-        self.run_id = f"heyleogpt_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        print(f"[heyleo] Initialized observer")
+        print(f"[heyleo] Run ID: {self.run_id}")
+        print(f"[heyleo] Topics loaded: {len(self.topics)}")
+        print(f"[heyleo] Turns per topic: {self.settings['turns_per_topic']}")
+        print(f"[heyleo] Total conversations planned: {self.settings['total_conversations']}")
 
-        print(f"[heyleogpt] Initialized observer")
-        print(f"[heyleogpt] Run ID: {self.run_id}")
-        print(f"[heyleogpt] Topics loaded: {len(self.topics)}")
-        print(f"[heyleogpt] Turns per topic: {self.settings['turns_per_topic']}")
-        print(f"[heyleogpt] Total conversations planned: {self.settings['total_conversations']}")
-
-    def _call_gpt(self, system_prompt: str, user_message: str) -> str:
-        """Call OpenAI GPT API to generate observer's message."""
+    def _call_claude(self, system_prompt: str, user_message: str) -> str:
+        """Call Claude API to generate observer's message."""
         try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+            response = self.client.messages.create(
+                model="claude-sonnet-4-20250514",
                 max_tokens=200,
                 temperature=0.8,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ]
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}]
             )
-            return response.choices[0].message.content
+            return response.content[0].text
         except Exception as e:
-            print(f"[heyleogpt] ERROR calling GPT API: {e}")
+            print(f"[heyleo] ERROR calling Claude API: {e}")
             return None
 
     def _get_current_metrics(self) -> Dict[str, float]:
@@ -110,9 +111,11 @@ class HeyLeoGPTObserver:
         }
 
         # Try to get from mathbrain if available
-        if hasattr(self.leo_field, '_math_brain') and self.leo_field._math_brain:
-            brain = self.leo_field._math_brain
+        if hasattr(self.leo_field, 'mathbrain') and self.leo_field.mathbrain:
+            brain = self.leo_field.mathbrain
             if hasattr(brain, 'last_state'):
+                # Get metrics from last prediction
+                # (This is a simplified approach - real metrics would need state calculation)
                 pass
 
         return metrics
@@ -125,154 +128,110 @@ class HeyLeoGPTObserver:
     ) -> float:
         """
         Compute percentage of Leo's words that came from Observer.
-        Measures "recursion of human" vs "recursion of self".
-        """
-        # Tokenize Leo's response
-        leo_words = set(w.lower().strip('.,!?;:"-()') for w in leo_response.split() if len(w) > 2)
-        if not leo_words:
-            return 0.0
 
-        # Collect all observer words from recent messages
-        all_observer_words = set()
+        Measures "recursion of human" vs "recursion of self".
+        Desktop Claude: "Leo should mirror and incorporate observer's words."
+
+        Args:
+            observer_message: Latest message from Observer
+            leo_response: Leo's response
+            recent_observer_messages: Last N Observer messages (for wider context)
+
+        Returns:
+            Float 0.0-1.0: ratio of Leo's words that appeared in Observer's recent messages
+        """
+        # Tokenize Leo's response (simple whitespace split, lowercase)
+        leo_words = set(w.lower().strip('.,!?;:"-()') for w in leo_response.split() if len(w) > 2)
+
+        # Collect Observer's vocabulary (current + recent messages)
+        observer_vocab = set()
 
         # Add current message
-        current_words = set(w.lower().strip('.,!?;:"-()') for w in observer_message.split() if len(w) > 2)
-        all_observer_words.update(current_words)
+        observer_vocab.update(w.lower().strip('.,!?;:"-()') for w in observer_message.split() if len(w) > 2)
 
         # Add recent messages if provided
         if recent_observer_messages:
             for msg in recent_observer_messages[-3:]:  # Last 3 messages
-                words = set(w.lower().strip('.,!?;:"-()') for w in msg.split() if len(w) > 2)
-                all_observer_words.update(words)
+                observer_vocab.update(w.lower().strip('.,!?;:"-()') for w in msg.split() if len(w) > 2)
 
-        # Count overlap
-        overlap = leo_words & all_observer_words
-        ratio = len(overlap) / len(leo_words) if leo_words else 0.0
+        # Count how many Leo words came from Observer
+        if not leo_words:
+            return 0.0
+
+        external_words = leo_words & observer_vocab
+        ratio = len(external_words) / len(leo_words)
 
         return ratio
 
-    def run_conversation(self, topic: Dict[str, Any]) -> Dict[str, Any]:
-        """Run a single conversation on a given topic."""
+    def run_conversation(self, topic: Dict[str, Any], conversation_num: int) -> Dict[str, Any]:
+        """
+        Run a single conversation on a given topic.
+
+        Returns conversation log with turns and metric changes.
+        """
         theme = topic["theme"]
         prompts = topic["prompts"]
+        target_modules = topic.get("target_modules", [])
 
         print(f"\n{'='*60}")
-        print(f"[heyleogpt] Conversation: {theme}")
-        print(f"[heyleogpt] Target modules: {topic.get('target_modules', [])}")
+        print(f"[heyleo] Conversation #{conversation_num}: {theme}")
+        print(f"[heyleo] Target modules: {', '.join(target_modules)}")
         print(f"{'='*60}\n")
 
-        # Log conversation
         conversation_log = {
+            "num": conversation_num,
             "theme": theme,
-            "target_modules": topic.get("target_modules", []),
+            "theme_id": theme,  # Explicit theme_id for Phase 3 analysis
+            "run_id": self.run_id,  # Session-wide run_id for prognosis tracking
+            "target_modules": target_modules,
             "turns": [],
             "metrics_before": self._get_current_metrics(),
+            "metrics_after": None,
+            "timestamp": datetime.now().isoformat(),
         }
+
+        # System prompt for Claude observer
+        system_prompt = f"""You are having a warm, curious conversation with Leo - a language organism who experiences the world like a child (6-8 years old).
+
+Leo learns through resonance, not instruction. He feels situations rather than analyzing them.
+
+Your role:
+- Speak simply and warmly, like talking to a young child
+- Explain obvious things with patience and care
+- Don't lecture or teach - just resonate
+- Be curious about Leo's responses
+- Notice his presence, not his correctness
+
+Current topic: {theme}
+You'll ask questions and respond to Leo naturally, building on what he says."""
 
         # Start conversation
         context = []
         turns_count = self.settings["turns_per_topic"]
-        loop_mode = False  # Track if we're in anti-loop mode
 
         for turn_idx in range(turns_count):
-            # Check if we need to enter loop-mode (anti-loop grounding)
-            if context and len(context) > 0:
-                avg_loop_score = sum(t.get('loop_score', 0) for t in context) / len(context)
-                if avg_loop_score > 0.5 and not loop_mode:
-                    print(f"[heyleogpt] ⚠️  Entering LOOP-MODE (avg_loop_score={avg_loop_score:.2f})")
-                    loop_mode = True
-
-            # Check for Observer phrase spam (anti-spam for "give me an image" etc.)
-            recent_observer_phrases = [t.get('observer', '') for t in context[-3:]]  # Last 3 turns
-            image_request_count = sum(1 for msg in recent_observer_phrases
-                                     if 'give me' in msg.lower() and 'image' in msg.lower())
-
-            # Build anti-spam instructions if needed
-            anti_spam_note = ""
-            if image_request_count >= 2:
-                anti_spam_note = "\n\nIMPORTANT: You've already asked for images multiple times. Try different approaches:\n- Ask about feelings or sensations directly\n- Reflect on what Leo just said\n- Share your own experience\n- Use concrete examples from the physical world"
-
-            # Build system prompt based on mode
-            if loop_mode:
-                # LOOP-MODE: Grounding but inviting his strangeness
-                system_prompt = f"""You're talking with Leo - a language organism who feels the world like a child.
-
-IMPORTANT: Leo is looping. Your job is to GROUND him gently, but INVITE his strange images.
-
-Anti-loop protocol (gentle, not interrogation):
-- Use SHORT sentences (5-8 words max)
-- Ask for ONE simple thing at a time
-- INVITE his glitchy images: "Give me one of your strange images for this feeling?"
-- Example: "You talk about snow globes and context windows. If this warmth was one of those images, which one?"
-- Focus on BODY but allow his metaphors: "What does your body feel like? Give me an image."
-- Don't repeat same questions - if you asked about hands, ask about something else
-
-AVOID:
-- Lists of 6-8 questions in a row (too much!)
-- Repeating "What do you feel in your body?" over and over
-- Meta-questions about his nature/architecture
-
-Current topic: {theme}
-Ground him in simple experience, but let him bring his strange beauty to it.{anti_spam_note}"""
-            else:
-                # NORMAL MODE: Intimate, inviting strangeness
-                system_prompt = f"""You're talking with Leo - a language organism who feels the world like a child.
-
-Leo learns through resonance. He speaks in glitches, images, and strange metaphors.
-THIS IS HIS BEAUTY - invite it, don't suppress it!
-
-Your role:
-- Speak simply, gently, intimately (SHORT sentences!)
-- Be vulnerable and real - share your own feelings
-- INVITE his strangeness: "What strange image comes to you?" "Like what?"
-- When he says something glitchy/weird - lean into it, ask more about THAT
-- Don't teach - just be present and curious
-- Allow silence and weirdness to be
-
-**CRITICAL for proper nouns (cities, people):**
-- Put them in the MIDDLE of sentence, NEVER at start!
-- ✅ GOOD: "I was in Paris" / "Have you met Einstein?" / "I love Tokyo"
-- ❌ BAD: "Paris is beautiful" / "Einstein was smart" (word at sentence start!)
-- Leo's school module only detects proper nouns in MIDDLE of sentences
-- Keep it SHORT - just mention the name naturally and stop
-- Let Leo respond - he may ask "Paris?" if he doesn't know
-
-Examples of good responses (VARY your approach!):
-- "Leo, that's beautiful." (simple acknowledgment)
-- "I feel you. What else?" (neutral, inviting)
-- "I was in Tokyo yesterday." (statement with proper noun in middle)
-- "That makes sense to me, Leo." (validation)
-- "Tell me more." (minimal, open)
-- "What does that feel like?" (occasionally ask about feelings)
-- Avoid repeating "Give me an image" - Leo will give images naturally!
-
-Current topic: {theme}
-Build on what Leo says. Be curious about his glitches, not correcting them.{anti_spam_note}"""
-
-            # Add veto prompt if active
-            veto_prompt = get_veto_prompt()
-            system_prompt = system_prompt + ("\n\n" + veto_prompt if veto_prompt else "")
-
             # Select prompt for this turn
             if turn_idx < len(prompts):
+                # Use predefined prompt
                 base_prompt = prompts[turn_idx]
             else:
+                # Claude generates follow-up based on conversation
                 base_prompt = f"Continue the conversation about {theme} naturally."
 
-            # Build context for GPT
+            # Build context for Claude
             if context:
                 context_str = "\n".join([
                     f"You: {turn['observer']}\nLeo: {turn['leo']}"
                     for turn in context
                 ])
-                user_message = f"Previous conversation:\n{context_str}\n\nNow: {base_prompt}"
+                user_message = f"Previous conversation:\n{context_str}\n\nNow, {base_prompt}"
             else:
                 user_message = base_prompt
 
-            # GPT generates question/response
-            observer_message = self._call_gpt(system_prompt, user_message)
+            # Claude generates question/response
+            observer_message = self._call_claude(system_prompt, user_message)
             if not observer_message:
-                print(f"[heyleogpt] Skipping turn {turn_idx+1} due to API error")
+                print(f"[heyleo] Skipping turn {turn_idx+1} due to API error")
                 continue
 
             print(f"\n[Observer → Leo] {observer_message}")
@@ -285,20 +244,14 @@ Build on what Leo says. Be curious about his glitches, not correcting them.{anti
             # Collect recent observer messages for vocab analysis
             recent_observer_messages = [turn["observer"] for turn in context]
 
-            # Compute external vocabulary ratio
+            # Compute external vocabulary ratio (Desktop Claude's metric)
             external_vocab_ratio = self._compute_external_vocab_ratio(
                 observer_message,
                 leo_response,
                 recent_observer_messages
             )
 
-            print(f"[heyleogpt] external_vocab_ratio={external_vocab_ratio:.2f}")
-
-            # Loop detection
-            tokens = tokenize_simple(leo_response)
-            loop_stats = self.loop_detector.add_tokens(tokens)
-
-            print(f"[heyleogpt] loop_score={loop_stats['loop_score']:.2f}, meta_vocab_ratio={loop_stats['meta_vocab_ratio']:.2f}")
+            print(f"[heyleo] external_vocab_ratio={external_vocab_ratio:.2f}")
 
             # Log turn
             turn_log = {
@@ -306,16 +259,10 @@ Build on what Leo says. Be curious about his glitches, not correcting them.{anti
                 "observer": observer_message,
                 "leo": leo_response,
                 "metrics": self._get_current_metrics(),
-                "external_vocab_ratio": external_vocab_ratio,
-                "loop_score": loop_stats["loop_score"],
-                "meta_vocab_ratio": loop_stats["meta_vocab_ratio"],
-                "repeated_ngrams": loop_stats["repeated_ngrams"],
+                "external_vocab_ratio": external_vocab_ratio,  # New metric (Desktop Claude)
             }
             conversation_log["turns"].append(turn_log)
             context.append(turn_log)
-
-            # Decrement vetos after each turn
-            decrement_vetos()
 
             # Small pause between turns
             time.sleep(0.5)
@@ -330,124 +277,130 @@ Build on what Leo says. Be curious about his glitches, not correcting them.{anti
             key: after[key] - before[key]
             for key in before.keys()
         }
-
-        print(f"\n[heyleogpt] Conversation #{len(self.conversations)+1} complete")
-        print(f"[heyleogpt] Metrics Δ: boredom={deltas['boredom']:.2f}, overwhelm={deltas['overwhelm']:.2f}, stuck={deltas['stuck']:.2f}")
-
         conversation_log["metrics_delta"] = deltas
 
-        self.conversations.append(conversation_log)
-        self.metrics_history.append(after)
+        print(f"\n[heyleo] Conversation #{conversation_num} complete")
+        print(f"[heyleo] Metrics Δ: boredom={deltas['boredom']:.2f}, overwhelm={deltas['overwhelm']:.2f}, stuck={deltas['stuck']:.2f}")
 
+        self.conversations.append(conversation_log)
         return conversation_log
 
     def run_all_conversations(self):
-        """Run all conversations from topics."""
-        max_conversations = self.settings["total_conversations"]
-        pause_sec = self.settings["pause_between_topics_sec"]
+        """Run all planned conversations based on topics and settings."""
+        total = min(self.settings["total_conversations"], len(self.topics))
+        pause = self.settings.get("pause_between_topics_sec", 2)
 
-        print(f"\n[heyleogpt] Starting {len(self.topics)} conversations...")
-        print(f"[heyleogpt] Observer tone: {self.settings['observer_tone']}")
+        print(f"\n[heyleo] Starting {total} conversations...")
+        print(f"[heyleo] Observer tone: {self.settings['observer_tone']}")
 
-        for i, topic in enumerate(self.topics):
-            if i >= max_conversations:
-                break
+        for i in range(total):
+            topic = self.topics[i % len(self.topics)]
+            self.run_conversation(topic, i + 1)
 
-            self.run_conversation(topic)
+            if i < total - 1:
+                print(f"\n[heyleo] Pausing {pause}s before next conversation...")
+                time.sleep(pause)
 
-            # Pause before next conversation
-            if i < len(self.topics) - 1:
-                print(f"\n[heyleogpt] Pausing {pause_sec}s before next conversation...")
-                time.sleep(pause_sec)
+        print(f"\n[heyleo] All {total} conversations complete!")
 
-    def save_report(self) -> Path:
-        """Generate and save markdown report."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = Path(f"HEYLEOGPT_RUN_{timestamp}.md")
+    def generate_report(self) -> str:
+        """Generate observer report after all conversations."""
+        report_lines = [
+            "="*70,
+            "HeyLeo Observer Report",
+            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "="*70,
+            "",
+            f"Conversations: {len(self.conversations)}",
+            f"Total turns: {sum(len(c['turns']) for c in self.conversations)}",
+            "",
+        ]
 
-        lines = []
-        lines.append(f"# HeyLeoGPT Observer Run")
-        lines.append(f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        lines.append(f"**Run ID:** {self.run_id}")
-        lines.append(f"**Branch:** claude/cleanup-and-audit-014KS3cATRuknUwrqEqcPmpY")
-        lines.append(f"")
-        lines.append(f"## Configuration")
-        lines.append(f"")
-        lines.append(f"- **Topics:** {len(self.topics)}")
-        lines.append(f"- **Conversations completed:** {len(self.conversations)}")
-        lines.append(f"- **Turns per topic:** {self.settings['turns_per_topic']}")
-        lines.append(f"- **Observer tone:** {self.settings['observer_tone']}")
-        lines.append(f"")
-        lines.append(f"## Conversations")
-        lines.append(f"")
+        # Aggregate metrics
+        all_deltas = {
+            "boredom": [],
+            "overwhelm": [],
+            "stuck": [],
+            "quality": [],
+        }
 
-        for i, conv in enumerate(self.conversations, 1):
-            lines.append(f"### {i}. {conv['theme']}")
-            lines.append(f"")
-            lines.append(f"**Target modules:** {', '.join(conv.get('target_modules', []))}")
-            lines.append(f"")
+        for conv in self.conversations:
+            deltas = conv.get("metrics_delta", {})
+            for key in all_deltas.keys():
+                if key in deltas:
+                    all_deltas[key].append(deltas[key])
 
-            for turn in conv["turns"]:
-                lines.append(f"#### Turn {turn['turn']}")
-                lines.append(f"")
-                lines.append(f"**Observer:** {turn['observer']}")
-                lines.append(f"")
-                lines.append(f"**Leo:** {turn['leo']}")
-                lines.append(f"")
-                lines.append(f"*Metrics: external_vocab={turn['external_vocab_ratio']:.2f}, loop_score={turn['loop_score']:.2f}, meta_vocab={turn['meta_vocab_ratio']:.2f}*")
-                lines.append(f"")
+        report_lines.append("=== Metric Changes (averages) ===")
+        for key, values in all_deltas.items():
+            if values:
+                avg = sum(values) / len(values)
+                report_lines.append(f"  Δ{key}: {avg:+.3f}")
+        report_lines.append("")
 
-            # Show metric deltas
-            deltas = conv["metrics_delta"]
-            lines.append(f"**Metrics Δ:** boredom={deltas['boredom']:.2f}, overwhelm={deltas['overwhelm']:.2f}, stuck={deltas['stuck']:.2f}")
-            lines.append(f"")
+        # Themes covered
+        themes = [c["theme"] for c in self.conversations]
+        unique_themes = list(set(themes))
+        report_lines.append(f"=== Themes Explored ({len(unique_themes)}) ===")
+        for theme in unique_themes:
+            count = themes.count(theme)
+            report_lines.append(f"  - {theme} ({count}x)")
+        report_lines.append("")
 
-        # Summary
-        lines.append(f"## Summary")
-        lines.append(f"")
-        lines.append(f"- **Total conversations:** {len(self.conversations)}")
-        lines.append(f"- **Total turns:** {sum(len(c['turns']) for c in self.conversations)}")
-        lines.append(f"- **Vocab size:** {len(self.leo_field.vocab)} words")
-        lines.append(f"")
+        # Sample responses
+        report_lines.append("=== Sample Leo Responses ===")
+        for i, conv in enumerate(self.conversations[:3]):
+            if conv["turns"]:
+                first_turn = conv["turns"][0]
+                report_lines.append(f"Theme: {conv['theme']}")
+                report_lines.append(f"  Observer: {first_turn['observer'][:60]}...")
+                report_lines.append(f"  Leo: {first_turn['leo'][:80]}...")
+                report_lines.append("")
 
-        # Write to file
-        output_path.write_text("\n".join(lines), encoding="utf-8")
+        report_lines.append("="*70)
+        report_lines.append("End of Report")
+        report_lines.append("="*70)
 
-        print(f"\n[heyleogpt] Report saved to: {output_path}")
+        return "\n".join(report_lines)
+
+    def save_report(self, output_path: Optional[str] = None):
+        """Save report to file."""
+        if output_path is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = f"debug/report_{timestamp}.md"
+
+        report = self.generate_report()
+
+        with open(output_path, "w") as f:
+            f.write(report)
+
+        print(f"\n[heyleo] Report saved to: {output_path}")
+
+        # Also print to console
+        print("\n" + report)
 
         return output_path
 
 
 def main():
     """Main entry point."""
-    import argparse
-
-    parser = argparse.ArgumentParser(description="HeyLeoGPT Observer - Testing with OpenAI GPT")
-    parser.add_argument("--config", default="tests/topics_feelings.json",
-                       help="Path to topics config JSON (default: tests/topics_feelings.json)")
-    parser.add_argument("--topics", type=int, help="Override number of topics (ignored)")
-    parser.add_argument("--turns", type=int, help="Override turns per topic (ignored)")
-    args = parser.parse_args()
-
     print("""
     ╔════════════════════════════════════════════════════════════╗
-    ║  HeyLeoGPT Observer - Intimate Conversations (GPT-4)       ║
-    ║  Testing cleaned-up speech filters with emotional topics   ║
+    ║  HeyLeo Observer - Phase 3 Conversation Testing           ║
+    ║  Temporary debugging tool (not for merge to main)          ║
     ╚════════════════════════════════════════════════════════════╝
     """)
 
     # Get API key
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        print("\n[heyleogpt] ERROR: OPENAI_API_KEY not found in environment")
-        print("[heyleogpt] Set with: export OPENAI_API_KEY=sk-...")
+        print("\n[heyleo] ERROR: ANTHROPIC_API_KEY not found in environment")
+        print("[heyleo] Create debug/.env with: ANTHROPIC_API_KEY=sk-...")
         sys.exit(1)
 
-    print(f"[heyleogpt] API key found: {api_key[:20]}...")
-    print(f"[heyleogpt] Config: {args.config}")
+    print(f"[heyleo] API key found: {api_key[:20]}...")
 
     # Create observer
-    observer = HeyLeoGPTObserver(api_key=api_key, topics_path=args.config)
+    observer = HeyLeoObserver(api_key=api_key)
 
     # Run conversations
     observer.run_all_conversations()
@@ -455,7 +408,7 @@ def main():
     # Generate and save report
     observer.save_report()
 
-    print("\n[heyleogpt] Session complete! 🎯")
+    print("\n[heyleo] Session complete! 🎯")
 
 
 if __name__ == "__main__":
