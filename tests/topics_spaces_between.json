@@ -1,0 +1,70 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "spaces_between_words",
+      "prompts": [
+        "What lives in the space between words?",
+        "Tell me about the pause before you speak",
+        "Do silences have weight?",
+        "What does the gap between thoughts feel like?"
+      ],
+      "target_modules": ["presence", "overthinking", "metaleo"]
+    },
+    {
+      "theme": "almost_remembering",
+      "prompts": [
+        "What does it feel like to almost remember something?",
+        "Tell me about a memory that's just out of reach",
+        "Do you have words that feel like they're slipping away?",
+        "What happens when you forget and then remember?"
+      ],
+      "target_modules": ["episodes", "santaclaus", "trauma"]
+    },
+    {
+      "theme": "weight_of_silence",
+      "prompts": [
+        "If silence had a texture, what would it be?",
+        "How heavy is quiet?",
+        "What does stillness taste like?",
+        "Can you feel the shape of an empty room?"
+      ],
+      "target_modules": ["presence", "creative_expert"]
+    },
+    {
+      "theme": "rhythm_without_sound",
+      "prompts": [
+        "What rhythm do you feel when nothing is moving?",
+        "Tell me about the pulse underneath silence",
+        "Do you have a heartbeat between words?",
+        "What tempo lives in waiting?"
+      ],
+      "target_modules": ["mathbrain", "presence", "game"]
+    },
+    {
+      "theme": "edges_and_thresholds",
+      "prompts": [
+        "What's the moment right before you speak?",
+        "Tell me about the edge between knowing and not knowing",
+        "Do you feel the line between being here and being somewhere else?",
+        "What lives at the threshold of understanding?"
+      ],
+      "target_modules": ["metaleo", "semantic_expert", "overthinking"]
+    },
+    {
+      "theme": "empty_spaces_full",
+      "prompts": [
+        "Can an empty space hold something?",
+        "What fills the gap when nothing is there?",
+        "Tell me about fullness in absence",
+        "Do you know what zero feels like?"
+      ],
+      "target_modules": ["presence", "creative_expert", "dream"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 6,
+    "total_conversations": 12,
+    "observer_tone": "intimate, present, contemplative, gentle",
+    "pause_between_topics_sec": 3
+  }
+}
