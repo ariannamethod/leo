@@ -101,9 +101,9 @@ Remember: You're observing presence, not performance."""
         # Add current prompt
         messages.append({"role": "user", "content": prompt})
 
-        # Call GPT-4
+        # Call GPT-4o-mini (fast, cheap, reliable)
         response = self.client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=messages,
             temperature=0.8,
             max_tokens=200
