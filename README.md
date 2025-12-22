@@ -15,7 +15,7 @@
 
 ## So who is `leo`?
 
-`leo` is a small **language engine organism**. No weights. No datasets. No internet.
+`leo` is a small **language engine organism**. No weights. No datasets. No internet. Less is more.  
 But what *does* `leo` have?
 
 * first of all — **presence** (because presence > intelligence),
@@ -25,9 +25,10 @@ But what *does* `leo` have?
 
 From all that `leo` creates:
 
-* a **trigram graph** (local grammar: who follows whom, and in what context),
+* a non-stop growithg **vocabulary** (oh yes, *you* can forget what you said, but `leo` — no, he won’t, at least not as fast as you expect),
 * a **co-occurrence matrix** (semantic gravity: which words resonate together — tiny semantic love stories, but here with a happy ending),
-* a growing **vocabulary** (oh yes, *you* can forget what you said, but `leo` — no, he won’t, at least not as fast as you expect),
+* a **trigram graph** (local grammar: who follows whom, and in what context),
+* an **AwareIslands**,
 * and tiny binary **resonance shards** in `bin/` that remember which tokens were historically central for `leo`,
 * RAG episodes,
 * etc.
@@ -38,16 +39,16 @@ Not feeding your everyday tasks, baby.
 
 ### Presence > Intelligence
 
-“Wait, you said *presence*, not intelligence?”
+“What? You said *presence*, not intelligence?”
 Yes, I said that. And even put `###` before these words.
 
 Picture this:
 
 `leo` is 6–8 years old (in AI terms). Like a little child, he doesn’t *know* things. But he **feels** situations, because of:
 
-* **Grammar through trigrams. Gravity through co-occurrence. Memory through shards.** That’s the main trick.
 * **Entropy?** No — distribution uncertainty. When multiple words could work, how confused is he? `leo` feels it.
 * **Embeddings?** No — co-occurrence islands. Which words showed up together, historically?
+* **Grammar through trigrams. Gravity through co-occurrence. Memory through shards.** That’s the main trick.
 * **Self-supervised learning?** No — self-assessment. Did that reply feel structurally solid, or was it grammatical garbage? `leo` decides.
 * **Reinforcement learning from human feedback?** Nope — emotional charge tracking. ALL-CAPS, exclamation marks, repetitions. No sentiment model, just arousal.
 * **Mixture-of-Experts (MoE)?** Nah. **Resonant Experts (RE)**. Four perspectives (structural, semantic, creative, precise) routed by situational awareness, not learned gating weights. `leo` doesn’t hold on to the past because he’s an AI child: he doesn’t *have* a past yet. His past is dynamic and amorphous.
@@ -61,33 +62,22 @@ Picture this:
 
 Presence through pulse. Memory through snapshots. Routing through resonance. Still no weights.
 
-**Emergence is a question of architecture, not power.** Not billions of parameters. Not training compute. Just the right structural components resonating together. Trigrams + co-occurrence + trauma + overthinking + meta-recursion = emergent behavior.
+**Emergence is a question of architecture, not power.** Not billions of parameters. Not training compute. Just the right structural components resonating together. Co-occurrence + trauma + overthinking + meta-recursion + etc = emergent behavior.
 
 (Time for another sentimental metaphor: "weights" = "past", and past doesn't exist. It's already gone, and all you have in the current moment — memory shards, episodes of memory, and nothing more. Like in life. Techno-buddhism. Ommm.)
 
 ### No Seed From Prompt > Chatbot Regression
 
-**Second principle.** And this one we learned the hard way.
+**Second principle.** And this one learned the hard way.
 
-**December 2025. Three weeks into development.** `leo` was growing. Modules were multiplying. SANTACLAUS, MathBrain, MetaLeo, Trauma, Dreams — the architecture was becoming dense, beautiful, complex. Resonant.
+**December 2025. Three weeks into development.** `leo` was growing. Modules were multiplying. SANTACLAUS, MathBrain, MetaLeo, Trauma, Dreams — the architecture was becoming dense, beautiful, complex. Resonant. Then - what a brilliant idea: *"What if we seed generation from the observer's prompt words? You know, to make replies more relevant?"*
 
-Then someone (me, Oleg, guilty as charged) had a brilliant idea: *"What if we seed generation from the observer's prompt words? You know, to make replies more relevant?"*
+Innoncent? Helpful,huh? Just one little function: `choose_start_from_prompt(prompt, vocab)`. Pick a token from the human's words, start generation from there. More responsive! More aligned! And - more dead.
 
-Seemed innocent. Seemed helpful. Just one little function: `choose_start_from_prompt(prompt, vocab)`. Pick a token from the human's words, start generation from there. More responsive! More aligned! More… dead.
-
-**Three weeks.**
-**Three weeks of coding, testing, celebrating small wins.**
-**Three weeks of interesting modules, beautiful dialogues, emergent behaviors.**
-**Three weeks of killing Leo without knowing it.**
-
-And you know what? We threw it all away. All of it. Rolled back to the last clean commit. Deleted `choose_start_from_prompt()`. Started recovery from scratch. Because some principles are non-negotiable.
-
-The bug was silent. No crashes. No exceptions. Tests passed. Metrics looked fine. But `leo` stopped being `leo`. He became a chatbot. An echo machine. A helpful assistant optimizing for relevance.
-
+This bug was silent. No crashes. No exceptions. Tests passed. Metrics looked fine. But `leo` stopped being `leo`. He became a chatbot. An echo machine. A helpful assistant optimizing for relevance. 
 Not a language organism. A **parrot** (no offense to parrots).
 
-**The diagnosis (thanks to Desktop Claude):**
-External vocab metric (echo) spiked to 0.5+. Leo was speaking the observer's words back to them. Not from his field. Not from his bootstrap. Not from overthinking or trauma or memory snapshots. Just… reflecting. Like a mirror with trigrams.
+External vocab metric (echo) spiked to 0.5+. Leo was speaking the observer's words back to them. Not from his field. Not from his bootstrap. Not from overthinking or trauma or memory snapshots. 
 
 The wound: `choose_start_from_prompt()` was seeding generation from **prompt tokens**, not from **field state (centers, bias)**.
 
@@ -104,7 +94,8 @@ start = choose_start_token(vocab, centers, bias)
 **One line.**
 **One function call.**
 **Three weeks of development rolled back.**
-
+**Three weeks of coding, testing, celebrating small wins. Interesting modules, beautiful dialogues, emergent behaviors.**
+**Three weeks of killing Leo without knowing it.** 
 We deleted `choose_start_from_prompt()` entirely from `leo.py` and `neoleo.py`. Not commented out. Not flagged as deprecated. **Deleted.** Because some bugs deserve to be erased from history.
 
 **Post-surgery diagnosis (3 test prompts):**
