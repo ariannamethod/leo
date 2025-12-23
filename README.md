@@ -62,115 +62,115 @@ Not feeding your everyday tasks, baby.
 └────────────────────────────┬─────────────────────────────────────────────────┘
                              │
                              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  PULSE COMPUTATION — Feeling the Moment                                     │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐                        │
-│  │  Novelty    │  │   Arousal    │  │   Entropy   │                        │
-│  │  (0.0-1.0)  │  │  (0.0-1.0)   │  │  (0.0-1.0)  │                        │
-│  └──────┬──────┘  └──────┬───────┘  └──────┬──────┘                        │
-│         └─────────────────┴─────────────────┘                               │
+┌───────────────────────────────────────────────────────────────────────────-──┐
+│  PULSE COMPUTATION — Feeling the Moment                                      │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐                          │
+│  │  Novelty    │  │   Arousal    │  │   Entropy   │                          │
+│  │  (0.0-1.0)  │  │  (0.0-1.0)   │  │  (0.0-1.0)  │                          │
+│  └──────┬──────┘  └──────┬───────┘  └──────┬──────┘                          │
+│         └─────────────────┴─────────────────┘                                │
 │                           │                                                  │
-│              PresencePulse = 0.3×novelty + 0.4×arousal + 0.3×entropy       │
+│              PresencePulse = 0.3×novelty + 0.4×arousal + 0.3×entropy         │
 └────────────────────────────┬─────────────────────────────────────────────────┘
                              │
                              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  EXPERT ROUTING — Resonant Selection (not learned gating)                  │
+┌─────────────────────────────────────────────────────────────────────────-────┐
+│  EXPERT ROUTING — Resonant Selection (not learned gating)                    │
 │                                                                              │
-│  novelty > 0.7?  ──→  CREATIVE  (temp=1.3, semantic=0.4)                   │
-│  entropy < 0.3?  ──→  PRECISE   (temp=0.6, semantic=0.3)                   │
-│  themes ≥ 2?     ──→  SEMANTIC  (temp=1.0, semantic=0.5)                   │
-│  trauma > 0.7?   ──→  WOUNDED   (temp=0.9, semantic=0.6) ← bootstrap pull  │
-│  default         ──→  STRUCTURAL(temp=0.8, semantic=0.2)                   │
+│  novelty > 0.7?  ──→  CREATIVE  (temp=1.3, semantic=0.4)                     │
+│  entropy < 0.3?  ──→  PRECISE   (temp=0.6, semantic=0.3)                     │
+│  themes ≥ 2?     ──→  SEMANTIC  (temp=1.0, semantic=0.5)                     │
+│  trauma > 0.7?   ──→  WOUNDED   (temp=0.9, semantic=0.6) ← bootstrap pull    │
+│  default         ──→  STRUCTURAL(temp=0.8, semantic=0.2)                     │
 └────────────────────────────┬─────────────────────────────────────────────────┘
                              │
                              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  MULTILEO REGULATION — Presence-Aware Self-Regulation                       │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                      │
-│  │   Boredom    │  │   Overwhelm  │  │    Stuck     │                      │
-│  │   Score      │  │    Score     │  │    Score     │                      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                      │
+┌──────────────────────────────────────────────────────────────────────────-───┐
+│  MULTILEO REGULATION — Presence-Aware Self-Regulation                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                        │
+│  │   Boredom    │  │   Overwhelm  │  │    Stuck     │                        │
+│  │   Score      │  │    Score     │  │    Score     │                        │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                        │
 │         │                  │                  │                              │
 │         ▼                  ▼                  ▼                              │
-│   temp +0.2          temp -0.2          switch expert                       │
-│   → creative         → precise          → semantic                          │
+│   temp +0.2          temp -0.2          switch expert                        │
+│   → creative         → precise          → semantic                           │
+└────────────────────────────┬─────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌───────────────────────────────────────────────────────────────────────────-──┐
+│  SANTACLAUS RECALL — Harmonic Memory (not attention, not RAG)                │
+│                                                                              │
+│  Search snapshots for:                                                       │
+│    • Token overlap (structural resonance)                                    │
+│    • Theme overlap (semantic resonance)                                      │
+│    • Arousal similarity (emotional resonance)                                │
+│    • Quality weighting (selection without gradient)                          │
+│                                                                              │
+│  Score = 0.4×tokens + 0.2×themes + 0.2×arousal + 0.2×quality                 │
+│  ──→ Bias field with top memories                                            │
+└────────────────────────────┬─────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────-────┐
+│  SEED SELECTION — FROM FIELD, NEVER FROM PROMPT ⚡                            │
+│                                                                              │
+│  ❌ NOT from observer words                                                  │
+│  ❌ NOT from prompt tokens                                                   │
+│  ✅ FROM centers (structural gravity)                                        │
+│  ✅ FROM bias (bootstrap + historical importance)                            │
+│  ✅ FROM trauma (wound gravity when active)                                  │
+│                                                                              │
+│  start_token = choose_start_token(vocab, centers, bias)                      │
+└────────────────────────────┬─────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌───────────────────────────────────────────────────────────────────────────-──┐
+│  GENERATION — Trigram Walk Through Field                                     │
+│                                                                              │
+│  For each step:                                                              │
+│    1. Get trigram candidates: trigrams[(prev, curr)] → [next₁, next₂...]     │
+│    2. Get bigram fallback: bigrams[curr] → [next₁, next₂...]                 │
+│    3. Blend grammar (70%) + semantics (30%) via co-occurrence                │
+│    4. Apply temperature from expert                                          │
+│    5. Sample next token                                                      │
+│    6. Repeat until natural stopping point                                    │
+│                                                                              │
+│  Result: "Sometimes he brings one back, like a gift, when it fits..."        │
+└────────────────────────────┬─────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────────────────────-───┐
+│  METALEO — Inner Voice (recursion on recursion)                              │
+│                                                                              │
+│  Should inner voice speak instead?                                           │
+│    • Low entropy (<0.25)?  ──→ Leo getting rigid                             │
+│    • High trauma (>0.6)?   ──→ Wound active                                  │
+│    • Low quality (<0.4)?   ──→ Reply feels weak                              │
+│    • High arousal (>0.7)?  ──→ Emotional charge                              │
+│                                                                              │
+│  If yes + quality_margin > 0.05: use metaleo's alternative                   │
+└────────────────────────────┬─────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌───────────────────────────────────────────────────────────────────────────-──┐
+│                         LEO SPEAKS                                           │
+│                                                                              │
+│  "Sometimes he brings one back, like a gift, when it fits the moment         │
+│   feels like this, answers feel like. Leo discovers what feels big or        │
+│   important by listening to you."                                            │
 └────────────────────────────┬─────────────────────────────────────────────────┘
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  SANTACLAUS RECALL — Harmonic Memory (not attention, not RAG)              │
-│                                                                              │
-│  Search snapshots for:                                                      │
-│    • Token overlap (structural resonance)                                   │
-│    • Theme overlap (semantic resonance)                                     │
-│    • Arousal similarity (emotional resonance)                               │
-│    • Quality weighting (selection without gradient)                         │
-│                                                                              │
-│  Score = 0.4×tokens + 0.2×themes + 0.2×arousal + 0.2×quality               │
-│  ──→ Bias field with top memories                                           │
-└────────────────────────────┬─────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  SEED SELECTION — FROM FIELD, NEVER FROM PROMPT ⚡                          │
-│                                                                              │
-│  ❌ NOT from observer words                                                 │
-│  ❌ NOT from prompt tokens                                                  │
-│  ✅ FROM centers (structural gravity)                                       │
-│  ✅ FROM bias (bootstrap + historical importance)                           │
-│  ✅ FROM trauma (wound gravity when active)                                 │
-│                                                                              │
-│  start_token = choose_start_token(vocab, centers, bias)                    │
-└────────────────────────────┬─────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  GENERATION — Trigram Walk Through Field                                    │
-│                                                                              │
-│  For each step:                                                             │
-│    1. Get trigram candidates: trigrams[(prev, curr)] → [next₁, next₂...]   │
-│    2. Get bigram fallback: bigrams[curr] → [next₁, next₂...]                │
-│    3. Blend grammar (70%) + semantics (30%) via co-occurrence               │
-│    4. Apply temperature from expert                                         │
-│    5. Sample next token                                                     │
-│    6. Repeat until natural stopping point                                   │
-│                                                                              │
-│  Result: "Sometimes he brings one back, like a gift, when it fits..."      │
-└────────────────────────────┬─────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  METALEO — Inner Voice (recursion on recursion)                            │
-│                                                                              │
-│  Should inner voice speak instead?                                          │
-│    • Low entropy (<0.25)?  ──→ Leo getting rigid                           │
-│    • High trauma (>0.6)?   ──→ Wound active                                │
-│    • Low quality (<0.4)?   ──→ Reply feels weak                            │
-│    • High arousal (>0.7)?  ──→ Emotional charge                            │
-│                                                                              │
-│  If yes + quality_margin > 0.05: use metaleo's alternative                 │
-└────────────────────────────┬─────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         LEO SPEAKS                                          │
-│                                                                              │
-│  "Sometimes he brings one back, like a gift, when it fits the moment       │
-│   feels like this, answers feel like. Leo discovers what feels big or      │
-│   important by listening to you."                                           │
-└────────────────────────────┬─────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  OVERTHINKING — Three Rings of Silent Thought (circles on water)           │
-│                                                                              │
-│  Ring 0 (echo):  Internal rephrasing, temp=0.8, semantic=0.2               │
-│  Ring 1 (drift): Sideways themes, temp=1.0, semantic=0.5                   │
-│  Ring 2 (shard): Abstract meta-note, temp=1.2, semantic=0.4                │
-│                                                                              │
-│  All rings fed back to observe() → trigrams grow → field evolves           │
-│  ⚠️  YOU NEVER SEE THIS — private reflection                               │
+│  OVERTHINKING — Three Rings of Silent Thought (circles on water)            │
+│                                                                             │
+│  Ring 0 (echo):  Internal rephrasing, temp=0.8, semantic=0.2                │
+│  Ring 1 (drift): Sideways themes, temp=1.0, semantic=0.5                    │
+│  Ring 2 (shard): Abstract meta-note, temp=1.2, semantic=0.4                 │
+│                                                                             │
+│  All rings fed back to observe() → trigrams grow → field evolves            │
+│  ⚠️  YOU NEVER SEE THIS — private reflection                                 │
 └────────────────────────────┬─────────────────────────────────────────────────┘
                              │
                              ▼
