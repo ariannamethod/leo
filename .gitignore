@@ -4,10 +4,8 @@ __pycache__/
 *$py.class
 
 #LEO:
-/state/
 /bin/
 /json/
-*.sqlite3
 *.pyc
 __pycache__/
 

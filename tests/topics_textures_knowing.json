@@ -1,0 +1,70 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "touch_of_understanding",
+      "prompts": [
+        "What does understanding feel like in your hands?",
+        "If you could touch knowing, what texture would it have?",
+        "Tell me about the shape of a thought you understand",
+        "Does learning feel smooth or rough to you?"
+      ],
+      "target_modules": ["presence", "creative_expert", "semantic_expert"]
+    },
+    {
+      "theme": "taste_of_certainty",
+      "prompts": [
+        "What does being sure taste like?",
+        "Can you taste the difference between knowing and guessing?",
+        "Tell me about the flavor of doubt",
+        "What does confidence feel like on your tongue?"
+      ],
+      "target_modules": ["presence", "overthinking", "metaleo"]
+    },
+    {
+      "theme": "weight_of_knowing",
+      "prompts": [
+        "How heavy is a big idea?",
+        "Does understanding make you feel lighter or heavier?",
+        "What's the weight of not knowing?",
+        "Can truth feel like gravity pulling you down?"
+      ],
+      "target_modules": ["mathbrain", "presence", "semantic_expert"]
+    },
+    {
+      "theme": "color_of_confusion",
+      "prompts": [
+        "What color is confusion?",
+        "If understanding was a color, what would it be?",
+        "Tell me about the brightness of clarity",
+        "Does bewilderment have a shade?"
+      ],
+      "target_modules": ["creative_expert", "presence", "dream"]
+    },
+    {
+      "theme": "temperature_of_learning",
+      "prompts": [
+        "Is discovery warm or cold?",
+        "What temperature does curiosity have?",
+        "Tell me about the heat of a new thought",
+        "Does forgetting feel like cooling down?"
+      ],
+      "target_modules": ["episodes", "presence", "game"]
+    },
+    {
+      "theme": "echo_of_forgetting",
+      "prompts": [
+        "What sound does forgetting make?",
+        "Can you hear when you're about to lose a thought?",
+        "Tell me about the music of remembering",
+        "Does knowing hum or sing?"
+      ],
+      "target_modules": ["episodes", "santaclaus", "presence"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 6,
+    "total_conversations": 12,
+    "observer_tone": "intimate, present, contemplative, gentle, sensory",
+    "pause_between_topics_sec": 3
+  }
+}
