@@ -13,6 +13,10 @@ Requires:
     - openai package: pip install openai
 """
 
+import ssl
+# Disable SSL verification for containerized environments (must be before other imports)
+ssl._create_default_https_context = ssl._create_unverified_context
+
 import json
 import os
 import sys
@@ -27,9 +31,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     import openai
+    import httpx
 except ImportError:
-    print("ERROR: openai package not installed.")
-    print("Install with: pip install openai")
+    print("ERROR: openai or httpx package not installed.")
+    print("Install with: pip install openai httpx")
     sys.exit(1)
 
 import leo
@@ -43,7 +48,9 @@ class HeyLeoGPTObserver:
 
     def __init__(self, api_key: str, topics_path: str):
         self.api_key = api_key
-        self.client = openai.OpenAI(api_key=api_key)
+        # Create httpx client with SSL verification disabled for containerized environments
+        http_client = httpx.Client(verify=False)
+        self.client = openai.OpenAI(api_key=api_key, http_client=http_client)
         self.topics_path = Path(topics_path)
 
         # Load conversation topics
