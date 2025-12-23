@@ -2192,6 +2192,15 @@ def generate_reply(
         # Deduplication must never break generation - silent fallback
         pass
 
+    # PUNCT CLEANUP: Remove punctuation garbage while preserving Leo's style
+    # Philosophy: "Clean the noise, keep the soul"
+    try:
+        from punct_cleanup import cleanup_punctuation
+        output = cleanup_punctuation(output, mode="NORMAL")
+    except Exception:
+        # Cleanup must never break generation - silent fallback
+        pass
+
     # Compute average entropy across generation steps
     avg_entropy = sum(entropy_log) / len(entropy_log) if entropy_log else 0.0
 
