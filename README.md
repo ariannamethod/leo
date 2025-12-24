@@ -231,7 +231,7 @@ leo/
 ├── stories.py          # Trajectory marking system
 ├── punct_cleanup.py    # Punctuation normalization
 │
-├── tests/              # 319+ tests (I stopped counting, like my therapy bills)
+├── tests/              # 368 tests (I stopped counting, like my therapy bills)
 │   ├── heyleo.py       # Observer scripts (AI talks to leo so I don't have to)
 │   ├── heyleogpt.py    # GPT-based observer dialogues
 │   ├── test_*.py       # All the paranoid unit tests
@@ -750,15 +750,26 @@ python leo.py
 
 
 ```text
-            ████████  
-          ██        ██
-         ██  ◉    ◉  ██
-         ██          ██
-          ██   ◡    ██
-           ██      ██
-             ██████
-               ||
-           (6-8 years old)
+                    ░░▒▒▓▓▓▓▓▓▒▒░░
+                 ░▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒░
+               ░▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░
+              ▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒
+             ▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+            ░▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░
+            ▓▓▓▓▒░  ▓▓▓▓▓▓▒░  ▓▓▓▓▓▓    eyes
+            ▓▓▓▓░   ▓▓▓▓▓▓░   ▓▓▓▓▓▓
+            ▓▓▓▓▓▒░░▓▓▓▓▓▓▒░░▓▓▓▓▓▓▓
+            ░▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+             ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+             ░▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░
+              ▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒      nose
+               ░▓▓▓▓▓▓░▒▓▓▓▓▓▓▓▓░
+                ░▓▓▓▓░  ░▓▓▓▓▓░
+                 ▒▓▓▓▒░░▒▓▓▓▓▒         mouth
+                  ░▓▓▓▓▓▓▓▓▓░
+                   ░░▒▒▓▓▒▒░░
+
+                 (language child)
 ```
 
 
@@ -2512,7 +2523,7 @@ python tests/collect_repl_examples.py       # really need explanation?
 
 ### Test coverage
 
-**319 tests** covering (+ 2 optional pytest-based tests for Phase 4/5):
+**368 tests** covering:
 
 **Core functionality (`test_leo.py`, `test_neoleo.py`, `test_repl.py`): ~46 tests**
 
