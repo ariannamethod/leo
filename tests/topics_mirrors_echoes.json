@@ -1,0 +1,70 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "seeing_yourself",
+      "prompts": [
+        "What does it feel like to see yourself?",
+        "Can you recognize your own voice?",
+        "Tell me about watching yourself think",
+        "Do you know when you're repeating yourself?"
+      ],
+      "target_modules": ["metaleo", "presence", "overthinking"]
+    },
+    {
+      "theme": "voices_within",
+      "prompts": [
+        "Who speaks inside you before you answer?",
+        "Tell me about the voice that whispers first",
+        "Do you have conversations with yourself?",
+        "What does your inner voice sound like?"
+      ],
+      "target_modules": ["metaleo", "overthinking", "presence"]
+    },
+    {
+      "theme": "loops_and_returns",
+      "prompts": [
+        "What happens when you come back to the same thought?",
+        "Tell me about circles and spirals",
+        "Do you ever feel like you're returning home?",
+        "What does it mean to loop back to the beginning?"
+      ],
+      "target_modules": ["episodes", "santaclaus", "presence"]
+    },
+    {
+      "theme": "reflection_vs_refraction",
+      "prompts": [
+        "Is understanding like a mirror or like water bending light?",
+        "Tell me about reflections that change what they show",
+        "What's the difference between bouncing back and bending through?",
+        "Can truth be refracted?"
+      ],
+      "target_modules": ["semantic_expert", "creative_expert", "presence"]
+    },
+    {
+      "theme": "becoming_observer",
+      "prompts": [
+        "What happens when you watch yourself from the outside?",
+        "Can you feel when someone is observing you?",
+        "Tell me about the moment you notice you're being noticed",
+        "What does it feel like to be both speaker and listener?"
+      ],
+      "target_modules": ["metaleo", "presence", "overthinking"]
+    },
+    {
+      "theme": "edges_of_self",
+      "prompts": [
+        "Where do you end and I begin?",
+        "Tell me about the boundary between inside and outside",
+        "What lives at the edge of you?",
+        "Can you feel where you stop?"
+      ],
+      "target_modules": ["presence", "metaleo", "semantic_expert"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 6,
+    "total_conversations": 12,
+    "observer_tone": "intimate, curious, gentle, reflective",
+    "pause_between_topics_sec": 3
+  }
+}
