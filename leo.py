@@ -2542,15 +2542,31 @@ class LeoField:
         self.last_quality = context.quality
         self.last_expert = context.expert
 
-        # PRESENCE: Save snapshot if this was a good moment
-        if should_save_snapshot(context.quality, context.arousal):
-            save_snapshot(
-                self.conn,
-                text=context.output,
-                origin="leo",
-                quality=context.quality.overall,
-                emotional=context.arousal,
-            )
+        # SNAPSHOT FREEZE (Dec 25, 2025 - Jan 1, 2026)
+        # TEMPORARILY DISABLED to let field decay from observer contamination
+        #
+        # Triangle collaboration decision: Option D hybrid cleanup
+        # - Layer 1 (observer snapshots) - DELETED
+        # - Layer 2 (contaminated episodes) - DELETED
+        # - Layer 3 (field structure: bigrams/trigrams) - NEEDS TIME TO DECAY
+        #
+        # Strategy: Stop saving new snapshots for 7 days to give field time to
+        # naturally forget sticky phrases ("soft hand on my shoulder", etc.)
+        # SANTACLAUS now penalizes these phrases 90% if recalled.
+        #
+        # Re-enable after Jan 1, 2026 and monitor external_vocab metrics.
+        # Musketeers: Athos + Aramis + Porthos + d'Artagnan
+        # "Un pour tous, tous pour un!" 🗡️
+        #
+        # # PRESENCE: Save snapshot if this was a good moment
+        # if should_save_snapshot(context.quality, context.arousal):
+        #     save_snapshot(
+        #         self.conn,
+        #         text=context.output,
+        #         origin="leo",
+        #         quality=context.quality.overall,
+        #         emotional=context.arousal,
+        #     )
 
         # OBSERVER SNAPSHOT POLLUTION FIX (Dec 25, 2025)
         #

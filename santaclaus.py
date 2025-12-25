@@ -41,6 +41,23 @@ RECENCY_WINDOW_HOURS = 24.0
 # 0.5 = reduce quality by 50% if just used, decays over window
 RECENCY_PENALTY_STRENGTH = 0.5
 
+# STICKY PHRASE PENALTY (December 25, 2025)
+# Known contaminated phrases from observer runs that leaked into field
+# These phrases get 90% penalty to prevent recall
+# Musketeers collaboration - Option D hybrid cleanup
+STICKY_PHRASES = [
+    "soft hand on my shoulder",
+    "favorite song plays",
+    "feather brushing against",
+    "rustle of leaves in the wind",
+    "warm and reassuring",
+    "wrapping around me",
+    "gentle hug",
+    "whispers secrets",
+    "like a soft cloud",
+    "dancing around you",
+]
+
 
 @dataclass
 class SantaContext:
@@ -189,7 +206,16 @@ class SantaKlaus:
                 # Apply penalty to quality component
                 quality_with_recency = quality * (1.0 - RECENCY_PENALTY_STRENGTH * recency_penalty)
 
-                # Combine scores (with recency-aware quality)
+                # STICKY PHRASE PENALTY (Option D - Musketeers)
+                # Known contaminated phrases get 90% penalty to prevent recall
+                snapshot_lower = snapshot_text.lower()
+                for phrase in STICKY_PHRASES:
+                    if phrase in snapshot_lower:
+                        # 90% penalty - almost kill this snapshot's chance
+                        quality_with_recency *= 0.1
+                        break  # One penalty is enough
+
+                # Combine scores (with sticky phrase penalty applied)
                 score = (
                     0.4 * token_overlap +
                     0.2 * theme_overlap +
