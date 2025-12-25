@@ -115,9 +115,9 @@ Remember: You're observing presence, not performance."""
 
         for attempt in range(max_retries):
             try:
-                # Call GPT-4o (fast, reliable)
+                # Call GPT-4o-mini (more stable for SSL issues)
                 response = self.client.chat.completions.create(
-                    model="gpt-4o",
+                    model="gpt-4o-mini",
                     messages=messages,
                     temperature=0.8,
                     max_tokens=200
