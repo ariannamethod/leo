@@ -96,6 +96,11 @@ def cleanup_punctuation(text: str, mode: str = "NORMAL") -> str:
     result = re.sub(r'\.\s+,', '.', result)      # ". ," → "."
     result = re.sub(r',\s*,', ',', result)       # ", ," → ","
 
+    # 10. Cosmetic: Capitalize "Leo" consistently
+    # Leo's name should always be capitalized for consistency
+    # Use word boundaries to avoid touching words like "napoleon" or "galileo"
+    result = re.sub(r'\bleo\b', 'Leo', result)
+
     return result.strip()
 
 
