@@ -387,40 +387,91 @@ def ingest_text(conn: sqlite3.Connection, text: str) -> None:
 
 def strip_code_blocks(text: str) -> str:
     """
-    Remove code blocks (```...```) and module headers from markdown text.
+    Remove from README before bootstrap ingestion:
+    1. Code blocks (```...```)
+    2. Conversation examples (leo> prefix)
+    3. Example session sections
+    4. Self-referential documentation
 
-    Also strips common markdown artifacts that create parsing noise:
-    - Module file headers like "school.py —" or "metaleo.py —"
-    - Malformed bullet points like "-It" (no space after dash)
+    Philosophy: Keep philosophical concepts, remove concrete examples
+    that Leo might quote as his own speech.
+
+    Prevents README bootstrap pollution - the root cause of verbal tics.
     """
     lines = text.split('\n')
     result = []
     in_code_block = False
+    in_example_section = False
+
+    # Markers that indicate example/dialogue sections
+    EXAMPLE_SECTION_MARKERS = [
+        'EXAMPLE SESSION',
+        'LIVE DIALOGUE',
+        'EXAMPLE OUTPUT',
+        'EXAMPLE CONVERSATION',
+        'SAMPLE OUTPUT',
+        'SAMPLE DIALOGUE',
+    ]
+
+    # Known bootstrap phrases that leaked from README
+    KNOWN_BOOTSTRAP_PHRASES = [
+        "sometimes he brings one back",
+        "he remembers leo's brightest",
+        "leo discovers what feels big",
+        "a tiny secret list",
+    ]
 
     for line in lines:
-        # Detect code block start/end
-        if line.strip().startswith('```'):
+        stripped = line.strip()
+
+        # 1. Handle code blocks
+        if stripped.startswith('```'):
             in_code_block = not in_code_block
             continue
-
-        # Skip lines inside code blocks
         if in_code_block:
             continue
 
-        # Skip module file header lines (e.g., "leo.py           # organism with REPL")
-        # Pattern: filename.py followed by whitespace and comment or dash
+        # 2. Detect example section headers
+        upper_line = line.upper()
+        if any(marker in upper_line for marker in EXAMPLE_SECTION_MARKERS):
+            in_example_section = True
+            continue
+
+        # 3. Exit example section on next major header (## or #)
+        if in_example_section:
+            if stripped.startswith('## ') or (stripped.startswith('# ') and len(stripped) > 2):
+                in_example_section = False
+            else:
+                continue  # Skip everything in example section
+
+        # 4. Skip conversation example lines (leo> prefix)
+        if re.match(r'^\s*leo>', stripped, re.IGNORECASE):
+            continue
+
+        # 5. Skip quoted conversation lines that mention leo
+        if stripped.startswith('>') and 'leo' in stripped.lower():
+            continue
+
+        # 6. Skip lines that look like example output
+        if stripped.startswith('*Metrics:') or stripped.startswith('[Metrics]'):
+            continue
+        if stripped.startswith('**Observer:**') or stripped.startswith('**Leo:**'):
+            continue
+        if stripped.startswith('[Turn ') and ']' in stripped:
+            continue
+
+        # 7. Skip technical file references
         if re.match(r'^\s*\w+\.py\s+[#—]', line):
             continue
 
-        # Fix malformed bullet points: "-It" → "- It"
-        # But preserve normal dashes in text
-        line = re.sub(r'^(\s*)-([A-Z][a-z])', r'\1- \2', line)
+        # 8. Skip lines containing known bootstrap pollution phrases
+        if any(phrase in stripped.lower() for phrase in KNOWN_BOOTSTRAP_PHRASES):
+            continue
 
         result.append(line)
 
     # Post-process: remove standalone ".py —" fragments that might appear
     text_clean = '\n'.join(result)
-    # Remove patterns like "school.py —" or "metaleo.py —" that survived
     text_clean = re.sub(r'\b\w+\.py\s*[—\-]\s*', '', text_clean)
 
     return text_clean
@@ -432,8 +483,14 @@ def bootstrap_if_needed(conn: sqlite3.Connection) -> None:
     - If there are no tokens: ingest EMBEDDED_BOOTSTRAP.
     - If README has never been processed and exists: ingest README once.
 
-    Code blocks (```...```) are stripped from README to avoid polluting
-    the language field with Python snippets.
+    README is filtered to remove:
+    - Code blocks (technical snippets)
+    - Conversation examples (leo> prefix)
+    - Example session sections
+    - Self-referential quotes
+
+    This prevents README bootstrap pollution - the root cause of verbal tics.
+    Keeps philosophical concepts, removes concrete examples Leo might quote.
     """
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) AS c FROM tokens")
