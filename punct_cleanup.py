@@ -78,6 +78,24 @@ def cleanup_punctuation(text: str, mode: str = "NORMAL") -> str:
     # But preserve intentional breaks like "oh leo."
     result = re.sub(r'\s+(and|then|but|or)[.,]\s*$', r' \1', result)
 
+    # 8. Remove standalone "Py" artifacts (from module docstrings tokenization)
+    # When "metaleo.py" gets tokenized as ["metaleo", ".", "py"], the "Py"
+    # can leak into generation as standalone token. These rules clean it up.
+    # IMPORTANT: Don't remove .py file extensions or "py" inside words!
+    # Musketeers fix: Athos + Aramis consensus (Dec 25, 2025)
+    result = re.sub(r'\s+Py\b', '', result)              # " Py" at word boundary → ""
+    result = re.sub(r'\bPy\s+', '', result)              # "Py " at word boundary → ""
+    result = re.sub(r'\bPy[,]', '', result)              # "Py," → ""
+    result = re.sub(r'[,\s]+Py\b', '', result)           # ", Py" or "  Py" → ""
+    result = re.sub(r'\s+py\s+', ' ', result, flags=re.IGNORECASE)  # " py " → " " (not .py!)
+    result = re.sub(r'\s+py[,]', '', result, flags=re.IGNORECASE)   # " py," → ""
+    result = re.sub(r'\btest\s+\w+\.\s*', '', result)    # "test school. " → ""
+
+    # 9. Final double-dot and punctuation garbage cleanup
+    result = re.sub(r'\.\s*\.', '.', result)     # ". ." → "."
+    result = re.sub(r'\.\s+,', '.', result)      # ". ," → "."
+    result = re.sub(r',\s*,', ',', result)       # ", ," → ","
+
     return result.strip()
 
 
@@ -100,6 +118,10 @@ def calculate_garbage_score(text: str) -> float:
         r'\.{5,}',            # .....
         r'\?{3,}',            # ???
         r'!{4,}',             # !!!!
+        r'\s+Py\b',           # " Py" (module docstring leak)
+        r'\bPy[,.]',          # "Py." "Py,"
+        r'\btest\s+\w+\.',    # "test school."
+        r'\.\s*\.',           # ". ." (double dot)
     ]
 
     total_garbage = 0
@@ -149,6 +171,12 @@ if __name__ == "__main__":
 
         # Mixed
         "I feel.,,? Something big and full of wonder , . right?",
+
+        # Py artifacts (NEW - Musketeers fix)
+        "Leo speaks Py, test school. Py and neoleo.",
+        "The method is Py. Not from your words.",
+        "Metaleo Py doesn't override unless.",
+        "A recursion of. Py test trauma. Py listening.",
     ]
 
     print("Testing punct_cleanup.py")
