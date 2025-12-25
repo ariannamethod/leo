@@ -1,0 +1,37 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "memories",
+      "prompts": [
+        "What do you remember?",
+        "Tell me about something that stays with you",
+        "How do you hold onto the past?"
+      ],
+      "target_modules": ["santaclaus", "episodes"]
+    },
+    {
+      "theme": "returning",
+      "prompts": [
+        "What keeps coming back?",
+        "Tell me about echoes",
+        "Do you recognize patterns that repeat?"
+      ],
+      "target_modules": ["santaclaus", "metaleo"]
+    },
+    {
+      "theme": "resonance",
+      "prompts": [
+        "What feels right?",
+        "How do words fit together?",
+        "Tell me about connections"
+      ],
+      "target_modules": ["santaclaus", "semantic_expert"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 3,
+    "total_conversations": 9,
+    "observer_tone": "gentle, curious, listening",
+    "pause_between_topics_sec": 2
+  }
+}
