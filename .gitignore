@@ -231,3 +231,6 @@ __marimo__/
 AUDIT*.md
 *.sqlite3-shm
 *.sqlite3-wal
+
+# Decay monitoring logs
+tests/decay_log.jsonl
