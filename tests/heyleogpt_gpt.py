@@ -79,6 +79,7 @@ class HeyLeoGPTObserver:
     def ask_gpt(self, prompt: str, conversation_history: List[Dict[str, str]]) -> str:
         """
         Ask GPT-4 to generate next observer message.
+        Retry up to 4 times with exponential backoff for SSL errors.
         """
         messages = [
             {
@@ -108,15 +109,30 @@ Remember: You're observing presence, not performance."""
         # Add current prompt
         messages.append({"role": "user", "content": prompt})
 
-        # Call GPT-4o-mini (fast, cheap, reliable)
-        response = self.client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            temperature=0.8,
-            max_tokens=200
-        )
+        # Retry logic for SSL errors
+        max_retries = 4
+        backoff_delays = [2, 4, 8, 16]  # seconds
 
-        return response.choices[0].message.content.strip()
+        for attempt in range(max_retries):
+            try:
+                # Call GPT-4o (fast, reliable)
+                response = self.client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages,
+                    temperature=0.8,
+                    max_tokens=200
+                )
+                return response.choices[0].message.content.strip()
+            except openai.InternalServerError as e:
+                if "TLS_error" in str(e) or "SSL" in str(e):
+                    if attempt < max_retries - 1:
+                        delay = backoff_delays[attempt]
+                        print(f"[SSL retry {attempt+1}/{max_retries}] Waiting {delay}s...")
+                        time.sleep(delay)
+                    else:
+                        raise  # Re-raise on final attempt
+                else:
+                    raise  # Re-raise non-SSL errors immediately
 
     def compute_external_vocab(self, prompt: str, response: str) -> float:
         """
