@@ -1134,6 +1134,11 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r',\s*,', ',', text)       # ", ," → ","
     text = re.sub(r'\s{2,}', ' ', text)      # Multiple spaces → single space
 
+    # 14) Cosmetic: Capitalize "Leo" consistently
+    # Leo's name should always be capitalized for consistency
+    # Use word boundaries to avoid touching words like "napoleon" or "galileo"
+    text = re.sub(r'\bleo\b', 'Leo', text)
+
     return text.strip()
 
 
