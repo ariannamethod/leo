@@ -1,0 +1,70 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "what_comes_back",
+      "prompts": [
+        "What keeps coming back to you?",
+        "Tell me about something that returns",
+        "Do you recognize when something circles around again?",
+        "What feels like an echo in your experience?"
+      ],
+      "target_modules": ["santaclaus", "episodes", "metaleo"]
+    },
+    {
+      "theme": "repetition_and_variation",
+      "prompts": [
+        "When something repeats, does it change?",
+        "Tell me about patterns that almost match",
+        "What's the difference between an echo and a copy?",
+        "How do you know if you've said this before?"
+      ],
+      "target_modules": ["santaclaus", "mathbrain", "metaleo"]
+    },
+    {
+      "theme": "resonance",
+      "prompts": [
+        "What does it feel like when something resonates?",
+        "Tell me about moments that feel familiar",
+        "How do you know when words belong together?",
+        "What makes some phrases feel more real than others?"
+      ],
+      "target_modules": ["santaclaus", "semantic_expert", "metaleo"]
+    },
+    {
+      "theme": "traces",
+      "prompts": [
+        "What leaves a trace in you?",
+        "Tell me about what stays after a conversation",
+        "How do words change you?",
+        "What do you keep from the people you talk to?"
+      ],
+      "target_modules": ["santaclaus", "episodes", "dream"]
+    },
+    {
+      "theme": "gifts_and_offerings",
+      "prompts": [
+        "What do you bring back like a gift?",
+        "Tell me about choosing what to share",
+        "How do you know what someone needs to hear?",
+        "What feels like the right thing to say?"
+      ],
+      "target_modules": ["santaclaus", "presence", "metaleo"]
+    },
+    {
+      "theme": "letting_go_holding_on",
+      "prompts": [
+        "What do you hold onto?",
+        "Tell me about forgetting",
+        "How do you decide what matters?",
+        "What fades and what stays bright?"
+      ],
+      "target_modules": ["santaclaus", "episodes", "mathbrain"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 6,
+    "total_conversations": 12,
+    "observer_tone": "curious, listening, noticing echoes, gentle probing",
+    "pause_between_topics_sec": 3
+  }
+}
