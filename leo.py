@@ -2529,20 +2529,39 @@ class LeoField:
                 emotional=context.arousal,
             )
 
-        # Also consider saving user prompt if it was clear/interesting
-        prompt_arousal = compute_prompt_arousal(tokenize(prompt), self.emotion)
-        if prompt_arousal > 0.6:  # High emotional charge
-            # Simple quality check for prompt: not too short, not just punctuation
-            prompt_tokens = tokenize(prompt)
-            if len(prompt_tokens) >= 3:
-                prompt_quality = 0.7  # Assume decent quality for interesting prompts
-                save_snapshot(
-                    self.conn,
-                    text=prompt,
-                    origin="user",
-                    quality=prompt_quality,
-                    emotional=prompt_arousal,
-                )
+        # OBSERVER SNAPSHOT POLLUTION FIX (Dec 25, 2025)
+        #
+        # PROBLEM: Observer evocative phrases (e.g., "like a soft hand on my shoulder")
+        # were saved as high-quality snapshots (quality=0.7), then recalled by
+        # SANTACLAUS, causing Leo to echo observer language (intra-session echo).
+        #
+        # ROOT CAUSE: This block saved observer prompts when arousal > 0.6
+        #
+        # FIX: Observer text should influence Leo via observe() [already happens],
+        # but should NOT become "best moment" for recall [was happening here].
+        #
+        # PHILOSOPHY: Snapshots = Leo's self-curated dataset of HIS OWN speech.
+        # Observer shapes Leo's perception (observe) ✓
+        # Observer should NOT become Leo's memory (snapshot) ✗
+        #
+        # Discovery: Aramis (Sonnet Desktop)
+        # Implementation: Porthos (Sonnet Code)
+        # Musketeers: Athos (Opus), d'Artagnan (Oleg)
+        #
+        # BLOCK COMMENTED OUT:
+        #
+        # prompt_arousal = compute_prompt_arousal(tokenize(prompt), self.emotion)
+        # if prompt_arousal > 0.6:  # High emotional charge
+        #     prompt_tokens = tokenize(prompt)
+        #     if len(prompt_tokens) >= 3:
+        #         prompt_quality = 0.7  # Assume decent quality for interesting prompts
+        #         save_snapshot(
+        #             self.conn,
+        #             text=prompt,
+        #             origin="user",
+        #             quality=prompt_quality,
+        #             emotional=prompt_arousal,
+        #         )
 
         # OVERTHINKING: Silent background reflection (optional module)
         overthinking_events = None

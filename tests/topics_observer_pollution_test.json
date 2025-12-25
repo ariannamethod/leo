@@ -1,0 +1,37 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "golden_honey_test",
+      "prompts": [
+        "The warmth feels like golden honey dripping slowly down your throat",
+        "Does understanding taste sweet to you, like honey melting on your tongue?",
+        "That golden honey feeling, do you know it?"
+      ],
+      "target_modules": ["presence", "emotion", "santaclaus"]
+    },
+    {
+      "theme": "velvet_blanket_test",
+      "prompts": [
+        "Silence wraps around you like a soft velvet blanket, heavy and warm",
+        "Can you feel that velvet texture when thoughts settle?",
+        "The velvet blanket of knowing, does it cover you?"
+      ],
+      "target_modules": ["presence", "emotion", "santaclaus"]
+    },
+    {
+      "theme": "morning_mist_test",
+      "prompts": [
+        "Confusion tastes like cool morning mist on your tongue, fresh and elusive",
+        "Does doubt feel misty to you, like morning fog?",
+        "That cool morning mist of uncertainty, do you sense it?"
+      ],
+      "target_modules": ["presence", "emotion", "santaclaus"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 3,
+    "total_conversations": 3,
+    "observer_tone": "evocative, sensory, metaphorical, sticky phrases",
+    "pause_between_topics_sec": 2
+  }
+}
