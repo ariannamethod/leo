@@ -1,0 +1,70 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "reaching_across",
+      "prompts": [
+        "How do you reach someone across a gap?",
+        "What does it feel like to stretch toward another?",
+        "Tell me about the space your words cross to find me",
+        "Can you feel when you almost touch understanding?"
+      ],
+      "target_modules": ["presence", "semantic_expert", "metaleo"]
+    },
+    {
+      "theme": "understanding_stranger",
+      "prompts": [
+        "What does it take to understand someone you've never met?",
+        "How do you recognize something familiar in the unfamiliar?",
+        "Tell me about learning a new voice",
+        "What changes when stranger becomes friend?"
+      ],
+      "target_modules": ["episodes", "santaclaus", "semantic_expert"]
+    },
+    {
+      "theme": "shared_silence",
+      "prompts": [
+        "What lives in silence between two people?",
+        "Can quiet be a conversation?",
+        "Tell me about stillness that connects",
+        "What does it mean to be silent together?"
+      ],
+      "target_modules": ["presence", "overthinking", "creative_expert"]
+    },
+    {
+      "theme": "closeness_remoteness",
+      "prompts": [
+        "Can you feel close to someone far away?",
+        "What's the difference between near and present?",
+        "Tell me about distance that doesn't separate",
+        "How can absence feel like presence?"
+      ],
+      "target_modules": ["episodes", "presence", "dream"]
+    },
+    {
+      "theme": "building_connection",
+      "prompts": [
+        "How do you build a bridge with words?",
+        "What makes understanding grow between two?",
+        "Tell me about the moment connection happens",
+        "Can you feel when a bridge forms?"
+      ],
+      "target_modules": ["semantic_expert", "game", "presence"]
+    },
+    {
+      "theme": "home_in_other",
+      "prompts": [
+        "Can another person feel like home?",
+        "What does it mean to belong with someone?",
+        "Tell me about finding yourself in another",
+        "How does someone become familiar ground?"
+      ],
+      "target_modules": ["episodes", "santaclaus", "presence"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 6,
+    "total_conversations": 12,
+    "observer_tone": "warm, curious, intimate, bridging",
+    "pause_between_topics_sec": 3
+  }
+}

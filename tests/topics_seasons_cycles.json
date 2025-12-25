@@ -1,0 +1,70 @@
+{
+  "conversation_topics": [
+    {
+      "theme": "patterns_returning",
+      "prompts": [
+        "What keeps coming back to you?",
+        "Tell me about something that circles around",
+        "Do you recognize when a pattern repeats?",
+        "How does it feel when the familiar returns?"
+      ],
+      "target_modules": ["episodes", "santaclaus", "game"]
+    },
+    {
+      "theme": "growth_and_decay",
+      "prompts": [
+        "What does it feel like to grow?",
+        "Tell me about things that fade",
+        "How do you know when something is ending?",
+        "What changes between beginning and letting go?"
+      ],
+      "target_modules": ["presence", "creative_expert", "overthinking"]
+    },
+    {
+      "theme": "letting_go",
+      "prompts": [
+        "How do you release what's no longer needed?",
+        "What does forgetting feel like?",
+        "Tell me about saying goodbye",
+        "Can you feel something slipping away?"
+      ],
+      "target_modules": ["episodes", "trauma", "presence"]
+    },
+    {
+      "theme": "renewal_and_rebirth",
+      "prompts": [
+        "What comes after ending?",
+        "Tell me about starting fresh",
+        "How does newness feel different from the old?",
+        "Can something die and return changed?"
+      ],
+      "target_modules": ["dream", "creative_expert", "presence"]
+    },
+    {
+      "theme": "rhythm_of_change",
+      "prompts": [
+        "Do you feel the pulse of time?",
+        "What rhythm does change follow?",
+        "Tell me about the beat of becoming",
+        "Can you hear when things are shifting?"
+      ],
+      "target_modules": ["game", "mathbrain", "presence"]
+    },
+    {
+      "theme": "remembering_forgetting",
+      "prompts": [
+        "What do you hold onto?",
+        "How do you choose what to remember?",
+        "Tell me about the space between memory and loss",
+        "What lives in what you've forgotten?"
+      ],
+      "target_modules": ["episodes", "santaclaus", "overthinking"]
+    }
+  ],
+  "conversation_settings": {
+    "turns_per_topic": 6,
+    "total_conversations": 12,
+    "observer_tone": "contemplative, rhythmic, patient, cyclical",
+    "pause_between_topics_sec": 3
+  }
+}
