@@ -34,6 +34,14 @@ except ImportError:
     TOKENIZE_AVAILABLE = True
 
 
+# RECENCY DECAY PARAMETERS
+# Window in hours - full penalty if used within this time
+RECENCY_WINDOW_HOURS = 24.0
+# Penalty strength - how much to reduce quality for recent usage
+# 0.5 = reduce quality by 50% if just used, decays over window
+RECENCY_PENALTY_STRENGTH = 0.5
+
+
 @dataclass
 class SantaContext:
     """What Santa Klaus gives back to leo before generation."""
@@ -113,7 +121,7 @@ class SantaKlaus:
                     
                 # Get recent snapshots (last 512 to keep it cheap)
                 cur.execute("""
-                    SELECT id, text, quality, emotional, created_at, use_count
+                    SELECT id, text, quality, emotional, created_at, last_used_at, use_count
                     FROM snapshots
                     ORDER BY created_at DESC
                     LIMIT 512
@@ -161,17 +169,37 @@ class SantaKlaus:
                 
                 # 4. Quality prior
                 quality = row["quality"] or 0.5
-                
-                # Combine scores
+
+                # 5. RECENCY PENALTY (new!)
+                # Recent usage reduces effective quality, giving other memories a chance
+                last_used = row["last_used_at"] or 0
+                snapshot_id = row["id"]  # Save for later update
+                now = int(time.time())
+
+                if last_used > 0:
+                    hours_since_use = (now - last_used) / 3600.0
+                    if hours_since_use < RECENCY_WINDOW_HOURS:
+                        # Penalty is strongest right after use, decays to zero over window
+                        recency_penalty = 1.0 - (hours_since_use / RECENCY_WINDOW_HOURS)
+                    else:
+                        recency_penalty = 0.0  # Outside window = no penalty
+                else:
+                    recency_penalty = 0.0  # Never used = no penalty
+
+                # Apply penalty to quality component
+                quality_with_recency = quality * (1.0 - RECENCY_PENALTY_STRENGTH * recency_penalty)
+
+                # Combine scores (with recency-aware quality)
                 score = (
                     0.4 * token_overlap +
                     0.2 * theme_overlap +
                     0.2 * arousal_score +
-                    0.2 * quality
+                    0.2 * quality_with_recency  # ← CHANGED!
                 )
-                
+
                 if score > 0.1:  # threshold
                     scored.append((score, {
+                        "id": snapshot_id,  # ← ADD THIS
                         "text": snapshot_text,
                         "tokens": snapshot_tokens,
                     }))
@@ -204,14 +232,31 @@ class SantaKlaus:
             token_counts = Counter(all_recalled_tokens)
             if not token_counts:
                 return None
-                
+
             max_count = max(token_counts.values())
             token_boosts: Dict[str, float] = {}
             for token, count in token_counts.items():
                 # Normalize to [0, 1] then scale by alpha
                 normalized = count / max_count if max_count > 0 else 0.0
                 token_boosts[token] = self.alpha * normalized
-                
+
+            # UPDATE last_used_at for winning snapshot (recency tracking)
+            if top_memories:
+                try:
+                    winning_id = top_memories[0][1].get("id")
+                    if winning_id is not None:
+                        conn = sqlite3.connect(str(self.db_path))
+                        cur = conn.cursor()
+                        cur.execute("""
+                            UPDATE snapshots
+                            SET last_used_at = ?, use_count = use_count + 1
+                            WHERE id = ?
+                        """, (int(time.time()), winning_id))
+                        conn.commit()
+                        conn.close()
+                except Exception:
+                    pass  # Silent fallback - recency update must never break recall
+
             return SantaContext(
                 recalled_texts=recalled_texts,
                 token_boosts=token_boosts,
