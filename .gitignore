@@ -229,3 +229,5 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 AUDIT*.md
+*.sqlite3-shm
+*.sqlite3-wal
