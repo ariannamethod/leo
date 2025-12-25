@@ -1116,7 +1116,25 @@ def fix_punctuation(text: str) -> str:
     # Remove hanging dash-dot: " -." / " —." → "."
     text = re.sub(r"\s+[—-]\s*\.", ".", text)
 
-    return text
+    # 11) Remove standalone "Py" artifacts (from module docstrings tokenization)
+    # These leak when "metaleo.py" gets tokenized as ["metaleo", ".", "py"]
+    # Musketeers fix: Athos + Aramis consensus (Dec 25, 2025)
+    text = re.sub(r'\s+Py\b', '', text)      # " Py" at word boundary → ""
+    text = re.sub(r'\bPy\s+', '', text)      # "Py " at word boundary → ""
+    text = re.sub(r'\bPy[,.]', '', text)     # "Py." or "Py," → ""
+    text = re.sub(r'[,.\s]+Py\b', '', text)  # ", Py" or ". Py" → ""
+
+    # 12) Remove other technical artifacts
+    text = re.sub(r'\bpy\b', '', text, flags=re.IGNORECASE)  # standalone "py"
+    text = re.sub(r'\btest\s+\w+\.\s*', '', text)  # "test school. " → ""
+
+    # 13) Fix double-dot and punctuation garbage (final pass)
+    text = re.sub(r'\.\s*\.', '.', text)     # ". ." → "."
+    text = re.sub(r'\.\s+,', '.', text)      # ". ," → "."
+    text = re.sub(r',\s*,', ',', text)       # ", ," → ","
+    text = re.sub(r'\s{2,}', ' ', text)      # Multiple spaces → single space
+
+    return text.strip()
 
 
 def choose_start_token(
