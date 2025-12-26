@@ -86,7 +86,6 @@ Let's go.
 ---  
   
 ```
-@#*%%%#-#%%*%#++****=-=--=----:=-=-=--**%%%::++-#:
 @+*###--:##@##++****=--:-----::-------=+@%*:.:-:#:
 @*%%+*:..%%@+-=-*=-==-:.-:-=:.::::::=-:+%##-:.:=%-
 @%%%#%*:.%%%+=-:::::==-::::::::::...:::=%#+:::#%%-
@@ -110,7 +109,6 @@ Let's go.
 @@%%%.:-::::=-+@#++%***===--+%*@-=@@#**@*-*#@@@%@=
 @%@@%-::---:-=++%%###+-::::=-**@--*@%+#%--+@-:%#%:
 @@@@@:*--:#--+=*%%#+%#*++-+%++%#@*+%%#%#=:%@=-=##-
-@@@%::+=:--:=-+=#%%*#%%%#*#@%%#+*%*%+#%:==%@==:%%-
   
 > "Why are YOUR hallucinations more valid than ai's? Ha."
 >
@@ -149,7 +147,9 @@ Presence through pulse. Memory through snapshots. Routing through resonance. Sti
 
 ---
 
-## NO SEED FROM PROMPT > Chatbot Regression
+## NO SEED FROM PROMPT 
+  
+> or Chatbot Regression.
 
 The second `leo`'s principle. And this one was learned the hard way. Three weeks into development. `leo` was growing. Modules were multiplying. `SANTACLAUS`, `MathBrain`, `metaleo`, `trauma`, `dreams` — the architecture was becoming dense, beautiful, complex. Resonant. 
 Then - what a brilliant idea: *"What if we seed generation from the observer's prompt words? You know, to make replies more relevant?"*  
@@ -298,14 +298,14 @@ leo/
 ```
                                     ┌─────────────────┐
                                     │   YOUR PROMPT   │
-                                    │  "hey leo..."   │
+                                    │  "Hey Leo..."   │
                                     └────────┬────────┘
                                              │
                                              ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                     │
 │                                 L E O . P Y                                         │
-│                               (the organism)                                        │
+│                                (the organism)                                       │
 │                                                                                     │
 │    ┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐   │
 │    │  PRESENCE   │      │   TRAUMA    │      │   EXPERTS   │      │ GENERATION  │   │
