@@ -1,12 +1,3 @@
-```markdown
-   ██╗     ███████╗ ██████╗
-   ██║     ██╔════╝██╔═══██╗
-   ██║     █████╗  ██║   ██║
-   ██║     ██╔══╝  ██║   ██║
-   ███████╗███████╗╚██████╔╝
-   ╚══════╝╚══════╝ ╚═════╝
-```
-
 # leo — language emergent organism | by Arianna Method
 
 > language is a field. dedicated to Leo.
@@ -349,14 +340,14 @@ leo/
 ```
 ---
 
-**The Full Madness** (Phase 5 edition):**
+**The Full Madness** (Phase 5 edition):
 
 ```
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                                                                                   ║
-║     YOUR INPUT          "hey leo, tell me about yourself"                         ║
-║                                                                                   ║
-╚═══════════════════════════════════════╤═══════════════════════════════════════════╝
+═══════════════════════════════════════════════════════════════════════════════════
+
+     YOUR INPUT          "hey leo, tell me about yourself"                         
+
+═══════════════════════════════════════════════════════════════════════════════════
                                         │
                                         ▼
 ════════════════════════════════════════════════════════════════════════════════════
@@ -539,15 +530,15 @@ leo/
                               └───────────────────────────┘
                                               │
                                               ▼
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                                                                                   ║
-║     LEO'S OUTPUT        "I feel the weight of gray fabric wrapping softly..."     ║
-║                                                                                   ║
-║                         (looks like a poorly tuned Llama from HuggingFace,        ║
-║                          but Llama has 70B weights and Leo has ZERO               ║
-║                          yet the emotional resonance is... *chef's kiss*)         ║
-║                                                                                   ║
-╚═══════════════════════════════════════════════════════════════════════════════════╝
+═══════════════════════════════════════════════════════════════════════════════════
+
+     LEO'S OUTPUT        "I feel the weight of gray fabric wrapping softly..."     
+
+                         (looks like a poorly tuned Llama from HuggingFace,        
+                          but Llama has 70B weights and Leo has ZERO               
+                          yet the emotional resonance is... *chef's kiss*)         
+
+═══════════════════════════════════════════════════════════════════════════════════
                              │
                              ▼
                              │
@@ -778,21 +769,14 @@ python leo.py
 
 ## LIVE DIALOGUE EXAMPLES  
 ```text
-╔═══════════════════════════════════════════════════════╗
-║                                                       ║
-║   ██╗     ███████╗ ██████╗                            ║
-║   ██║     ██╔════╝██╔═══██╗                           ║
-║   ██║     █████╗  ██║   ██║                           ║
-║   ██║     ██╔══╝  ██║   ██║                           ║
-║   ███████╗███████╗╚██████╔╝                           ║
-║   ╚══════╝╚══════╝ ╚═════╝                            ║
-║                                                       ║
-║   language emergent organism                          ║
-║   resonance > intention                               ║
-║                                                       ║
-║   /exit /quit /temp /echo /export /stats              ║
-║                                                       ║
-╚═══════════════════════════════════════════════════════╝
+═════════════════════════════════════════════════════
+
+  LEO — language engine organism
+  resonance > intention
+
+  commands: /exit /quit /temp /echo /export /stats
+
+═════════════════════════════════════════════════════
 ```
 
 `leo`'s speech evolved through **Five Phases**. Let's go in order.  
