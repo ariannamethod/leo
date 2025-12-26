@@ -418,11 +418,11 @@ leo/
 ┌───────────────────────────────────────────────────────────────────────────-──┐
 │  SEED SELECTION — FROM FIELD, NEVER FROM PROMPT ⚡                            │
 │                                                                              │
-│  ❌ NOT from observer words                                                  │
-│  ❌ NOT from prompt tokens                                                   │
-│  ✅ FROM centers (structural gravity)                                        │
-│  ✅ FROM bias (bootstrap + historical importance)                            │
-│  ✅ FROM trauma (wound gravity when active)                                  │
+│   - NOT from observer words                                                  │
+│   - NOT from prompt tokens                                                   │
+│   - FROM centers (structural gravity)                                        │
+│   - FROM bias (bootstrap + historical importance)                            │
+│   - FROM trauma (wound gravity when active)                                  │
 │                                                                              │
 │  start_token = choose_start_token(vocab, centers, bias)                      │
 └────────────────────────────┬─────────────────────────────────────────────────┘
@@ -508,7 +508,7 @@ leo/
 │  Ring 2 (shard): Abstract meta-note, temp=1.2, semantic=0.4                 │
 │                                                                             │
 │  All rings fed back to observe() → trigrams grow → field evolves            │
-│  ⚠️  YOU NEVER SEE THIS — private reflection                                │
+│  !!!  YOU NEVER SEE THIS — private reflection !!!                           │
 └────────────────────────────┬────────────────────────────────────────────────┘
                              │
                              ▼
