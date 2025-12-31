@@ -53,17 +53,26 @@ from leo import (
     METALEO_AVAILABLE, GAME_MODULE_AVAILABLE, SCHOOL_MODULE_AVAILABLE,
     DREAM_MODULE_AVAILABLE,
 
-    # Optional module classes (sync versions - will be replaced with async)
-    SantaContext, RAGBrain, MathBrain, MathState, FlowTracker,
-    MetaLeo, GameEngine, School, SchoolConfig,
-    TraumaState, run_trauma, OverthinkingConfig, PulseSnapshot, run_overthinking,
-    init_dream, DREAM_AVAILABLE, Episode,
+    # Data classes only (no module instances)
+    SantaContext, RAGBrain, MathBrain, MathState,
+    TraumaState, OverthinkingConfig, PulseSnapshot,
+    SchoolConfig, Episode,
+    DREAM_AVAILABLE,
 )
 
-# Import async modules
+# Import async modules (Phase 2 complete!)
 from async_santaclaus import AsyncSantaKlaus
 from async_mathbrain import AsyncMathBrain
 from async_episodes import AsyncRAGBrain
+from async_modules import (
+    AsyncMetaLeo, MetaConfig,
+    AsyncFlowTracker,
+    async_run_trauma,
+    async_run_overthinking,
+    AsyncGameEngine, GameTurn,
+    AsyncSchool,
+    async_init_dream,
+)
 
 
 # ============================================================================
@@ -414,7 +423,7 @@ class AsyncLeoField:
         self.observe_count: int = 0
         self.DECAY_INTERVAL: int = 100
 
-        # Optional modules (sync versions for now - Phase 2 will migrate)
+        # Optional modules (Phase 2.1 complete - all async!)
         self.santa: Optional[Any] = None
         self.rag: Optional[Any] = None
         self.math_brain: Optional[Any] = None
@@ -422,6 +431,9 @@ class AsyncLeoField:
         self.metaleo: Optional[Any] = None
         self.game: Optional[Any] = None
         self.school: Optional[Any] = None
+
+        # Trauma state (async-compatible)
+        self._trauma_state: Optional[TraumaState] = None
 
         # NOTE: Module initialization happens in async_init()
         # Cannot call async methods in __init__
@@ -461,6 +473,44 @@ class AsyncLeoField:
                 await self.math_brain.async_init()
             except Exception:
                 self.math_brain = None
+
+        # METALEO: Async inner voice (Phase 2.1 - sync I/O for now)
+        if METALEO_AVAILABLE:
+            try:
+                self.metaleo = AsyncMetaLeo(leo_field=self, config=MetaConfig())
+            except Exception:
+                self.metaleo = None
+
+        # FLOWTRACKER: Async theme trajectory (Phase 2.1 - sync I/O for now)
+        if FLOW_AVAILABLE:
+            try:
+                self.flow_tracker = AsyncFlowTracker(conn=None)  # Will use sync conn from db_path
+            except Exception:
+                self.flow_tracker = None
+
+        # GAME: Async conversational rhythm (Phase 2.1 - sync I/O for now)
+        if GAME_MODULE_AVAILABLE:
+            try:
+                game_path = STATE_DIR / "game.sqlite3"
+                self.game = AsyncGameEngine(db_path=game_path)
+            except Exception:
+                self.game = None
+
+        # SCHOOL: Async knowledge notes (Phase 2.1 - sync I/O for now)
+        if SCHOOL_MODULE_AVAILABLE:
+            try:
+                school_config = SchoolConfig()
+                self.school = AsyncSchool(db_path=self.db_path, config=school_config)
+            except Exception:
+                self.school = None
+
+        # TRAUMA: Initialize trauma state (Phase 2.1 - sync I/O for now)
+        if TRAUMA_AVAILABLE:
+            try:
+                # Trauma uses leo main DB, initialize state
+                self._trauma_state = TraumaState()
+            except Exception:
+                self._trauma_state = None
 
     async def refresh(self, initial_shard: bool = False) -> None:
         """Reload field from database (async)."""
@@ -589,9 +639,11 @@ class AsyncLeoField:
                 themes=self.themes,
                 token_to_themes=self.token_to_themes,
                 use_experts=True,
-                trauma_state=None,  # Trauma not yet migrated
+                trauma_state=self._trauma_state,  # Async trauma state
                 token_boosts=token_boosts,
                 mathbrain=self.math_brain,
+                metaleo=self.metaleo,  # Async MetaLeo
+                flow_tracker=self.flow_tracker,  # Async FlowTracker
             )
 
             # Store presence metrics
@@ -605,26 +657,47 @@ class AsyncLeoField:
                     reply_tokens = tokenize(context.output)
                     unique_ratio = len(set(reply_tokens)) / len(reply_tokens) if reply_tokens else 0.0
 
-                    # Build MathState
+                    # Extract FlowTracker metrics (if available)
+                    emerging_score = 0.0
+                    fading_score = 0.0
+                    if self.flow_tracker is not None and hasattr(context.quality, 'active_themes'):
+                        try:
+                            # FlowTracker tracks theme momentum
+                            emerging_score = getattr(context.quality, 'emerging_score', 0.0)
+                            fading_score = getattr(context.quality, 'fading_score', 0.0)
+                        except Exception:
+                            pass
+
+                    # Extract MetaLeo metrics (if available)
+                    metaleo_weight = 0.0
+                    used_metaleo = False
+                    if self.metaleo is not None:
+                        try:
+                            metaleo_weight = getattr(context, 'metaleo_weight', 0.0)
+                            used_metaleo = getattr(context, 'used_metaleo', False)
+                        except Exception:
+                            pass
+
+                    # Build MathState with full async module integration
                     state = MathState(
                         entropy=context.pulse.entropy if context.pulse else 0.0,
                         novelty=context.pulse.novelty if context.pulse else 0.0,
                         arousal=context.pulse.arousal if context.pulse else 0.0,
                         pulse=context.pulse.pulse if context.pulse else 0.0,
-                        trauma_level=0.0,  # Trauma not yet migrated to async
+                        trauma_level=self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
                         active_theme_count=len(context.quality.active_themes) if context.quality and hasattr(context.quality, 'active_themes') else 0,
                         total_themes=len(self.themes),
-                        emerging_score=0.0,  # TODO: Add theme tracking in async
-                        fading_score=0.0,    # TODO: Add theme tracking in async
+                        emerging_score=emerging_score,
+                        fading_score=fading_score,
                         reply_len=len(reply_tokens),
                         unique_ratio=unique_ratio,
                         expert_id=context.expert.name if context.expert else "structural",
                         expert_temp=context.expert.temperature if context.expert else 1.0,
                         expert_semantic=context.expert.semantic_weight if context.expert else 0.5,
-                        metaleo_weight=0.0,  # TODO: Add MetaLeo tracking in async
-                        used_metaleo=False,
+                        metaleo_weight=metaleo_weight,
+                        used_metaleo=used_metaleo,
                         overthinking_enabled=OVERTHINKING_AVAILABLE,
-                        rings_present=0,  # TODO: Add ring tracking in async
+                        rings_present=len(getattr(context, 'rings', [])) if hasattr(context, 'rings') else 0,
                         quality=context.quality.overall if context.quality else 0.5,
                     )
 
