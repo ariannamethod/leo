@@ -21,10 +21,10 @@ from typing import List, Dict, Any, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    import anthropic
+    import openai
 except ImportError:
-    print("ERROR: anthropic package not installed.")
-    print("Install with: pip install anthropic")
+    print("ERROR: openai package not installed.")
+    print("Install with: pip install openai")
     sys.exit(1)
 
 from async_leo import AsyncLeoField, ASYNC_DB_PATH
@@ -38,7 +38,7 @@ class AsyncHeyLeoObserver:
 
     def __init__(self, api_key: str, topics_path: str = "tests/topics_paradoxes.json"):
         self.api_key = api_key
-        self.client = anthropic.Anthropic(api_key=api_key)
+        self.client = openai.OpenAI(api_key=api_key)
         self.topics_path = Path(topics_path)
 
         # Load conversation topics
@@ -73,19 +73,21 @@ class AsyncHeyLeoObserver:
         print(f"[async-heyleo] AsyncLeoField initialized")
         print(f"[async-heyleo] Vocab size: {len(self.leo_field.vocab)}")
 
-    def _call_claude(self, system_prompt: str, user_message: str) -> str:
-        """Call Claude API to generate observer's message."""
+    def _call_gpt(self, system_prompt: str, user_message: str) -> str:
+        """Call OpenAI GPT API to generate observer's message."""
         try:
-            response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+            response = self.client.chat.completions.create(
+                model="gpt-4o",  # GPT-5 equivalent, no rate limits
                 max_tokens=200,
                 temperature=0.8,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}]
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ]
             )
-            return response.content[0].text
+            return response.choices[0].message.content
         except Exception as e:
-            print(f"[async-heyleo] ERROR calling Claude API: {e}")
+            print(f"[async-heyleo] ERROR calling GPT API: {e}")
             return None
 
     def _compute_external_vocab_ratio(
@@ -154,7 +156,7 @@ Be natural, brief (1-2 sentences), and present."""
             # Generate observer's message
             context_msg = f"Continue the conversation about: {topic}\n\nPrevious messages: {recent_observer_messages[-2:] if recent_observer_messages else 'None yet'}"
 
-            observer_message = self._call_claude(system_prompt, context_msg)
+            observer_message = self._call_gpt(system_prompt, context_msg)
             if not observer_message:
                 print(f"  [ERROR] Failed to generate observer message")
                 break
