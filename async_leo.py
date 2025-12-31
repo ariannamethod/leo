@@ -54,14 +54,16 @@ from leo import (
     DREAM_MODULE_AVAILABLE,
 
     # Optional module classes (sync versions - will be replaced with async)
-    SantaContext, RAGBrain, MathBrain, FlowTracker,
+    SantaContext, RAGBrain, MathBrain, MathState, FlowTracker,
     MetaLeo, GameEngine, School, SchoolConfig,
     TraumaState, run_trauma, OverthinkingConfig, PulseSnapshot, run_overthinking,
-    init_dream, DREAM_AVAILABLE,
+    init_dream, DREAM_AVAILABLE, Episode,
 )
 
-# Import async Santa Klaus
+# Import async modules
 from async_santaclaus import AsyncSantaKlaus
+from async_mathbrain import AsyncMathBrain
+from async_episodes import AsyncRAGBrain
 
 
 # ============================================================================
@@ -437,19 +439,26 @@ class AsyncLeoField:
             except Exception:
                 self.santa = None
 
-        if EPISODES_AVAILABLE and RAGBrain is not None:
+        # RAG: Async episodic memory
+        if EPISODES_AVAILABLE:
             try:
                 rag_path = STATE_DIR / "leo_rag.sqlite3"
-                self.rag = RAGBrain(db_path=rag_path)
+                self.rag = AsyncRAGBrain(db_path=rag_path)
+                await self.rag.async_init()
             except Exception:
                 self.rag = None
 
-        if MATHBRAIN_AVAILABLE and MathBrain is not None:
+        # MATHBRAIN: Async body perception
+        if MATHBRAIN_AVAILABLE:
             try:
                 state_path = STATE_DIR / "mathbrain.json"
-                # MathBrain expects a sync LeoField, so we'll skip for now
-                # Phase 2: Create AsyncMathBrain
-                self.math_brain = None
+                self.math_brain = AsyncMathBrain(
+                    field=self,
+                    hidden_dim=16,
+                    lr=0.01,
+                    state_path=state_path
+                )
+                await self.math_brain.async_init()
             except Exception:
                 self.math_brain = None
 
@@ -588,6 +597,60 @@ class AsyncLeoField:
             # Store presence metrics
             self.last_pulse = context.pulse
             self.last_quality = context.quality
+
+            # MATHBRAIN: Learn from this reply (async)
+            if self.math_brain is not None and MATHBRAIN_AVAILABLE and MathState is not None:
+                try:
+                    # Compute unique ratio
+                    reply_tokens = tokenize(context.output)
+                    unique_ratio = len(set(reply_tokens)) / len(reply_tokens) if reply_tokens else 0.0
+
+                    # Build MathState
+                    state = MathState(
+                        entropy=context.pulse.entropy if context.pulse else 0.0,
+                        novelty=context.pulse.novelty if context.pulse else 0.0,
+                        arousal=context.pulse.arousal if context.pulse else 0.0,
+                        pulse=context.pulse.pulse if context.pulse else 0.0,
+                        trauma_level=0.0,  # Trauma not yet migrated to async
+                        active_theme_count=len(context.quality.active_themes) if context.quality and hasattr(context.quality, 'active_themes') else 0,
+                        total_themes=len(self.themes),
+                        emerging_score=0.0,  # TODO: Add theme tracking in async
+                        fading_score=0.0,    # TODO: Add theme tracking in async
+                        reply_len=len(reply_tokens),
+                        unique_ratio=unique_ratio,
+                        expert_id=context.expert.name if context.expert else "structural",
+                        expert_temp=context.expert.temperature if context.expert else 1.0,
+                        expert_semantic=context.expert.semantic_weight if context.expert else 0.5,
+                        metaleo_weight=0.0,  # TODO: Add MetaLeo tracking in async
+                        used_metaleo=False,
+                        overthinking_enabled=OVERTHINKING_AVAILABLE,
+                        rings_present=0,  # TODO: Add ring tracking in async
+                        quality=context.quality.overall if context.quality else 0.5,
+                    )
+
+                    # Observe and learn (sync - in-memory)
+                    self.math_brain.observe(state)
+
+                    # Save state (async - file I/O)
+                    await self.math_brain.async_save_state()
+                except Exception:
+                    # MathBrain must NEVER break normal flow - silent fallback
+                    pass
+
+            # RAG: Log episode to episodic memory (async)
+            if self.rag is not None and EPISODES_AVAILABLE and Episode is not None:
+                try:
+                    # Use the same MathState from above (if available)
+                    if self.math_brain is not None and 'state' in locals():
+                        episode = Episode(
+                            prompt=prompt,
+                            reply=context.output,
+                            metrics=state,
+                        )
+                        await self.rag.async_observe_episode(episode)
+                except Exception:
+                    # RAG must never break Leo - silent fallback
+                    pass
 
             # SNAPSHOT FREEZE (Dec 25 - Jan 1) - STILL ACTIVE
             # Do not save snapshots during decay period

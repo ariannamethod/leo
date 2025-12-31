@@ -9,3 +9,12 @@
 #
 # Graceful fallback: Leo works without numpy, but with lower precision
 numpy>=1.20.0
+
+# Async dependencies for async_leo.py
+# aiosqlite: async SQLite operations for non-blocking database queries
+# Used in: async_leo.py, async_santaclaus.py, async_episodes.py
+aiosqlite>=0.17.0
+
+# aiofiles: async file I/O for JSON state persistence
+# Used in: async_mathbrain.py
+aiofiles>=23.0.0
