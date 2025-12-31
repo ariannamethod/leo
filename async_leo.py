@@ -642,8 +642,7 @@ class AsyncLeoField:
                 trauma_state=self._trauma_state,  # Async trauma state
                 token_boosts=token_boosts,
                 mathbrain=self.math_brain,
-                metaleo=self.metaleo,  # Async MetaLeo
-                flow_tracker=self.flow_tracker,  # Async FlowTracker
+                # NOTE: metaleo and flow_tracker handled internally by generate_reply
             )
 
             # Store presence metrics
