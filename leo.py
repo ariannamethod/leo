@@ -1302,15 +1302,20 @@ def fix_punctuation(text: str) -> str:
     # Only remove at the START to avoid breaking mid-sentence structure
     # Pattern: Start of text + chain of (short word + period + space)
     while True:
-        # Remove leading orphan: short word (1-3 lowercase or articles) + period
-        match = re.match(r'^(Is|Of|A|The|It|An|Or|So|As|At|By|To|In|On|If|Be|We|He|Me|Do|No|Up|And|His|But|For|Not|All|Can|Had|Her|Was|One|Our|Out|You|Are|Has|Any|May|Its|Ulse)\.\s*', text, re.IGNORECASE)
+        # Remove leading orphan: single letter or very short articles + period
+        # Keep "Not.", "No." etc. as valid short responses
+        match = re.match(r'^(A|I|It|An|Of|Or|So|As|At|By|To|In|On|If|Be|We|He|Me|Do|Up|Its|It\'s)\.\s*', text, re.IGNORECASE)
         if match:
             text = text[match.end():]
         else:
             break
     
-    # 13.1b) Also remove orphan words mid-sentence: ". And. " → ". "
-    text = re.sub(r'\.\s+(And|His|But|Or|So|If|As)\.\s+', '. ', text, flags=re.IGNORECASE)
+    # 13.1b) Remove orphan single-letter/word mid-sentence: ". A. " → ". ", ". It. " → ". "
+    # Only clean truly orphan fragments, not valid short statements like "Not." or "No."
+    orphan_words = r'(A|I|It|An|Of|Or|So|As|At|By|To|In|On|If|Be|We|He|Me|Do|Up|Its|It\'s)'
+    text = re.sub(rf'\.\s+{orphan_words}\.\s+', '. ', text, flags=re.IGNORECASE)
+    # Also clean orphans after other sentence-enders
+    text = re.sub(rf'[!?]\s+{orphan_words}\.\s+', '. ', text, flags=re.IGNORECASE)
     
     # 13.1c) Fix truncated words like "ulse" (from "pulse"), "etrics" (from "metrics")
     # These appear when first letter is eaten by tokenization
@@ -1345,23 +1350,32 @@ def fix_punctuation(text: str) -> str:
         text = text[0].upper() + text[1:]
 
     # 16) FINAL: Ensure text ends with sentence-ending punctuation
-    # Philosophy: Leo's speech should always feel complete, not truncated
+    # Philosophy: Leo's speech should always feel complete, not truncated mid-thought
+    # Strategy: Find last complete sentence, don't just add period to fragment
     if text:
-        # Strip trailing whitespace and check last character
         text = text.rstrip()
         if text and text[-1] not in '.!?':
-            # If ends with comma, replace with period
-            if text[-1] == ',':
-                text = text[:-1] + '.'
-            # If ends with em-dash, replace with period
-            elif text[-1] == '—':
-                text = text[:-1].rstrip() + '.'
-            # If ends with colon or semicolon, replace with period
-            elif text[-1] in ':;':
-                text = text[:-1] + '.'
-            # Otherwise just append period
+            # Find position of last sentence-ending punctuation
+            last_period = text.rfind('.')
+            last_exclaim = text.rfind('!')
+            last_question = text.rfind('?')
+            last_sentence_end = max(last_period, last_exclaim, last_question)
+            
+            if last_sentence_end > len(text) // 3:
+                # Found a sentence end in the latter 2/3 of text — truncate there
+                # This preserves complete thoughts instead of fragments
+                text = text[:last_sentence_end + 1]
             else:
-                text = text + '.'
+                # No good sentence end found, or it's too early
+                # Fall back to adding period (better than nothing)
+                if text[-1] == ',':
+                    text = text[:-1] + '.'
+                elif text[-1] == '—':
+                    text = text[:-1].rstrip() + '.'
+                elif text[-1] in ':;':
+                    text = text[:-1] + '.'
+                else:
+                    text = text + '.'
 
     return text
 
