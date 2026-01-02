@@ -333,8 +333,6 @@ def init_db() -> sqlite3.Connection:
 
 def get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
     """Get metadata value."""
-    # Ensure row_factory is set for dict-style access
-    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT value FROM meta WHERE key = ?", (key,))
     row = cur.fetchone()
