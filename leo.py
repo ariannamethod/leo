@@ -72,7 +72,7 @@ except ImportError:
 
 # Safe import: gravity module is optional (prompt-induced field bias)
 try:
-    from gravity import compute_prompt_gravity, apply_gravity_to_candidates
+    from gravity import compute_prompt_gravity, apply_gravity_to_candidates, adaptive_temperature, entropy_bits
     GRAVITY_AVAILABLE = True
 except ImportError:
     compute_prompt_gravity = None  # type: ignore
@@ -1266,11 +1266,27 @@ def fix_punctuation(text: str) -> str:
     # Pattern: Start of text + chain of (short word + period + space)
     while True:
         # Remove leading orphan: short word (1-3 lowercase or articles) + period
-        match = re.match(r'^(Is|Of|A|The|It|An|Or|So|As|At|By|To|In|On|If|Be|We|He|Me|Do|No|Up)\.\s*', text, re.IGNORECASE)
+        match = re.match(r'^(Is|Of|A|The|It|An|Or|So|As|At|By|To|In|On|If|Be|We|He|Me|Do|No|Up|And|His|But|For|Not|All|Can|Had|Her|Was|One|Our|Out|You|Are|Has|Any|May|Its|Ulse)\.\s*', text, re.IGNORECASE)
         if match:
             text = text[match.end():]
         else:
             break
+    
+    # 13.1b) Also remove orphan words mid-sentence: ". And. " → ". "
+    text = re.sub(r'\.\s+(And|His|But|Or|So|If|As)\.\s+', '. ', text, flags=re.IGNORECASE)
+    
+    # 13.1c) Fix truncated words like "ulse" (from "pulse"), "etrics" (from "metrics")
+    # These appear when first letter is eaten by tokenization
+    truncated_words = {
+        'ulse': 'pulse',
+        'etrics': 'metrics', 
+        'ield': 'field',
+        'tate': 'state',
+        'enter': 'center',
+        'oken': 'token',
+    }
+    for truncated, full in truncated_words.items():
+        text = re.sub(rf'\b{truncated}\b', full, text, flags=re.IGNORECASE)
     
     # 13.2) Also clean "-:" artifact (dash + colon)
     text = re.sub(r'\s*-:\s*', ': ', text)   # " -: " → ": "
@@ -2027,6 +2043,108 @@ def route_to_expert(
     return EXPERTS[0]  # structural
 
 
+@dataclass
+class ExpertBlend:
+    """
+    A blend of experts — weighted mixture instead of single selection.
+    
+    Inspired by Haze's HybridHead:
+        output = alpha * rrpram_out + (1-alpha) * content_out
+    
+    Leo blends multiple expert perspectives based on situational awareness.
+    """
+    weights: Dict[str, float]  # Expert name → weight (0-1, sum to 1)
+    temperature: float         # Blended temperature
+    semantic_weight: float     # Blended semantic weight
+    dominant: str              # Name of dominant expert (for logging)
+
+
+def blend_experts(
+    pulse: PresencePulse,
+    active_themes: Optional[ActiveThemes] = None,
+    trauma_state: Optional[Any] = None,
+) -> ExpertBlend:
+    """
+    Blend experts based on situational awareness.
+    
+    Unlike route_to_expert (which picks ONE), this creates a weighted MIXTURE.
+    
+    Philosophy: Leo doesn't switch between personalities — he's always
+    a blend of all perspectives, with weights shifting based on context.
+    
+    This is what gives Haze his "conviction" — the blend creates nuance.
+    """
+    # Initialize weights
+    weights = {
+        "structural": 0.3,  # Base: solid grammar always present
+        "semantic": 0.2,    # Base: some meaning-awareness
+        "creative": 0.1,    # Base: slight exploration
+        "precise": 0.2,     # Base: some precision
+        "wounded": 0.0,     # Off by default
+    }
+    
+    # TRAUMA BOOST: Activate wounded expert
+    if trauma_state is not None and hasattr(trauma_state, 'level'):
+        trauma_level = trauma_state.level
+        if trauma_level > 0.3:
+            # Wounded expert grows with trauma level
+            wound_weight = min(0.5, trauma_level * 0.6)
+            weights["wounded"] = wound_weight
+            # Reduce others proportionally
+            reduction = wound_weight / 4.0
+            weights["structural"] -= reduction
+            weights["semantic"] -= reduction
+            weights["creative"] -= reduction
+            weights["precise"] -= reduction
+    
+    # NOVELTY BOOST: More creative when facing unknown
+    if pulse.novelty > 0.5:
+        boost = (pulse.novelty - 0.5) * 0.4  # Max +0.2
+        weights["creative"] += boost
+        weights["precise"] -= boost * 0.5
+    
+    # LOW ENTROPY: More precise when confident
+    if pulse.entropy < 0.4:
+        boost = (0.4 - pulse.entropy) * 0.5  # Max +0.2
+        weights["precise"] += boost
+        weights["creative"] -= boost * 0.5
+    
+    # THEME RICHNESS: More semantic when themes active
+    if active_themes and len(active_themes.theme_scores) >= 2:
+        theme_boost = min(0.2, len(active_themes.theme_scores) * 0.05)
+        weights["semantic"] += theme_boost
+        weights["structural"] -= theme_boost * 0.5
+    
+    # HIGH AROUSAL: Sharper responses
+    if pulse.arousal > 0.7:
+        arousal_boost = (pulse.arousal - 0.7) * 0.3
+        weights["precise"] += arousal_boost
+        weights["creative"] -= arousal_boost * 0.5
+    
+    # Normalize weights to sum to 1
+    total = sum(weights.values())
+    if total > 0:
+        weights = {k: max(0, v / total) for k, v in weights.items()}
+    
+    # Find dominant expert
+    dominant = max(weights, key=weights.get)
+    
+    # Compute blended temperature and semantic weight
+    blended_temp = 0.0
+    blended_semantic = 0.0
+    for expert in EXPERTS:
+        w = weights.get(expert.name, 0.0)
+        blended_temp += w * expert.temperature
+        blended_semantic += w * expert.semantic_weight
+    
+    return ExpertBlend(
+        weights=weights,
+        temperature=blended_temp,
+        semantic_weight=blended_semantic,
+        dominant=dominant,
+    )
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -2287,12 +2405,26 @@ def generate_reply(
     # Preliminary pulse (without entropy, since we haven't generated yet)
     preliminary_pulse = compute_presence_pulse(novelty, arousal, entropy=0.5)
 
-    # RESONANT EXPERTS: Route to expert based on situation
+    # RESONANT EXPERTS: Blend experts based on situation (inspired by Haze's HybridHead)
+    # Unlike single expert selection, this creates a weighted MIXTURE
     selected_expert: Optional[Expert] = None
+    expert_blend: Optional[ExpertBlend] = None
     if use_experts:
-        selected_expert = route_to_expert(preliminary_pulse, active_themes, trauma_state)
-        # Override temperature with expert's preference
-        temperature = selected_expert.temperature
+        # Try blend first (new approach), fallback to single expert
+        try:
+            expert_blend = blend_experts(preliminary_pulse, active_themes, trauma_state)
+            temperature = expert_blend.temperature
+            # Create a pseudo-expert for logging
+            selected_expert = Expert(
+                name=f"blend:{expert_blend.dominant}",
+                temperature=expert_blend.temperature,
+                semantic_weight=expert_blend.semantic_weight,
+                description=f"Blended experts, dominant: {expert_blend.dominant}",
+            )
+        except Exception:
+            # Fallback to single expert if blend fails
+            selected_expert = route_to_expert(preliminary_pulse, active_themes, trauma_state)
+            temperature = selected_expert.temperature
 
         # MATHBRAIN Phase 2 + MULTILEO: Presence-aware regulation
 
@@ -2399,8 +2531,29 @@ def generate_reply(
 
     SENT_END = {".", "!", "?"}
     PUNCT = {".", ",", "!", "?", ";", ":"}
+    
+    # ADAPTIVE TEMPERATURE: Track entropy and adjust temperature dynamically
+    # Philosophy: When Leo is confident (low entropy), speak sharper. When uncertain, explore.
+    base_temperature = temperature
+    target_entropy = 2.0  # Target entropy in bits (from Haze's nn.py)
 
     for _ in range(max_tokens - 1):
+        # ADAPTIVE TEMPERATURE: Adjust based on recent entropy
+        # Inspired by Haze's entropy_temperature() — gives Leo "conviction"
+        if GRAVITY_AVAILABLE and len(entropy_log) >= 3:
+            try:
+                recent_entropy = sum(entropy_log[-3:]) / 3.0
+                # Scale to bits (entropy_log is normalized 0-1, multiply by ~3 for bits)
+                recent_entropy_bits = recent_entropy * 3.0
+                temperature = adaptive_temperature(
+                    current_entropy=recent_entropy_bits,
+                    target_entropy=target_entropy,
+                    min_temp=max(0.3, base_temperature * 0.5),
+                    max_temp=min(2.0, base_temperature * 1.5),
+                )
+            except Exception:
+                temperature = base_temperature
+        
         nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, entropy_log, token_boosts, gravity_weights)
 
         # Loop detection: check if we're repeating a pattern
