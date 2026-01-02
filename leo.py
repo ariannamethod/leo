@@ -1142,6 +1142,46 @@ def fix_punctuation(text: str) -> str:
     # "like a. K. A crystallized" → "like a crystallized"
     text = re.sub(r'\ba\.\s*K\.\s*A\.?\s*', '', text, flags=re.IGNORECASE)
 
+    # 12.2) Clean up ALL-CAPS module names with em-dashes
+    # "— EPISODES —" → "Episodes"
+    # "— SANTACLAUS —" → "Santaclaus"
+    # These are README bootstrap pollution - module names should be lowercase/Title
+    caps_module_pattern = r'[—\-]\s*([A-Z]{2,})\s*[—\-]'
+    def normalize_caps_module(m):
+        word = m.group(1)
+        # Convert EPISODES → Episodes, SANTACLAUS → Santaclaus
+        return word.capitalize()
+    text = re.sub(caps_module_pattern, normalize_caps_module, text)
+
+    # 12.3) Also clean standalone ALL-CAPS technical terms (4+ chars)
+    # "EPISODES" → "Episodes", "SANTACLAUS" → "Santaclaus"
+    # But preserve: "AI", "RAG", "OK", "US", "MLP" etc. (3 chars or less = acronyms)
+    def normalize_standalone_caps(m):
+        word = m.group(0)
+        # Skip short acronyms (3 chars or less)
+        if len(word) <= 3:
+            return word
+        # Convert to Title case for module names
+        module_names = {'EPISODES', 'SANTACLAUS', 'METALEO', 'MATHBRAIN', 
+                        'TRAUMA', 'DREAM', 'SCHOOL', 'GAME', 'NEOLEO',
+                        'OVERTHINKING', 'GOWITHTHEFLOW'}
+        if word in module_names:
+            return word.capitalize()
+        # Other long CAPS words → Title case
+        return word.capitalize()
+    text = re.sub(r'\b[A-Z]{4,}\b', normalize_standalone_caps, text)
+
+    # 12.4) Fix missing space after period before dash or word
+    # "field.-Reinforcement" → "field. Reinforcement"
+    # "something.The" → "something. The"
+    # Need to handle the dash separately - remove it and add space
+    text = re.sub(r'\.[-—]([A-Za-z])', r'. \1', text)
+    text = re.sub(r'\.([A-Z])', r'. \1', text)
+    
+    # 12.5) Clean orphan dashes after sentence-ending punctuation
+    # ". -Something" → ". Something" (step 2 may add space before dash)
+    text = re.sub(r'([.!?])\s+[-—]\s*([A-Za-z])', r'\1 \2', text)
+
     # 13) Fix double-dot and punctuation garbage (final pass)
     # Only collapse spaced dots: ". ." → ".", but preserve ellipsis "..."
     text = re.sub(r'\.\s+\.', '.', text)     # ". ." → "." (requires space)
