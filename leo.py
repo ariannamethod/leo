@@ -1241,6 +1241,27 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r'\s+\.', '.', text)       # " ." → "." (space before dot)
     text = re.sub(r'\s{2,}', ' ', text)      # Multiple spaces → single space
 
+    # 13.1) Remove orphan single-word "sentences" at START of text
+    # "Is. of. Stuck" → "Stuck" 
+    # These are artifacts from tech word removal leaving short words as sentences
+    # Only remove at the START to avoid breaking mid-sentence structure
+    # Pattern: Start of text + chain of (short word + period + space)
+    while True:
+        # Remove leading orphan: short word (1-3 lowercase or articles) + period
+        match = re.match(r'^(Is|Of|A|The|It|An|Or|So|As|At|By|To|In|On|If|Be|We|He|Me|Do|No|Up)\.\s*', text, re.IGNORECASE)
+        if match:
+            text = text[match.end():]
+        else:
+            break
+    
+    # 13.2) Also clean "-:" artifact (dash + colon)
+    text = re.sub(r'\s*-:\s*', ': ', text)   # " -: " → ": "
+    text = re.sub(r'\s*:-\s*', ': ', text)   # " :- " → ": "
+    
+    # Clean up after orphan removal
+    text = re.sub(r'\s{2,}', ' ', text)
+    text = re.sub(r'^\s*[.,:;]\s*', '', text)  # Remove leading punctuation
+
     # 14) Cosmetic: Capitalize "Leo" consistently
     # Leo's name should always be capitalized for consistency
     # Use word boundaries to avoid touching words like "napoleon" or "galileo"

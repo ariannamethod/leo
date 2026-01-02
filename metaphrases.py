@@ -133,7 +133,8 @@ def remove_tech_words(reply: str) -> str:
     result = reply
     for word in TECH_WORD_BLACKLIST:
         # Remove standalone word (case insensitive)
-        result = re.sub(rf'\b{word}\b', '', result, flags=re.IGNORECASE)
+        # Use re.escape to prevent regex injection if word contains special chars
+        result = re.sub(rf'\b{re.escape(word)}\b', '', result, flags=re.IGNORECASE)
     # Clean up artifacts
     result = re.sub(r'\s{2,}', ' ', result)
     result = re.sub(r',\s*,', ',', result)
