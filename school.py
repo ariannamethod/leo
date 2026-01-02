@@ -283,6 +283,88 @@ class School:
         except Exception:
             pass
     
+    def recall_knowledge(
+        self,
+        prompt: str,
+        max_items: int = 3,
+    ) -> Optional[str]:
+        """
+        Recall relevant knowledge from School for a given prompt.
+        
+        Returns a short text snippet with relevant facts, or None if nothing found.
+        This can be used to enrich Leo's generation with learned knowledge.
+        """
+        if not SCHOOL_AVAILABLE or self._conn is None:
+            return None
+        
+        if not prompt or not prompt.strip():
+            return None
+        
+        # Extract tokens from prompt
+        tokens = re.findall(r"\b[\wА-Яа-яЁё]+\b", prompt.lower(), flags=re.UNICODE)
+        if not tokens:
+            return None
+        
+        cur = self._conn.cursor()
+        found_notes = []
+        found_entities = []
+        found_relations = []
+        
+        try:
+            for token in tokens:
+                # Check notes
+                cur.execute(
+                    "SELECT display, note FROM school_notes WHERE token = ? AND note IS NOT NULL LIMIT 1",
+                    (token,),
+                )
+                row = cur.fetchone()
+                if row:
+                    display, note = row
+                    # Take first 100 chars of note
+                    short_note = note[:100] + "..." if len(note) > 100 else note
+                    found_notes.append(f"{display}: {short_note}")
+                
+                # Check entities
+                cur.execute(
+                    "SELECT display, kind FROM school_entities WHERE token = ? LIMIT 1",
+                    (token,),
+                )
+                row = cur.fetchone()
+                if row:
+                    display, kind = row
+                    found_entities.append(f"{display} is a {kind}")
+                
+                # Check relations (as subject)
+                cur.execute(
+                    "SELECT relation, object FROM school_relations WHERE subject = ? AND confidence > 0.3 LIMIT 2",
+                    (token,),
+                )
+                for row in cur.fetchall():
+                    relation, obj = row
+                    found_relations.append(f"{token} {relation.replace('_', ' ')} {obj}")
+                
+                # Check relations (as object)
+                cur.execute(
+                    "SELECT subject, relation FROM school_relations WHERE object = ? AND confidence > 0.3 LIMIT 2",
+                    (token,),
+                )
+                for row in cur.fetchall():
+                    subj, relation = row
+                    found_relations.append(f"{subj} {relation.replace('_', ' ')} {token}")
+                
+                if len(found_notes) + len(found_entities) + len(found_relations) >= max_items:
+                    break
+            
+            # Build result
+            all_facts = found_entities + found_relations + found_notes
+            if not all_facts:
+                return None
+            
+            return ". ".join(all_facts[:max_items])
+            
+        except Exception:
+            return None
+    
     # ------------------------------------------------------------------
     # INTERNALS
     # ------------------------------------------------------------------
