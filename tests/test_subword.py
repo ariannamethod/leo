@@ -126,7 +126,7 @@ class TestSubwordField(unittest.TestCase):
         field.observe("The resonance of the field creates a beautiful pattern.")
         field.observe("Leo speaks from his field, not from the observer.")
         
-        generated = field.generate(max_tokens=20)
+        generated = field.generate(seed_text="", length=20)
         self.assertIsInstance(generated, str)
 
 
