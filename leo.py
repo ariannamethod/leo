@@ -70,6 +70,15 @@ except ImportError:
     SubwordVocab = None  # type: ignore
     SUBWORD_AVAILABLE = False
 
+# Safe import: gravity module is optional (prompt-induced field bias)
+try:
+    from gravity import compute_prompt_gravity, apply_gravity_to_candidates
+    GRAVITY_AVAILABLE = True
+except ImportError:
+    compute_prompt_gravity = None  # type: ignore
+    apply_gravity_to_candidates = None  # type: ignore
+    GRAVITY_AVAILABLE = False
+
 # Safe import: mathbrain module is optional
 try:
     from mathbrain import MathBrain, MathState
@@ -2030,6 +2039,7 @@ def step_token(
     co_occur: Optional[Dict[str, Dict[str, int]]] = None,
     entropy_log: Optional[List[float]] = None,
     token_boosts: Optional[Dict[str, float]] = None,
+    gravity_weights: Optional[Dict[str, float]] = None,
 ) -> str:
     """
     Single step in bigram/trigram graph with semantic blending.
@@ -2042,6 +2052,9 @@ def step_token(
     temperature > 1.0 => softer, more exploratory
 
     If entropy_log provided, appends normalized entropy of this step's distribution.
+    
+    gravity_weights: Prompt-induced field bias (from gravity.py).
+    Creates attraction to relevant tokens WITHOUT seeding from prompt.
     """
     # Try trigram first if available
     if trigrams is not None and prev_token is not None:
@@ -2075,6 +2088,15 @@ def step_token(
                         # Additive boost in log-space (small, gentle)
                         counts[i] = counts[i] * (1.0 + boost)
 
+            # GRAVITY: Apply prompt-induced field bias (gentle attraction)
+            # Philosophy: Prompt "wrinkles" the field, doesn't seed it
+            if gravity_weights:
+                for i, tok in enumerate(tokens):
+                    grav = gravity_weights.get(tok.lower(), 0.0)
+                    if grav > 0:
+                        # Gentle multiplicative boost (max 1.5x)
+                        counts[i] = counts[i] * (1.0 + grav * 0.5)
+
             # Clamp temperature to safe range
             temperature = max(min(temperature, 100.0), 1e-3)
 
@@ -2104,7 +2126,7 @@ def step_token(
         return choose_start_token(vocab, centers, bias)
 
     tokens = list(row.keys())
-    counts = [row[t] for t in tokens]
+    counts = [float(row[t]) for t in tokens]
 
     # Apply token boosts (Santa Klaus resonant recall)
     if token_boosts:
@@ -2113,6 +2135,14 @@ def step_token(
                 boost = token_boosts[tok]
                 # Additive boost in log-space (small, gentle)
                 counts[i] = counts[i] * (1.0 + boost)
+
+    # GRAVITY: Apply prompt-induced field bias (gentle attraction)
+    if gravity_weights:
+        for i, tok in enumerate(tokens):
+            grav = gravity_weights.get(tok.lower(), 0.0)
+            if grav > 0:
+                # Gentle multiplicative boost (max 1.5x)
+                counts[i] = counts[i] * (1.0 + grav * 0.5)
 
     # Clamp temperature to safe range
     temperature = max(min(temperature, 100.0), 1e-3)
@@ -2213,7 +2243,7 @@ def generate_reply(
         prev_tok: Optional[str] = None
         for tok in tokens_in:
             if tok in bigrams:
-                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature, trigrams, prev_tok, co_occur, None, token_boosts)
+                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature, trigrams, prev_tok, co_occur, None, token_boosts, None)
                 tokens_out.append(nxt)
                 prev_tok = tok
             else:
@@ -2225,6 +2255,21 @@ def generate_reply(
         return output
 
     prompt_tokens = tokenize(prompt)
+
+    # GRAVITY: Compute prompt-induced field bias (gentle attraction)
+    # Philosophy: Prompt "wrinkles" the field, doesn't seed it
+    gravity_weights: Optional[Dict[str, float]] = None
+    if GRAVITY_AVAILABLE and compute_prompt_gravity is not None:
+        try:
+            gravity_weights = compute_prompt_gravity(
+                prompt,
+                bigrams=bigrams,
+                trigrams=trigrams,
+                decay_factor=0.7,
+            )
+        except Exception:
+            # Silent fail — gravity must never break generation
+            gravity_weights = None
 
     # PRESENCE METRICS (internal, not shown in REPL)
     # Compute novelty: how unfamiliar is this prompt?
@@ -2356,7 +2401,7 @@ def generate_reply(
     PUNCT = {".", ",", "!", "?", ";", ":"}
 
     for _ in range(max_tokens - 1):
-        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, entropy_log, token_boosts)
+        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, entropy_log, token_boosts, gravity_weights)
 
         # Loop detection: check if we're repeating a pattern
         # Check for 2-token loops (e.g., "hello there hello there hello there...")
@@ -2388,7 +2433,7 @@ def generate_reply(
             if last_content is not None and nxt == last_content:
                 # Try a few times to pick a different token
                 for _retry in range(3):
-                    alt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, None, token_boosts)
+                    alt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, None, token_boosts, gravity_weights)
                     if alt != last_content:
                         nxt = alt
                         break
