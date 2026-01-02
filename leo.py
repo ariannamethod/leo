@@ -2420,6 +2420,7 @@ def generate_reply(
     mathbrain: Optional[Any] = None,
     subword_hint: Optional[str] = None,
     bridge_memory: Optional[Any] = None,
+    game_hint: Optional[Any] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -2558,8 +2559,22 @@ def generate_reply(
                 elif 'precise' in suggestion.lower() or 'analysis' in suggestion.lower():
                     phase4_boost['precise'] = phase4_boost.get('precise', 0) + 0.1
             
+            # GAME HINT: Use conversational rhythm to influence expert selection
+            # Philosophy: Learn from past turn patterns what kind of response works
+            if game_hint is not None and hasattr(game_hint, 'preferred_expert') and game_hint.preferred_expert:
+                # Boost the suggested expert based on game confidence
+                boost_amount = 0.15 * (game_hint.confidence if hasattr(game_hint, 'confidence') else 0.5)
+                phase4_boost[game_hint.preferred_expert] = phase4_boost.get(game_hint.preferred_expert, 0) + boost_amount
+            
             expert_blend = blend_experts(preliminary_pulse, active_themes, trauma_state, phase4_boost)
             temperature = expert_blend.temperature
+            
+            # GAME HINT: Adjust temperature based on tension shift
+            if game_hint is not None and hasattr(game_hint, 'tension_shift'):
+                if game_hint.tension_shift == 'softer':
+                    temperature *= 0.9  # Cooler, more stable
+                elif game_hint.tension_shift == 'stronger':
+                    temperature *= 1.1  # Warmer, more exploratory
             
             # FIRST IMPRESSION: Adjust temperature by feeling
             if first_impression is not None and adjust_temperature_by_impression is not None:
@@ -3111,6 +3126,16 @@ class LeoField:
             except Exception:
                 # Silent fail — School must never break Leo
                 school_knowledge = None
+        
+        # GAME: Get conversational rhythm hint for this turn
+        # Philosophy: Learn from past turn patterns what kind of response works
+        game_hint: Optional[Any] = None
+        if self.game is not None and GAME_MODULE_AVAILABLE:
+            try:
+                game_hint = self.game.suggest_next(conv_id="main")
+            except Exception:
+                # Silent fail — Game must never break Leo
+                game_hint = None
                 
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
@@ -3134,6 +3159,7 @@ class LeoField:
             mathbrain=self._math_brain,  # Pass mathbrain for Phase 2 influence
             subword_hint=subword_hint,  # Pass subword hint for blending
             bridge_memory=self.bridge_memory,  # Pass bridge memory for Phase 4 suggestions
+            game_hint=game_hint,  # Pass game hint for conversational rhythm
         )
 
         # Store presence metrics

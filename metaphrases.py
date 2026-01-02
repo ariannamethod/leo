@@ -125,6 +125,12 @@ TECH_WORD_BLACKLIST = [
     "dst", "src", "idx", "ptr", "cfg", "ctx", "req", "res", 
     "tmp", "buf", "len", "cnt", "num", "arr", "obj", "fn", 
     "cb", "err", "msg", "kwargs", "params", "attrs", "vals",
+    # Additional tech artifacts from game/h2o/mathbrain modules
+    "gameturn", "numoptional", "neoleo", "mathbrain", "mathstate",
+    "flowtacker", "gameengine", "gamehint", "subwordfield",
+    "h2oruntime", "h2ocompiler", "h2oengine", "bridgememory",
+    "santa claus", "santaclaus", "santaklaus",
+    "justnumpy", "justnumoptional", "justsmall", "justnum",
 ]
 
 
