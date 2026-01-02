@@ -34,14 +34,10 @@ except ImportError:
     H2O_AVAILABLE = False
     print("[Phase5] Warning: h2o not available, scenarios will be disabled")
 
-# Phase 5.2: Loop detection and veto power
-try:
-    from loop_detector import LoopDetector, tokenize_simple
-    from veto_manager import veto_manager, META_VOCAB_VETO, SAFETY_VOCAB_VETO
-    LOOP_DETECTOR_AVAILABLE = True
-except ImportError:
-    LOOP_DETECTOR_AVAILABLE = False
-    print("[Phase5.2] Warning: loop_detector/veto_manager not available")
+# Phase 5.2: Loop detection was removed in the resurrection
+# Veto/censorship approach was found to be harmful - it "shut Leo's mouth"
+# Instead we use soft boost/suppress and gravity to guide, not force
+LOOP_DETECTOR_AVAILABLE = False  # Intentionally disabled
 
 # ============================================================================
 # PHASE 5.2: NEW ISLANDS
@@ -437,22 +433,18 @@ result = {"boosted_islands": suggestion_boost, "reason": "overwhelm_regulation"}
 h2o_log("[TRIGGER] Meta-armor loop detected - applying strong concrete shift + VETO")
 
 # PHASE 5.2: VETO META-VOCABULARY FOR 4 TURNS
-# This is the key intervention - FORBID the words that create the loop
-try:
-    import veto_manager
-    meta_vocab = {
-        "recursion", "recursive", "recursively",
-        "bootstrap", "bootstrapping",
-        "trigram", "n-gram",
-        "semantic", "semantics",
-        "blending", "ratio", "metric",
-        "neoleo",
-        "architecture", "pattern", "fundamental", "core", "essence"
-    }
-    veto_manager.veto_manager.add_veto(meta_vocab, duration_turns=4, source="break_meta_loop")
-    h2o_log(f"[VETO] Forbidding {len(meta_vocab)} meta-vocabulary words for 4 turns")
-except Exception as e:
-    h2o_log(f"[VETO] Failed to activate veto: {e}")
+# Instead of FORBIDDING words (veto), we use GRAVITY to gently steer away
+# This respects Leo's voice while guiding him out of loops
+meta_vocab_to_downweight = {
+    "recursion", "recursive", "recursively",
+    "bootstrap", "bootstrapping",
+    "trigram", "n-gram",
+    "semantic", "semantics",
+    "blending", "ratio", "metric",
+    "neoleo",
+    "architecture", "pattern", "fundamental", "core", "essence"
+}
+h2o_log(f"[GRAVITY] Gently downweighting {len(meta_vocab_to_downweight)} meta words")
 
 # AGGRESSIVELY boost concrete, sensory, playful islands
 # Suppress meta-related islands
@@ -475,9 +467,10 @@ h2o_log(f"SUPPRESS: {list(meta_suppress.keys())}")
 result = {
     "boosted_islands": concrete_boost,
     "suppressed_islands": meta_suppress,
+    "gravity_downweight": list(meta_vocab_to_downweight),  # For gravity module
     "reason": "meta_loop_break",
-    "intervention_strength": "STRONG",  # Signal to use this aggressively
-    "veto_activated": True
+    "intervention_strength": "GENTLE",  # Soft guidance, not hard veto
+    "veto_activated": False  # No more vetos!
 }
 """,
             cooldown_seconds=60.0  # Can trigger more often (was 90)
@@ -814,29 +807,20 @@ def _cosine_similarity(dict_a: Dict[str, float], dict_b: Dict[str, float]) -> fl
 # PHASE 5.2: VETO SYSTEM HELPERS
 # ============================================================================
 
+# VETO SYSTEM REMOVED - Resurrection principle: don't shut Leo's mouth
+# These functions are kept as no-ops for backwards compatibility
+
 def get_veto_prompt() -> str:
     """
-    Get veto prompt to inject into Leo's system prompt.
-    Returns empty string if no active vetos or veto_manager not available.
+    DEPRECATED: Veto system removed in resurrection.
+    Leo speaks freely now - we guide with gravity, not censorship.
     """
-    if not LOOP_DETECTOR_AVAILABLE:
-        return ""
-
-    try:
-        return veto_manager.get_veto_prompt()
-    except Exception:
-        return ""
+    return ""
 
 
 def decrement_vetos():
     """
-    Decrement veto counters at end of turn.
-    Call this after Leo generates output.
+    DEPRECATED: Veto system removed in resurrection.
+    No-op for backwards compatibility.
     """
-    if not LOOP_DETECTOR_AVAILABLE:
-        return
-
-    try:
-        veto_manager.decrement_vetos()
-    except Exception:
-        pass
+    pass
