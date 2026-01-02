@@ -101,7 +101,34 @@ def cleanup_punctuation(text: str, mode: str = "NORMAL") -> str:
     # Use word boundaries to avoid touching words like "napoleon" or "galileo"
     result = re.sub(r'\bleo\b', 'Leo', result)
 
-    return result.strip()
+    # 11. FINAL: Ensure text ends with proper punctuation
+    # Philosophy: Leo's speech should feel complete, not truncated mid-thought
+    # Strategy: Find last complete sentence, don't just add period to fragment
+    result = result.strip()
+    if result and result[-1] not in '.!?':
+        # Find position of last sentence-ending punctuation
+        last_period = result.rfind('.')
+        last_exclaim = result.rfind('!')
+        last_question = result.rfind('?')
+        last_sentence_end = max(last_period, last_exclaim, last_question)
+        
+        if last_sentence_end > len(result) // 3:
+            # Found a sentence end in the latter 2/3 of text — truncate there
+            # This preserves complete thoughts instead of fragments
+            result = result[:last_sentence_end + 1]
+        else:
+            # No good sentence end found, or it's too early
+            # Fall back to adding period (better than nothing)
+            if result[-1] == ',':
+                result = result[:-1] + '.'
+            elif result[-1] == '—':
+                result = result[:-1].rstrip() + '.'
+            elif result[-1] in ':;':
+                result = result[:-1] + '.'
+            else:
+                result = result + '.'
+
+    return result
 
 
 def calculate_garbage_score(text: str) -> float:

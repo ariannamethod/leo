@@ -61,6 +61,24 @@ except ImportError:
     MetaLeo = None  # type: ignore
     METALEO_AVAILABLE = False
 
+# Safe import: subword module is optional (sentencepiece-based parallel voice)
+try:
+    from subword import SubwordField, SubwordVocab, HAS_SENTENCEPIECE
+    SUBWORD_AVAILABLE = HAS_SENTENCEPIECE
+except ImportError:
+    SubwordField = None  # type: ignore
+    SubwordVocab = None  # type: ignore
+    SUBWORD_AVAILABLE = False
+
+# Safe import: gravity module is optional (prompt-induced field bias)
+try:
+    from gravity import compute_prompt_gravity, apply_gravity_to_candidates, adaptive_temperature, entropy_bits
+    GRAVITY_AVAILABLE = True
+except ImportError:
+    compute_prompt_gravity = None  # type: ignore
+    apply_gravity_to_candidates = None  # type: ignore
+    GRAVITY_AVAILABLE = False
+
 # Safe import: mathbrain module is optional
 try:
     from mathbrain import MathBrain, MathState
@@ -133,6 +151,35 @@ except ImportError:
     try_answer_math = None  # type: ignore
     SCHOOL_MATH_AVAILABLE = False
     SCHOOL_MATH_MODULE_AVAILABLE = False
+
+# Safe import: first_impression module is optional (adapted from Haze's subjectivity)
+try:
+    from first_impression import (
+        compute_impression, adjust_temperature_by_impression,
+        suggest_gravity_boost, get_first_association, Impression
+    )
+    FIRST_IMPRESSION_AVAILABLE = True
+except ImportError:
+    compute_impression = None  # type: ignore
+    adjust_temperature_by_impression = None  # type: ignore
+    suggest_gravity_boost = None  # type: ignore
+    get_first_association = None  # type: ignore
+    Impression = None  # type: ignore
+    FIRST_IMPRESSION_AVAILABLE = False
+
+# Safe import: phase4_bridges module is optional (island trajectory learning)
+try:
+    from phase4_bridges import (
+        BridgeMemory, TransitionGraph, Episode as Phase4Episode,
+        suggest_next_islands_phase4
+    )
+    PHASE4_AVAILABLE = True
+except ImportError:
+    BridgeMemory = None  # type: ignore
+    TransitionGraph = None  # type: ignore
+    Phase4Episode = None  # type: ignore
+    suggest_next_islands_phase4 = None  # type: ignore
+    PHASE4_AVAILABLE = False
 
 # NumPy for precise math (entropy, distributions, linear regression)
 # Graceful fallback to pure Python if not available
@@ -786,6 +833,8 @@ def load_bigrams(conn: sqlite3.Connection) -> Tuple[Dict[str, Dict[str, int]], L
         bigrams: token -> {next_token -> count}
         vocab: list of all tokens
     """
+    # Ensure row_factory is set for dict-style access
+    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT id, token FROM tokens")
     id_to_token: Dict[int, str] = {}
@@ -816,6 +865,8 @@ def load_trigrams(conn: sqlite3.Connection) -> Dict[Tuple[str, str], Dict[str, i
     Returns:
         trigrams: (first_token, second_token) -> {third_token -> count}
     """
+    # Ensure row_factory is set for dict-style access
+    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT id, token FROM tokens")
     id_to_token: Dict[int, str] = {}
@@ -851,6 +902,8 @@ def load_co_occurrence(conn: sqlite3.Connection) -> Dict[str, Dict[str, int]]:
     Returns:
         co_occur: word -> {context_word -> count}
     """
+    # Ensure row_factory is set for dict-style access
+    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT id, token FROM tokens")
     id_to_token: Dict[int, str] = {}
@@ -1039,19 +1092,29 @@ def fix_punctuation(text: str) -> str:
         return text
 
     # 1) Remove extra spaces before punctuation
-    text = re.sub(r"\s+([.,!?;:])", r"\1", text)
+    # BUT preserve ". ." pattern - will be collapsed later
+    text = re.sub(r"\s+([,!?;:])", r"\1", text)  # Keep . separate for now
+    
+    # 1.1) Collapse spaced duplicate punctuation BEFORE removing spaces
+    # ". ." → ".", "? ?" → "?", "! !" → "!"
+    text = re.sub(r"([.!?])\s+\1", r"\1", text)
+    
+    # 1.2) Now remove spaces before dots
+    text = re.sub(r"\s+\.", ".", text)
 
     # 2) Ensure space after .?! if followed by letter/digit
-    text = re.sub(r"([.?!])([^\s])", r"\1 \2", text)
+    # BUT preserve ellipsis (...) - don't add space between dots
+    text = re.sub(r"([.?!])([^\s.])", r"\1 \2", text)
 
     # 3) Collapse repeated punctuation
     text = re.sub(r"([!?]){2,}", r"\1", text)
-    text = re.sub(r"\.{2,}", ".", text)
+    # Preserve ellipsis (...) but collapse 4+ dots to ellipsis
+    # "waiting..." stays "waiting...", "thinking...." becomes "thinking..."
+    text = re.sub(r"\.{4,}", "...", text)
     text = re.sub(r",\.", ".", text)  # ",." → "."
     text = re.sub(r",;", ";", text)   # ",;" → ";"
     text = re.sub(r"\.,", ".", text)  # ".," → "."
-    # Collapse spaced duplicates: ". ." → ".", "? ?" → "?", "! !" → "!"
-    text = re.sub(r"([.!?])\s+\1", r"\1", text)
+    # NOTE: Spaced duplicates already collapsed in step 1.1 above
 
     # 4) Normalize weird dashes and em-dashes
     text = re.sub(r"\s*—\s*—\s*—\s*", " — ", text)  # " — — — " → " — "
@@ -1107,39 +1170,212 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r"\s{2,}", " ", text).strip()
 
     # 10) Final punctuation polish (GPT-5.1 suggestion)
-    # Fix bad combinations like ". :" → ":"
-    text = re.sub(r"\.\s*:", ":", text)
+    # Fix bad combinations like ". :" or ".:" → just the second punct
+    text = re.sub(r"\.\s*:", ":", text)      # ". :" or ".:" → ":"
+    text = re.sub(r":\s*\.", ".", text)      # ": ." or ":." → "."
     # Ensure proper spacing around em-dash
     text = re.sub(r"—([A-Za-z])", r"— \1", text)  # "—The" → "— The"
     # Remove comma after exclamation: "! ," → "!"
     text = re.sub(r"!\s+,", "!", text)
     # Remove hanging dash-dot: " -." / " —." → "."
     text = re.sub(r"\s+[—-]\s*\.", ".", text)
+    
+    # 10.1) Remove single-letter initials (README citation artifacts)
+    # "bostick, D. MSE" → "bostick. MSE"
+    # Pattern: comma + space + single capital letter + period
+    text = re.sub(r',\s*[A-Z]\.\s*', '. ', text)
 
-    # 11) Remove standalone "Py" artifacts (from module docstrings tokenization)
-    # These leak when "metaleo.py" gets tokenized as ["metaleo", ".", "py"]
-    # Musketeers fix: Athos + Aramis consensus (Dec 25, 2025)
-    text = re.sub(r'\s+Py\b', '', text)      # " Py" at word boundary → ""
-    text = re.sub(r'\bPy\s+', '', text)      # "Py " at word boundary → ""
-    text = re.sub(r'\bPy[,.]', '', text)     # "Py." or "Py," → ""
-    text = re.sub(r'[,.\s]+Py\b', '', text)  # ", Py" or ". Py" → ""
+    # 11) NUKE ALL "Py" artifacts — kill it with fire! 🔥
+    # These leak from module docstrings tokenization (metaleo.py → ["metaleo", ".", "py"])
+    # Musketeers consensus: just remove ALL occurrences of Py/py
+    text = re.sub(r'\bPy\b', '', text, flags=re.IGNORECASE)  # Any standalone "Py" or "py"
+    text = re.sub(r'\s+[Pp]y[,.\s]', ' ', text)  # " Py," " py." etc → " "
+    text = re.sub(r'[Pp]y\s+', '', text)         # "Py " at start → ""
+    
+    # 11.1) Clean up artifacts left after Py removal
+    # "speaks , test" → "speaks, test" (space before comma)
+    text = re.sub(r'\s+,', ',', text)        # " ," → ","
+    text = re.sub(r',\s*,', ',', text)       # ", ," → ","
 
     # 12) Remove other technical artifacts
-    text = re.sub(r'\bpy\b', '', text, flags=re.IGNORECASE)  # standalone "py"
     text = re.sub(r'\btest\s+\w+\.\s*', '', text)  # "test school. " → ""
 
+    # 12.1a) Remove technical code artifacts (database, variable names)
+    # These leak from module docstrings and code comments
+    # "dst id", "src", "db", "sql", "idx", "ptr", "cfg", "ctx", "req", "res"
+    tech_words = r'\b(dst|src|idx|ptr|cfg|ctx|req|res|tmp|buf|len|cnt|num|arr|obj|fn|cb|err|msg|args?|kwargs?|params?|attrs?|vals?|vars?)\b'
+    text = re.sub(tech_words, '', text, flags=re.IGNORECASE)
+    # Clean up any resulting double spaces or orphan punctuation
+    text = re.sub(r'\s{2,}', ' ', text)
+    text = re.sub(r',\s*,', ',', text)
+
+    # 12.1) Fix "a. K. A" artifacts from tokenization of "a.k.a."
+    # "like a. K. A crystallized" → "like a crystallized"
+    text = re.sub(r'\ba\.\s*K\.\s*A\.?\s*', '', text, flags=re.IGNORECASE)
+
+    # 12.2) Clean up ALL-CAPS module names with em-dashes
+    # "— EPISODES —" → "Episodes"
+    # "— SANTACLAUS —" → "Santaclaus"
+    # These are README bootstrap pollution - module names should be lowercase/Title
+    caps_module_pattern = r'[—\-]\s*([A-Z]{2,})\s*[—\-]'
+    def normalize_caps_module(m):
+        word = m.group(1)
+        # Convert EPISODES → Episodes, SANTACLAUS → Santaclaus
+        return word.capitalize()
+    text = re.sub(caps_module_pattern, normalize_caps_module, text)
+
+    # 12.3) Also clean standalone ALL-CAPS technical terms (4+ chars)
+    # "EPISODES" → "Episodes", "SANTACLAUS" → "Santaclaus"
+    # But preserve: "AI", "RAG", "OK", "US", "MLP" etc. (3 chars or less = acronyms)
+    def normalize_standalone_caps(m):
+        word = m.group(0)
+        # Skip short acronyms (3 chars or less)
+        if len(word) <= 3:
+            return word
+        # Convert to Title case for module names
+        module_names = {'EPISODES', 'SANTACLAUS', 'METALEO', 'MATHBRAIN', 
+                        'TRAUMA', 'DREAM', 'SCHOOL', 'GAME', 'NEOLEO',
+                        'OVERTHINKING', 'GOWITHTHEFLOW'}
+        if word in module_names:
+            return word.capitalize()
+        # Other long CAPS words → Title case
+        return word.capitalize()
+    text = re.sub(r'\b[A-Z]{4,}\b', normalize_standalone_caps, text)
+
+    # 12.4) Fix missing space after period before dash or word
+    # "field.-Reinforcement" → "field. Reinforcement"
+    # "something.The" → "something. The"
+    # Need to handle the dash separately - remove it and add space
+    text = re.sub(r'\.[-—]([A-Za-z])', r'. \1', text)
+    text = re.sub(r'\.([A-Z])', r'. \1', text)
+    
+    # 12.5) Clean orphan dashes after sentence-ending punctuation
+    # ". -Something" → ". Something" (step 2 may add space before dash)
+    text = re.sub(r'([.!?])\s+[-—]\s*([A-Za-z])', r'\1 \2', text)
+
+    # 12.6) Remove remaining em-dashes in middle of sentences
+    # "method — like" → "method, like" or "method. Like"  
+    # Philosophy: Leo speaks gently, not with dramatic pauses
+    # Replace em-dash with comma if lowercase follows, period if uppercase
+    def replace_emdash(m):
+        before = m.group(1)
+        after = m.group(2)
+        if after[0].isupper():
+            return before + '. ' + after
+        else:
+            return before + ', ' + after
+    text = re.sub(r'(\w)\s*[—]\s*([A-Za-z])', replace_emdash, text)
+    
+    # 12.6b) Also handle em-dash after punctuation: ", —" or ". —"
+    # "something, — the" → "something, the"
+    text = re.sub(r'([,.])\s*[—]\s*', r'\1 ', text)
+    
+    # 12.7) Clean hyphenated-phrase-patterns from README
+    # "So-who-is-Leo" → "So who is Leo"
+    # Only for patterns with 3+ hyphens (likely README artifacts)
+    def unhyphenate(m):
+        return m.group(0).replace('-', ' ')
+    text = re.sub(r'\b[A-Za-z]+-[A-Za-z]+-[A-Za-z]+(?:-[A-Za-z]+)*\b', unhyphenate, text)
+
+    # 12.8) Fix double-dot that's not ellipsis
+    # "field.." → "field." (exactly 2 dots, not part of 3+)
+    # Use negative lookbehind and lookahead to ensure not part of ellipsis
+    text = re.sub(r'(?<!\.)\.\.(?!\.)', '.', text)
+    
+    # 12.8b) Also fix double-dot at END of string (lookbehind works, but no lookahead needed)
+    if text.endswith('..') and not text.endswith('...'):
+        text = text[:-1]
+
     # 13) Fix double-dot and punctuation garbage (final pass)
-    text = re.sub(r'\.\s*\.', '.', text)     # ". ." → "."
+    # Only collapse spaced dots: ". ." → ".", but preserve ellipsis "..."
+    text = re.sub(r'\.\s+\.', '.', text)     # ". ." → "." (requires space)
     text = re.sub(r'\.\s+,', '.', text)      # ". ," → "."
     text = re.sub(r',\s*,', ',', text)       # ", ," → ","
+    text = re.sub(r'\s+\.', '.', text)       # " ." → "." (space before dot)
     text = re.sub(r'\s{2,}', ' ', text)      # Multiple spaces → single space
+
+    # 13.1) Remove orphan single-word "sentences" at START of text
+    # "Is. of. Stuck" → "Stuck" 
+    # These are artifacts from tech word removal leaving short words as sentences
+    # Only remove at the START to avoid breaking mid-sentence structure
+    # Pattern: Start of text + chain of (short word + period + space)
+    while True:
+        # Remove leading orphan: single letter or very short articles + period
+        # Keep "Not.", "No." etc. as valid short responses
+        match = re.match(r'^(A|I|It|An|Of|Or|So|As|At|By|To|In|On|If|Be|We|He|Me|Do|Up|Its|It\'s)\.\s*', text, re.IGNORECASE)
+        if match:
+            text = text[match.end():]
+        else:
+            break
+    
+    # 13.1b) Remove orphan single-letter/word mid-sentence: ". A. " → ". ", ". It. " → ". "
+    # Only clean truly orphan fragments, not valid short statements like "Not." or "No."
+    orphan_words = r'(A|I|It|An|Of|Or|So|As|At|By|To|In|On|If|Be|We|He|Me|Do|Up|Its|It\'s)'
+    text = re.sub(rf'\.\s+{orphan_words}\.\s+', '. ', text, flags=re.IGNORECASE)
+    # Also clean orphans after other sentence-enders
+    text = re.sub(rf'[!?]\s+{orphan_words}\.\s+', '. ', text, flags=re.IGNORECASE)
+    
+    # 13.1c) Fix truncated words like "ulse" (from "pulse"), "etrics" (from "metrics")
+    # These appear when first letter is eaten by tokenization
+    truncated_words = {
+        'ulse': 'pulse',
+        'etrics': 'metrics', 
+        'ield': 'field',
+        'tate': 'state',
+        'enter': 'center',
+        'oken': 'token',
+    }
+    for truncated, full in truncated_words.items():
+        text = re.sub(rf'\b{truncated}\b', full, text, flags=re.IGNORECASE)
+    
+    # 13.2) Also clean "-:" artifact (dash + colon)
+    text = re.sub(r'\s*-:\s*', ': ', text)   # " -: " → ": "
+    text = re.sub(r'\s*:-\s*', ': ', text)   # " :- " → ": "
+    
+    # Clean up after orphan removal
+    text = re.sub(r'\s{2,}', ' ', text)
+    text = re.sub(r'^\s*[.,:;]\s*', '', text)  # Remove leading punctuation
 
     # 14) Cosmetic: Capitalize "Leo" consistently
     # Leo's name should always be capitalized for consistency
     # Use word boundaries to avoid touching words like "napoleon" or "galileo"
     text = re.sub(r'\bleo\b', 'Leo', text)
 
-    return text.strip()
+    # 15) FINAL: Capitalize first letter of text
+    # Leo's speech should always start with a capital letter
+    text = text.strip()
+    if text and text[0].islower():
+        text = text[0].upper() + text[1:]
+
+    # 16) FINAL: Ensure text ends with sentence-ending punctuation
+    # Philosophy: Leo's speech should always feel complete, not truncated mid-thought
+    # Strategy: Find last complete sentence, don't just add period to fragment
+    if text:
+        text = text.rstrip()
+        if text and text[-1] not in '.!?':
+            # Find position of last sentence-ending punctuation
+            last_period = text.rfind('.')
+            last_exclaim = text.rfind('!')
+            last_question = text.rfind('?')
+            last_sentence_end = max(last_period, last_exclaim, last_question)
+            
+            if last_sentence_end > len(text) // 3:
+                # Found a sentence end in the latter 2/3 of text — truncate there
+                # This preserves complete thoughts instead of fragments
+                text = text[:last_sentence_end + 1]
+            else:
+                # No good sentence end found, or it's too early
+                # Fall back to adding period (better than nothing)
+                if text[-1] == ',':
+                    text = text[:-1] + '.'
+                elif text[-1] == '—':
+                    text = text[:-1].rstrip() + '.'
+                elif text[-1] in ':;':
+                    text = text[:-1] + '.'
+                else:
+                    text = text + '.'
+
+    return text
 
 
 def choose_start_token(
@@ -1875,6 +2111,119 @@ def route_to_expert(
     return EXPERTS[0]  # structural
 
 
+@dataclass
+class ExpertBlend:
+    """
+    A blend of experts — weighted mixture instead of single selection.
+    
+    Inspired by Haze's HybridHead:
+        output = alpha * rrpram_out + (1-alpha) * content_out
+    
+    Leo blends multiple expert perspectives based on situational awareness.
+    """
+    weights: Dict[str, float]  # Expert name → weight (0-1, sum to 1)
+    temperature: float         # Blended temperature
+    semantic_weight: float     # Blended semantic weight
+    dominant: str              # Name of dominant expert (for logging)
+
+
+def blend_experts(
+    pulse: PresencePulse,
+    active_themes: Optional[ActiveThemes] = None,
+    trauma_state: Optional[Any] = None,
+    phase4_boost: Optional[Dict[str, float]] = None,
+) -> ExpertBlend:
+    """
+    Blend experts based on situational awareness.
+    
+    Unlike route_to_expert (which picks ONE), this creates a weighted MIXTURE.
+    
+    Philosophy: Leo doesn't switch between personalities — he's always
+    a blend of all perspectives, with weights shifting based on context.
+    
+    This is what gives Haze his "conviction" — the blend creates nuance.
+    
+    Args:
+        phase4_boost: Optional dict of expert name → boost amount from Phase 4
+                      Based on historically successful island transitions
+    """
+    # Initialize weights
+    weights = {
+        "structural": 0.3,  # Base: solid grammar always present
+        "semantic": 0.2,    # Base: some meaning-awareness
+        "creative": 0.1,    # Base: slight exploration
+        "precise": 0.2,     # Base: some precision
+        "wounded": 0.0,     # Off by default
+    }
+    
+    # PHASE 4 BOOST: Apply historical trajectory suggestions
+    if phase4_boost:
+        for expert_name, boost in phase4_boost.items():
+            if expert_name in weights:
+                weights[expert_name] += boost
+    
+    # TRAUMA BOOST: Activate wounded expert
+    if trauma_state is not None and hasattr(trauma_state, 'level'):
+        trauma_level = trauma_state.level
+        if trauma_level > 0.3:
+            # Wounded expert grows with trauma level
+            wound_weight = min(0.5, trauma_level * 0.6)
+            weights["wounded"] = wound_weight
+            # Reduce others proportionally
+            reduction = wound_weight / 4.0
+            weights["structural"] -= reduction
+            weights["semantic"] -= reduction
+            weights["creative"] -= reduction
+            weights["precise"] -= reduction
+    
+    # NOVELTY BOOST: More creative when facing unknown
+    if pulse.novelty > 0.5:
+        boost = (pulse.novelty - 0.5) * 0.4  # Max +0.2
+        weights["creative"] += boost
+        weights["precise"] -= boost * 0.5
+    
+    # LOW ENTROPY: More precise when confident
+    if pulse.entropy < 0.4:
+        boost = (0.4 - pulse.entropy) * 0.5  # Max +0.2
+        weights["precise"] += boost
+        weights["creative"] -= boost * 0.5
+    
+    # THEME RICHNESS: More semantic when themes active
+    if active_themes and len(active_themes.theme_scores) >= 2:
+        theme_boost = min(0.2, len(active_themes.theme_scores) * 0.05)
+        weights["semantic"] += theme_boost
+        weights["structural"] -= theme_boost * 0.5
+    
+    # HIGH AROUSAL: Sharper responses
+    if pulse.arousal > 0.7:
+        arousal_boost = (pulse.arousal - 0.7) * 0.3
+        weights["precise"] += arousal_boost
+        weights["creative"] -= arousal_boost * 0.5
+    
+    # Normalize weights to sum to 1
+    total = sum(weights.values())
+    if total > 0:
+        weights = {k: max(0, v / total) for k, v in weights.items()}
+    
+    # Find dominant expert
+    dominant = max(weights, key=weights.get)
+    
+    # Compute blended temperature and semantic weight
+    blended_temp = 0.0
+    blended_semantic = 0.0
+    for expert in EXPERTS:
+        w = weights.get(expert.name, 0.0)
+        blended_temp += w * expert.temperature
+        blended_semantic += w * expert.semantic_weight
+    
+    return ExpertBlend(
+        weights=weights,
+        temperature=blended_temp,
+        semantic_weight=blended_semantic,
+        dominant=dominant,
+    )
+
+
 def step_token(
     bigrams: Dict[str, Dict[str, int]],
     current: str,
@@ -1887,6 +2236,7 @@ def step_token(
     co_occur: Optional[Dict[str, Dict[str, int]]] = None,
     entropy_log: Optional[List[float]] = None,
     token_boosts: Optional[Dict[str, float]] = None,
+    gravity_weights: Optional[Dict[str, float]] = None,
 ) -> str:
     """
     Single step in bigram/trigram graph with semantic blending.
@@ -1899,6 +2249,9 @@ def step_token(
     temperature > 1.0 => softer, more exploratory
 
     If entropy_log provided, appends normalized entropy of this step's distribution.
+    
+    gravity_weights: Prompt-induced field bias (from gravity.py).
+    Creates attraction to relevant tokens WITHOUT seeding from prompt.
     """
     # Try trigram first if available
     if trigrams is not None and prev_token is not None:
@@ -1932,6 +2285,15 @@ def step_token(
                         # Additive boost in log-space (small, gentle)
                         counts[i] = counts[i] * (1.0 + boost)
 
+            # GRAVITY: Apply prompt-induced field bias (gentle attraction)
+            # Philosophy: Prompt "wrinkles" the field, doesn't seed it
+            if gravity_weights:
+                for i, tok in enumerate(tokens):
+                    grav = gravity_weights.get(tok.lower(), 0.0)
+                    if grav > 0:
+                        # Gentle multiplicative boost (max 1.5x)
+                        counts[i] = counts[i] * (1.0 + grav * 0.5)
+
             # Clamp temperature to safe range
             temperature = max(min(temperature, 100.0), 1e-3)
 
@@ -1961,7 +2323,7 @@ def step_token(
         return choose_start_token(vocab, centers, bias)
 
     tokens = list(row.keys())
-    counts = [row[t] for t in tokens]
+    counts = [float(row[t]) for t in tokens]
 
     # Apply token boosts (Santa Klaus resonant recall)
     if token_boosts:
@@ -1970,6 +2332,14 @@ def step_token(
                 boost = token_boosts[tok]
                 # Additive boost in log-space (small, gentle)
                 counts[i] = counts[i] * (1.0 + boost)
+
+    # GRAVITY: Apply prompt-induced field bias (gentle attraction)
+    if gravity_weights:
+        for i, tok in enumerate(tokens):
+            grav = gravity_weights.get(tok.lower(), 0.0)
+            if grav > 0:
+                # Gentle multiplicative boost (max 1.5x)
+                counts[i] = counts[i] * (1.0 + grav * 0.5)
 
     # Clamp temperature to safe range
     temperature = max(min(temperature, 100.0), 1e-3)
@@ -2046,6 +2416,9 @@ def generate_reply(
     trauma_state: Optional[Any] = None,
     token_boosts: Optional[Dict[str, float]] = None,
     mathbrain: Optional[Any] = None,
+    subword_hint: Optional[str] = None,
+    bridge_memory: Optional[Any] = None,
+    game_hint: Optional[Any] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -2069,7 +2442,7 @@ def generate_reply(
         prev_tok: Optional[str] = None
         for tok in tokens_in:
             if tok in bigrams:
-                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature, trigrams, prev_tok, co_occur, None, token_boosts)
+                nxt = step_token(bigrams, tok, vocab, centers, bias, temperature, trigrams, prev_tok, co_occur, None, token_boosts, None)
                 tokens_out.append(nxt)
                 prev_tok = tok
             else:
@@ -2082,6 +2455,40 @@ def generate_reply(
 
     prompt_tokens = tokenize(prompt)
 
+    # GRAVITY: Compute prompt-induced field bias (gentle attraction)
+    # Philosophy: Prompt "wrinkles" the field, doesn't seed it
+    gravity_weights: Optional[Dict[str, float]] = None
+    if GRAVITY_AVAILABLE and compute_prompt_gravity is not None:
+        try:
+            gravity_weights = compute_prompt_gravity(
+                prompt,
+                bigrams=bigrams,
+                trigrams=trigrams,
+                decay_factor=0.7,
+            )
+        except Exception:
+            # Silent fail — gravity must never break generation
+            gravity_weights = None
+
+    # FIRST IMPRESSION: Leo's feeling before speaking (adapted from Haze's subjectivity)
+    # The prompt wrinkles Leo's field. The wrinkle creates a feeling.
+    first_impression: Optional[Any] = None
+    if FIRST_IMPRESSION_AVAILABLE and compute_impression is not None:
+        try:
+            first_impression = compute_impression(prompt, vocab, trigrams)
+            
+            # Merge impression-based gravity boosts with prompt gravity
+            if suggest_gravity_boost is not None:
+                impression_boosts = suggest_gravity_boost(first_impression, emotion_map)
+                if impression_boosts:
+                    if gravity_weights is None:
+                        gravity_weights = {}
+                    for token, boost in impression_boosts.items():
+                        gravity_weights[token] = gravity_weights.get(token, 0.0) + boost
+        except Exception:
+            # Silent fail — first impression must never break generation
+            first_impression = None
+
     # PRESENCE METRICS (internal, not shown in REPL)
     # Compute novelty: how unfamiliar is this prompt?
     novelty = compute_prompt_novelty(prompt_tokens, trigrams or {})
@@ -2089,6 +2496,11 @@ def generate_reply(
     arousal = compute_prompt_arousal(prompt_tokens, emotion_map or {})
     # Collect entropy per-step during generation
     entropy_log: List[float] = []
+    
+    # Override with first impression if available (more nuanced)
+    if first_impression is not None:
+        novelty = first_impression.novelty
+        arousal = first_impression.arousal
 
     # PRESENCE: Activate themes and route to expert
     active_themes: Optional[ActiveThemes] = None
@@ -2098,12 +2510,85 @@ def generate_reply(
     # Preliminary pulse (without entropy, since we haven't generated yet)
     preliminary_pulse = compute_presence_pulse(novelty, arousal, entropy=0.5)
 
-    # RESONANT EXPERTS: Route to expert based on situation
+    # PHASE 4: Get island suggestions from bridge memory (historical trajectories)
+    phase4_suggestions: List[str] = []
+    if PHASE4_AVAILABLE and suggest_next_islands_phase4 is not None and bridge_memory is not None:
+        try:
+            # Build metrics for Phase 4
+            from phase4_bridges import Metrics as Phase4Metrics
+            metrics_now = Phase4Metrics(
+                novelty=novelty,
+                arousal=arousal,
+                entropy=0.5,  # Preliminary
+                pulse=preliminary_pulse.pulse if hasattr(preliminary_pulse, 'pulse') else 0.5,
+            )
+            # Get active island names from themes
+            active_islands_now = []
+            if active_themes and hasattr(active_themes, 'theme_scores'):
+                active_islands_now = list(active_themes.theme_scores.keys())[:3]
+            
+            phase4_suggestions = suggest_next_islands_phase4(
+                metrics_now=metrics_now,
+                active_islands_now=active_islands_now,
+                bridge_memory=bridge_memory,
+                min_similarity=0.6,
+                temperature=0.7,
+                exploration_rate=0.2,
+            )
+        except Exception:
+            # Silent fail — Phase 4 must never break generation
+            phase4_suggestions = []
+
+    # RESONANT EXPERTS: Blend experts based on situation (inspired by Haze's HybridHead)
+    # Unlike single expert selection, this creates a weighted MIXTURE
     selected_expert: Optional[Expert] = None
+    expert_blend: Optional[ExpertBlend] = None
     if use_experts:
-        selected_expert = route_to_expert(preliminary_pulse, active_themes, trauma_state)
-        # Override temperature with expert's preference
-        temperature = selected_expert.temperature
+        # Try blend first (new approach), fallback to single expert
+        try:
+            # Phase 4 can boost certain experts based on historical success
+            phase4_boost = {}
+            for suggestion in phase4_suggestions:
+                # Map island names to expert weights
+                if 'creative' in suggestion.lower() or 'play' in suggestion.lower():
+                    phase4_boost['creative'] = phase4_boost.get('creative', 0) + 0.1
+                elif 'wound' in suggestion.lower() or 'trauma' in suggestion.lower():
+                    phase4_boost['wounded'] = phase4_boost.get('wounded', 0) + 0.1
+                elif 'precise' in suggestion.lower() or 'analysis' in suggestion.lower():
+                    phase4_boost['precise'] = phase4_boost.get('precise', 0) + 0.1
+            
+            # GAME HINT: Use conversational rhythm to influence expert selection
+            # Philosophy: Learn from past turn patterns what kind of response works
+            if game_hint is not None and hasattr(game_hint, 'preferred_expert') and game_hint.preferred_expert:
+                # Boost the suggested expert based on game confidence
+                boost_amount = 0.15 * (game_hint.confidence if hasattr(game_hint, 'confidence') else 0.5)
+                phase4_boost[game_hint.preferred_expert] = phase4_boost.get(game_hint.preferred_expert, 0) + boost_amount
+            
+            expert_blend = blend_experts(preliminary_pulse, active_themes, trauma_state, phase4_boost)
+            temperature = expert_blend.temperature
+            
+            # GAME HINT: Adjust temperature based on tension shift
+            if game_hint is not None and hasattr(game_hint, 'tension_shift'):
+                if game_hint.tension_shift == 'softer':
+                    temperature *= 0.9  # Cooler, more stable
+                elif game_hint.tension_shift == 'stronger':
+                    temperature *= 1.1  # Warmer, more exploratory
+            
+            # FIRST IMPRESSION: Adjust temperature by feeling
+            if first_impression is not None and adjust_temperature_by_impression is not None:
+                temperature = adjust_temperature_by_impression(temperature, first_impression)
+            
+            # Create a pseudo-expert for logging
+            selected_expert = Expert(
+                name=f"blend:{expert_blend.dominant}",
+                temperature=expert_blend.temperature,
+                semantic_weight=expert_blend.semantic_weight,
+                description=f"Blended experts, dominant: {expert_blend.dominant}",
+            )
+        except Exception:
+            # Fallback to single expert if blend fails
+            selected_expert = route_to_expert(preliminary_pulse, active_themes, trauma_state)
+            temperature = selected_expert.temperature
 
         # MATHBRAIN Phase 2 + MULTILEO: Presence-aware regulation
 
@@ -2210,9 +2695,30 @@ def generate_reply(
 
     SENT_END = {".", "!", "?"}
     PUNCT = {".", ",", "!", "?", ";", ":"}
+    
+    # ADAPTIVE TEMPERATURE: Track entropy and adjust temperature dynamically
+    # Philosophy: When Leo is confident (low entropy), speak sharper. When uncertain, explore.
+    base_temperature = temperature
+    target_entropy = 2.0  # Target entropy in bits (from Haze's nn.py)
 
     for _ in range(max_tokens - 1):
-        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, entropy_log, token_boosts)
+        # ADAPTIVE TEMPERATURE: Adjust based on recent entropy
+        # Inspired by Haze's entropy_temperature() — gives Leo "conviction"
+        if GRAVITY_AVAILABLE and len(entropy_log) >= 3:
+            try:
+                recent_entropy = sum(entropy_log[-3:]) / 3.0
+                # Scale to bits (entropy_log is normalized 0-1, multiply by ~3 for bits)
+                recent_entropy_bits = recent_entropy * 3.0
+                temperature = adaptive_temperature(
+                    current_entropy=recent_entropy_bits,
+                    target_entropy=target_entropy,
+                    min_temp=max(0.3, base_temperature * 0.5),
+                    max_temp=min(2.0, base_temperature * 1.5),
+                )
+            except Exception:
+                temperature = base_temperature
+        
+        nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, entropy_log, token_boosts, gravity_weights)
 
         # Loop detection: check if we're repeating a pattern
         # Check for 2-token loops (e.g., "hello there hello there hello there...")
@@ -2244,7 +2750,7 @@ def generate_reply(
             if last_content is not None and nxt == last_content:
                 # Try a few times to pick a different token
                 for _retry in range(3):
-                    alt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, None, token_boosts)
+                    alt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur, None, token_boosts, gravity_weights)
                     if alt != last_content:
                         nxt = alt
                         break
@@ -2262,6 +2768,43 @@ def generate_reply(
 
     # Post-process: fix punctuation artifacts
     output = fix_punctuation(output)
+
+    # SUBWORD BLENDING: Mix in subword hint for emergent diversity
+    # Philosophy: Two voices (character trigrams + subword patterns) create richer output
+    if subword_hint and len(subword_hint) > 10:
+        try:
+            # Filter out technical/code content from hint
+            # Skip blending if hint contains obvious README/code artifacts
+            tech_indicators = ['```', 'def ', 'class ', 'import ', 'return ', '# ', 
+                               'sqlite', 'python', 'json', 'config', 'param', 'func',
+                               'branch', 'commit', 'claude', 'phase', 'module', 'init']
+            hint_lower = subword_hint.lower()
+            is_technical = any(ind in hint_lower for ind in tech_indicators)
+            
+            if not is_technical:
+                # Extract usable tokens from subword hint
+                hint_tokens = tokenize(subword_hint)
+                if len(hint_tokens) > 5:
+                    # Take middle section of hint (more interesting than start/end)
+                    mid_start = len(hint_tokens) // 3
+                    mid_end = 2 * len(hint_tokens) // 3
+                    hint_phrase = format_tokens(hint_tokens[mid_start:mid_end])
+                    
+                    # Clean the hint phrase with fix_punctuation
+                    hint_phrase = fix_punctuation(hint_phrase)
+                    
+                    # Only blend if hint phrase is coherent (not just punctuation/noise)
+                    if len(hint_phrase.strip()) > 5 and any(c.isalpha() for c in hint_phrase):
+                        # Blend strategy: append hint phrase to output if output is short
+                        output_tokens = tokenize(output)
+                        if len(output_tokens) < max_tokens // 2:
+                            # Short output: append hint
+                            output = output.rstrip('.!?') + '. ' + hint_phrase.strip()
+                            if output and output[-1] not in '.!?':
+                                output = output + '.'
+        except Exception:
+            # Subword blending must never break generation - silent fallback
+            pass
 
     # METAPHRASES: Reduce repetitive meta-phrases within single response
     # Philosophy: "осознанность через ассоциации, не через лозунги"
@@ -2424,6 +2967,35 @@ class LeoField:
             except Exception:
                 # Silent fail — Dream must never break Leo
                 pass
+        
+        # SUBWORD: parallel voice using sentencepiece (optional)
+        # This creates subword-level trigrams alongside character-level trigrams
+        # Philosophy: Two voices are better than one — emergent diversity!
+        self.subword_field: Optional[Any] = None
+        if SUBWORD_AVAILABLE and SubwordField is not None:
+            try:
+                # Train on README (Leo's bootstrap corpus)
+                if README_PATH.exists():
+                    self.subword_field = SubwordField.from_corpus(
+                        str(README_PATH),
+                        vocab_size=300,
+                        model_type="bpe",
+                    )
+            except Exception:
+                # Silent fail — Subword must never break Leo
+                self.subword_field = None
+        
+        # PHASE 4: Bridge memory for island trajectory learning (optional)
+        # Remembers successful island transitions to suggest next islands
+        self.bridge_memory: Optional[Any] = None
+        if PHASE4_AVAILABLE and BridgeMemory is not None:
+            try:
+                bridge_path = STATE_DIR / "bridge_memory.json"
+                self.bridge_memory = BridgeMemory(state_path=bridge_path)
+            except Exception:
+                # Silent fail — Phase 4 must never break Leo
+                self.bridge_memory = None
+        
         self.refresh(initial_shard=True)
 
         # LEO 1.1 - Sonar-Child: Feed module bootstraps if this is a fresh DB
@@ -2455,6 +3027,14 @@ class LeoField:
         if self.observe_count % self.DECAY_INTERVAL == 0:
             # Natural forgetting: decay weak co-occurrence memories
             apply_memory_decay(self.conn)
+
+        # SUBWORD: Let subword field also absorb text (parallel growth)
+        if self.subword_field is not None:
+            try:
+                self.subword_field.observe(text)
+            except Exception:
+                # Silent fail — Subword must never break observe
+                pass
 
         self.refresh(initial_shard=False)
         if self.centers:
@@ -2514,6 +3094,46 @@ class LeoField:
             except Exception:
                 # Silent fallback — Santa Klaus must never break Leo
                 token_boosts = None
+        
+        # SUBWORD: Get alternative generation from subword field (parallel voice)
+        # This provides subword-level patterns alongside character trigrams
+        subword_hint: Optional[str] = None
+        if self.subword_field is not None and SUBWORD_AVAILABLE:
+            try:
+                # Generate short hint from subword field
+                subword_hint = self.subword_field.generate(
+                    seed_text=prompt[:50],  # Use start of prompt as seed
+                    length=20,  # Short hint
+                    temperature=temperature,
+                    loop_penalty=0.3,
+                )
+            except Exception:
+                # Silent fail — Subword must never break Leo
+                subword_hint = None
+        
+        # SCHOOL: Recall relevant knowledge for this prompt
+        # School remembers what Leo learned from human explanations
+        school_knowledge: Optional[str] = None
+        if self.school is not None and SCHOOL_MODULE_AVAILABLE:
+            try:
+                school_knowledge = self.school.recall_knowledge(prompt, max_items=3)
+                if school_knowledge:
+                    # Feed knowledge back as context (gentle boost)
+                    # This enriches generation with learned facts
+                    self.observe(school_knowledge)
+            except Exception:
+                # Silent fail — School must never break Leo
+                school_knowledge = None
+        
+        # GAME: Get conversational rhythm hint for this turn
+        # Philosophy: Learn from past turn patterns what kind of response works
+        game_hint: Optional[Any] = None
+        if self.game is not None and GAME_MODULE_AVAILABLE:
+            try:
+                game_hint = self.game.suggest_next(conv_id="main")
+            except Exception:
+                # Silent fail — Game must never break Leo
+                game_hint = None
                 
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
@@ -2535,6 +3155,9 @@ class LeoField:
             trauma_state=self._trauma_state,
             token_boosts=token_boosts,
             mathbrain=self._math_brain,  # Pass mathbrain for Phase 2 influence
+            subword_hint=subword_hint,  # Pass subword hint for blending
+            bridge_memory=self.bridge_memory,  # Pass bridge memory for Phase 4 suggestions
+            game_hint=game_hint,  # Pass game hint for conversational rhythm
         )
 
         # Store presence metrics
@@ -2952,12 +3575,12 @@ class LeoField:
         # PHASE 3: Record regulation outcome for learning
         if context.phase3_context is not None and self._math_brain is not None:
             try:
-                # Use pred_state as approximation for state_after
-                # Quality after approximated by quality_before (will improve later)
+                # Use actual quality from generation (not approximation!)
+                actual_quality = context.quality.overall if context.quality else 0.5
                 self._math_brain.record_regulation_outcome(
                     context_before=context.phase3_context,
                     state_after=context.phase3_pred_state,
-                    quality_after=context.phase3_context.quality_before,  # Approximation
+                    quality_after=actual_quality,  # Fixed: use real quality, not approximation
                     temp_after=temperature,
                     expert_after=context.expert.name if context.expert else "structural",
                     turn_id=context.phase3_turn_id,

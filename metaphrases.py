@@ -102,7 +102,50 @@ DOCSTRING_BLACKLIST = [
     "Game is not for facts",
     "Dream is not for facts",  # Dream module docstring (Run #5 leak)
     # "It is a recursion of you",  # REMOVED: This is Leo's philosophical voice, not technical noise!
+    # Technical code artifacts (database, functions, variables) - Jan 2026
+    "silent fallback",
+    "graceful failure",
+    "corrupt DB",
+    "database operations",
+    "table creation",
+    "helper functions",
+    "from context",
+    "get fading themes",
+    "max theme limits",
+    "running averages",
+    "snapshot creation",
+    "bucketize",
+    "decode game",
 ]
+
+
+# Technical variable names that should be removed (standalone words)
+# These leak from code comments and docstrings
+TECH_WORD_BLACKLIST = [
+    "dst", "src", "idx", "ptr", "cfg", "ctx", "req", "res", 
+    "tmp", "buf", "len", "cnt", "num", "arr", "obj", "fn", 
+    "cb", "err", "msg", "kwargs", "params", "attrs", "vals",
+    # Additional tech artifacts from game/h2o/mathbrain modules
+    "gameturn", "numoptional", "neoleo", "mathbrain", "mathstate",
+    "flowtacker", "gameengine", "gamehint", "subwordfield",
+    "h2oruntime", "h2ocompiler", "h2oengine", "bridgememory",
+    "santa claus", "santaclaus", "santaklaus",
+    "justnumpy", "justnumoptional", "justsmall", "justnum",
+]
+
+
+def remove_tech_words(reply: str) -> str:
+    """Remove standalone technical variable names from reply."""
+    result = reply
+    for word in TECH_WORD_BLACKLIST:
+        # Remove standalone word (case insensitive)
+        # Use re.escape to prevent regex injection if word contains special chars
+        result = re.sub(rf'\b{re.escape(word)}\b', '', result, flags=re.IGNORECASE)
+    # Clean up artifacts
+    result = re.sub(r'\s{2,}', ' ', result)
+    result = re.sub(r',\s*,', ',', result)
+    result = re.sub(r'\s+([.!?,;:])', r'\1', result)
+    return result.strip()
 
 
 def remove_inner_monologue(reply: str) -> str:
@@ -220,6 +263,9 @@ def deduplicate_meta_phrases(
 
     # Stage 2: Remove docstring phrases (BLACKLIST - Desktop Claude)
     result = remove_docstring_phrases(result)
+
+    # Stage 2.5: Remove technical variable names (Jan 2026)
+    result = remove_tech_words(result)
 
     # Stage 3: Deduplicate remaining meta-phrases with variants (ORIGINAL)
 

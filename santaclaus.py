@@ -41,6 +41,12 @@ RECENCY_WINDOW_HOURS = 24.0
 # 0.5 = reduce quality by 50% if just used, decays over window
 RECENCY_PENALTY_STRENGTH = 0.5
 
+# DRUNK FACTOR (from Haze's PlayfulSanta)
+# Probability of picking a random snapshot instead of the best one
+# This adds creative unpredictability — sometimes Santa gets playful
+# and brings back something unexpected but still beautiful
+SILLY_FACTOR = 0.15  # 15% chance of "wrong" but creative recall
+
 # STICKY PHRASE PENALTY (December 25, 2025)
 # Known contaminated phrases from observer runs that leaked into field
 # These phrases get 90% penalty to prevent recall
@@ -81,6 +87,7 @@ class SantaKlaus:
         max_memories: int = 5,
         max_tokens_per_memory: int = 64,
         alpha: float = 0.3,
+        silly_factor: float = SILLY_FACTOR,
     ) -> None:
         """
         Args:
@@ -88,11 +95,17 @@ class SantaKlaus:
             max_memories: how many snapshots to recall per prompt
             max_tokens_per_memory: truncate recalled text before scoring
             alpha: overall strength of sampling bias
+            silly_factor: probability of random recall (creative sloppiness)
         """
         self.db_path = Path(db_path)
         self.max_memories = max_memories
         self.max_tokens_per_memory = max_tokens_per_memory
         self.alpha = alpha
+        self.silly_factor = silly_factor
+        
+        # Stats (like PlayfulSanta)
+        self.total_recalled = 0
+        self.silly_recalls = 0  # times Santa stumbled
         
     def recall(
         self,
@@ -233,9 +246,32 @@ class SantaKlaus:
             if not scored:
                 return None
                 
-            # Sort by score descending, take top max_memories
+            # Sort by score descending
             scored.sort(key=lambda x: x[0], reverse=True)
-            top_memories = scored[:self.max_memories]
+            
+            # DRUNK SELECTION (from Haze's PlayfulSanta)
+            # Sometimes Santa gets playful and picks a random snapshot
+            # This adds creative unpredictability
+            import random
+            
+            top_memories = []
+            is_silly = False
+            
+            for i in range(min(self.max_memories, len(scored))):
+                if random.random() < self.silly_factor and len(scored) > 1:
+                    # Santa gets playful and picks a random one! 🎁
+                    random_idx = random.randint(0, len(scored) - 1)
+                    top_memories.append(scored[random_idx])
+                    is_silly = True
+                else:
+                    # Sober moment: pick the best remaining
+                    if i < len(scored):
+                        top_memories.append(scored[i])
+            
+            if is_silly:
+                self.silly_recalls += 1
+            
+            self.total_recalled += len(top_memories)
             
             # Build recalled texts (truncate if needed)
             recalled_texts: List[str] = []
@@ -291,6 +327,15 @@ class SantaKlaus:
         except Exception:
             # Silent fallback on any error
             return None
+
+    def stats(self) -> Dict[str, Any]:
+        """Return recall stats (like PlayfulSanta)."""
+        return {
+            "total_recalled": self.total_recalled,
+            "silly_recalls": self.silly_recalls,
+            "silly_ratio": self.silly_recalls / max(1, self.total_recalled),
+            "silly_factor": self.silly_factor,
+        }
 
 
 __all__ = ["SantaKlaus", "SantaContext"]

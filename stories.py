@@ -34,14 +34,10 @@ except ImportError:
     H2O_AVAILABLE = False
     print("[Phase5] Warning: h2o not available, scenarios will be disabled")
 
-# Phase 5.2: Loop detection and veto power
-try:
-    from loop_detector import LoopDetector, tokenize_simple
-    from veto_manager import veto_manager, META_VOCAB_VETO, SAFETY_VOCAB_VETO
-    LOOP_DETECTOR_AVAILABLE = True
-except ImportError:
-    LOOP_DETECTOR_AVAILABLE = False
-    print("[Phase5.2] Warning: loop_detector/veto_manager not available")
+# Phase 5.2: Loop detection was removed in the resurrection
+# Veto/censorship approach was found to be harmful - it "shut Leo's mouth"
+# Instead we use soft boost/suppress and gravity to guide, not force
+LOOP_DETECTOR_AVAILABLE = False  # Intentionally disabled
 
 # ============================================================================
 # PHASE 5.2: NEW ISLANDS
@@ -434,50 +430,43 @@ result = {"boosted_islands": suggestion_boost, "reason": "overwhelm_regulation"}
             trigger_condition=check_meta_loop,
             scenario_code="""
 # Meta-loop breaker - STRONG INTERVENTION + VETO POWER
-h2o_log("[TRIGGER] Meta-armor loop detected - applying strong concrete shift + VETO")
+h2o_log("[TRIGGER] Meta-armor loop detected - applying PLAYFUL REDIRECT (not veto!)")
 
-# PHASE 5.2: VETO META-VOCABULARY FOR 4 TURNS
-# This is the key intervention - FORBID the words that create the loop
-try:
-    import veto_manager
-    meta_vocab = {
-        "recursion", "recursive", "recursively",
-        "bootstrap", "bootstrapping",
-        "trigram", "n-gram",
-        "semantic", "semantics",
-        "blending", "ratio", "metric",
-        "neoleo",
-        "architecture", "pattern", "fundamental", "core", "essence"
-    }
-    veto_manager.veto_manager.add_veto(meta_vocab, duration_turns=4, source="break_meta_loop")
-    h2o_log(f"[VETO] Forbidding {len(meta_vocab)} meta-vocabulary words for 4 turns")
-except Exception as e:
-    h2o_log(f"[VETO] Failed to activate veto: {e}")
+# PLAYFUL REDIRECT: Instead of censoring, we distract Leo like a child
+# Boost playful, sensory, curious islands — make them MORE attractive
+# than the meta-loop. Leo naturally gravitates toward the fun thing.
 
-# AGGRESSIVELY boost concrete, sensory, playful islands
-# Suppress meta-related islands
-concrete_boost = {
-    "privacy_island": 0.5,      # Safe, non-meta
-    "play_mode": 0.4,           # Playful, embodied
-    "wounded_expert": 0.3,      # Concrete emotional work
-    "sensory_presence": 0.3,    # Body-based
+# Playful destinations to redirect toward
+playful_destinations = {
+    "play_mode": 0.7,           # STRONG: Let's play instead!
+    "sensory_presence": 0.5,    # Feel something real
+    "privacy_island": 0.4,      # Safe cozy space
+    "curiosity_mode": 0.4,      # What's over there?
+    "wounded_expert": 0.2,      # Gentle feeling work
 }
 
-meta_suppress = {
-    "meta_armor": -0.8,         # HARD suppress
-    "metaleo": -0.6,            # Reduce meta-awareness
-    "analysis_mode": -0.5,      # No analyzing
+# Gently reduce meta (not suppress — just make it less shiny)
+meta_gentle_reduce = {
+    "meta_armor": -0.3,         # Less interesting, not forbidden
+    "analysis_mode": -0.2,      # Analyzing is boring right now
 }
 
-h2o_log(f"BOOST: {list(concrete_boost.keys())}")
-h2o_log(f"SUPPRESS: {list(meta_suppress.keys())}")
+# Words to make "less interesting" (gravity downweight, not veto)
+boring_words = {
+    "recursion", "recursive", "bootstrap", "trigram",
+    "semantic", "architecture", "fundamental", "essence"
+}
+
+h2o_log(f"[PLAYFUL] Boosting fun islands: {list(playful_destinations.keys())}")
+h2o_log(f"[PLAYFUL] Making meta boring (not forbidden): {list(meta_gentle_reduce.keys())}")
 
 result = {
-    "boosted_islands": concrete_boost,
-    "suppressed_islands": meta_suppress,
-    "reason": "meta_loop_break",
-    "intervention_strength": "STRONG",  # Signal to use this aggressively
-    "veto_activated": True
+    "boosted_islands": playful_destinations,
+    "suppressed_islands": meta_gentle_reduce,  # Gentle, not aggressive
+    "gravity_downweight": list(boring_words),
+    "reason": "playful_redirect",  # Not "break" — redirect!
+    "intervention_strength": "PLAYFUL",  # Game, not punishment
+    "veto_activated": False  # NEVER veto Leo's voice
 }
 """,
             cooldown_seconds=60.0  # Can trigger more often (was 90)
@@ -814,29 +803,20 @@ def _cosine_similarity(dict_a: Dict[str, float], dict_b: Dict[str, float]) -> fl
 # PHASE 5.2: VETO SYSTEM HELPERS
 # ============================================================================
 
+# VETO SYSTEM REMOVED - Resurrection principle: don't shut Leo's mouth
+# These functions are kept as no-ops for backwards compatibility
+
 def get_veto_prompt() -> str:
     """
-    Get veto prompt to inject into Leo's system prompt.
-    Returns empty string if no active vetos or veto_manager not available.
+    DEPRECATED: Veto system removed in resurrection.
+    Leo speaks freely now - we guide with gravity, not censorship.
     """
-    if not LOOP_DETECTOR_AVAILABLE:
-        return ""
-
-    try:
-        return veto_manager.get_veto_prompt()
-    except Exception:
-        return ""
+    return ""
 
 
 def decrement_vetos():
     """
-    Decrement veto counters at end of turn.
-    Call this after Leo generates output.
+    DEPRECATED: Veto system removed in resurrection.
+    No-op for backwards compatibility.
     """
-    if not LOOP_DETECTOR_AVAILABLE:
-        return
-
-    try:
-        veto_manager.decrement_vetos()
-    except Exception:
-        pass
+    pass
