@@ -34,6 +34,7 @@ def cleanup_punctuation(text: str, mode: str = "NORMAL") -> str:
     # .... → ...
     # ???? → ???
     # !!!! → !!!
+    # Preserve ellipsis (...) - only collapse 4+ dots
     result = re.sub(r'\.{4,}', '...', result)
     result = re.sub(r'\?{4,}', '???', result)
     result = re.sub(r'!{4,}', '!!!', result)

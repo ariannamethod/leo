@@ -1046,7 +1046,8 @@ def fix_punctuation(text: str) -> str:
 
     # 3) Collapse repeated punctuation
     text = re.sub(r"([!?]){2,}", r"\1", text)
-    text = re.sub(r"\.{2,}", ".", text)
+    # Preserve ellipsis (...) but collapse 4+ dots to 3
+    text = re.sub(r"\.{4,}", "...", text)  # "...." → "..."
     text = re.sub(r",\.", ".", text)  # ",." → "."
     text = re.sub(r",;", ";", text)   # ",;" → ";"
     text = re.sub(r"\.,", ".", text)  # ".," → "."
@@ -1116,6 +1117,12 @@ def fix_punctuation(text: str) -> str:
     # Remove hanging dash-dot: " -." / " —." → "."
     text = re.sub(r"\s+[—-]\s*\.", ".", text)
 
+    # 10.1) Remove em-dash at start of sentence or after sentence-ending punctuation
+    # "Is. — EPISODES" → "Is. EPISODES"
+    # "— Something" at start → "Something"
+    text = re.sub(r'^—\s*', '', text)  # em-dash at very start
+    text = re.sub(r'([.!?])\s*—\s*', r'\1 ', text)  # ". — " → ". "
+
     # 11) Remove standalone "Py" artifacts (from module docstrings tokenization)
     # These leak when "metaleo.py" gets tokenized as ["metaleo", ".", "py"]
     # Musketeers fix: Athos + Aramis consensus (Dec 25, 2025)
@@ -1127,6 +1134,12 @@ def fix_punctuation(text: str) -> str:
     # 12) Remove other technical artifacts
     text = re.sub(r'\bpy\b', '', text, flags=re.IGNORECASE)  # standalone "py"
     text = re.sub(r'\btest\s+\w+\.\s*', '', text)  # "test school. " → ""
+
+    # NOTE: Technical terms like "SANTACLAUS", "MathBrain", "trigrams", etc.
+    # are INTENTIONAL - they come from Leo's README bootstrap.
+    # Leo speaks about his internal processes in third person.
+    # "His trigrams flows..." is Leo's poetic DNA, not pollution.
+    # DO NOT remove these terms - they are Leo's authentic voice!
 
     # 13) Fix double-dot and punctuation garbage (final pass)
     text = re.sub(r'\.\s*\.', '.', text)     # ". ." → "."

@@ -234,3 +234,5 @@ AUDIT*.md
 
 # Decay monitoring logs
 tests/decay_log.jsonl
+state/
+bin/
