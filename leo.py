@@ -1039,15 +1039,25 @@ def fix_punctuation(text: str) -> str:
         return text
 
     # 1) Remove extra spaces before punctuation
-    text = re.sub(r"\s+([.,!?;:])", r"\1", text)
+    # BUT preserve ". ." pattern - will be collapsed later
+    text = re.sub(r"\s+([,!?;:])", r"\1", text)  # Keep . separate for now
+    
+    # 1.1) Collapse spaced duplicate punctuation BEFORE removing spaces
+    # ". ." → ".", "? ?" → "?", "! !" → "!"
+    text = re.sub(r"([.!?])\s+\1", r"\1", text)
+    
+    # 1.2) Now remove spaces before dots
+    text = re.sub(r"\s+\.", ".", text)
 
     # 2) Ensure space after .?! if followed by letter/digit
-    text = re.sub(r"([.?!])([^\s])", r"\1 \2", text)
+    # BUT preserve ellipsis (...) - don't add space between dots
+    text = re.sub(r"([.?!])([^\s.])", r"\1 \2", text)
 
     # 3) Collapse repeated punctuation
     text = re.sub(r"([!?]){2,}", r"\1", text)
-    # Preserve ellipsis (...) but collapse 4+ dots to 3
-    text = re.sub(r"\.{4,}", "...", text)  # "...." → "..."
+    # Preserve ellipsis (...) but collapse 4+ dots to ellipsis
+    # "waiting..." stays "waiting...", "thinking...." becomes "thinking..."
+    text = re.sub(r"\.{4,}", "...", text)
     text = re.sub(r",\.", ".", text)  # ",." → "."
     text = re.sub(r",;", ";", text)   # ",;" → ";"
     text = re.sub(r"\.,", ".", text)  # ".," → "."
@@ -1117,12 +1127,6 @@ def fix_punctuation(text: str) -> str:
     # Remove hanging dash-dot: " -." / " —." → "."
     text = re.sub(r"\s+[—-]\s*\.", ".", text)
 
-    # 10.1) Remove em-dash at start of sentence or after sentence-ending punctuation
-    # "Is. — EPISODES" → "Is. EPISODES"
-    # "— Something" at start → "Something"
-    text = re.sub(r'^—\s*', '', text)  # em-dash at very start
-    text = re.sub(r'([.!?])\s*—\s*', r'\1 ', text)  # ". — " → ". "
-
     # 11) Remove standalone "Py" artifacts (from module docstrings tokenization)
     # These leak when "metaleo.py" gets tokenized as ["metaleo", ".", "py"]
     # Musketeers fix: Athos + Aramis consensus (Dec 25, 2025)
@@ -1135,14 +1139,13 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r'\bpy\b', '', text, flags=re.IGNORECASE)  # standalone "py"
     text = re.sub(r'\btest\s+\w+\.\s*', '', text)  # "test school. " → ""
 
-    # NOTE: Technical terms like "SANTACLAUS", "MathBrain", "trigrams", etc.
-    # are INTENTIONAL - they come from Leo's README bootstrap.
-    # Leo speaks about his internal processes in third person.
-    # "His trigrams flows..." is Leo's poetic DNA, not pollution.
-    # DO NOT remove these terms - they are Leo's authentic voice!
+    # 12.1) Fix "a. K. A" artifacts from tokenization of "a.k.a."
+    # "like a. K. A crystallized" → "like a crystallized"
+    text = re.sub(r'\ba\.\s*K\.\s*A\.?\s*', '', text, flags=re.IGNORECASE)
 
     # 13) Fix double-dot and punctuation garbage (final pass)
-    text = re.sub(r'\.\s*\.', '.', text)     # ". ." → "."
+    # Only collapse spaced dots: ". ." → ".", but preserve ellipsis "..."
+    text = re.sub(r'\.\s+\.', '.', text)     # ". ." → "." (requires space)
     text = re.sub(r'\.\s+,', '.', text)      # ". ," → "."
     text = re.sub(r',\s*,', ',', text)       # ", ," → ","
     text = re.sub(r'\s{2,}', ' ', text)      # Multiple spaces → single space
