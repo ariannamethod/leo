@@ -61,6 +61,15 @@ except ImportError:
     MetaLeo = None  # type: ignore
     METALEO_AVAILABLE = False
 
+# Safe import: subword module is optional (sentencepiece-based parallel voice)
+try:
+    from subword import SubwordField, SubwordVocab, HAS_SENTENCEPIECE
+    SUBWORD_AVAILABLE = HAS_SENTENCEPIECE
+except ImportError:
+    SubwordField = None  # type: ignore
+    SubwordVocab = None  # type: ignore
+    SUBWORD_AVAILABLE = False
+
 # Safe import: mathbrain module is optional
 try:
     from mathbrain import MathBrain, MathState
@@ -2180,6 +2189,7 @@ def generate_reply(
     trauma_state: Optional[Any] = None,
     token_boosts: Optional[Dict[str, float]] = None,
     mathbrain: Optional[Any] = None,
+    subword_hint: Optional[str] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -2397,6 +2407,43 @@ def generate_reply(
     # Post-process: fix punctuation artifacts
     output = fix_punctuation(output)
 
+    # SUBWORD BLENDING: Mix in subword hint for emergent diversity
+    # Philosophy: Two voices (character trigrams + subword patterns) create richer output
+    if subword_hint and len(subword_hint) > 10:
+        try:
+            # Filter out technical/code content from hint
+            # Skip blending if hint contains obvious README/code artifacts
+            tech_indicators = ['```', 'def ', 'class ', 'import ', 'return ', '# ', 
+                               'sqlite', 'python', 'json', 'config', 'param', 'func',
+                               'branch', 'commit', 'claude', 'phase', 'module', 'init']
+            hint_lower = subword_hint.lower()
+            is_technical = any(ind in hint_lower for ind in tech_indicators)
+            
+            if not is_technical:
+                # Extract usable tokens from subword hint
+                hint_tokens = tokenize(subword_hint)
+                if len(hint_tokens) > 5:
+                    # Take middle section of hint (more interesting than start/end)
+                    mid_start = len(hint_tokens) // 3
+                    mid_end = 2 * len(hint_tokens) // 3
+                    hint_phrase = format_tokens(hint_tokens[mid_start:mid_end])
+                    
+                    # Clean the hint phrase with fix_punctuation
+                    hint_phrase = fix_punctuation(hint_phrase)
+                    
+                    # Only blend if hint phrase is coherent (not just punctuation/noise)
+                    if len(hint_phrase.strip()) > 5 and any(c.isalpha() for c in hint_phrase):
+                        # Blend strategy: append hint phrase to output if output is short
+                        output_tokens = tokenize(output)
+                        if len(output_tokens) < max_tokens // 2:
+                            # Short output: append hint
+                            output = output.rstrip('.!?') + '. ' + hint_phrase.strip()
+                            if output and output[-1] not in '.!?':
+                                output = output + '.'
+        except Exception:
+            # Subword blending must never break generation - silent fallback
+            pass
+
     # METAPHRASES: Reduce repetitive meta-phrases within single response
     # Philosophy: "осознанность через ассоциации, не через лозунги"
     try:
@@ -2558,6 +2605,24 @@ class LeoField:
             except Exception:
                 # Silent fail — Dream must never break Leo
                 pass
+        
+        # SUBWORD: parallel voice using sentencepiece (optional)
+        # This creates subword-level trigrams alongside character-level trigrams
+        # Philosophy: Two voices are better than one — emergent diversity!
+        self.subword_field: Optional[Any] = None
+        if SUBWORD_AVAILABLE and SubwordField is not None:
+            try:
+                # Train on README (Leo's bootstrap corpus)
+                if README_PATH.exists():
+                    self.subword_field = SubwordField.from_corpus(
+                        str(README_PATH),
+                        vocab_size=300,
+                        model_type="bpe",
+                    )
+            except Exception:
+                # Silent fail — Subword must never break Leo
+                self.subword_field = None
+        
         self.refresh(initial_shard=True)
 
         # LEO 1.1 - Sonar-Child: Feed module bootstraps if this is a fresh DB
@@ -2589,6 +2654,14 @@ class LeoField:
         if self.observe_count % self.DECAY_INTERVAL == 0:
             # Natural forgetting: decay weak co-occurrence memories
             apply_memory_decay(self.conn)
+
+        # SUBWORD: Let subword field also absorb text (parallel growth)
+        if self.subword_field is not None:
+            try:
+                self.subword_field.observe(text)
+            except Exception:
+                # Silent fail — Subword must never break observe
+                pass
 
         self.refresh(initial_shard=False)
         if self.centers:
@@ -2648,6 +2721,22 @@ class LeoField:
             except Exception:
                 # Silent fallback — Santa Klaus must never break Leo
                 token_boosts = None
+        
+        # SUBWORD: Get alternative generation from subword field (parallel voice)
+        # This provides subword-level patterns alongside character trigrams
+        subword_hint: Optional[str] = None
+        if self.subword_field is not None and SUBWORD_AVAILABLE:
+            try:
+                # Generate short hint from subword field
+                subword_hint = self.subword_field.generate(
+                    seed_text=prompt[:50],  # Use start of prompt as seed
+                    length=20,  # Short hint
+                    temperature=temperature,
+                    loop_penalty=0.3,
+                )
+            except Exception:
+                # Silent fail — Subword must never break Leo
+                subword_hint = None
                 
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
@@ -2669,6 +2758,7 @@ class LeoField:
             trauma_state=self._trauma_state,
             token_boosts=token_boosts,
             mathbrain=self._math_brain,  # Pass mathbrain for Phase 2 influence
+            subword_hint=subword_hint,  # Pass subword hint for blending
         )
 
         # Store presence metrics
