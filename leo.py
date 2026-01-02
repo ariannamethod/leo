@@ -152,6 +152,31 @@ except ImportError:
     SCHOOL_MATH_AVAILABLE = False
     SCHOOL_MATH_MODULE_AVAILABLE = False
 
+# Safe import: first_impression module is optional (adapted from Haze's subjectivity)
+try:
+    from first_impression import (
+        compute_impression, adjust_temperature_by_impression,
+        suggest_gravity_boost, get_first_association, Impression
+    )
+    FIRST_IMPRESSION_AVAILABLE = True
+except ImportError:
+    compute_impression = None  # type: ignore
+    adjust_temperature_by_impression = None  # type: ignore
+    suggest_gravity_boost = None  # type: ignore
+    get_first_association = None  # type: ignore
+    Impression = None  # type: ignore
+    FIRST_IMPRESSION_AVAILABLE = False
+
+# Safe import: phase4_bridges module is optional (island trajectory learning)
+try:
+    from phase4_bridges import BridgeMemory, TransitionGraph, Episode as Phase4Episode
+    PHASE4_AVAILABLE = True
+except ImportError:
+    BridgeMemory = None  # type: ignore
+    TransitionGraph = None  # type: ignore
+    Phase4Episode = None  # type: ignore
+    PHASE4_AVAILABLE = False
+
 # NumPy for precise math (entropy, distributions, linear regression)
 # Graceful fallback to pure Python if not available
 try:
@@ -2389,6 +2414,25 @@ def generate_reply(
             # Silent fail — gravity must never break generation
             gravity_weights = None
 
+    # FIRST IMPRESSION: Leo's feeling before speaking (adapted from Haze's subjectivity)
+    # The prompt wrinkles Leo's field. The wrinkle creates a feeling.
+    first_impression: Optional[Any] = None
+    if FIRST_IMPRESSION_AVAILABLE and compute_impression is not None:
+        try:
+            first_impression = compute_impression(prompt, vocab, trigrams)
+            
+            # Merge impression-based gravity boosts with prompt gravity
+            if suggest_gravity_boost is not None:
+                impression_boosts = suggest_gravity_boost(first_impression, emotion_map)
+                if impression_boosts:
+                    if gravity_weights is None:
+                        gravity_weights = {}
+                    for token, boost in impression_boosts.items():
+                        gravity_weights[token] = gravity_weights.get(token, 0.0) + boost
+        except Exception:
+            # Silent fail — first impression must never break generation
+            first_impression = None
+
     # PRESENCE METRICS (internal, not shown in REPL)
     # Compute novelty: how unfamiliar is this prompt?
     novelty = compute_prompt_novelty(prompt_tokens, trigrams or {})
@@ -2396,6 +2440,11 @@ def generate_reply(
     arousal = compute_prompt_arousal(prompt_tokens, emotion_map or {})
     # Collect entropy per-step during generation
     entropy_log: List[float] = []
+    
+    # Override with first impression if available (more nuanced)
+    if first_impression is not None:
+        novelty = first_impression.novelty
+        arousal = first_impression.arousal
 
     # PRESENCE: Activate themes and route to expert
     active_themes: Optional[ActiveThemes] = None
@@ -2414,6 +2463,11 @@ def generate_reply(
         try:
             expert_blend = blend_experts(preliminary_pulse, active_themes, trauma_state)
             temperature = expert_blend.temperature
+            
+            # FIRST IMPRESSION: Adjust temperature by feeling
+            if first_impression is not None and adjust_temperature_by_impression is not None:
+                temperature = adjust_temperature_by_impression(temperature, first_impression)
+            
             # Create a pseudo-expert for logging
             selected_expert = Expert(
                 name=f"blend:{expert_blend.dominant}",
@@ -3374,12 +3428,12 @@ class LeoField:
         # PHASE 3: Record regulation outcome for learning
         if context.phase3_context is not None and self._math_brain is not None:
             try:
-                # Use pred_state as approximation for state_after
-                # Quality after approximated by quality_before (will improve later)
+                # Use actual quality from generation (not approximation!)
+                actual_quality = context.quality.overall if context.quality else 0.5
                 self._math_brain.record_regulation_outcome(
                     context_before=context.phase3_context,
                     state_after=context.phase3_pred_state,
-                    quality_after=context.phase3_context.quality_before,  # Approximation
+                    quality_after=actual_quality,  # Fixed: use real quality, not approximation
                     temp_after=temperature,
                     expert_after=context.expert.name if context.expert else "structural",
                     turn_id=context.phase3_turn_id,
