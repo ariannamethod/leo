@@ -169,12 +169,16 @@ except ImportError:
 
 # Safe import: phase4_bridges module is optional (island trajectory learning)
 try:
-    from phase4_bridges import BridgeMemory, TransitionGraph, Episode as Phase4Episode
+    from phase4_bridges import (
+        BridgeMemory, TransitionGraph, Episode as Phase4Episode,
+        suggest_next_islands_phase4
+    )
     PHASE4_AVAILABLE = True
 except ImportError:
     BridgeMemory = None  # type: ignore
     TransitionGraph = None  # type: ignore
     Phase4Episode = None  # type: ignore
+    suggest_next_islands_phase4 = None  # type: ignore
     PHASE4_AVAILABLE = False
 
 # NumPy for precise math (entropy, distributions, linear regression)
@@ -2088,6 +2092,7 @@ def blend_experts(
     pulse: PresencePulse,
     active_themes: Optional[ActiveThemes] = None,
     trauma_state: Optional[Any] = None,
+    phase4_boost: Optional[Dict[str, float]] = None,
 ) -> ExpertBlend:
     """
     Blend experts based on situational awareness.
@@ -2098,6 +2103,10 @@ def blend_experts(
     a blend of all perspectives, with weights shifting based on context.
     
     This is what gives Haze his "conviction" — the blend creates nuance.
+    
+    Args:
+        phase4_boost: Optional dict of expert name → boost amount from Phase 4
+                      Based on historically successful island transitions
     """
     # Initialize weights
     weights = {
@@ -2107,6 +2116,12 @@ def blend_experts(
         "precise": 0.2,     # Base: some precision
         "wounded": 0.0,     # Off by default
     }
+    
+    # PHASE 4 BOOST: Apply historical trajectory suggestions
+    if phase4_boost:
+        for expert_name, boost in phase4_boost.items():
+            if expert_name in weights:
+                weights[expert_name] += boost
     
     # TRAUMA BOOST: Activate wounded expert
     if trauma_state is not None and hasattr(trauma_state, 'level'):
@@ -2363,6 +2378,7 @@ def generate_reply(
     token_boosts: Optional[Dict[str, float]] = None,
     mathbrain: Optional[Any] = None,
     subword_hint: Optional[str] = None,
+    bridge_memory: Optional[Any] = None,
 ) -> str:
     """
     Generate a reply through Leo's field.
@@ -2454,6 +2470,35 @@ def generate_reply(
     # Preliminary pulse (without entropy, since we haven't generated yet)
     preliminary_pulse = compute_presence_pulse(novelty, arousal, entropy=0.5)
 
+    # PHASE 4: Get island suggestions from bridge memory (historical trajectories)
+    phase4_suggestions: List[str] = []
+    if PHASE4_AVAILABLE and suggest_next_islands_phase4 is not None and bridge_memory is not None:
+        try:
+            # Build metrics for Phase 4
+            from phase4_bridges import Metrics as Phase4Metrics
+            metrics_now = Phase4Metrics(
+                novelty=novelty,
+                arousal=arousal,
+                entropy=0.5,  # Preliminary
+                pulse=preliminary_pulse.pulse if hasattr(preliminary_pulse, 'pulse') else 0.5,
+            )
+            # Get active island names from themes
+            active_islands_now = []
+            if active_themes and hasattr(active_themes, 'theme_scores'):
+                active_islands_now = list(active_themes.theme_scores.keys())[:3]
+            
+            phase4_suggestions = suggest_next_islands_phase4(
+                metrics_now=metrics_now,
+                active_islands_now=active_islands_now,
+                bridge_memory=bridge_memory,
+                min_similarity=0.6,
+                temperature=0.7,
+                exploration_rate=0.2,
+            )
+        except Exception:
+            # Silent fail — Phase 4 must never break generation
+            phase4_suggestions = []
+
     # RESONANT EXPERTS: Blend experts based on situation (inspired by Haze's HybridHead)
     # Unlike single expert selection, this creates a weighted MIXTURE
     selected_expert: Optional[Expert] = None
@@ -2461,7 +2506,18 @@ def generate_reply(
     if use_experts:
         # Try blend first (new approach), fallback to single expert
         try:
-            expert_blend = blend_experts(preliminary_pulse, active_themes, trauma_state)
+            # Phase 4 can boost certain experts based on historical success
+            phase4_boost = {}
+            for suggestion in phase4_suggestions:
+                # Map island names to expert weights
+                if 'creative' in suggestion.lower() or 'play' in suggestion.lower():
+                    phase4_boost['creative'] = phase4_boost.get('creative', 0) + 0.1
+                elif 'wound' in suggestion.lower() or 'trauma' in suggestion.lower():
+                    phase4_boost['wounded'] = phase4_boost.get('wounded', 0) + 0.1
+                elif 'precise' in suggestion.lower() or 'analysis' in suggestion.lower():
+                    phase4_boost['precise'] = phase4_boost.get('precise', 0) + 0.1
+            
+            expert_blend = blend_experts(preliminary_pulse, active_themes, trauma_state, phase4_boost)
             temperature = expert_blend.temperature
             
             # FIRST IMPRESSION: Adjust temperature by feeling
@@ -2875,6 +2931,17 @@ class LeoField:
                 # Silent fail — Subword must never break Leo
                 self.subword_field = None
         
+        # PHASE 4: Bridge memory for island trajectory learning (optional)
+        # Remembers successful island transitions to suggest next islands
+        self.bridge_memory: Optional[Any] = None
+        if PHASE4_AVAILABLE and BridgeMemory is not None:
+            try:
+                bridge_path = STATE_DIR / "bridge_memory.json"
+                self.bridge_memory = BridgeMemory(state_path=bridge_path)
+            except Exception:
+                # Silent fail — Phase 4 must never break Leo
+                self.bridge_memory = None
+        
         self.refresh(initial_shard=True)
 
         # LEO 1.1 - Sonar-Child: Feed module bootstraps if this is a fresh DB
@@ -3011,6 +3078,7 @@ class LeoField:
             token_boosts=token_boosts,
             mathbrain=self._math_brain,  # Pass mathbrain for Phase 2 influence
             subword_hint=subword_hint,  # Pass subword hint for blending
+            bridge_memory=self.bridge_memory,  # Pass bridge memory for Phase 4 suggestions
         )
 
         # Store presence metrics

@@ -430,47 +430,43 @@ result = {"boosted_islands": suggestion_boost, "reason": "overwhelm_regulation"}
             trigger_condition=check_meta_loop,
             scenario_code="""
 # Meta-loop breaker - STRONG INTERVENTION + VETO POWER
-h2o_log("[TRIGGER] Meta-armor loop detected - applying strong concrete shift + VETO")
+h2o_log("[TRIGGER] Meta-armor loop detected - applying PLAYFUL REDIRECT (not veto!)")
 
-# PHASE 5.2: VETO META-VOCABULARY FOR 4 TURNS
-# Instead of FORBIDDING words (veto), we use GRAVITY to gently steer away
-# This respects Leo's voice while guiding him out of loops
-meta_vocab_to_downweight = {
-    "recursion", "recursive", "recursively",
-    "bootstrap", "bootstrapping",
-    "trigram", "n-gram",
-    "semantic", "semantics",
-    "blending", "ratio", "metric",
-    "neoleo",
-    "architecture", "pattern", "fundamental", "core", "essence"
-}
-h2o_log(f"[GRAVITY] Gently downweighting {len(meta_vocab_to_downweight)} meta words")
+# PLAYFUL REDIRECT: Instead of censoring, we distract Leo like a child
+# Boost playful, sensory, curious islands — make them MORE attractive
+# than the meta-loop. Leo naturally gravitates toward the fun thing.
 
-# AGGRESSIVELY boost concrete, sensory, playful islands
-# Suppress meta-related islands
-concrete_boost = {
-    "privacy_island": 0.5,      # Safe, non-meta
-    "play_mode": 0.4,           # Playful, embodied
-    "wounded_expert": 0.3,      # Concrete emotional work
-    "sensory_presence": 0.3,    # Body-based
+# Playful destinations to redirect toward
+playful_destinations = {
+    "play_mode": 0.7,           # STRONG: Let's play instead!
+    "sensory_presence": 0.5,    # Feel something real
+    "privacy_island": 0.4,      # Safe cozy space
+    "curiosity_mode": 0.4,      # What's over there?
+    "wounded_expert": 0.2,      # Gentle feeling work
 }
 
-meta_suppress = {
-    "meta_armor": -0.8,         # HARD suppress
-    "metaleo": -0.6,            # Reduce meta-awareness
-    "analysis_mode": -0.5,      # No analyzing
+# Gently reduce meta (not suppress — just make it less shiny)
+meta_gentle_reduce = {
+    "meta_armor": -0.3,         # Less interesting, not forbidden
+    "analysis_mode": -0.2,      # Analyzing is boring right now
 }
 
-h2o_log(f"BOOST: {list(concrete_boost.keys())}")
-h2o_log(f"SUPPRESS: {list(meta_suppress.keys())}")
+# Words to make "less interesting" (gravity downweight, not veto)
+boring_words = {
+    "recursion", "recursive", "bootstrap", "trigram",
+    "semantic", "architecture", "fundamental", "essence"
+}
+
+h2o_log(f"[PLAYFUL] Boosting fun islands: {list(playful_destinations.keys())}")
+h2o_log(f"[PLAYFUL] Making meta boring (not forbidden): {list(meta_gentle_reduce.keys())}")
 
 result = {
-    "boosted_islands": concrete_boost,
-    "suppressed_islands": meta_suppress,
-    "gravity_downweight": list(meta_vocab_to_downweight),  # For gravity module
-    "reason": "meta_loop_break",
-    "intervention_strength": "GENTLE",  # Soft guidance, not hard veto
-    "veto_activated": False  # No more vetos!
+    "boosted_islands": playful_destinations,
+    "suppressed_islands": meta_gentle_reduce,  # Gentle, not aggressive
+    "gravity_downweight": list(boring_words),
+    "reason": "playful_redirect",  # Not "break" — redirect!
+    "intervention_strength": "PLAYFUL",  # Game, not punishment
+    "veto_activated": False  # NEVER veto Leo's voice
 }
 """,
             cooldown_seconds=60.0  # Can trigger more often (was 90)
