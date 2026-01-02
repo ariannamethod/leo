@@ -101,7 +101,24 @@ def cleanup_punctuation(text: str, mode: str = "NORMAL") -> str:
     # Use word boundaries to avoid touching words like "napoleon" or "galileo"
     result = re.sub(r'\bleo\b', 'Leo', result)
 
-    return result.strip()
+    # 11. FINAL: Ensure text ends with proper punctuation
+    # Philosophy: Leo's speech should feel complete, not truncated mid-thought
+    result = result.strip()
+    if result and result[-1] not in '.!?':
+        # If ends with comma, replace with period
+        if result[-1] == ',':
+            result = result[:-1] + '.'
+        # If ends with em-dash, replace with period  
+        elif result[-1] == '—':
+            result = result[:-1].rstrip() + '.'
+        # If ends with colon or semicolon, replace with period
+        elif result[-1] in ':;':
+            result = result[:-1] + '.'
+        # Otherwise just append period
+        else:
+            result = result + '.'
+
+    return result
 
 
 def calculate_garbage_score(text: str) -> float:

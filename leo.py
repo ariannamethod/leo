@@ -1344,6 +1344,25 @@ def fix_punctuation(text: str) -> str:
     if text and text[0].islower():
         text = text[0].upper() + text[1:]
 
+    # 16) FINAL: Ensure text ends with sentence-ending punctuation
+    # Philosophy: Leo's speech should always feel complete, not truncated
+    if text:
+        # Strip trailing whitespace and check last character
+        text = text.rstrip()
+        if text and text[-1] not in '.!?':
+            # If ends with comma, replace with period
+            if text[-1] == ',':
+                text = text[:-1] + '.'
+            # If ends with em-dash, replace with period
+            elif text[-1] == '—':
+                text = text[:-1].rstrip() + '.'
+            # If ends with colon or semicolon, replace with period
+            elif text[-1] in ':;':
+                text = text[:-1] + '.'
+            # Otherwise just append period
+            else:
+                text = text + '.'
+
     return text
 
 
