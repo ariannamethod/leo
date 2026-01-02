@@ -333,6 +333,8 @@ def init_db() -> sqlite3.Connection:
 
 def get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
     """Get metadata value."""
+    # Ensure row_factory is set for dict-style access
+    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT value FROM meta WHERE key = ?", (key,))
     row = cur.fetchone()
@@ -833,6 +835,8 @@ def load_bigrams(conn: sqlite3.Connection) -> Tuple[Dict[str, Dict[str, int]], L
         bigrams: token -> {next_token -> count}
         vocab: list of all tokens
     """
+    # Ensure row_factory is set for dict-style access
+    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT id, token FROM tokens")
     id_to_token: Dict[int, str] = {}
@@ -863,6 +867,8 @@ def load_trigrams(conn: sqlite3.Connection) -> Dict[Tuple[str, str], Dict[str, i
     Returns:
         trigrams: (first_token, second_token) -> {third_token -> count}
     """
+    # Ensure row_factory is set for dict-style access
+    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT id, token FROM tokens")
     id_to_token: Dict[int, str] = {}
@@ -898,6 +904,8 @@ def load_co_occurrence(conn: sqlite3.Connection) -> Dict[str, Dict[str, int]]:
     Returns:
         co_occur: word -> {context_word -> count}
     """
+    # Ensure row_factory is set for dict-style access
+    conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT id, token FROM tokens")
     id_to_token: Dict[int, str] = {}
