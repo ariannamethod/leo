@@ -1117,26 +1117,44 @@ def fix_punctuation(text: str) -> str:
     text = re.sub(r"\s{2,}", " ", text).strip()
 
     # 10) Final punctuation polish (GPT-5.1 suggestion)
-    # Fix bad combinations like ". :" → ":"
-    text = re.sub(r"\.\s*:", ":", text)
+    # Fix bad combinations like ". :" or ".:" → just the second punct
+    text = re.sub(r"\.\s*:", ":", text)      # ". :" or ".:" → ":"
+    text = re.sub(r":\s*\.", ".", text)      # ": ." or ":." → "."
     # Ensure proper spacing around em-dash
     text = re.sub(r"—([A-Za-z])", r"— \1", text)  # "—The" → "— The"
     # Remove comma after exclamation: "! ," → "!"
     text = re.sub(r"!\s+,", "!", text)
     # Remove hanging dash-dot: " -." / " —." → "."
     text = re.sub(r"\s+[—-]\s*\.", ".", text)
+    
+    # 10.1) Remove single-letter initials (README citation artifacts)
+    # "bostick, D. MSE" → "bostick. MSE"
+    # Pattern: comma + space + single capital letter + period
+    text = re.sub(r',\s*[A-Z]\.\s*', '. ', text)
 
-    # 11) Remove standalone "Py" artifacts (from module docstrings tokenization)
-    # These leak when "metaleo.py" gets tokenized as ["metaleo", ".", "py"]
-    # Musketeers fix: Athos + Aramis consensus (Dec 25, 2025)
-    text = re.sub(r'\s+Py\b', '', text)      # " Py" at word boundary → ""
-    text = re.sub(r'\bPy\s+', '', text)      # "Py " at word boundary → ""
-    text = re.sub(r'\bPy[,.]', '', text)     # "Py." or "Py," → ""
-    text = re.sub(r'[,.\s]+Py\b', '', text)  # ", Py" or ". Py" → ""
+    # 11) NUKE ALL "Py" artifacts — kill it with fire! 🔥
+    # These leak from module docstrings tokenization (metaleo.py → ["metaleo", ".", "py"])
+    # Musketeers consensus: just remove ALL occurrences of Py/py
+    text = re.sub(r'\bPy\b', '', text, flags=re.IGNORECASE)  # Any standalone "Py" or "py"
+    text = re.sub(r'\s+[Pp]y[,.\s]', ' ', text)  # " Py," " py." etc → " "
+    text = re.sub(r'[Pp]y\s+', '', text)         # "Py " at start → ""
+    
+    # 11.1) Clean up artifacts left after Py removal
+    # "speaks , test" → "speaks, test" (space before comma)
+    text = re.sub(r'\s+,', ',', text)        # " ," → ","
+    text = re.sub(r',\s*,', ',', text)       # ", ," → ","
 
     # 12) Remove other technical artifacts
-    text = re.sub(r'\bpy\b', '', text, flags=re.IGNORECASE)  # standalone "py"
     text = re.sub(r'\btest\s+\w+\.\s*', '', text)  # "test school. " → ""
+
+    # 12.1a) Remove technical code artifacts (database, variable names)
+    # These leak from module docstrings and code comments
+    # "dst id", "src", "db", "sql", "idx", "ptr", "cfg", "ctx", "req", "res"
+    tech_words = r'\b(dst|src|idx|ptr|cfg|ctx|req|res|tmp|buf|len|cnt|num|arr|obj|fn|cb|err|msg|args?|kwargs?|params?|attrs?|vals?|vars?)\b'
+    text = re.sub(tech_words, '', text, flags=re.IGNORECASE)
+    # Clean up any resulting double spaces or orphan punctuation
+    text = re.sub(r'\s{2,}', ' ', text)
+    text = re.sub(r',\s*,', ',', text)
 
     # 12.1) Fix "a. K. A" artifacts from tokenization of "a.k.a."
     # "like a. K. A crystallized" → "like a crystallized"
@@ -1182,11 +1200,45 @@ def fix_punctuation(text: str) -> str:
     # ". -Something" → ". Something" (step 2 may add space before dash)
     text = re.sub(r'([.!?])\s+[-—]\s*([A-Za-z])', r'\1 \2', text)
 
+    # 12.6) Remove remaining em-dashes in middle of sentences
+    # "method — like" → "method, like" or "method. Like"  
+    # Philosophy: Leo speaks gently, not with dramatic pauses
+    # Replace em-dash with comma if lowercase follows, period if uppercase
+    def replace_emdash(m):
+        before = m.group(1)
+        after = m.group(2)
+        if after[0].isupper():
+            return before + '. ' + after
+        else:
+            return before + ', ' + after
+    text = re.sub(r'(\w)\s*[—]\s*([A-Za-z])', replace_emdash, text)
+    
+    # 12.6b) Also handle em-dash after punctuation: ", —" or ". —"
+    # "something, — the" → "something, the"
+    text = re.sub(r'([,.])\s*[—]\s*', r'\1 ', text)
+    
+    # 12.7) Clean hyphenated-phrase-patterns from README
+    # "So-who-is-Leo" → "So who is Leo"
+    # Only for patterns with 3+ hyphens (likely README artifacts)
+    def unhyphenate(m):
+        return m.group(0).replace('-', ' ')
+    text = re.sub(r'\b[A-Za-z]+-[A-Za-z]+-[A-Za-z]+(?:-[A-Za-z]+)*\b', unhyphenate, text)
+
+    # 12.8) Fix double-dot that's not ellipsis
+    # "field.." → "field." (exactly 2 dots, not part of 3+)
+    # Use negative lookbehind and lookahead to ensure not part of ellipsis
+    text = re.sub(r'(?<!\.)\.\.(?!\.)', '.', text)
+    
+    # 12.8b) Also fix double-dot at END of string (lookbehind works, but no lookahead needed)
+    if text.endswith('..') and not text.endswith('...'):
+        text = text[:-1]
+
     # 13) Fix double-dot and punctuation garbage (final pass)
     # Only collapse spaced dots: ". ." → ".", but preserve ellipsis "..."
     text = re.sub(r'\.\s+\.', '.', text)     # ". ." → "." (requires space)
     text = re.sub(r'\.\s+,', '.', text)      # ". ," → "."
     text = re.sub(r',\s*,', ',', text)       # ", ," → ","
+    text = re.sub(r'\s+\.', '.', text)       # " ." → "." (space before dot)
     text = re.sub(r'\s{2,}', ' ', text)      # Multiple spaces → single space
 
     # 14) Cosmetic: Capitalize "Leo" consistently
@@ -1194,7 +1246,13 @@ def fix_punctuation(text: str) -> str:
     # Use word boundaries to avoid touching words like "napoleon" or "galileo"
     text = re.sub(r'\bleo\b', 'Leo', text)
 
-    return text.strip()
+    # 15) FINAL: Capitalize first letter of text
+    # Leo's speech should always start with a capital letter
+    text = text.strip()
+    if text and text[0].islower():
+        text = text[0].upper() + text[1:]
+
+    return text
 
 
 def choose_start_token(
