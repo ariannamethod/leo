@@ -405,3 +405,97 @@ def _random_bootstrap_fragment(bootstrap: str, max_words: int = 12) -> str:
     except Exception:
         # Silent fallback: overthinking errors must not break Leo
         return ""
+
+
+# ============================================================================
+# ASYNC OVERTHINKING — with Lock for field coherence
+# ============================================================================
+
+
+class AsyncOverthinking:
+    """
+    Async version of overthinking with field lock.
+    
+    Maintains coherence through atomic operations.
+    Uses the same run_overthinking logic but with async wrappers.
+    """
+    
+    def __init__(self):
+        import asyncio
+        self._lock = asyncio.Lock()
+        self._ring_history: List[OverthinkingEvent] = []
+        self.enrichment_count: int = 0
+    
+    @property
+    def ring_history(self) -> List[OverthinkingEvent]:
+        return self._ring_history
+    
+    async def generate_rings_async(
+        self,
+        *,
+        prompt: str,
+        reply: str,
+        generate_fn: Callable[[str, float, int, float, str], str],
+        observe_fn: Callable[[str, str], None],
+        pulse: Optional[PulseSnapshot] = None,
+        trauma_state: Optional[object] = None,
+        bootstrap: Optional[str] = None,
+        config: Optional[OverthinkingConfig] = None,
+    ) -> List[OverthinkingEvent]:
+        """
+        Generate overthinking rings with atomic field access.
+        
+        Same API as run_overthinking but async with Lock.
+        """
+        async with self._lock:
+            events = run_overthinking(
+                prompt=prompt,
+                reply=reply,
+                generate_fn=generate_fn,
+                observe_fn=observe_fn,
+                pulse=pulse,
+                trauma_state=trauma_state,
+                bootstrap=bootstrap,
+                config=config,
+            )
+            
+            # Track history
+            self._ring_history.extend(events)
+            self.enrichment_count += len(events)
+            
+            # Keep history bounded
+            if len(self._ring_history) > 100:
+                self._ring_history = self._ring_history[-100:]
+            
+            return events
+    
+    async def get_influence_words(self) -> List[str]:
+        """Get words from recent rings to influence generation."""
+        async with self._lock:
+            words = []
+            # Get words from last 10 rings
+            for event in self._ring_history[-10:]:
+                if event.thought:
+                    ring_words = event.thought.lower().split()
+                    words.extend(ring_words)
+            return words
+    
+    async def get_stats(self) -> dict:
+        """Get overthinking statistics."""
+        async with self._lock:
+            return {
+                "total_rings": len(self._ring_history),
+                "enrichment_count": self.enrichment_count,
+                "ring0_count": sum(1 for e in self._ring_history if e.ring == 0),
+                "ring1_count": sum(1 for e in self._ring_history if e.ring == 1),
+                "ring2_count": sum(1 for e in self._ring_history if e.ring == 2),
+            }
+
+
+__all__ = [
+    "run_overthinking",
+    "AsyncOverthinking",
+    "OverthinkingEvent",
+    "OverthinkingConfig",
+    "PulseSnapshot",
+]

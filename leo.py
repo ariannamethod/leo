@@ -3064,6 +3064,20 @@ class LeoField:
             except Exception:
                 # Silent fail — Subword must never break Leo
                 subword_hint = None
+        
+        # SCHOOL: Recall relevant knowledge for this prompt
+        # School remembers what Leo learned from human explanations
+        school_knowledge: Optional[str] = None
+        if self.school is not None and SCHOOL_MODULE_AVAILABLE:
+            try:
+                school_knowledge = self.school.recall_knowledge(prompt, max_items=3)
+                if school_knowledge:
+                    # Feed knowledge back as context (gentle boost)
+                    # This enriches generation with learned facts
+                    self.observe(school_knowledge)
+            except Exception:
+                # Silent fail — School must never break Leo
+                school_knowledge = None
                 
         # Get reply with full context (pulse, quality, arousal)
         context = generate_reply(
