@@ -7,7 +7,7 @@
    ╚══════╝╚══════╝ ╚═════╝
 ```
 
-# Leo — Language Emergent Organism
+# leo — Language Emergent Organism
 
 > *language is a field. dedicated to Leo.*
 
