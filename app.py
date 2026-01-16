@@ -42,7 +42,7 @@ def init_leo():
     """Initialize Leo organism with database."""
     global field
     if field is None:
-        conn = init_db(DB_PATH)
+        conn = init_db()
         field = LeoField(conn)
         # Bootstrap Leo with embedded seed if fresh start
         readme_path = Path(__file__).parent / "README.md"
