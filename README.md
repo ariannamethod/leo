@@ -1,3 +1,18 @@
+---
+license: gpl-3.0
+tags:
+- emergent
+- organism
+- post-transformer
+- resonance
+- weightless
+- presence
+- arianna-method
+sdk: gradio
+sdk_version: 4.0.0
+app_file: app.py
+---
+
 ```
    ██╗     ███████╗ ██████╗
    ██║     ██╔════╝██╔═══██╗
