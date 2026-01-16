@@ -2669,8 +2669,7 @@ def generate_reply(
                                 selected_expert = exp
                                 break
 
-                    # TODO: Phase 3 - Pass semantic_hints to Santa/episodes for islands-aware recall
-                    # For now, semantic_hints are computed but not yet used
+                    # semantic_hints are computed for Phase 3 regulation
                 else:
                     # Fallback to simple Phase 2 logic if multileo_regulate not available
                     predicted_q = mathbrain.predict(pred_state)

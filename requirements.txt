@@ -23,6 +23,13 @@ sentencepiece>=0.1.99
 # - asyncio.Lock for thread-safe field updates
 aiofiles>=23.0.0
 
+# Gradio: HuggingFace Spaces interface
+# Used in:
+# - app.py: Web interface for Leo organism
+# - ChatInterface with dark theme matching HAZE aesthetic
+# - NO SEED FROM PROMPT enforcement in UI
+gradio>=4.0.0
+
 # Optional: OpenAI for GPT observer tests
 # openai>=1.0.0
 # httpx>=0.25.0
