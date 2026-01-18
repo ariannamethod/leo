@@ -34,26 +34,146 @@ from collections import Counter
 # FIRST IMPRESSION — The Feeling Before Speaking
 # ============================================================================
 
-@dataclass
-class Impression:
-    """
-    Leo's first impression of the observer's words.
-    
-    Like a child sensing the mood before responding.
-    """
-    novelty: float = 0.0     # How new/unfamiliar is this?
-    arousal: float = 0.0     # How intense/emotional?
-    warmth: float = 0.0      # How friendly/warm? (Leo-specific)
-    curiosity: float = 0.0   # Is this a question? Wants to explore?
-    
-    @property
-    def composite(self) -> float:
-        """Composite feeling signal."""
-        return 0.25 * self.novelty + 0.25 * self.arousal + 0.25 * self.warmth + 0.25 * self.curiosity
-    
-    def __repr__(self) -> str:
-        return f"Impression(novelty={self.novelty:.2f}, arousal={self.arousal:.2f}, warmth={self.warmth:.2f}, curiosity={self.curiosity:.2f})"
+# Note: The Impression class is defined below after EMOTIONAL_WEIGHTS
+# to allow using compute_emotional_valence() in its methods.
 
+
+# ============================================================================
+# EMOTIONAL WEIGHTS — Float Dictionary (inspired by arianna.c/high.go)
+# ============================================================================
+# Instead of binary word lists, each word has a valence weight [-1.0, 1.0]
+# Positive = positive emotion, Negative = negative emotion
+# This allows for nuanced emotional analysis, not just yes/no detection
+#
+# Philosophy: Emotions are gradients, not categories.
+# ============================================================================
+
+EMOTIONAL_WEIGHTS: Dict[str, float] = {
+    # === POSITIVE (WARMTH/LOVE) ===
+    "love": 0.95, "adore": 0.9, "cherish": 0.85, "devotion": 0.8,
+    "affection": 0.8, "tenderness": 0.75, "care": 0.7, "warm": 0.7,
+    "wonderful": 0.8, "amazing": 0.75, "beautiful": 0.8, "lovely": 0.75,
+    "happy": 0.7, "joy": 0.8, "delighted": 0.75, "pleased": 0.6,
+    "smile": 0.6, "hug": 0.7, "gentle": 0.6, "sweet": 0.65,
+    "kind": 0.6, "soft": 0.5, "thank": 0.5, "grateful": 0.7,
+    "blessed": 0.6, "peaceful": 0.5, "calm": 0.4, "serene": 0.5,
+    "hope": 0.6, "dream": 0.5, "inspire": 0.6, "create": 0.5,
+    "friend": 0.65, "dear": 0.6, "heart": 0.5, "feel": 0.3,
+    "good": 0.4, "nice": 0.35, "fine": 0.2, "okay": 0.1,
+    
+    # === PLAYFUL (LEO-SPECIFIC) ===
+    "play": 0.7, "fun": 0.7, "game": 0.6, "silly": 0.65,
+    "laugh": 0.75, "giggle": 0.7, "joke": 0.6, "funny": 0.65,
+    "magic": 0.7, "pretend": 0.5, "story": 0.5, "adventure": 0.6,
+    "surprise": 0.5, "candy": 0.5, "rainbow": 0.6, "sparkle": 0.55,
+    "dance": 0.6, "sing": 0.6, "bounce": 0.5,
+    
+    # === CURIOSITY (FLOW) ===
+    "curious": 0.4, "wonder": 0.45, "explore": 0.5, "discover": 0.55,
+    "mystery": 0.4, "secret": 0.35, "imagine": 0.5,
+    
+    # === NEGATIVE (FEAR) ===
+    "fear": -0.7, "afraid": -0.7, "scared": -0.75, "terrified": -0.9,
+    "anxious": -0.6, "worry": -0.5, "panic": -0.8, "dread": -0.75,
+    "horror": -0.85, "nervous": -0.5, "terror": -0.9, "frightened": -0.7,
+    "alarmed": -0.6, "threatened": -0.7, "unsafe": -0.65, "danger": -0.7,
+    "scary": -0.6, "creepy": -0.55, "nightmare": -0.75,
+    
+    # === NEGATIVE (VOID/EMPTINESS) ===
+    "empty": -0.5, "nothing": -0.55, "numb": -0.6, "hollow": -0.55,
+    "void": -0.6, "blank": -0.4, "gone": -0.5, "lost": -0.5,
+    "alone": -0.6, "lonely": -0.7, "isolated": -0.65, "disconnected": -0.6,
+    "apathy": -0.5, "meaningless": -0.7, "pointless": -0.65,
+    "dead": -0.8, "silent": -0.3, "cold": -0.4, "dark": -0.35,
+    
+    # === NEGATIVE (PAIN/SUFFERING) ===
+    "hate": -0.9, "terrible": -0.8, "awful": -0.7, "horrible": -0.8,
+    "disgusting": -0.85, "sad": -0.6, "angry": -0.7, "frustrated": -0.6,
+    "disappointed": -0.55, "upset": -0.55, "bad": -0.5, "wrong": -0.4,
+    "fail": -0.6, "lose": -0.5, "hurt": -0.7, "pain": -0.8,
+    "suffer": -0.8, "stress": -0.5, "worthless": -0.85, "stupid": -0.6,
+    "ugly": -0.5, "weak": -0.45, "useless": -0.7, "pathetic": -0.75,
+    
+    # === TRAUMA TRIGGERS ===
+    "die": -0.9, "kill": -0.9, "death": -0.85, "failure": -0.7,
+    "loser": -0.7, "reject": -0.65, "abandon": -0.8, "betray": -0.85,
+    "forget": -0.4, "ignore": -0.5, "invisible": -0.6, "broken": -0.65,
+    "damaged": -0.6, "ruined": -0.65, "trapped": -0.7, "hopeless": -0.8,
+    
+    # === INTENSE (HIGH AROUSAL, NEUTRAL VALENCE) ===
+    # These don't shift valence but increase arousal
+    "now": 0.0, "must": 0.0, "need": 0.0, "urgent": 0.0,
+    "important": 0.0, "help": -0.1, "stop": -0.2, "wait": 0.0,
+    "listen": 0.0, "understand": 0.1, "really": 0.0, "very": 0.0,
+    "always": 0.0, "never": -0.1, "everything": 0.0, "everyone": 0.0,
+    
+    # === RUSSIAN (Subset from high.go) ===
+    "люблю": 0.9, "радость": 0.8, "счастье": 0.85, "хорошо": 0.5,
+    "спасибо": 0.5, "красиво": 0.7, "прекрасно": 0.8,
+    "ненавижу": -0.9, "страшно": -0.7, "больно": -0.8, "грустно": -0.6,
+    "одиноко": -0.7, "пусто": -0.5,
+}
+
+# Arousal modifiers — words that increase emotional intensity
+AROUSAL_MODIFIERS: Dict[str, float] = {
+    "very": 0.2, "really": 0.2, "so": 0.15, "extremely": 0.3,
+    "absolutely": 0.25, "totally": 0.2, "completely": 0.2,
+    "always": 0.1, "never": 0.15, "everything": 0.1, "nothing": 0.1,
+    "now": 0.15, "must": 0.2, "need": 0.15, "urgent": 0.25,
+    "important": 0.15, "help": 0.2, "please": 0.1,
+    "!": 0.15,  # Exclamation mark
+}
+
+
+def compute_emotional_valence(text: str) -> Tuple[float, float]:
+    """
+    Compute emotional valence and arousal from text using EMOTIONAL_WEIGHTS.
+    
+    Returns:
+        (valence, arousal) where:
+        - valence: [-1, 1] negative to positive
+        - arousal: [0, 1] calm to excited
+    """
+    words = text.lower().split()
+    
+    if not words:
+        return 0.0, 0.0
+    
+    valence_sum = 0.0
+    valence_count = 0
+    arousal = 0.0
+    
+    for word in words:
+        # Clean punctuation except for exclamation
+        clean_word = word.strip(".,;:?\"'()-")
+        
+        # Check emotional weight
+        if clean_word in EMOTIONAL_WEIGHTS:
+            valence_sum += EMOTIONAL_WEIGHTS[clean_word]
+            valence_count += 1
+        
+        # Check arousal modifiers
+        if clean_word in AROUSAL_MODIFIERS:
+            arousal += AROUSAL_MODIFIERS[clean_word]
+        
+        # Exclamation marks increase arousal
+        if "!" in word:
+            arousal += AROUSAL_MODIFIERS.get("!", 0.15)
+    
+    # Compute average valence
+    valence = valence_sum / valence_count if valence_count > 0 else 0.0
+    
+    # Clamp values
+    valence = max(-1.0, min(1.0, valence))
+    arousal = max(0.0, min(1.0, arousal))
+    
+    return valence, arousal
+
+
+# ============================================================================
+# LEGACY BINARY WORD LISTS (kept for backward compatibility)
+# These are still used by some functions but will be phased out
+# ============================================================================
 
 # Warm words — Leo recognizes these as friendly (LOVE chamber)
 WARM_WORDS = {
@@ -99,6 +219,179 @@ PLAYFUL_WORDS = {
     "candy", "rainbow", "sparkle", "dance", "sing", "bounce",
 }
 
+
+# ============================================================================
+# EMOTIONAL STATE & DRIFT ODE (inspired by arianna.c/high.go)
+# ============================================================================
+# Emotions evolve through differential equations, not discrete jumps.
+# Based on Friston's Free Energy Principle:
+# - dV/dt = -τ(V - V₀) + surprise * gain
+# - dA/dt = -τ(A - A₀) + |surprise| * gain + entropy * weight
+#
+# Philosophy: Leo "remembers" emotional state between messages.
+# Emotional momentum creates more natural, human-like responses.
+# ============================================================================
+
+@dataclass
+class EmotionalState:
+    """
+    Leo's emotional state that persists across messages.
+    
+    Unlike Impression (single message), EmotionalState tracks
+    the emotional trajectory over a conversation.
+    """
+    valence: float = 0.1      # [-1, 1] negative to positive
+    arousal: float = 0.3      # [0, 1] calm to excited
+    entropy: float = 0.5      # [0, inf] uncertainty/chaos
+    prediction: float = 0.1   # Expected valence for next message (for surprise calc)
+    
+    # Conversation momentum
+    momentum: float = 0.0     # Rate of valence change
+    message_count: int = 0    # How many messages processed
+    
+    def copy(self) -> "EmotionalState":
+        """Create a copy of this state."""
+        return EmotionalState(
+            valence=self.valence,
+            arousal=self.arousal,
+            entropy=self.entropy,
+            prediction=self.prediction,
+            momentum=self.momentum,
+            message_count=self.message_count,
+        )
+
+
+@dataclass
+class EmotionalDriftParams:
+    """Parameters controlling the ODE dynamics."""
+    decay_rate: float = 0.15      # Return to baseline speed (τ) — increased for faster response
+    surprise_gain: float = 0.5    # How much surprise affects state — increased for sensitivity
+    input_pull: float = 0.3       # Direct influence of input valence (NEW)
+    entropy_weight: float = 0.2   # Entropy influence on arousal
+    momentum_decay: float = 0.3   # Momentum persistence — decreased for less inertia
+    baseline_valence: float = 0.1 # Resting valence (slightly positive)
+    baseline_arousal: float = 0.3 # Resting arousal (calm but alert)
+
+
+# Global default params
+DEFAULT_DRIFT_PARAMS = EmotionalDriftParams()
+
+
+def emotional_drift(
+    current: EmotionalState,
+    input_text: str,
+    dt: float = 1.0,
+    params: Optional[EmotionalDriftParams] = None,
+) -> EmotionalState:
+    """
+    Compute the next emotional state using ODE (Euler method).
+    
+    Based on Free Energy Principle from arianna.c/high.go:
+    - dV/dt = -τ(V - V₀) + surprise * gain + momentum
+    - dA/dt = -τ(A - A₀) + |surprise| * gain + entropy * weight
+    
+    Args:
+        current: Current emotional state
+        input_text: New input to process
+        dt: Time step (1.0 = one message)
+        params: ODE parameters (uses defaults if None)
+    
+    Returns:
+        New emotional state after drift
+    """
+    if params is None:
+        params = DEFAULT_DRIFT_PARAMS
+    
+    # Analyze input using EMOTIONAL_WEIGHTS
+    input_valence, input_arousal = compute_emotional_valence(input_text)
+    
+    # Compute surprise (prediction error) — Free Energy Principle
+    surprise = input_valence - current.prediction
+    
+    # ODE integration (Euler method)
+    
+    # dV/dt = decay toward baseline + surprise influence + input pull + momentum
+    # INPUT PULL: Direct influence of input valence — if input is very negative,
+    # Leo should feel it, not just be "surprised" by it
+    d_valence = (
+        -params.decay_rate * (current.valence - params.baseline_valence) +
+        surprise * params.surprise_gain +
+        (input_valence - current.valence) * params.input_pull +  # NEW: direct pull
+        current.momentum * 0.3  # Reduced momentum contribution
+    )
+    
+    # dA/dt = decay toward baseline + |surprise| + input arousal
+    d_arousal = (
+        -params.decay_rate * (current.arousal - params.baseline_arousal) +
+        abs(surprise) * params.surprise_gain +
+        input_arousal * params.entropy_weight
+    )
+    
+    # Update momentum (tracks rate of change)
+    new_momentum = (
+        current.momentum * params.momentum_decay +
+        d_valence * (1 - params.momentum_decay)
+    )
+    
+    # Update state
+    next_state = EmotionalState(
+        valence=max(-1.0, min(1.0, current.valence + d_valence * dt)),
+        arousal=max(0.0, min(1.0, current.arousal + d_arousal * dt)),
+        entropy=current.entropy * 0.9 + input_arousal * 0.1,  # Slow update
+        prediction=current.valence + d_valence * dt * 0.5,  # Predict next valence
+        momentum=new_momentum,
+        message_count=current.message_count + 1,
+    )
+    
+    return next_state
+
+
+def compute_surprise(expected_valence: float, actual_valence: float) -> float:
+    """
+    Compute surprise (prediction error) — Free Energy Principle.
+    
+    Lower = better prediction, Higher = more surprise.
+    """
+    return abs(expected_valence - actual_valence)
+
+
+# Global emotional state (persists across calls)
+_global_emotional_state: Optional[EmotionalState] = None
+
+
+def get_emotional_state() -> EmotionalState:
+    """Get the global emotional state, creating if needed."""
+    global _global_emotional_state
+    if _global_emotional_state is None:
+        _global_emotional_state = EmotionalState()
+    return _global_emotional_state
+
+
+def update_emotional_state(input_text: str) -> EmotionalState:
+    """
+    Update the global emotional state with new input.
+    
+    This is the main entry point for the ODE-based emotional system.
+    Call this for each new message to evolve Leo's emotional state.
+    """
+    global _global_emotional_state
+    
+    current = get_emotional_state()
+    next_state = emotional_drift(current, input_text)
+    _global_emotional_state = next_state
+    
+    return next_state
+
+
+def reset_emotional_state() -> None:
+    """Reset emotional state to baseline (new conversation)."""
+    global _global_emotional_state
+    _global_emotional_state = None
+
+
+# ============================================================================
+# IMPRESSION CLASS (enhanced with EmotionalWeights integration)
+# ============================================================================
 
 @dataclass
 class Impression:

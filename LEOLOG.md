@@ -53,11 +53,17 @@ Response comes FROM internal state (mother is tired), but TO the child (contextu
 - Emotion chambers affect HOW Leo connects to prompt
 - Balance between organism and conversation
 
-**Future ideas (from arianna.c/high.go):**
-- EmotionalWeights as float dictionary (not binary word lists)
-- EmotionalDrift ODE (emotions evolve through differential equations)
-- Free Energy Principle: surprise = prediction error
-- Schumann resonance coupling (7.83 Hz)
+**New in this update (from arianna.c/high.go):**
+- ✅ **EMOTIONAL_WEIGHTS** — float dictionary instead of binary word lists
+  - Words have valence from -0.95 (hate) to +0.95 (love)
+  - Includes Russian words (люблю, ненавижу, etc.)
+- ✅ **EmotionalDrift ODE** — emotions evolve through differential equations
+  - dV/dt = -τ(V - V₀) + surprise × gain + momentum
+  - Leo "remembers" emotional state between messages
+- ✅ **Free Energy Principle**: surprise = prediction error
+  - Leo predicts next valence, surprise affects arousal
+- ✅ **AROUSAL_MODIFIERS** — words/punctuation that increase intensity
+- Future: Schumann resonance coupling (7.83 Hz)
 
 ---
 
