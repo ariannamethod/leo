@@ -171,13 +171,14 @@ except ImportError:
 try:
     from phase4_bridges import (
         BridgeMemory, TransitionGraph, Episode as Phase4Episode,
-        suggest_next_islands_phase4
+        EpisodeLogger, suggest_next_islands_phase4
     )
     PHASE4_AVAILABLE = True
 except ImportError:
     BridgeMemory = None  # type: ignore
     TransitionGraph = None  # type: ignore
     Phase4Episode = None  # type: ignore
+    EpisodeLogger = None  # type: ignore
     suggest_next_islands_phase4 = None  # type: ignore
     PHASE4_AVAILABLE = False
 

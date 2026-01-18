@@ -8,6 +8,7 @@ while preserving philosophical content.
 
 import sys
 from pathlib import Path
+import unittest
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -15,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from leo import strip_code_blocks
 
 # Test input with polluting content
-test_text = """
+TEST_TEXT = """
 # Philosophy
 Leo is about presence > intelligence.
 Resonance is unbreakable.
@@ -51,63 +52,66 @@ This philosophical content should remain.
 Leo discovers patterns through field dynamics.
 """
 
-print("=" * 70)
-print("TESTING ENHANCED README FILTER")
-print("=" * 70)
 
-result = strip_code_blocks(test_text)
+class TestReadmeFilter(unittest.TestCase):
+    """Tests for the README filter that removes conversation examples."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.result = strip_code_blocks(TEST_TEXT)
+    
+    def test_should_not_contain_gift_phrase(self):
+        """Filter should remove 'Sometimes he brings one back'."""
+        self.assertNotIn("Sometimes he brings one back", self.result)
+    
+    def test_should_not_contain_brightest_phrase(self):
+        """Filter should remove 'He remembers leo's brightest'."""
+        self.assertNotIn("He remembers leo's brightest", self.result)
+    
+    def test_should_not_contain_secret_list(self):
+        """Filter should remove 'A tiny secret list'."""
+        self.assertNotIn("A tiny secret list", self.result)
+    
+    def test_should_not_contain_leo_prompt(self):
+        """Filter should remove 'leo>'."""
+        self.assertNotIn("leo>", self.result)
+    
+    def test_should_not_contain_observer_marker(self):
+        """Filter should remove '**Observer:**'."""
+        self.assertNotIn("**Observer:**", self.result)
+    
+    def test_should_not_contain_leo_marker(self):
+        """Filter should remove '**Leo:**'."""
+        self.assertNotIn("**Leo:**", self.result)
+    
+    def test_should_not_contain_turn_marker(self):
+        """Filter should remove '[Turn '."""
+        self.assertNotIn("[Turn ", self.result)
+    
+    def test_should_not_contain_metrics_marker(self):
+        """Filter should remove '[Metrics]'."""
+        self.assertNotIn("[Metrics]", self.result)
+    
+    def test_should_not_contain_code_blocks(self):
+        """Filter should remove code blocks like 'def test():'."""
+        self.assertNotIn("def test():", self.result)
+    
+    def test_should_contain_presence_intelligence(self):
+        """Filter should preserve 'presence > intelligence'."""
+        self.assertIn("presence > intelligence", self.result)
+    
+    def test_should_contain_resonance(self):
+        """Filter should preserve 'Resonance is unbreakable'."""
+        self.assertIn("Resonance is unbreakable", self.result)
+    
+    def test_should_contain_philosophical_content(self):
+        """Filter should preserve 'This philosophical content should remain'."""
+        self.assertIn("This philosophical content should remain", self.result)
+    
+    def test_should_contain_field_dynamics(self):
+        """Filter should preserve 'field dynamics'."""
+        self.assertIn("field dynamics", self.result)
 
-print("\nFILTERED OUTPUT:")
-print("-" * 70)
-print(result)
-print("-" * 70)
 
-# Verification checks
-print("\n" + "=" * 70)
-print("VERIFICATION CHECKS")
-print("=" * 70)
-
-checks = [
-    ("❌ SHOULD NOT contain", [
-        "Sometimes he brings one back",
-        "He remembers leo's brightest",
-        "A tiny secret list",
-        "leo>",
-        "**Observer:**",
-        "**Leo:**",
-        "[Turn ",
-        "[Metrics]",
-        "def test():",
-    ]),
-    ("✅ SHOULD contain", [
-        "presence > intelligence",
-        "Resonance is unbreakable",
-        "This philosophical content should remain",
-        "field dynamics",
-    ]),
-]
-
-all_passed = True
-
-for check_type, phrases in checks:
-    print(f"\n{check_type}:")
-    for phrase in phrases:
-        present = phrase in result
-        expected = (check_type == "✅ SHOULD contain")
-
-        if present == expected:
-            status = "✅ PASS"
-        else:
-            status = "❌ FAIL"
-            all_passed = False
-
-        presence_str = "FOUND" if present else "NOT FOUND"
-        print(f"  {status} - '{phrase}' - {presence_str}")
-
-print("\n" + "=" * 70)
-if all_passed:
-    print("✅ ALL CHECKS PASSED - Filter working correctly!")
-    sys.exit(0)
-else:
-    print("❌ SOME CHECKS FAILED - Filter needs adjustment")
-    sys.exit(1)
+if __name__ == "__main__":
+    unittest.main()
