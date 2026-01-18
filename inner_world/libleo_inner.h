@@ -85,6 +85,10 @@ extern void leo_emotional_drift(float inputValence, float inputArousal);
 extern void leo_reset_state();
 extern char* leo_find_nearest_attractor(float valence, float arousal);
 extern void leo_compute_attractor_pull(float valence, float arousal, float* outDV, float* outDA);
+extern float leo_entropy(char* text);
+extern float leo_emotional_score(char* text);
+extern float leo_perplexity(char* text);
+extern float leo_semantic_distance(char* text1, char* text2);
 
 #ifdef __cplusplus
 }

@@ -26,8 +26,8 @@ state/school_bootstrap.json
 .DS_Store
 Thumbs.db
 
-# C extensions
-*.so
+# C extensions (keep .so for inner_world - pre-compiled Go library)
+# *.so
 
 # Distribution / packaging
 .Python

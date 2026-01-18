@@ -22,7 +22,9 @@ package main
 import "C"
 import (
 	"math"
+	"strings"
 	"sync"
+	"unicode"
 )
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -344,6 +346,234 @@ func leo_compute_attractor_pull(valence, arousal C.float, outDV, outDA *C.float)
 	dv, da := ComputeAttractorPull(float32(valence), float32(arousal))
 	*outDV = C.float(dv)
 	*outDA = C.float(da)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HIGH MATH ENGINE (from arianna.c/high.go)
+// Fast mathematical computations for emotional analysis
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// tokenize splits text into lowercase words
+func tokenize(text string) []string {
+	text = strings.ToLower(text)
+
+	var words []string
+	var current strings.Builder
+
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			current.WriteRune(r)
+		} else if current.Len() > 0 {
+			words = append(words, current.String())
+			current.Reset()
+		}
+	}
+
+	if current.Len() > 0 {
+		words = append(words, current.String())
+	}
+
+	return words
+}
+
+// VectorizedEntropy computes entropy with emotional modulation
+func VectorizedEntropy(text string) (entropy float32, emotionalScore float32) {
+	words := tokenize(text)
+	if len(words) == 0 {
+		return 0, 0
+	}
+
+	wordCounts := make(map[string]int)
+	totalWords := 0
+	emotionalSum := float32(0)
+
+	for _, word := range words {
+		wordCounts[word]++
+		totalWords++
+
+		// Accumulate emotional weight
+		if weight, exists := EmotionalWeights[word]; exists {
+			emotionalSum += weight
+		}
+	}
+
+	if totalWords == 0 {
+		return 0, 0
+	}
+
+	// Compute Shannon entropy
+	entropy = float32(0)
+	for _, count := range wordCounts {
+		p := float32(count) / float32(totalWords)
+		if p > 0 {
+			entropy -= p * float32(math.Log2(float64(p)))
+		}
+	}
+
+	// Emotional score normalized by word count
+	emotionalScore = emotionalSum / float32(totalWords)
+
+	// Modulate entropy by emotional intensity
+	emotionalMod := 1.0 + float32(math.Abs(float64(emotionalScore)))*0.2
+	entropy *= emotionalMod
+
+	return entropy, emotionalScore
+}
+
+// CharEntropy computes character-level entropy
+func CharEntropy(text string) float32 {
+	if len(text) == 0 {
+		return 0
+	}
+
+	charCounts := make(map[rune]int)
+	total := 0
+
+	for _, c := range text {
+		charCounts[c]++
+		total++
+	}
+
+	entropy := float32(0)
+	for _, count := range charCounts {
+		p := float32(count) / float32(total)
+		if p > 0 {
+			entropy -= p * float32(math.Log2(float64(p)))
+		}
+	}
+
+	return entropy
+}
+
+// Perplexity computes perplexity of text based on character transitions
+func Perplexity(text string) float32 {
+	if len(text) < 2 {
+		return 1.0
+	}
+
+	// Build bigram counts
+	bigramCounts := make(map[string]int)
+	unigramCounts := make(map[rune]int)
+
+	runes := []rune(text)
+	for i := 0; i < len(runes)-1; i++ {
+		bigram := string(runes[i : i+2])
+		bigramCounts[bigram]++
+		unigramCounts[runes[i]]++
+	}
+	unigramCounts[runes[len(runes)-1]]++
+
+	// Compute log probability
+	logProb := float64(0)
+	count := 0
+
+	for i := 0; i < len(runes)-1; i++ {
+		bigram := string(runes[i : i+2])
+		bigramCount := bigramCounts[bigram]
+		unigramCount := unigramCounts[runes[i]]
+
+		if unigramCount > 0 && bigramCount > 0 {
+			p := float64(bigramCount) / float64(unigramCount)
+			logProb += math.Log2(p)
+			count++
+		}
+	}
+
+	if count == 0 {
+		return 1.0
+	}
+
+	avgLogProb := logProb / float64(count)
+	perplexity := math.Pow(2, -avgLogProb)
+
+	return float32(perplexity)
+}
+
+// SemanticDistance computes distance between two texts using cosine similarity
+func SemanticDistance(text1, text2 string) float32 {
+	words1 := tokenize(text1)
+	words2 := tokenize(text2)
+
+	if len(words1) == 0 || len(words2) == 0 {
+		return 1.0 // Maximum distance
+	}
+
+	// Build vocabulary
+	vocab := make(map[string]int)
+	idx := 0
+	for _, w := range words1 {
+		if _, exists := vocab[w]; !exists {
+			vocab[w] = idx
+			idx++
+		}
+	}
+	for _, w := range words2 {
+		if _, exists := vocab[w]; !exists {
+			vocab[w] = idx
+			idx++
+		}
+	}
+
+	// Build vectors
+	vec1 := make([]float32, len(vocab))
+	vec2 := make([]float32, len(vocab))
+
+	for _, w := range words1 {
+		vec1[vocab[w]]++
+	}
+	for _, w := range words2 {
+		vec2[vocab[w]]++
+	}
+
+	// Cosine similarity
+	dot := float32(0)
+	norm1 := float32(0)
+	norm2 := float32(0)
+
+	for i := range vec1 {
+		dot += vec1[i] * vec2[i]
+		norm1 += vec1[i] * vec1[i]
+		norm2 += vec2[i] * vec2[i]
+	}
+
+	if norm1 == 0 || norm2 == 0 {
+		return 1.0
+	}
+
+	similarity := dot / (float32(math.Sqrt(float64(norm1))) * float32(math.Sqrt(float64(norm2))))
+
+	return 1.0 - similarity
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CGO EXPORTS - HIGH MATH
+// ═══════════════════════════════════════════════════════════════════════════════
+
+//export leo_entropy
+func leo_entropy(text *C.char) C.float {
+	goText := C.GoString(text)
+	entropy, _ := VectorizedEntropy(goText)
+	return C.float(entropy)
+}
+
+//export leo_emotional_score
+func leo_emotional_score(text *C.char) C.float {
+	goText := C.GoString(text)
+	_, emotional := VectorizedEntropy(goText)
+	return C.float(emotional)
+}
+
+//export leo_perplexity
+func leo_perplexity(text *C.char) C.float {
+	goText := C.GoString(text)
+	return C.float(Perplexity(goText))
+}
+
+//export leo_semantic_distance
+func leo_semantic_distance(text1 *C.char, text2 *C.char) C.float {
+	goText1 := C.GoString(text1)
+	goText2 := C.GoString(text2)
+	return C.float(SemanticDistance(goText1, goText2))
 }
 
 // Main is required for CGO
