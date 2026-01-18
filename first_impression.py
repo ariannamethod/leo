@@ -125,6 +125,151 @@ AROUSAL_MODIFIERS: Dict[str, float] = {
 }
 
 
+# ============================================================================
+# AROUSAL COMPONENTS (inspired by arianna.c/mood.h)
+# ============================================================================
+# Arousal is not just "high/low" — it's a combination of factors:
+# - TENSION: conflict, urgency, pressure
+# - NOVELTY: surprise, unfamiliarity
+# - FOCUS: concentration, precision
+# - RECURSION: self-reference, meta-cognition
+#
+# Different emotions have different arousal profiles:
+# - FEAR: high tension, high arousal (0.8)
+# - RAGE: very high tension, very high arousal (0.9)
+# - VOID: low everything, low arousal (0.1) — numbness
+# - JOY: moderate arousal, high valence (0.6)
+# ============================================================================
+
+# Tension words — conflict, urgency, pressure
+TENSION_WORDS: Dict[str, float] = {
+    "must": 0.6, "need": 0.5, "urgent": 0.8, "now": 0.4,
+    "stop": 0.7, "wait": 0.4, "hurry": 0.7, "quick": 0.5,
+    "danger": 0.8, "threat": 0.7, "crisis": 0.8, "emergency": 0.9,
+    "fight": 0.7, "attack": 0.8, "conflict": 0.6, "battle": 0.7,
+    "pressure": 0.6, "stress": 0.5, "deadline": 0.5, "demand": 0.5,
+}
+
+# Novelty words — surprise, unfamiliarity
+NOVELTY_WORDS: Dict[str, float] = {
+    "surprise": 0.7, "suddenly": 0.6, "unexpected": 0.7, "shock": 0.8,
+    "strange": 0.5, "weird": 0.4, "unusual": 0.5, "bizarre": 0.6,
+    "new": 0.4, "different": 0.3, "unknown": 0.5, "discover": 0.5,
+    "first": 0.4, "never": 0.5, "change": 0.4, "transform": 0.5,
+}
+
+# Focus words — concentration, precision
+FOCUS_WORDS: Dict[str, float] = {
+    "exactly": 0.5, "precisely": 0.5, "specific": 0.4, "particular": 0.4,
+    "only": 0.4, "just": 0.3, "certain": 0.4, "definite": 0.5,
+    "clear": 0.4, "obvious": 0.4, "sure": 0.4, "know": 0.3,
+    "understand": 0.4, "realize": 0.5, "see": 0.3, "notice": 0.4,
+}
+
+# Recursion words — self-reference, meta-cognition
+RECURSION_WORDS: Dict[str, float] = {
+    "myself": 0.6, "yourself": 0.5, "itself": 0.5, "self": 0.6,
+    "remember": 0.5, "forget": 0.5, "think": 0.4, "thought": 0.4,
+    "feel": 0.4, "feeling": 0.4, "sense": 0.4, "aware": 0.5,
+    "realize": 0.5, "recognize": 0.5, "reflect": 0.6, "consider": 0.4,
+}
+
+
+@dataclass
+class ArousalComponents:
+    """
+    Decomposed arousal (inspired by arianna.c/mood.h).
+    
+    Arousal is not just "high/low" — it has multiple dimensions
+    that combine to create the overall activation level.
+    """
+    base: float = 0.0       # Base arousal from AROUSAL_MODIFIERS
+    tension: float = 0.0    # Conflict, urgency, pressure
+    novelty: float = 0.0    # Surprise, unfamiliarity
+    focus: float = 0.0      # Concentration, precision
+    recursion: float = 0.0  # Self-reference, meta-cognition
+    
+    @property
+    def combined(self) -> float:
+        """
+        Combine arousal components into single value.
+        
+        Formula inspired by arianna.c mood scoring:
+        - Tension has highest weight (urgency drives arousal)
+        - Novelty adds surprise activation
+        - Focus can dampen or amplify
+        - Recursion adds depth
+        """
+        combined = (
+            self.base * 1.0 +
+            self.tension * 0.8 +
+            self.novelty * 0.5 +
+            self.focus * 0.3 +
+            self.recursion * 0.2
+        )
+        return max(0.0, min(1.0, combined))
+    
+    def __repr__(self) -> str:
+        return (f"ArousalComponents(base={self.base:.2f}, tension={self.tension:.2f}, "
+                f"novelty={self.novelty:.2f}, focus={self.focus:.2f}, "
+                f"recursion={self.recursion:.2f}, combined={self.combined:.2f})")
+
+
+def compute_arousal_components(text: str) -> ArousalComponents:
+    """
+    Compute decomposed arousal components from text.
+    
+    Inspired by arianna.c/mood.h — arousal is not just high/low,
+    it's a combination of tension, novelty, focus, and recursion.
+    
+    Returns:
+        ArousalComponents with all dimensions
+    """
+    words = text.lower().split()
+    
+    if not words:
+        return ArousalComponents()
+    
+    components = ArousalComponents()
+    
+    for word in words:
+        clean_word = word.strip(".,;:?\"'()-")
+        
+        # Base arousal from modifiers
+        if clean_word in AROUSAL_MODIFIERS:
+            components.base += AROUSAL_MODIFIERS[clean_word]
+        
+        # Tension component
+        if clean_word in TENSION_WORDS:
+            components.tension += TENSION_WORDS[clean_word]
+        
+        # Novelty component
+        if clean_word in NOVELTY_WORDS:
+            components.novelty += NOVELTY_WORDS[clean_word]
+        
+        # Focus component
+        if clean_word in FOCUS_WORDS:
+            components.focus += FOCUS_WORDS[clean_word]
+        
+        # Recursion component
+        if clean_word in RECURSION_WORDS:
+            components.recursion += RECURSION_WORDS[clean_word]
+        
+        # Exclamation marks increase base arousal
+        if "!" in word:
+            components.base += 0.15
+    
+    # Normalize by word count (more words = more opportunity for arousal)
+    # But cap each component at 1.0
+    components.base = min(1.0, components.base)
+    components.tension = min(1.0, components.tension)
+    components.novelty = min(1.0, components.novelty)
+    components.focus = min(1.0, components.focus)
+    components.recursion = min(1.0, components.recursion)
+    
+    return components
+
+
 def compute_emotional_valence(text: str) -> Tuple[float, float]:
     """
     Compute emotional valence and arousal from text using EMOTIONAL_WEIGHTS.
@@ -132,7 +277,7 @@ def compute_emotional_valence(text: str) -> Tuple[float, float]:
     Returns:
         (valence, arousal) where:
         - valence: [-1, 1] negative to positive
-        - arousal: [0, 1] calm to excited
+        - arousal: [0, 1] calm to excited (now using ArousalComponents!)
     """
     words = text.lower().split()
     
@@ -141,7 +286,6 @@ def compute_emotional_valence(text: str) -> Tuple[float, float]:
     
     valence_sum = 0.0
     valence_count = 0
-    arousal = 0.0
     
     for word in words:
         # Clean punctuation except for exclamation
@@ -151,23 +295,48 @@ def compute_emotional_valence(text: str) -> Tuple[float, float]:
         if clean_word in EMOTIONAL_WEIGHTS:
             valence_sum += EMOTIONAL_WEIGHTS[clean_word]
             valence_count += 1
-        
-        # Check arousal modifiers
-        if clean_word in AROUSAL_MODIFIERS:
-            arousal += AROUSAL_MODIFIERS[clean_word]
-        
-        # Exclamation marks increase arousal
-        if "!" in word:
-            arousal += AROUSAL_MODIFIERS.get("!", 0.15)
     
     # Compute average valence
     valence = valence_sum / valence_count if valence_count > 0 else 0.0
+    
+    # Use sophisticated arousal computation (inspired by arianna.c)
+    arousal_components = compute_arousal_components(text)
+    arousal = arousal_components.combined
     
     # Clamp values
     valence = max(-1.0, min(1.0, valence))
     arousal = max(0.0, min(1.0, arousal))
     
     return valence, arousal
+
+
+def compute_emotional_valence_detailed(text: str) -> Tuple[float, ArousalComponents]:
+    """
+    Compute emotional valence with detailed arousal breakdown.
+    
+    Returns:
+        (valence, ArousalComponents) for more nuanced analysis
+    """
+    words = text.lower().split()
+    
+    if not words:
+        return 0.0, ArousalComponents()
+    
+    valence_sum = 0.0
+    valence_count = 0
+    
+    for word in words:
+        clean_word = word.strip(".,;:?\"'()-")
+        if clean_word in EMOTIONAL_WEIGHTS:
+            valence_sum += EMOTIONAL_WEIGHTS[clean_word]
+            valence_count += 1
+    
+    valence = valence_sum / valence_count if valence_count > 0 else 0.0
+    valence = max(-1.0, min(1.0, valence))
+    
+    arousal_components = compute_arousal_components(text)
+    
+    return valence, arousal_components
 
 
 # ============================================================================
@@ -221,6 +390,120 @@ PLAYFUL_WORDS = {
 
 
 # ============================================================================
+# EMOTIONAL ATTRACTORS (inspired by arianna.c/emotional_drift.go)
+# ============================================================================
+# Emotions don't just drift — they're pulled toward "attractor" states.
+# Some emotions are "sticky" (hard to leave), others are transitional.
+#
+# Each attractor has:
+# - Position: (valence, arousal) in emotional space
+# - Strength: how strongly it pulls
+# - Sticky: how hard to leave once reached (0-1)
+#
+# Examples from arianna.c:
+# - Void is very sticky (0.7) — depression is hard to escape
+# - Excitement is not sticky (0.2) — it fades quickly
+# ============================================================================
+
+@dataclass
+class EmotionalAttractor:
+    """
+    An attractor in emotional space that pulls the state toward it.
+    Inspired by arianna.c/emotional_drift.go.
+    """
+    name: str
+    valence: float      # -1 to 1
+    arousal: float      # 0 to 1
+    strength: float     # how strongly it pulls (0-1)
+    sticky: float       # how hard to leave once reached (0-1)
+
+
+# Define emotional attractors (from arianna.c)
+EMOTIONAL_ATTRACTORS: List[EmotionalAttractor] = [
+    # Positive states
+    EmotionalAttractor("joy", valence=0.7, arousal=0.6, strength=0.3, sticky=0.3),
+    EmotionalAttractor("contentment", valence=0.5, arousal=0.2, strength=0.4, sticky=0.5),
+    EmotionalAttractor("excitement", valence=0.8, arousal=0.8, strength=0.2, sticky=0.2),
+    EmotionalAttractor("warmth", valence=0.6, arousal=0.3, strength=0.3, sticky=0.4),
+    
+    # Negative states
+    EmotionalAttractor("sadness", valence=-0.6, arousal=0.2, strength=0.4, sticky=0.6),
+    EmotionalAttractor("fear", valence=-0.7, arousal=0.8, strength=0.3, sticky=0.3),
+    EmotionalAttractor("rage", valence=-0.8, arousal=0.9, strength=0.25, sticky=0.2),
+    EmotionalAttractor("void", valence=-0.4, arousal=0.1, strength=0.5, sticky=0.7),  # Very sticky!
+    
+    # Neutral/flow states
+    EmotionalAttractor("flow", valence=0.1, arousal=0.4, strength=0.35, sticky=0.4),
+    EmotionalAttractor("neutral", valence=0.0, arousal=0.3, strength=0.3, sticky=0.3),
+    EmotionalAttractor("curiosity", valence=0.2, arousal=0.5, strength=0.25, sticky=0.35),
+    
+    # Leo-specific: Playful!
+    EmotionalAttractor("playful", valence=0.5, arousal=0.7, strength=0.3, sticky=0.25),
+]
+
+
+def find_nearest_attractor(valence: float, arousal: float) -> EmotionalAttractor:
+    """
+    Find the nearest emotional attractor to current position.
+    """
+    import math
+    
+    nearest = EMOTIONAL_ATTRACTORS[0]
+    min_dist = float('inf')
+    
+    for attractor in EMOTIONAL_ATTRACTORS:
+        dv = attractor.valence - valence
+        da = attractor.arousal - arousal
+        dist = math.sqrt(dv * dv + da * da)
+        
+        if dist < min_dist:
+            min_dist = dist
+            nearest = attractor
+    
+    return nearest
+
+
+def compute_attractor_pull(valence: float, arousal: float) -> Tuple[float, float]:
+    """
+    Compute the combined pull from all attractors.
+    Returns (delta_valence, delta_arousal).
+    
+    Inspired by arianna.c/emotional_drift.go computeAttractorGradient().
+    """
+    import math
+    
+    total_dv = 0.0
+    total_da = 0.0
+    total_weight = 0.0
+    
+    for attractor in EMOTIONAL_ATTRACTORS:
+        # Distance to attractor
+        dv = attractor.valence - valence
+        da = attractor.arousal - arousal
+        dist = math.sqrt(dv * dv + da * da)
+        
+        if dist < 0.01:
+            continue
+        
+        # Pull strength (inverse distance with cutoff)
+        pull = attractor.strength / (dist + 0.5)
+        
+        # If close and sticky, reduce outward pull
+        if dist < 0.2:
+            pull *= (1 - attractor.sticky)
+        
+        # Accumulate gradient
+        weight = pull
+        total_dv += (dv / dist) * weight
+        total_da += (da / dist) * weight
+        total_weight += weight
+    
+    if total_weight > 0:
+        return total_dv / total_weight, total_da / total_weight
+    return 0.0, 0.0
+
+
+# ============================================================================
 # EMOTIONAL STATE & DRIFT ODE (inspired by arianna.c/high.go)
 # ============================================================================
 # Emotions evolve through differential equations, not discrete jumps.
@@ -267,6 +550,7 @@ class EmotionalDriftParams:
     decay_rate: float = 0.15      # Return to baseline speed (τ) — increased for faster response
     surprise_gain: float = 0.5    # How much surprise affects state — increased for sensitivity
     input_pull: float = 0.3       # Direct influence of input valence (NEW)
+    attractor_gravity: float = 0.1  # Pull toward emotional attractors (NEW from arianna.c)
     entropy_weight: float = 0.2   # Entropy influence on arousal
     momentum_decay: float = 0.3   # Momentum persistence — decreased for less inertia
     baseline_valence: float = 0.1 # Resting valence (slightly positive)
@@ -302,29 +586,32 @@ def emotional_drift(
     if params is None:
         params = DEFAULT_DRIFT_PARAMS
     
-    # Analyze input using EMOTIONAL_WEIGHTS
+    # Analyze input using EMOTIONAL_WEIGHTS + sophisticated arousal
     input_valence, input_arousal = compute_emotional_valence(input_text)
     
     # Compute surprise (prediction error) — Free Energy Principle
     surprise = input_valence - current.prediction
     
+    # Compute attractor gradient (from arianna.c/emotional_drift.go)
+    attractor_dv, attractor_da = compute_attractor_pull(current.valence, current.arousal)
+    
     # ODE integration (Euler method)
     
-    # dV/dt = decay toward baseline + surprise influence + input pull + momentum
-    # INPUT PULL: Direct influence of input valence — if input is very negative,
-    # Leo should feel it, not just be "surprised" by it
+    # dV/dt = decay toward baseline + surprise influence + input pull + attractor pull + momentum
     d_valence = (
         -params.decay_rate * (current.valence - params.baseline_valence) +
         surprise * params.surprise_gain +
-        (input_valence - current.valence) * params.input_pull +  # NEW: direct pull
-        current.momentum * 0.3  # Reduced momentum contribution
+        (input_valence - current.valence) * params.input_pull +
+        attractor_dv * params.attractor_gravity +  # NEW: attractor pull
+        current.momentum * 0.3
     )
     
-    # dA/dt = decay toward baseline + |surprise| + input arousal
+    # dA/dt = decay toward baseline + |surprise| + input arousal + attractor pull
     d_arousal = (
         -params.decay_rate * (current.arousal - params.baseline_arousal) +
         abs(surprise) * params.surprise_gain +
-        input_arousal * params.entropy_weight
+        input_arousal * params.entropy_weight +
+        attractor_da * params.attractor_gravity  # NEW: attractor pull
     )
     
     # Update momentum (tracks rate of change)

@@ -198,5 +198,76 @@ class TestEmotionalDrift(unittest.TestCase):
         self.assertAlmostEqual(surprise, 1.0)
 
 
+class TestArousalComponents(unittest.TestCase):
+    """Test sophisticated arousal decomposition (inspired by arianna.c/mood.h)."""
+
+    def test_arousal_components_creation(self):
+        """ArousalComponents should be created."""
+        from first_impression import ArousalComponents
+        comp = ArousalComponents()
+        self.assertEqual(comp.base, 0.0)
+        self.assertEqual(comp.tension, 0.0)
+        self.assertEqual(comp.combined, 0.0)
+
+    def test_compute_arousal_components_tension(self):
+        """High tension words should increase tension component."""
+        from first_impression import compute_arousal_components
+        
+        result = compute_arousal_components("STOP NOW! This is urgent!")
+        self.assertGreater(result.tension, 0.5)
+        self.assertGreater(result.combined, 0.5)
+
+    def test_compute_arousal_components_novelty(self):
+        """Novelty words should increase novelty component."""
+        from first_impression import compute_arousal_components
+        
+        result = compute_arousal_components("Suddenly something strange happened!")
+        self.assertGreater(result.novelty, 0.5)
+
+    def test_compute_arousal_components_recursion(self):
+        """Self-reference words should increase recursion component."""
+        from first_impression import compute_arousal_components
+        
+        result = compute_arousal_components("Remember yourself. Think about what you feel.")
+        self.assertGreater(result.recursion, 0.5)
+
+
+class TestEmotionalAttractors(unittest.TestCase):
+    """Test emotional attractors (inspired by arianna.c/emotional_drift.go)."""
+
+    def test_emotional_attractors_exist(self):
+        """EMOTIONAL_ATTRACTORS should be defined."""
+        from first_impression import EMOTIONAL_ATTRACTORS
+        self.assertGreater(len(EMOTIONAL_ATTRACTORS), 0)
+
+    def test_find_nearest_attractor(self):
+        """find_nearest_attractor should return closest attractor."""
+        from first_impression import find_nearest_attractor
+        
+        # High positive valence, moderate arousal → should be near joy/warmth
+        attractor = find_nearest_attractor(0.7, 0.5)
+        self.assertIn(attractor.name, ["joy", "warmth", "excitement"])
+        
+        # Low valence, low arousal → should be near void
+        attractor = find_nearest_attractor(-0.4, 0.1)
+        self.assertEqual(attractor.name, "void")
+
+    def test_void_is_sticky(self):
+        """Void attractor should be very sticky (hard to leave)."""
+        from first_impression import EMOTIONAL_ATTRACTORS
+        
+        void = next((a for a in EMOTIONAL_ATTRACTORS if a.name == "void"), None)
+        self.assertIsNotNone(void)
+        self.assertGreater(void.sticky, 0.6)  # Should be sticky
+
+    def test_excitement_is_not_sticky(self):
+        """Excitement attractor should not be sticky (fades quickly)."""
+        from first_impression import EMOTIONAL_ATTRACTORS
+        
+        excitement = next((a for a in EMOTIONAL_ATTRACTORS if a.name == "excitement"), None)
+        self.assertIsNotNone(excitement)
+        self.assertLess(excitement.sticky, 0.3)  # Should fade quickly
+
+
 if __name__ == "__main__":
     unittest.main()
