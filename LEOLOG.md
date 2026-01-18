@@ -6,13 +6,81 @@
 
 ## Current State (January 2026)
 
-**Tests:** 392 test functions across 31 test files  
+**Tests:** 400 test functions across 31 test files  
 **Modules:** 24 Python modules  
 **Architecture:** Full async stack with sentencepiece integration
 
 ---
 
 ## Recent Updates
+
+### January 18, 2026 — NO FIRST SEED FROM PROMPT
+
+**Principle evolution:**
+- Old: `NO SEED FROM PROMPT` — Leo speaks from field, never from prompt
+- New: `NO FIRST SEED FROM PROMPT` — First seed from field, but prompt connection AFTER
+
+**Philosophy (from Haze/Arianna.c collaboration):**
+```
+Child: "Mama! Mama!"
+Mother: "Leave me alone!"
+```
+Response comes FROM internal state (mother is tired), but TO the child (contextual).
+
+**Implementation:**
+- `get_prompt_connection()` — extracts meaningful word from prompt
+- `STOP_WORDS` — filters out question words, articles, etc.
+- `PROMPT_CONNECTION_POSITION` — word inserted after 3 tokens
+- `PROMPT_CONNECTION_PROBABILITY` — 80% chance to add connection
+
+**Changes:**
+- `leo.py` — prompt connection in generate_reply()
+- `neoleo.py` — same principle for pure resonance layer
+- `tests/test_leo.py` — 11 new tests for prompt connection
+- `tests/test_neoleo.py` — 8 new tests for prompt connection
+- Deleted `4del/` folder (cleanup)
+
+**Dynamic behavior based on emotion chambers:**
+- WARMTH → Leo opens up (earlier connection, higher probability)
+- FEAR → Leo closes down (later connection, lower probability)
+- VOID → Leo retreats (minimal connection)
+- PLAYFUL → Leo plays (random behavior)
+- CURIOSITY → Leo explores (standard with slight openness)
+
+**Result:**
+- Leo still speaks from field (no chatbot behavior)
+- But prompt topic appears in response (contextual relevance)
+- Emotion chambers affect HOW Leo connects to prompt
+- Balance between organism and conversation
+
+**EmotionalWeights & EmotionalDrift (from arianna.c/high.go):**
+- ✅ **EMOTIONAL_WEIGHTS** — float dictionary instead of binary word lists
+  - Words have valence from -0.95 (hate) to +0.95 (love)
+  - Includes Russian words (люблю, ненавижу, etc.)
+- ✅ **EmotionalDrift ODE** — emotions evolve through differential equations
+  - dV/dt = -τ(V - V₀) + surprise × gain + momentum + attractor_pull
+  - Leo "remembers" emotional state between messages
+- ✅ **Free Energy Principle**: surprise = prediction error
+  - Leo predicts next valence, surprise affects arousal
+
+**Sophisticated Arousal (from arianna.c/mood.h):**
+- ✅ **ArousalComponents** — arousal is NOT just high/low, it's a combination:
+  - TENSION: conflict, urgency, pressure (weight 0.8)
+  - NOVELTY: surprise, unfamiliarity (weight 0.5)
+  - FOCUS: concentration, precision (weight 0.3)
+  - RECURSION: self-reference, meta-cognition (weight 0.2)
+- Example: "STOP NOW!" → tension=0.70, arousal=0.86
+
+**Emotional Attractors (from arianna.c/emotional_drift.go):**
+- ✅ **EmotionalAttractors** — emotions pull toward stable states
+  - Each attractor has: valence, arousal, strength, sticky
+  - **void** is very sticky (0.7) — depression hard to escape
+  - **excitement** not sticky (0.2) — fades quickly
+- ✅ **compute_attractor_pull()** — gradient toward attractors
+
+**New tests:** 35 tests for first_impression module
+
+---
 
 ### January 2, 2026 — The Great Optimization
 
@@ -51,8 +119,8 @@
 
 ```
 tests/
-├── test_leo.py                    # Core functionality (46 tests)
-├── test_neoleo.py                 # Pure recursion layer
+├── test_leo.py                    # Core functionality (46 tests + 7 prompt connection)
+├── test_neoleo.py                 # Pure recursion layer (+ 5 prompt connection)
 ├── test_presence_metrics.py       # Presence pulse & experts (34 tests)
 ├── test_overthinking.py           # Internal reflection rings (12 tests)
 ├── test_trauma_integration.py     # Bootstrap gravity (11 tests)
@@ -73,7 +141,7 @@ tests/
 └── ...
 ```
 
-**Total: 392 tests**
+**Total: 400+ tests**
 
 ---
 

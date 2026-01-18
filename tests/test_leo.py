@@ -302,5 +302,112 @@ class TestLeoField(unittest.TestCase):
         self.assertIn("bigrams", stats)
 
 
+class TestPromptConnection(unittest.TestCase):
+    """Test the NO FIRST SEED FROM PROMPT + prompt connection functionality."""
+    
+    def test_get_prompt_connection_basic(self):
+        """Test basic prompt connection extraction."""
+        prompt = "What is resonance?"
+        tokens = leo.tokenize(prompt)
+        vocab = ["resonance", "field", "leo"]
+        
+        connection = leo.get_prompt_connection(tokens, vocab)
+        
+        # Should return 'resonance' (in vocab, not a stop word)
+        self.assertEqual(connection, "resonance")
+    
+    def test_get_prompt_connection_prefers_vocab_words(self):
+        """Test that vocab words are preferred over non-vocab words."""
+        prompt = "Tell me about suffering and love"
+        tokens = leo.tokenize(prompt)
+        vocab = ["love"]  # Only 'love' is in vocab
+        
+        connection = leo.get_prompt_connection(tokens, vocab)
+        
+        # Should prefer 'love' (in vocab) over 'suffering' (longer but not in vocab)
+        self.assertEqual(connection, "love")
+    
+    def test_get_prompt_connection_filters_stop_words(self):
+        """Test that stop words are filtered out."""
+        prompt = "What is the meaning of this"
+        tokens = leo.tokenize(prompt)
+        vocab = []
+        
+        connection = leo.get_prompt_connection(tokens, vocab)
+        
+        # Should return 'meaning' (only non-stop word >= 3 chars)
+        self.assertEqual(connection, "meaning")
+    
+    def test_get_prompt_connection_empty_prompt(self):
+        """Test that empty prompt returns None."""
+        connection = leo.get_prompt_connection([], [])
+        self.assertIsNone(connection)
+    
+    def test_get_prompt_connection_only_stop_words(self):
+        """Test prompt with only stop words returns None."""
+        prompt = "what is the"
+        tokens = leo.tokenize(prompt)
+        vocab = []
+        
+        connection = leo.get_prompt_connection(tokens, vocab)
+        
+        # All words are stop words, should return None
+        self.assertIsNone(connection)
+    
+    def test_stop_words_constant(self):
+        """Test that STOP_WORDS constant is properly defined."""
+        self.assertIsInstance(leo.STOP_WORDS, (set, frozenset))
+        # Should contain common stop words
+        self.assertIn("what", leo.STOP_WORDS)
+        self.assertIn("the", leo.STOP_WORDS)
+        self.assertIn("is", leo.STOP_WORDS)
+    
+    def test_prompt_connection_base_constants(self):
+        """Test that base prompt connection constants are properly defined."""
+        self.assertGreaterEqual(leo.PROMPT_CONNECTION_BASE_PROBABILITY, 0.0)
+        self.assertLessEqual(leo.PROMPT_CONNECTION_BASE_PROBABILITY, 1.0)
+        self.assertGreater(leo.PROMPT_CONNECTION_BASE_POSITION, 0)
+    
+    def test_compute_dynamic_connection_params_neutral(self):
+        """Test dynamic params with neutral metrics."""
+        position, prob = leo.compute_dynamic_connection_params(
+            novelty=0.3, arousal=0.3, entropy=0.5
+        )
+        # Should use base values for neutral input (position=2, prob=0.9)
+        self.assertEqual(position, leo.PROMPT_CONNECTION_BASE_POSITION)
+        self.assertEqual(prob, leo.PROMPT_CONNECTION_BASE_PROBABILITY)
+    
+    def test_compute_dynamic_connection_params_high_arousal(self):
+        """Test dynamic params with high arousal."""
+        position, prob = leo.compute_dynamic_connection_params(
+            novelty=0.3, arousal=0.8, entropy=0.5
+        )
+        # High arousal → position stays at minimum (2), higher probability
+        # With base position = 2, can't go lower
+        self.assertLessEqual(position, leo.PROMPT_CONNECTION_BASE_POSITION)
+        self.assertGreater(prob, leo.PROMPT_CONNECTION_BASE_PROBABILITY)
+    
+    def test_compute_dynamic_connection_params_high_novelty(self):
+        """Test dynamic params with high novelty."""
+        position, prob = leo.compute_dynamic_connection_params(
+            novelty=0.8, arousal=0.3, entropy=0.5
+        )
+        # High novelty → later position, lower probability
+        self.assertGreater(position, leo.PROMPT_CONNECTION_BASE_POSITION)
+        self.assertLess(prob, leo.PROMPT_CONNECTION_BASE_PROBABILITY)
+    
+    def test_get_prompt_connection_with_arousal(self):
+        """Test that arousal parameter affects word selection."""
+        prompt = "I LOVE this thing!"
+        tokens = leo.tokenize(prompt)
+        vocab = []
+        
+        # With high arousal, should still return a meaningful word
+        connection = leo.get_prompt_connection(tokens, vocab, arousal=0.9)
+        self.assertIsNotNone(connection)
+        # Should be either 'LOVE' or 'thing' (both are meaningful)
+        self.assertIn(connection.lower(), ['love', 'thing'])
+
+
 if __name__ == "__main__":
     unittest.main()

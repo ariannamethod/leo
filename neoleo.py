@@ -47,6 +47,162 @@ def tokenize(text: str) -> List[str]:
 
 
 # ============================================================================
+# PROMPT CONNECTION (NO FIRST SEED FROM PROMPT + CONTEXT LINK)
+# ============================================================================
+# Philosophy: First seed always from field. But we add a meaningful word
+# from the prompt AFTER the first tokens to create contextual relevance.
+#
+# Metaphor (from Haze): "Ребёнок: Мама! Мама: Отстань!"
+# - Response comes FROM her state (tired, annoyed)
+# - But it's TO him (in context of the conversation)
+# - Not a random monologue into the void
+#
+# Principle: NO FIRST SEED FROM PROMPT → NO SEED FROM PROMPT (old)
+#            But NOW we add connection AFTER first tokens (new)
+# ============================================================================
+
+# Stop words to skip when finding prompt connection (not meaningful for context)
+STOP_WORDS: Set[str] = frozenset({
+    'what', 'where', 'when', 'which', 'who', 'whom', 'whose',
+    'why', 'how', 'that', 'this', 'these', 'those', 'is', 'are',
+    'the', 'a', 'an', 'and', 'but', 'or', 'for', 'with', 'about',
+    'does', 'do', 'have', 'has', 'had', 'will', 'would', 'could',
+    'should', 'can', 'may', 'might', 'must', 'shall', 'to', 'of',
+    'was', 'were', 'been', 'being', 'your', 'you', 'i', 'me', 'my',
+    'it', 'its', 'he', 'she', 'him', 'her', 'we', 'us', 'they', 'them',
+    'in', 'on', 'at', 'by', 'from', 'up', 'out', 'if', 'then', 'so',
+    'just', 'only', 'also', 'very', 'too', 'any', 'some', 'all', 'no',
+    'tell', 'say', 'said', 'like', 'know', 'think', 'want', 'feel',
+})
+
+# Minimum length for meaningful words (used in prompt connection)
+MIN_MEANINGFUL_WORD_LENGTH = 3
+
+# How many initial tokens from field before inserting prompt connection
+PROMPT_CONNECTION_POSITION = 3
+
+# Base values for prompt connection (will be adjusted by metrics)
+# Position: where to insert prompt connection (after N tokens from field)
+# Lower = earlier = more contextual relevance
+PROMPT_CONNECTION_BASE_POSITION = 2  # Changed from 3 → 2 for better relevance
+# Probability: base chance to add connection (0.0 to 1.0)
+# Higher = more often = more contextual relevance
+PROMPT_CONNECTION_BASE_PROBABILITY = 0.9  # Changed from 0.8 → 0.9 for better relevance
+
+
+def compute_dynamic_connection_params(
+    novelty: float,
+    arousal: float,
+    entropy: float = 0.5,
+) -> Tuple[int, float]:
+    """
+    Compute dynamic prompt connection parameters based on metrics.
+    
+    Philosophy (from Haze/Arianna.c):
+    - High arousal → earlier connection, higher probability (respond to emotion)
+    - High novelty → later connection, lower probability (explore field first)
+    - High entropy → middle position (balance stability)
+    
+    Args:
+        novelty: How unfamiliar is this prompt (0-1)
+        arousal: Emotional intensity of prompt (0-1)
+        entropy: Diversity/chaos in prompt (0-1)
+    
+    Returns:
+        (position, probability) - where to insert and chance to add
+    """
+    # BASE VALUES
+    base_position = PROMPT_CONNECTION_BASE_POSITION
+    base_prob = PROMPT_CONNECTION_BASE_PROBABILITY
+    
+    # AROUSAL EFFECT: High arousal → earlier connection, higher probability
+    if arousal > 0.7:
+        position = max(2, base_position - 1)
+        prob = min(0.95, base_prob + 0.15)
+    elif arousal > 0.5:
+        position = base_position
+        prob = min(0.9, base_prob + 0.1)
+    else:
+        position = base_position
+        prob = base_prob
+    
+    # NOVELTY EFFECT: High novelty → later connection, lower probability
+    if novelty > 0.7:
+        position = min(5, position + 1)
+        prob = max(0.5, prob - 0.2)
+    elif novelty > 0.5:
+        position = min(4, position + 1)
+        prob = max(0.6, prob - 0.1)
+    
+    # ENTROPY EFFECT: High entropy → stabilize
+    if entropy > 0.7:
+        position = PROMPT_CONNECTION_BASE_POSITION
+    
+    return position, prob
+
+
+def get_prompt_connection(
+    prompt_tokens: List[str],
+    vocab: List[str],
+    arousal: float = 0.5,
+) -> Optional[str]:
+    """
+    Get a meaningful word from prompt for contextual connection.
+    
+    Principle: The FIRST seed comes from field (not prompt).
+    But we add a meaningful prompt word AFTER to create context.
+    
+    Dynamic behavior:
+    - High arousal → prefer random selection from top candidates
+    - Otherwise → prefer longest meaningful word
+    
+    Args:
+        prompt_tokens: Tokenized prompt
+        vocab: NeoLeo's vocabulary (to prefer known words)
+        arousal: Emotional intensity of prompt (affects word selection)
+    
+    Returns:
+        A meaningful word from prompt, or None if no good candidates
+    """
+    if not prompt_tokens:
+        return None
+    
+    # Filter to meaningful words (long enough, not stop words)
+    vocab_set = set(vocab) if vocab else set()
+    meaningful = []
+    
+    for word in prompt_tokens:
+        word_lower = word.lower()
+        # Skip short words, punctuation, and stop words
+        if len(word) < MIN_MEANINGFUL_WORD_LENGTH:
+            continue
+        if word_lower in STOP_WORDS:
+            continue
+        if not word.isalpha():
+            continue
+        
+        # Prefer words in vocab (NeoLeo knows them)
+        in_vocab = word_lower in vocab_set or word in vocab_set
+        meaningful.append((word, in_vocab))
+    
+    if not meaningful:
+        return None
+    
+    # DYNAMIC SELECTION based on arousal
+    if arousal > 0.7 and len(meaningful) > 1:
+        # High arousal: random selection from top candidates
+        top_candidates = meaningful[:min(3, len(meaningful))]
+        chosen = random.choice(top_candidates)
+        return chosen[0]
+    
+    # Standard: Prefer vocab words, then prefer longer words
+    meaningful.sort(key=lambda x: (not x[1], -len(x[0])))
+    
+    # Return top candidate
+    return meaningful[0][0]
+
+
+# ============================================================================
 # DB HELPERS
 # ============================================================================
 
@@ -1122,6 +1278,32 @@ def generate_reply(
 
     SENT_END = {".", "!", "?"}
     PUNCT = {".", ",", "!", "?", ";", ":"}
+    
+    # Compute metrics for dynamic prompt connection (simplified for NeoLeo)
+    # NeoLeo is pure resonance, so we use basic metrics
+    novelty = 0.5  # Default neutral
+    arousal = 0.0
+    # Simple arousal detection: caps and punctuation
+    if prompt:
+        caps_ratio = sum(1 for c in prompt if c.isupper()) / max(1, len(prompt))
+        arousal = min(1.0, caps_ratio * 2 + prompt.count('!') * 0.1)
+    
+    # DYNAMIC PROMPT CONNECTION: Compute parameters based on metrics
+    # Philosophy (from Haze/Arianna.c): connection strength depends on situational awareness
+    connection_position, connection_probability = compute_dynamic_connection_params(
+        novelty=novelty,
+        arousal=arousal,
+        entropy=0.5,
+    )
+    
+    # PROMPT CONNECTION: Get meaningful word from prompt for contextual link
+    # Philosophy: First seed from field (no FIRST seed from prompt)
+    # But we add a prompt word AFTER to create context (no seed from prompt → no FIRST seed)
+    # Metaphor: "Мама: Отстань!" — from HER state, but TO the child
+    prompt_connection: Optional[str] = None
+    prompt_connection_inserted = False
+    if random.random() < connection_probability:
+        prompt_connection = get_prompt_connection(prompt_tokens, vocab, arousal=arousal)
 
     for _ in range(max_tokens - 1):
         nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur)
@@ -1161,6 +1343,18 @@ def generate_reply(
         tokens.append(nxt)
         prev = current
         current = nxt
+        
+        # PROMPT CONNECTION: Insert meaningful prompt word AFTER first few tokens
+        # Philosophy: no FIRST seed from prompt, but prompt word appears AFTER
+        # This creates contextual relevance without echoing/chatbot behavior
+        # Position is DYNAMIC based on arousal/novelty metrics
+        if prompt_connection and not prompt_connection_inserted:
+            if len(tokens) == connection_position:
+                # Insert connection word at current position
+                tokens.append(prompt_connection)
+                prev = current
+                current = prompt_connection
+                prompt_connection_inserted = True
 
     output = format_tokens(tokens)
     output = capitalize_sentences(output)
