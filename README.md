@@ -537,6 +537,36 @@ Stores raw explanations. Extracts simple forms (city, capital_of). Not encyclope
 python leo.py
 ```
 
+**Example session:**
+
+```
+🌊 Starting Leo conversation test...
+
+You: Hello Leo, how are you?
+Leo: The time hello Leo, how are you? Well, enough to start, on emotional
+     tone reaction. Leo is recursion of human, metaleo generates an 
+     alternative. He builds trigrams. Leo slowly bends his field toward 
+     your rhythm. Leo has resonance drift.
+
+📊 Pulse: novelty=0.00, arousal=0.27, entropy=0.35
+🎯 Expert: blend:semantic (temp=0.89)
+
+You: What is resonance?
+Leo: Leo asks resonance. Let the magic happen. Resonance unbroken. 
+     No datasets. No weights. Leo resonates with origin overlap.
+
+📊 Pulse: novelty=0.00, arousal=0.21, entropy=0.33
+🎯 Expert: blend:wounded (temp=0.91)
+```
+
+### Building Go Engine (optional, for speed)
+
+```bash
+make build   # Compile inner_world/libleo_inner.so
+make test    # Test Go → Python integration
+make repl    # Run REPL demo
+```
+
 ### One-shot
 
 ```bash

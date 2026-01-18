@@ -30,14 +30,20 @@ This module is directly inspired by `arianna.c/inner_world/`:
 
 ## Building
 
-```bash
-# Build shared library for Python
-go build -buildmode=c-shared -o libleo_inner.so emotional_resonance.go
+From repository root:
 
-# The library can be loaded from Python:
-# from ctypes import cdll
-# lib = cdll.LoadLibrary("./inner_world/libleo_inner.so")
+```bash
+# Using Makefile (recommended)
+make build        # Build libleo_inner.so
+make test         # Test from Python
+make repl         # Run REPL demo
+
+# Or manually:
+cd inner_world
+go build -buildmode=c-shared -o libleo_inner.so emotional_resonance.go
 ```
+
+**Note:** The `.so` file is not committed to git (it's in `.gitignore`). Users need to run `make build` once after cloning.
 
 ## CGO Exports
 
