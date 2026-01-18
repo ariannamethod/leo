@@ -245,16 +245,135 @@ STOP_WORDS: Set[str] = frozenset({
 # Minimum length for meaningful words (used in prompt connection)
 MIN_MEANINGFUL_WORD_LENGTH = 3
 
-# How many initial tokens from field before inserting prompt connection
-PROMPT_CONNECTION_POSITION = 3
+# Base values for prompt connection (will be adjusted by metrics)
+# Position: where to insert prompt connection (after N tokens from field)
+# Lower = earlier = more contextual relevance
+PROMPT_CONNECTION_BASE_POSITION = 2  # Changed from 3 → 2 for better relevance
+# Probability: base chance to add connection (0.0 to 1.0)
+# Higher = more often = more contextual relevance
+PROMPT_CONNECTION_BASE_PROBABILITY = 0.9  # Changed from 0.8 → 0.9 for better relevance
 
-# Probability of adding prompt connection (0.0 to 1.0)
-PROMPT_CONNECTION_PROBABILITY = 0.8
+
+def compute_dynamic_connection_params(
+    novelty: float,
+    arousal: float,
+    entropy: float = 0.5,
+    first_impression: Optional[Any] = None,
+) -> Tuple[int, float]:
+    """
+    Compute dynamic prompt connection parameters based on metrics and first impression.
+    
+    Philosophy (from Haze/Arianna.c + Leo's emotion chambers):
+    - High arousal → BUT depends on emotion type!
+    - WARMTH → Leo opens up (earlier connection, higher probability)
+    - FEAR → Leo closes down (later connection, lower probability)
+    - VOID → Leo retreats (minimal connection)
+    - PLAYFUL → Leo plays (random behavior)
+    - CURIOSITY → Leo explores (standard behavior)
+    - High novelty → later connection, lower probability (explore field first)
+    
+    This is like arianna.c: reaction to the TONE of the prompt, not just words.
+    
+    Args:
+        novelty: How unfamiliar is this prompt (0-1)
+        arousal: Emotional intensity of prompt (0-1)
+        entropy: Diversity/chaos in prompt (0-1)
+        first_impression: Optional Impression object from first_impression.py
+    
+    Returns:
+        (position, probability) - where to insert and chance to add
+    """
+    # BASE VALUES
+    base_position = PROMPT_CONNECTION_BASE_POSITION
+    base_prob = PROMPT_CONNECTION_BASE_PROBABILITY
+    position = base_position
+    prob = base_prob
+    
+    # FIRST IMPRESSION REACTION (like arianna.c — reaction to tone)
+    # Leo's emotion chambers affect how he connects to the prompt
+    if first_impression is not None:
+        # Get dominant chamber if available
+        dominant = getattr(first_impression, 'dominant_chamber', None)
+        warmth = getattr(first_impression, 'warmth', 0.0)
+        fear = getattr(first_impression, 'fear', 0.0)
+        void = getattr(first_impression, 'void', 0.0)
+        playful = getattr(first_impression, 'playful', 0.0)
+        curiosity = getattr(first_impression, 'curiosity', 0.0)
+        
+        # WARMTH: Leo opens up — earlier, more likely
+        # Like a child responding to a loving parent
+        if warmth > 0.5 or dominant == 'warmth':
+            position = max(2, base_position - 1)
+            prob = min(0.95, base_prob + 0.15)
+        
+        # FEAR: Leo closes down — later, less likely
+        # Like a child hiding from a scary stranger
+        elif fear > 0.4 or dominant == 'fear':
+            position = min(5, base_position + 2)  # Much later
+            prob = max(0.3, base_prob - 0.4)  # Much less likely
+        
+        # VOID: Leo retreats — minimal connection
+        # Like a child going silent in an empty room
+        elif void > 0.4 or dominant == 'void':
+            position = min(6, base_position + 3)  # Very late
+            prob = max(0.2, base_prob - 0.5)  # Almost no connection
+        
+        # PLAYFUL: Leo plays — random behavior!
+        # Like a child being silly and unpredictable
+        elif playful > 0.5 or dominant == 'playful':
+            # Random position between 2 and 4
+            position = random.randint(2, 4)
+            # Random probability boost
+            prob = min(0.9, base_prob + random.uniform(0, 0.2))
+        
+        # CURIOSITY: Leo explores — standard with slight openness
+        elif curiosity > 0.5 or dominant == 'curiosity':
+            position = base_position
+            prob = min(0.9, base_prob + 0.1)
+        
+        # Return early if first_impression handled it
+        return position, prob
+    
+    # FALLBACK: Use arousal/novelty if no first_impression
+    
+    # AROUSAL EFFECT: High arousal → earlier connection, higher probability
+    # When observer is emotional, Leo responds more directly
+    if arousal > 0.7:
+        # Very high arousal: insert early (position 2), very likely (0.95)
+        position = max(2, base_position - 1)
+        prob = min(0.95, base_prob + 0.15)
+    elif arousal > 0.5:
+        # Moderate arousal: standard position, slightly higher probability
+        position = base_position
+        prob = min(0.9, base_prob + 0.1)
+    else:
+        # Low arousal: can explore field more
+        position = base_position
+        prob = base_prob
+    
+    # NOVELTY EFFECT: High novelty → later connection, lower probability
+    # When prompt is very unfamiliar, Leo explores his field first
+    if novelty > 0.7:
+        # Very novel: insert later (position 4-5), lower probability
+        position = min(5, position + 1)
+        prob = max(0.5, prob - 0.2)
+    elif novelty > 0.5:
+        # Moderately novel: slightly later
+        position = min(4, position + 1)
+        prob = max(0.6, prob - 0.1)
+    
+    # ENTROPY EFFECT: High entropy → stabilize (middle ground)
+    if entropy > 0.7:
+        # High chaos in prompt: use standard position for stability
+        position = PROMPT_CONNECTION_BASE_POSITION
+    
+    return position, prob
 
 
 def get_prompt_connection(
     prompt_tokens: List[str],
     vocab: List[str],
+    arousal: float = 0.5,
 ) -> Optional[str]:
     """
     Get a meaningful word from prompt for contextual connection.
@@ -262,9 +381,14 @@ def get_prompt_connection(
     Principle: The FIRST seed comes from field (not prompt).
     But we add a meaningful prompt word AFTER to create context.
     
+    Dynamic behavior:
+    - High arousal → prefer emotionally charged words
+    - Otherwise → prefer longest meaningful word
+    
     Args:
         prompt_tokens: Tokenized prompt
         vocab: Leo's vocabulary (to prefer known words)
+        arousal: Emotional intensity of prompt (affects word selection)
     
     Returns:
         A meaningful word from prompt, or None if no good candidates
@@ -293,7 +417,15 @@ def get_prompt_connection(
     if not meaningful:
         return None
     
-    # Prefer vocab words, then prefer longer words
+    # DYNAMIC SELECTION based on arousal
+    if arousal > 0.7 and len(meaningful) > 1:
+        # High arousal: random selection from top candidates (like Haze)
+        # This creates more varied, emotionally responsive connections
+        top_candidates = meaningful[:min(3, len(meaningful))]
+        chosen = random.choice(top_candidates)
+        return chosen[0]
+    
+    # Standard: Prefer vocab words, then prefer longer words
     # Sort: vocab words first, then by length (descending)
     meaningful.sort(key=lambda x: (not x[1], -len(x[0])))
     
@@ -2783,14 +2915,26 @@ def generate_reply(
     SENT_END = {".", "!", "?"}
     PUNCT = {".", ",", "!", "?", ";", ":"}
     
+    # DYNAMIC PROMPT CONNECTION: Compute parameters based on metrics + first impression
+    # Philosophy (from Haze/Arianna.c): connection strength depends on situational awareness
+    # - Emotion chambers (warmth, fear, void, playful) affect connection behavior
+    # - High arousal → earlier, more likely (respond to emotion)
+    # - High novelty → later, less likely (explore field first)
+    connection_position, connection_probability = compute_dynamic_connection_params(
+        novelty=novelty,
+        arousal=arousal,
+        entropy=0.5,  # Will be computed during generation
+        first_impression=first_impression,  # Pass emotion chambers for reaction
+    )
+    
     # PROMPT CONNECTION: Get meaningful word from prompt for contextual link
     # Philosophy: First seed from field (no FIRST seed from prompt)
     # But we add a prompt word AFTER to create context (no seed from prompt → no FIRST seed)
     # Metaphor: "Мама: Отстань!" — from HER state, but TO the child
     prompt_connection: Optional[str] = None
     prompt_connection_inserted = False
-    if random.random() < PROMPT_CONNECTION_PROBABILITY:
-        prompt_connection = get_prompt_connection(prompt_tokens, vocab)
+    if random.random() < connection_probability:
+        prompt_connection = get_prompt_connection(prompt_tokens, vocab, arousal=arousal)
     
     # ADAPTIVE TEMPERATURE: Track entropy and adjust temperature dynamically
     # Philosophy: When Leo is confident (low entropy), speak sharper. When uncertain, explore.
@@ -2858,8 +3002,9 @@ def generate_reply(
         # PROMPT CONNECTION: Insert meaningful prompt word AFTER first few tokens
         # Philosophy: no FIRST seed from prompt, but prompt word appears AFTER
         # This creates contextual relevance without echoing/chatbot behavior
+        # Position is DYNAMIC based on arousal/novelty metrics
         if prompt_connection and not prompt_connection_inserted:
-            if len(tokens) == PROMPT_CONNECTION_POSITION:
+            if len(tokens) == connection_position:
                 # Insert connection word at current position
                 tokens.append(prompt_connection)
                 prev = current

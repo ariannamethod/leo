@@ -362,10 +362,51 @@ class TestPromptConnection(unittest.TestCase):
         self.assertIn("the", leo.STOP_WORDS)
         self.assertIn("is", leo.STOP_WORDS)
     
-    def test_prompt_connection_probability_constant(self):
-        """Test that PROMPT_CONNECTION_PROBABILITY is in valid range."""
-        self.assertGreaterEqual(leo.PROMPT_CONNECTION_PROBABILITY, 0.0)
-        self.assertLessEqual(leo.PROMPT_CONNECTION_PROBABILITY, 1.0)
+    def test_prompt_connection_base_constants(self):
+        """Test that base prompt connection constants are properly defined."""
+        self.assertGreaterEqual(leo.PROMPT_CONNECTION_BASE_PROBABILITY, 0.0)
+        self.assertLessEqual(leo.PROMPT_CONNECTION_BASE_PROBABILITY, 1.0)
+        self.assertGreater(leo.PROMPT_CONNECTION_BASE_POSITION, 0)
+    
+    def test_compute_dynamic_connection_params_neutral(self):
+        """Test dynamic params with neutral metrics."""
+        position, prob = leo.compute_dynamic_connection_params(
+            novelty=0.3, arousal=0.3, entropy=0.5
+        )
+        # Should use base values for neutral input (position=2, prob=0.9)
+        self.assertEqual(position, leo.PROMPT_CONNECTION_BASE_POSITION)
+        self.assertEqual(prob, leo.PROMPT_CONNECTION_BASE_PROBABILITY)
+    
+    def test_compute_dynamic_connection_params_high_arousal(self):
+        """Test dynamic params with high arousal."""
+        position, prob = leo.compute_dynamic_connection_params(
+            novelty=0.3, arousal=0.8, entropy=0.5
+        )
+        # High arousal → position stays at minimum (2), higher probability
+        # With base position = 2, can't go lower
+        self.assertLessEqual(position, leo.PROMPT_CONNECTION_BASE_POSITION)
+        self.assertGreater(prob, leo.PROMPT_CONNECTION_BASE_PROBABILITY)
+    
+    def test_compute_dynamic_connection_params_high_novelty(self):
+        """Test dynamic params with high novelty."""
+        position, prob = leo.compute_dynamic_connection_params(
+            novelty=0.8, arousal=0.3, entropy=0.5
+        )
+        # High novelty → later position, lower probability
+        self.assertGreater(position, leo.PROMPT_CONNECTION_BASE_POSITION)
+        self.assertLess(prob, leo.PROMPT_CONNECTION_BASE_PROBABILITY)
+    
+    def test_get_prompt_connection_with_arousal(self):
+        """Test that arousal parameter affects word selection."""
+        prompt = "I LOVE this thing!"
+        tokens = leo.tokenize(prompt)
+        vocab = []
+        
+        # With high arousal, should still return a meaningful word
+        connection = leo.get_prompt_connection(tokens, vocab, arousal=0.9)
+        self.assertIsNotNone(connection)
+        # Should be either 'LOVE' or 'thing' (both are meaningful)
+        self.assertIn(connection.lower(), ['love', 'thing'])
 
 
 if __name__ == "__main__":

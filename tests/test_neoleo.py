@@ -311,11 +311,30 @@ class TestNeoLeoPromptConnection(unittest.TestCase):
         self.assertIn("what", neoleo.STOP_WORDS)
         self.assertIn("the", neoleo.STOP_WORDS)
     
-    def test_prompt_connection_constants(self):
-        """Test that prompt connection constants are properly defined."""
-        self.assertGreaterEqual(neoleo.PROMPT_CONNECTION_PROBABILITY, 0.0)
-        self.assertLessEqual(neoleo.PROMPT_CONNECTION_PROBABILITY, 1.0)
-        self.assertGreater(neoleo.PROMPT_CONNECTION_POSITION, 0)
+    def test_prompt_connection_base_constants(self):
+        """Test that base prompt connection constants are properly defined."""
+        self.assertGreaterEqual(neoleo.PROMPT_CONNECTION_BASE_PROBABILITY, 0.0)
+        self.assertLessEqual(neoleo.PROMPT_CONNECTION_BASE_PROBABILITY, 1.0)
+        self.assertGreater(neoleo.PROMPT_CONNECTION_BASE_POSITION, 0)
+    
+    def test_compute_dynamic_connection_params_neutral(self):
+        """Test dynamic params with neutral metrics."""
+        position, prob = neoleo.compute_dynamic_connection_params(
+            novelty=0.3, arousal=0.3, entropy=0.5
+        )
+        # Should use base values for neutral input
+        self.assertEqual(position, neoleo.PROMPT_CONNECTION_BASE_POSITION)
+        self.assertEqual(prob, neoleo.PROMPT_CONNECTION_BASE_PROBABILITY)
+    
+    def test_compute_dynamic_connection_params_high_arousal(self):
+        """Test dynamic params with high arousal."""
+        position, prob = neoleo.compute_dynamic_connection_params(
+            novelty=0.3, arousal=0.8, entropy=0.5
+        )
+        # High arousal → position stays at minimum (2), higher probability
+        # With base position = 2, can't go lower
+        self.assertLessEqual(position, neoleo.PROMPT_CONNECTION_BASE_POSITION)
+        self.assertGreater(prob, neoleo.PROMPT_CONNECTION_BASE_PROBABILITY)
 
 
 if __name__ == "__main__":
