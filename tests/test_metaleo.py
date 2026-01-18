@@ -292,7 +292,8 @@ class TestMetaLeo(unittest.TestCase):
         q_short = self.metaleo._assess_safe("hi", "test")
         self.assertLess(q_short, 0.5)
 
-        # Good length reply - threshold adjusted for scoring variance
+        # Acceptable length reply - lower threshold accounts for scoring variance
+        # (text without punctuation gets lower coherence score, resulting in ~0.48)
         q_good = self.metaleo._assess_safe("this is a reasonable length reply with some content", "test")
         self.assertGreaterEqual(q_good, 0.4)
 

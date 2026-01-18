@@ -438,13 +438,13 @@ class TestMathBrainTraining(unittest.TestCase):
             # Loss didn't decrease, but check it's not dramatically worse
             # (could happen with unlucky initialization or learning rate issues)
             ratio = late_avg / early_avg if early_avg > 0 else 1.0
-            # Allow up to 10x increase to handle random initialization variance.
+            # Allow up to 5x increase to handle random initialization variance.
             # This can happen when:
             # 1. Initial weights happen to produce very low early loss (lucky start)
             # 2. Network is small (21 -> 16 -> 1) with high parameter sensitivity  
             # 3. Learning rate causes oscillation before convergence
             # The critical safety check is that absolute loss stays under 1.0 (not exploding).
-            self.assertLess(ratio, 10.0, 
+            self.assertLess(ratio, 5.0, 
                           f"Loss should not increase dramatically: early={early_avg:.4f}, late={late_avg:.4f}, ratio={ratio:.2f}")
             # Also check that loss is reasonable (not exploding)
             self.assertLess(late_avg, 1.0, 
