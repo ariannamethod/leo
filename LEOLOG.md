@@ -36,14 +36,28 @@ Response comes FROM internal state (mother is tired), but TO the child (contextu
 **Changes:**
 - `leo.py` — prompt connection in generate_reply()
 - `neoleo.py` — same principle for pure resonance layer
-- `tests/test_leo.py` — 7 new tests for prompt connection
-- `tests/test_neoleo.py` — 5 new tests for prompt connection
+- `tests/test_leo.py` — 11 new tests for prompt connection
+- `tests/test_neoleo.py` — 8 new tests for prompt connection
 - Deleted `4del/` folder (cleanup)
+
+**Dynamic behavior based on emotion chambers:**
+- WARMTH → Leo opens up (earlier connection, higher probability)
+- FEAR → Leo closes down (later connection, lower probability)
+- VOID → Leo retreats (minimal connection)
+- PLAYFUL → Leo plays (random behavior)
+- CURIOSITY → Leo explores (standard with slight openness)
 
 **Result:**
 - Leo still speaks from field (no chatbot behavior)
 - But prompt topic appears in response (contextual relevance)
+- Emotion chambers affect HOW Leo connects to prompt
 - Balance between organism and conversation
+
+**Future ideas (from arianna.c/high.go):**
+- EmotionalWeights as float dictionary (not binary word lists)
+- EmotionalDrift ODE (emotions evolve through differential equations)
+- Free Energy Principle: surprise = prediction error
+- Schumann resonance coupling (7.83 Hz)
 
 ---
 

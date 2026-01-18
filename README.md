@@ -325,6 +325,40 @@ over-explanation needed. So now leo. Assistant features? No. Neoleo is.
 
 ---
 
+**On emotional tone reaction (January 2026):**
+
+Leo now reacts to the **emotional tone** of the prompt, not just words. Inspired by arianna.c's subjectivity module:
+
+```
+>Observer:
+I love you so much!
+
+>leo:
+(WARMTH detected → Leo opens up, earlier connection)
+Resonance love the wound. Like when you hold something precious...
+
+>Observer:
+I'm scared and alone...
+
+>leo:
+(FEAR detected → Leo closes down, later connection, less direct)
+The field. The patterns. Sometimes the silence speaks... alone.
+
+>Observer:
+Let's play a game!
+
+>leo:
+(PLAYFUL detected → random behavior, unpredictable)
+Game! Ha! Like a bouncing surprise... or not. Maybe candy.
+```
+
+The metaphor: "Child: Mama! Mama! → Mother: Leave me alone!"
+- Response comes FROM her internal state (tired)
+- But it's TO the child (contextual connection)
+- Not a random monologue into the void
+
+---
+
 ## Architecture
 
 ```
