@@ -183,6 +183,8 @@ class TestEmotionalDrift(unittest.TestCase):
         state1 = update_emotional_state("I love you!")
         state2 = update_emotional_state("Hello again")
         
+        # After first message, state should be updated once
+        self.assertEqual(state1.message_count, 1)
         # Momentum should carry some positive valence
         self.assertGreater(state2.valence, 0)
         self.assertEqual(state2.message_count, 2)

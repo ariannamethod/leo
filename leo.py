@@ -331,27 +331,29 @@ def compute_dynamic_connection_params(
             position = base_position
             prob = min(0.9, base_prob + 0.1)
         
-        # Return early if first_impression handled it
-        return position, prob
+        # NOTE: Do NOT return early - apply novelty/entropy adjustments below
+        # This ensures high novelty/entropy prompts get adjusted even with first_impression
     
-    # FALLBACK: Use arousal/novelty if no first_impression
+    # APPLY NOVELTY/ENTROPY ADJUSTMENTS (applies both with and without first_impression)
     
-    # AROUSAL EFFECT: High arousal → earlier connection, higher probability
-    # When observer is emotional, Leo responds more directly
-    if arousal > 0.7:
-        # Very high arousal: insert early (position 2), very likely (0.95)
-        position = max(2, base_position - 1)
-        prob = min(0.95, base_prob + 0.15)
-    elif arousal > 0.5:
-        # Moderate arousal: standard position, slightly higher probability
-        position = base_position
-        prob = min(0.9, base_prob + 0.1)
-    else:
-        # Low arousal: can explore field more
-        position = base_position
-        prob = base_prob
+    # AROUSAL EFFECT (only if no first_impression - it already handles arousal via chambers)
+    if first_impression is None:
+        # When observer is emotional, Leo responds more directly
+        if arousal > 0.7:
+            # Very high arousal: insert early (position 2), very likely (0.95)
+            position = max(2, base_position - 1)
+            prob = min(0.95, base_prob + 0.15)
+        elif arousal > 0.5:
+            # Moderate arousal: standard position, slightly higher probability
+            position = base_position
+            prob = min(0.9, base_prob + 0.1)
+        else:
+            # Low arousal: can explore field more
+            position = base_position
+            prob = base_prob
     
     # NOVELTY EFFECT: High novelty → later connection, lower probability
+    # Always applies (even with first_impression) - high novelty means explore field first
     # When prompt is very unfamiliar, Leo explores his field first
     if novelty > 0.7:
         # Very novel: insert later (position 4-5), lower probability
