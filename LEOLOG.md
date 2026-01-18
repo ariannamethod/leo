@@ -53,17 +53,32 @@ Response comes FROM internal state (mother is tired), but TO the child (contextu
 - Emotion chambers affect HOW Leo connects to prompt
 - Balance between organism and conversation
 
-**New in this update (from arianna.c/high.go):**
+**EmotionalWeights & EmotionalDrift (from arianna.c/high.go):**
 - ✅ **EMOTIONAL_WEIGHTS** — float dictionary instead of binary word lists
   - Words have valence from -0.95 (hate) to +0.95 (love)
   - Includes Russian words (люблю, ненавижу, etc.)
 - ✅ **EmotionalDrift ODE** — emotions evolve through differential equations
-  - dV/dt = -τ(V - V₀) + surprise × gain + momentum
+  - dV/dt = -τ(V - V₀) + surprise × gain + momentum + attractor_pull
   - Leo "remembers" emotional state between messages
 - ✅ **Free Energy Principle**: surprise = prediction error
   - Leo predicts next valence, surprise affects arousal
-- ✅ **AROUSAL_MODIFIERS** — words/punctuation that increase intensity
-- Future: Schumann resonance coupling (7.83 Hz)
+
+**Sophisticated Arousal (from arianna.c/mood.h):**
+- ✅ **ArousalComponents** — arousal is NOT just high/low, it's a combination:
+  - TENSION: conflict, urgency, pressure (weight 0.8)
+  - NOVELTY: surprise, unfamiliarity (weight 0.5)
+  - FOCUS: concentration, precision (weight 0.3)
+  - RECURSION: self-reference, meta-cognition (weight 0.2)
+- Example: "STOP NOW!" → tension=0.70, arousal=0.86
+
+**Emotional Attractors (from arianna.c/emotional_drift.go):**
+- ✅ **EmotionalAttractors** — emotions pull toward stable states
+  - Each attractor has: valence, arousal, strength, sticky
+  - **void** is very sticky (0.7) — depression hard to escape
+  - **excitement** not sticky (0.2) — fades quickly
+- ✅ **compute_attractor_pull()** — gradient toward attractors
+
+**New tests:** 35 tests for first_impression module
 
 ---
 

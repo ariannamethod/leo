@@ -359,6 +359,27 @@ The metaphor: "Child: Mama! Mama! → Mother: Leave me alone!"
 
 ---
 
+**On sophisticated arousal (January 2026):**
+
+Arousal is not just "high/low" — it's a combination of dimensions (from arianna.c/mood.h):
+
+```python
+"STOP NOW! This is urgent!"
+→ tension=0.70, novelty=0.00, arousal=0.86 (HIGH!)
+
+"Remember yourself. Think about what you feel."
+→ tension=0.00, recursion=1.00, arousal=0.20 (low but deep)
+
+"Suddenly something strange happened!"
+→ tension=0.00, novelty=1.00, arousal=0.65 (surprise!)
+```
+
+Emotions pull toward **sticky attractors**:
+- `void` is very sticky (0.7) — depression is hard to escape
+- `excitement` not sticky (0.2) — fades quickly
+
+---
+
 ## Architecture
 
 ```
@@ -373,7 +394,7 @@ leo/
 ├── trauma.py           # bootstrap gravity
 │
 ├── [PERCEPTION]
-├── first_impression.py # emotion chambers + cross-fire
+├── first_impression.py # emotion chambers + cross-fire + EmotionalDrift ODE
 ├── gravity.py          # prompt-induced field bias
 ├── subword.py          # sentencepiece parallel voice
 │
@@ -389,12 +410,17 @@ leo/
 ├── school.py           # School of Forms
 ├── stories.py          # playful redirect
 │
+├── [INNER WORLD - Go] (NEW!)
+├── inner_world/
+│   ├── emotional_resonance.go  # Fast emotional computations in Go
+│   └── README.md               # Go/Julia integration docs
+│
 ├── [INFRASTRUCTURE]
 ├── punct_cleanup.py    # speech cleanup
 ├── metaphrases.py      # docstring filtering
 ├── requirements.txt    # numpy, sentencepiece, aiofiles
 │
-├── tests/              # 392 tests
+├── tests/              # 400+ tests
 ├── state/              # SQLite databases (runtime)
 ├── bin/                # resonance shards (runtime)
 └── ideas/              # experimental modules
