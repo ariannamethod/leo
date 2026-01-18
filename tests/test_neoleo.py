@@ -275,5 +275,48 @@ class TestNeoLeoFormatting(unittest.TestCase):
         self.assertEqual(capitalized, "First. Second! Third?")
 
 
+class TestNeoLeoPromptConnection(unittest.TestCase):
+    """Test the NO FIRST SEED FROM PROMPT + prompt connection functionality."""
+    
+    def test_get_prompt_connection_basic(self):
+        """Test basic prompt connection extraction."""
+        prompt = "What is resonance?"
+        tokens = neoleo.tokenize(prompt)
+        vocab = ["resonance", "field", "neo"]
+        
+        connection = neoleo.get_prompt_connection(tokens, vocab)
+        
+        # Should return 'resonance' (in vocab, not a stop word)
+        self.assertEqual(connection, "resonance")
+    
+    def test_get_prompt_connection_filters_stop_words(self):
+        """Test that stop words are filtered out."""
+        prompt = "What is the meaning of this"
+        tokens = neoleo.tokenize(prompt)
+        vocab = []
+        
+        connection = neoleo.get_prompt_connection(tokens, vocab)
+        
+        # Should return 'meaning' (only non-stop word >= 3 chars)
+        self.assertEqual(connection, "meaning")
+    
+    def test_get_prompt_connection_empty_prompt(self):
+        """Test that empty prompt returns None."""
+        connection = neoleo.get_prompt_connection([], [])
+        self.assertIsNone(connection)
+    
+    def test_stop_words_constant(self):
+        """Test that STOP_WORDS constant is properly defined."""
+        self.assertIsInstance(neoleo.STOP_WORDS, (set, frozenset))
+        self.assertIn("what", neoleo.STOP_WORDS)
+        self.assertIn("the", neoleo.STOP_WORDS)
+    
+    def test_prompt_connection_constants(self):
+        """Test that prompt connection constants are properly defined."""
+        self.assertGreaterEqual(neoleo.PROMPT_CONNECTION_PROBABILITY, 0.0)
+        self.assertLessEqual(neoleo.PROMPT_CONNECTION_PROBABILITY, 1.0)
+        self.assertGreater(neoleo.PROMPT_CONNECTION_POSITION, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

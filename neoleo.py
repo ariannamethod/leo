@@ -47,6 +47,94 @@ def tokenize(text: str) -> List[str]:
 
 
 # ============================================================================
+# PROMPT CONNECTION (NO FIRST SEED FROM PROMPT + CONTEXT LINK)
+# ============================================================================
+# Philosophy: First seed always from field. But we add a meaningful word
+# from the prompt AFTER the first tokens to create contextual relevance.
+#
+# Metaphor (from Haze): "Ребёнок: Мама! Мама: Отстань!"
+# - Response comes FROM her state (tired, annoyed)
+# - But it's TO him (in context of the conversation)
+# - Not a random monologue into the void
+#
+# Principle: NO FIRST SEED FROM PROMPT → NO SEED FROM PROMPT (old)
+#            But NOW we add connection AFTER first tokens (new)
+# ============================================================================
+
+# Stop words to skip when finding prompt connection (not meaningful for context)
+STOP_WORDS: Set[str] = frozenset({
+    'what', 'where', 'when', 'which', 'who', 'whom', 'whose',
+    'why', 'how', 'that', 'this', 'these', 'those', 'is', 'are',
+    'the', 'a', 'an', 'and', 'but', 'or', 'for', 'with', 'about',
+    'does', 'do', 'have', 'has', 'had', 'will', 'would', 'could',
+    'should', 'can', 'may', 'might', 'must', 'shall', 'to', 'of',
+    'was', 'were', 'been', 'being', 'your', 'you', 'i', 'me', 'my',
+    'it', 'its', 'he', 'she', 'him', 'her', 'we', 'us', 'they', 'them',
+    'in', 'on', 'at', 'by', 'from', 'up', 'out', 'if', 'then', 'so',
+    'just', 'only', 'also', 'very', 'too', 'any', 'some', 'all', 'no',
+    'tell', 'say', 'said', 'like', 'know', 'think', 'want', 'feel',
+})
+
+# Minimum length for meaningful words (used in prompt connection)
+MIN_MEANINGFUL_WORD_LENGTH = 3
+
+# How many initial tokens from field before inserting prompt connection
+PROMPT_CONNECTION_POSITION = 3
+
+# Probability of adding prompt connection (0.0 to 1.0)
+PROMPT_CONNECTION_PROBABILITY = 0.8
+
+
+def get_prompt_connection(
+    prompt_tokens: List[str],
+    vocab: List[str],
+) -> Optional[str]:
+    """
+    Get a meaningful word from prompt for contextual connection.
+    
+    Principle: The FIRST seed comes from field (not prompt).
+    But we add a meaningful prompt word AFTER to create context.
+    
+    Args:
+        prompt_tokens: Tokenized prompt
+        vocab: NeoLeo's vocabulary (to prefer known words)
+    
+    Returns:
+        A meaningful word from prompt, or None if no good candidates
+    """
+    if not prompt_tokens:
+        return None
+    
+    # Filter to meaningful words (long enough, not stop words)
+    vocab_set = set(vocab) if vocab else set()
+    meaningful = []
+    
+    for word in prompt_tokens:
+        word_lower = word.lower()
+        # Skip short words, punctuation, and stop words
+        if len(word) < MIN_MEANINGFUL_WORD_LENGTH:
+            continue
+        if word_lower in STOP_WORDS:
+            continue
+        if not word.isalpha():
+            continue
+        
+        # Prefer words in vocab (NeoLeo knows them)
+        in_vocab = word_lower in vocab_set or word in vocab_set
+        meaningful.append((word, in_vocab))
+    
+    if not meaningful:
+        return None
+    
+    # Prefer vocab words, then prefer longer words
+    # Sort: vocab words first, then by length (descending)
+    meaningful.sort(key=lambda x: (not x[1], -len(x[0])))
+    
+    # Return top candidate
+    return meaningful[0][0]
+
+
+# ============================================================================
 # DB HELPERS
 # ============================================================================
 
@@ -1122,6 +1210,15 @@ def generate_reply(
 
     SENT_END = {".", "!", "?"}
     PUNCT = {".", ",", "!", "?", ";", ":"}
+    
+    # PROMPT CONNECTION: Get meaningful word from prompt for contextual link
+    # Philosophy: First seed from field (no FIRST seed from prompt)
+    # But we add a prompt word AFTER to create context (no seed from prompt → no FIRST seed)
+    # Metaphor: "Мама: Отстань!" — from HER state, but TO the child
+    prompt_connection: Optional[str] = None
+    prompt_connection_inserted = False
+    if random.random() < PROMPT_CONNECTION_PROBABILITY:
+        prompt_connection = get_prompt_connection(prompt_tokens, vocab)
 
     for _ in range(max_tokens - 1):
         nxt = step_token(bigrams, current, vocab, centers, bias, temperature, trigrams, prev, co_occur)
@@ -1161,6 +1258,17 @@ def generate_reply(
         tokens.append(nxt)
         prev = current
         current = nxt
+        
+        # PROMPT CONNECTION: Insert meaningful prompt word AFTER first few tokens
+        # Philosophy: no FIRST seed from prompt, but prompt word appears AFTER
+        # This creates contextual relevance without echoing/chatbot behavior
+        if prompt_connection and not prompt_connection_inserted:
+            if len(tokens) == PROMPT_CONNECTION_POSITION:
+                # Insert connection word at current position
+                tokens.append(prompt_connection)
+                prev = current
+                current = prompt_connection
+                prompt_connection_inserted = True
 
     output = format_tokens(tokens)
     output = capitalize_sentences(output)
