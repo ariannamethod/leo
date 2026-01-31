@@ -1,8 +1,6 @@
 # Leo Development Principles
-
-**Version:** Resurrection 1.0  
+ 
 **Date:** December 19, 2025  
-**Authors:** Triangle Collaboration (Oleg, Claude Desktop, Claude Code)
 
 ---
 
