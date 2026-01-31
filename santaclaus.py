@@ -41,6 +41,14 @@ RECENCY_WINDOW_HOURS = 24.0
 # 0.5 = reduce quality by 50% if just used, decays over window
 RECENCY_PENALTY_STRENGTH = 0.5
 
+# USE-COUNT DAMPENING (January 2026)
+# The more a snapshot has been recalled, the less it should dominate.
+# Unlike recency (resets after 24h), use_count is permanent.
+# Formula: quality *= 1 / (1 + use_count / USE_COUNT_HALF_LIFE)
+# At USE_COUNT_HALF_LIFE uses, quality is halved.
+# This prevents phrase-level loops from calcifying over time.
+USE_COUNT_HALF_LIFE = 5  # after 5 recalls, quality halved; after 15, quartered
+
 # DRUNK FACTOR (from Haze's PlayfulSanta)
 # Probability of picking a random snapshot instead of the best one
 # This adds creative unpredictability — sometimes Santa gets playful
@@ -218,6 +226,12 @@ class SantaKlaus:
 
                 # Apply penalty to quality component
                 quality_with_recency = quality * (1.0 - RECENCY_PENALTY_STRENGTH * recency_penalty)
+
+                # USE-COUNT DAMPENING: permanent diversity pressure
+                # Prevents the same snapshots from dominating across sessions
+                use_count = row["use_count"] or 0
+                if use_count > 0:
+                    quality_with_recency *= 1.0 / (1.0 + use_count / USE_COUNT_HALF_LIFE)
 
                 # STICKY PHRASE PENALTY (Option D - Musketeers)
                 # Known contaminated phrases get 90% penalty to prevent recall

@@ -109,10 +109,11 @@ class TestBootstrapFeeding(unittest.TestCase):
         # Check that some bootstrap-specific words are present
         vocab_lower = [t.lower() for t in field.vocab]
 
-        # From module bootstraps
-        self.assertIn("voice", vocab_lower)  # metaleo
-        self.assertIn("awareness", vocab_lower)  # mathbrain
-        self.assertIn("forms", vocab_lower)  # school
+        # From module bootstraps (after docstring cleanup filtering)
+        # Words that survive _clean_module_docstring tech/mechanical filters
+        self.assertIn("dream", vocab_lower)  # dream module
+        self.assertIn("story", vocab_lower)  # santaclaus module
+        self.assertIn("forms", vocab_lower)  # school module
 
         conn.close()
 

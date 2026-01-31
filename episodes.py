@@ -11,6 +11,7 @@ No external APIs. No heavy embeddings. Just local SQLite + simple similarity.
 from __future__ import annotations
 
 import sqlite3
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -142,6 +143,7 @@ class RAGBrain:
             # Clamp and sanitize all values
             def clamp(x: float, min_val: float = 0.0, max_val: float = 1.0) -> float:
                 if x != x:  # NaN check
+                    print("[episodes] NaN detected in metric, defaulting to 0.0", file=sys.stderr)
                     return 0.0
                 return max(min_val, min(max_val, x))
                 
