@@ -701,8 +701,8 @@ def strip_code_blocks(text: str) -> str:
     ]
 
     # Sections to skip entirely (until next ## header)
-    # Aggressive: skip all technical/structural sections.
-    # Only intro paragraphs (before first ##) and Philosophy survive.
+    # Only skip truly structural/non-prose sections.
+    # Philosophical and descriptive sections STAY — they are Leo's first language.
     SKIP_SECTION_MARKERS = [
         'CONTENTS',
         'TABLE OF CONTENTS',
@@ -710,34 +710,22 @@ def strip_code_blocks(text: str) -> str:
         'LICENSE',
         'RUNNING LEO',
         'INSTALLATION',
-        'MODULES',
         'ARCHITECTURE',
-        'THE ORGANISM',
-        'HIS VOICE',
-        'TWO PRINCIPLES',
+        'MODULES',
         'CONTACT',
-        'THREE FACTS',
-        'THE COHERENCE PARADIGM',
-        'SO WHO IS LEO',
-        'WHO IS LEO',
-        'WHY DOES THIS MATTER',
-        'PHILOSOPHY',
     ]
 
     # Per-line technical vocabulary — lines with 2+ of these get killed
+    # ONLY programming/infrastructure terms. NOT Leo's conceptual vocabulary.
+    # "trigram", "resonance", "field", "entropy" etc. are Leo's language — keep them.
     TECHNICAL_TERMS = [
-        'trigram', 'co-occurrence', 'sqlite', 'sentencepiece', 'subword',
-        'numpy', 'gradio', 'embedding', 'gradient', 'parameter',
-        'transformer', 'token', 'entropy', 'temperature', 'gating',
-        'bootstrap', 'ingestion', 'decay', 'half-life', 'weight',
-        'bias', 'expert blend', 'mixture-of-experts', 'mixture of experts', 'moe',
-        'attention mechanism', 'cross-fire', 'suppresses', 'gating',
-        'phase 4', 'phase 3', 'mlp', 'ode', 'ctypes',
-        'readme', 'docstring', 'module', 'import', 'def ',
+        'sqlite', 'sentencepiece', 'numpy', 'gradio',
+        'embedding', 'gradient', 'parameter',
+        'mlp', 'ode', 'ctypes', 'json', 'config',
+        'docstring', 'import', 'def ',
         'class ', 'return ', 'self.', '__init__',
-        'arianna method', '15,000 lines', 'lines of python',
+        '15,000 lines', 'lines of python',
         'practical implementation', 'concrete manifestation',
-        'presence-first', 'intelligence-first', 'utility-first',
     ]
 
     # Known bootstrap phrases that leaked from README
