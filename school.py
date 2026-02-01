@@ -5,13 +5,9 @@ school.py — School of Forms for Leo
 School gives Leo one new right:
 to sometimes ask the human: "Word?" and remember the explanation as raw text.
 
-From these answers Leo slowly builds tiny forms:
-- places, people, feelings,
-- simple relations between them,
-- his own private "geometry of forms".
-
-There are no fixed global truths here.
-Leo discovers what feels big or important by listening to you.
+School is an ear, not a database. It listens, stores notes,
+and feeds them into Leo's field as language. No knowledge graph,
+no entity extraction — just raw human explanations becoming part of Leo's flow.
 """
 
 from __future__ import annotations
@@ -71,15 +67,6 @@ except ImportError:
     MathState = Any  # type: ignore
     MATH_AVAILABLE = False
 
-# Form lexemes for context detection (not a dataset, just mapping)
-# School v1: English-only forms
-FORM_LEXEMES = {
-    "capital": "capital",
-    "city": "city",
-    "country": "country",
-    "planet": "planet",
-}
-
 # Maximum note length to prevent unbounded DB growth
 MAX_NOTE_LEN = 4096  # characters
 
@@ -119,11 +106,11 @@ class SchoolQuestion:
 class School:
     """
     School of Forms.
-    
+
     - Tracks: "this token was explained like THIS".
     - Asks only bare-word questions: "London?".
-    - Stores raw human explanations.
-    - Optionally extracts simple forms (city, country, capital_of) from answers.
+    - Stores raw human explanations as notes.
+    - Feeds explanations into Leo's field via observe().
     """
     
     def __init__(
@@ -208,9 +195,8 @@ class School:
     ) -> None:
         """
         Store human_answer as explanation for question.token.
-        
-        Also attempts simple pattern parsing to extract forms (city, country, capital_of).
-        On parse failure, just stores the note. All errors are silent.
+
+        Stores the note and feeds the explanation into Leo's field.
         """
         if not SCHOOL_AVAILABLE or self._conn is None:
             return
@@ -269,13 +255,6 @@ class School:
             print(f"[school] unexpected school db error: {e}", file=sys.stderr)
             return
         
-        # Attempt to parse forms from answer (best-effort, skip if answer too long)
-        if len(human_answer) <= MAX_NOTE_LEN:
-            try:
-                self._parse_and_store_forms(question.token, question.display, human_answer, ts)
-            except Exception as e:
-                print(f"[school] parse forms error: {e}", file=sys.stderr)
-        
         # Feed the explanation into Leo's field as language
         try:
             if self.field is not None and hasattr(self.field, "observe"):
@@ -307,12 +286,9 @@ class School:
         
         cur = self._conn.cursor()
         found_notes = []
-        found_entities = []
-        found_relations = []
-        
+
         try:
             for token in tokens:
-                # Check notes
                 cur.execute(
                     "SELECT display, note FROM school_notes WHERE token = ? AND note IS NOT NULL LIMIT 1",
                     (token,),
@@ -320,48 +296,17 @@ class School:
                 row = cur.fetchone()
                 if row:
                     display, note = row
-                    # Take first 100 chars of note
                     short_note = note[:100] + "..." if len(note) > 100 else note
                     found_notes.append(f"{display}: {short_note}")
-                
-                # Check entities
-                cur.execute(
-                    "SELECT display, kind FROM school_entities WHERE token = ? LIMIT 1",
-                    (token,),
-                )
-                row = cur.fetchone()
-                if row:
-                    display, kind = row
-                    found_entities.append(f"{display} is a {kind}")
-                
-                # Check relations (as subject)
-                cur.execute(
-                    "SELECT relation, object FROM school_relations WHERE subject = ? AND confidence > 0.3 LIMIT 2",
-                    (token,),
-                )
-                for row in cur.fetchall():
-                    relation, obj = row
-                    found_relations.append(f"{token} {relation.replace('_', ' ')} {obj}")
-                
-                # Check relations (as object)
-                cur.execute(
-                    "SELECT subject, relation FROM school_relations WHERE object = ? AND confidence > 0.3 LIMIT 2",
-                    (token,),
-                )
-                for row in cur.fetchall():
-                    subj, relation = row
-                    found_relations.append(f"{subj} {relation.replace('_', ' ')} {token}")
-                
-                if len(found_notes) + len(found_entities) + len(found_relations) >= max_items:
+
+                if len(found_notes) >= max_items:
                     break
-            
-            # Build result
-            all_facts = found_entities + found_relations + found_notes
-            if not all_facts:
+
+            if not found_notes:
                 return None
-            
-            return ". ".join(all_facts[:max_items])
-            
+
+            return ". ".join(found_notes[:max_items])
+
         except Exception:
             return None
     
@@ -393,51 +338,7 @@ class School:
         cur.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_school_token ON school_notes(token)"
         )
-        
-        # school_entities: kinds (city, country, planet, ...)
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS school_entities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                token TEXT NOT NULL,
-                display TEXT NOT NULL,
-                kind TEXT NOT NULL,
-                created_at REAL NOT NULL,
-                last_seen REAL NOT NULL,
-                weight REAL NOT NULL DEFAULT 1.0
-            )
-            """
-        )
-        cur.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_school_entities_token_kind ON school_entities(token, kind)"
-        )
-        
-        # school_relations: binary relations (capital_of, ...)
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS school_relations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                subject TEXT NOT NULL,
-                relation TEXT NOT NULL,
-                object TEXT NOT NULL,
-                confidence REAL NOT NULL DEFAULT 1.0,
-                created_at REAL NOT NULL,
-                last_seen REAL NOT NULL,
-                source TEXT DEFAULT 'user_answer'
-            )
-            """
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_school_rel_subject ON school_relations(subject, relation)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_school_rel_object ON school_relations(relation, object)"
-        )
-        # UNIQUE constraint for proper upsert semantics
-        cur.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_school_rel_triple ON school_relations(subject, relation, object)"
-        )
-        
+
         self._conn.commit()
     
     def _can_ask_now(
@@ -530,58 +431,18 @@ class School:
         }
         
         candidates: List[Tuple[str, str]] = []
-        high_priority: List[Tuple[str, str]] = []
-        
+
         for w in words:
-            # Skip first word
             if w == first:
                 continue
-            
-            # Skip pronouns/articles
             if w in ignore:
                 continue
-            
-            # Skip too long
             if len(w) > self.config.max_token_len:
                 continue
-            
-            token = w.lower()
-            candidate = (token, w)
-            
-            # Check if near form lexeme (high priority)
-            if self._has_form_lexeme_near(text, w):
-                high_priority.append(candidate)
-            else:
-                candidates.append(candidate)
-        
-        # Return high-priority first, then regular candidates
-        return high_priority + candidates
-    
-    def _has_form_lexeme_near(self, text: str, display: str) -> bool:
-        """
-        Check if display token appears near a form lexeme (capital, city, country, etc.).
-        
-        Looks in a small window (±7 tokens) around the token.
-        """
-        text_lower = text.lower()
-        display_lower = display.lower()
-        
-        # Find position of display token
-        pos = text_lower.find(display_lower)
-        if pos == -1:
-            return False
-        
-        # Extract window around token (±50 chars, roughly ±7 tokens)
-        start = max(0, pos - 50)
-        end = min(len(text), pos + len(display) + 50)
-        window = text_lower[start:end]
-        
-        # Check if any form lexeme appears in window
-        for lexeme in FORM_LEXEMES.keys():
-            if lexeme in window:
-                return True
-        
-        return False
+
+            candidates.append((w.lower(), w))
+
+        return candidates
     
     def _pick_new_token(
         self,
@@ -624,142 +485,6 @@ class School:
         except Exception:
             return False
     
-    def _parse_and_store_forms(
-        self,
-        token: str,
-        display: str,
-        answer: str,
-        now: float,
-    ) -> None:
-        """
-        Attempt to parse simple forms from answer (best-effort, silent on failure).
-        
-        School v1: English-only patterns.
-        
-        Patterns:
-        - "X is the capital of Y" → city/country, capital_of
-        - "It is a city/country/planet" → kind
-        """
-        if self._conn is None:
-            return
-        
-        answer_lower = answer.lower()
-        cur = self._conn.cursor()
-        
-        try:
-            # Pattern 1: "X is the capital of Y" (EN)
-            # Try both token and display (for case variations)
-            pattern_en_token = rf"{re.escape(token)}\s+is\s+the\s+capital\s+of\s+([a-zA-Z][a-zA-Z\s]+)"
-            pattern_en_display = rf"{re.escape(display.lower())}\s+is\s+the\s+capital\s+of\s+([a-zA-Z][a-zA-Z\s]+)"
-            match = re.search(pattern_en_token, answer_lower) or re.search(pattern_en_display, answer_lower)
-            if match:
-                object_name = match.group(1).strip()
-                object_token = re.sub(r'\s+', ' ', object_name).lower()
-                object_display = object_name.title()
-                
-                # Upsert entities
-                self._upsert_entity(cur, token, display, "city", now)
-                self._upsert_entity(cur, object_token, object_display, "country", now)
-                
-                # Upsert relation
-                self._upsert_relation(cur, token, "capital_of", object_token, now)
-                self._conn.commit()
-                return
-            
-            # Pattern 2: "It is a city/country/planet" (EN)
-            kind_pattern_en = r"it\s+is\s+a\s+(city|country|planet)"
-            match = re.search(kind_pattern_en, answer_lower)
-            if match:
-                kind = match.group(1)
-                self._upsert_entity(cur, token, display, kind, now)
-                self._conn.commit()
-                return
-            
-        except sqlite3.OperationalError as e:
-            print(f"[school] sqlite operational error in parse forms: {e}", file=sys.stderr)
-        except Exception as e:
-            print(f"[school] unexpected error in parse forms: {e}", file=sys.stderr)
-    
-    def _upsert_entity(
-        self,
-        cur: sqlite3.Cursor,
-        token: str,
-        display: str,
-        kind: str,
-        now: float,
-    ) -> None:
-        """Upsert entity in school_entities."""
-        try:
-            cur.execute(
-                """
-                INSERT INTO school_entities (token, display, kind, created_at, last_seen, weight)
-                VALUES (?, ?, ?, ?, ?, 1.0)
-                ON CONFLICT(token, kind) DO UPDATE SET
-                    display = excluded.display,
-                    last_seen = excluded.last_seen
-                """,
-                (token, display, kind, now, now),
-            )
-        except Exception:
-            pass
-    
-    def _upsert_relation(
-        self,
-        cur: sqlite3.Cursor,
-        subject: str,
-        relation: str,
-        object_token: str,
-        now: float,
-    ) -> None:
-        """Upsert relation in school_relations."""
-        try:
-            cur.execute(
-                """
-                INSERT OR IGNORE INTO school_relations
-                    (subject, relation, object, confidence, created_at, last_seen, source)
-                VALUES (?, ?, ?, 1.0, ?, ?, 'user_answer')
-                """,
-                (subject, relation, object_token, now, now),
-            )
-        except Exception:
-            pass
-    
-    def _decay_relations(self, now: float) -> None:
-        """
-        Apply decay to relations: multiply confidence by 0.99 per day since last_seen.
-        Delete relations where confidence < 0.1.
-        
-        This allows forgetting facts while keeping forms.
-        """
-        if self._conn is None:
-            return
-        
-        cur = self._conn.cursor()
-        try:
-            # Get all relations
-            cur.execute("SELECT id, last_seen, confidence FROM school_relations")
-            rows = cur.fetchall()
-            
-            for row_id, last_seen, confidence in rows:
-                days_ago = (now - last_seen) / 86400.0  # seconds to days
-                if days_ago > 0:
-                    new_confidence = confidence * (0.99 ** days_ago)
-                    if new_confidence < 0.1:
-                        # Delete weak relations
-                        cur.execute("DELETE FROM school_relations WHERE id = ?", (row_id,))
-                    else:
-                        # Update confidence
-                        cur.execute(
-                            "UPDATE school_relations SET confidence = ? WHERE id = ?",
-                            (new_confidence, row_id),
-                        )
-            
-            self._conn.commit()
-        except sqlite3.OperationalError as e:
-            print(f"[school] sqlite operational error in decay: {e}", file=sys.stderr)
-        except Exception as e:
-            print(f"[school] unexpected error in decay: {e}", file=sys.stderr)
-    
     def _remember_question(self, token: str, display: str, now: float) -> None:
         """Log the question and update counters."""
         if self._conn is None:
@@ -777,11 +502,6 @@ class School:
                 """,
                 (token, display, now, now),
             )
-            
-            # Occasionally run decay (1% chance per question)
-            import random
-            if random.random() < 0.01:
-                self._decay_relations(now)
             
             self._conn.commit()
         except sqlite3.OperationalError as e:

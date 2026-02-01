@@ -193,13 +193,14 @@ def bucketize(x: float, low: float = 0.33, high: float = 0.66) -> Bucket:
     Convert float in [0,1] to low/mid/high bucket.
 
     Args:
-        x: value to bucketize (assumed in [0,1])
+        x: value to bucketize
         low: threshold for low/mid boundary
         high: threshold for mid/high boundary
 
     Returns:
         "low", "mid", or "high"
     """
+    x = max(0.0, min(1.0, x))
     if x < low:
         return "low"
     if x > high:

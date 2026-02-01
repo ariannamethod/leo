@@ -4,15 +4,70 @@
 
 ---
 
-## Current State (January 2026)
+## Current State (February 2026)
 
-**Tests:** 400 test functions across 31 test files  
-**Modules:** 24 Python modules  
-**Architecture:** Full async stack with sentencepiece integration
+**Tests:** 502 test functions across 33 test files
+**Modules:** 24 Python modules + 1 Go module + ctypes bridge + async storage layer
+**Architecture:** Dual sync/async core (AsyncLeoField + LeoField), aiosqlite, sentencepiece
 
 ---
 
 ## Recent Updates
+
+### February 1, 2026 — Cleanup, Memory Bounds, School Simplification
+
+**Go ctypes bridge (`inner_world_bridge.py`):**
+- NEW module: full Python ctypes bridge for Go emotional resonance engine
+- Platform-specific library discovery (.so/.dylib/.dll)
+- Auto-build management (compiles Go if needed)
+- Complete Python fallbacks matching Go implementations exactly
+- `InnerWorld` class: valence, arousal, drift(), reset(), nearest_attractor(), entropy(), perplexity(), semantic_distance()
+- 40 new tests in `tests/test_inner_world_bridge.py`
+- `talkto.py` refactored to use the bridge (removed ~100 lines of inline Go management)
+
+**Julia removal:**
+- Removed all Julia references from `inner_world/README.md`
+- Architecture is Go + Python only now
+
+**Memory bounds (all modules):**
+- `phase4_bridges.py`: `MAX_COMPLETED_EPISODES=100`, `MAX_EPISODES=100` with pruning
+- `stories.py`: `MAX_STORIES=200`, quality-based pruning with pattern_index rebuild
+- `gowiththeflow.py`: `MAX_CACHED_THEMES=500`, eviction of bottom half by activation count
+- `game.py`: `bucketize()` clamp fix (`x = max(0.0, min(1.0, x))`)
+
+**School simplification (791 → 510 lines, -35%):**
+- Removed knowledge graph layer entirely:
+  - `school_entities` table (city/country/planet kinds)
+  - `school_relations` table (capital_of, etc.)
+  - `_parse_and_store_forms()` regex extraction
+  - `_upsert_entity()`, `_upsert_relation()`, `_decay_relations()`
+  - `_has_form_lexeme_near()` proximity boost
+  - `FORM_LEXEMES` dict
+- Kept: `school_notes` table, `maybe_ask()`, `register_answer()`, `recall_knowledge()` (notes-only), trauma/arousal gates, rate limiting
+- School is now an ear, not a database: listen → store note → `field.observe()`
+- 4 knowledge-graph tests removed, 13 school tests pass
+
+**Async migration (core + satellites):**
+- NEW `leo_storage.py` (370 lines): full async storage layer using aiosqlite
+  - `async_init_db`, `async_ingest_text`, `async_load_bigrams/trigrams/co_occurrence`
+  - `async_compute_centers`, `async_save_snapshot`, `async_apply_memory_decay`
+  - `async_get_meta/set_meta`, `async_bootstrap_if_needed`
+  - 21 tests in `tests/test_leo_storage.py`
+- NEW `AsyncLeoField` class in leo.py:
+  - `asyncio.Lock` per instance → sequential field evolution
+  - `await AsyncLeoField.create(db_path)` → factory method
+  - `await field.async_observe(text)` → async ingestion + refresh
+  - `await field.async_reply(prompt)` → full 24-module orchestration under lock
+  - `.conn` property → backward compat for modules expecting `field.conn`
+  - `.observe()` sync bridge → modules not yet migrated (overthinking, dream)
+  - Uses `AsyncMetaLeo` (real async dual generation) instead of sync `MetaLeo`
+- NEW `async_repl()` + `async_main()` → async REPL and entry point
+- 9 tests in `tests/test_async_leo.py`
+- Satellite assessment: `AsyncMetaLeo` = real async, `AsyncOverthinking` + `AsyncSubwordField` = lock wrappers (correct for CPU-bound)
+
+**Test results:** 502 passed, 2 skipped (pre-existing), 1 pre-existing flaky fail (santaclaus)
+
+---
 
 ### January 18, 2026 — NO FIRST SEED FROM PROMPT
 
@@ -133,15 +188,18 @@ tests/
 ├── test_episodes.py               # Episodic RAG (5 tests)
 ├── test_game.py                   # Conversational rhythm (37 tests)
 ├── test_dream.py                  # Imaginary friend (11 tests)
-├── test_school.py                 # School of Forms
-├── test_school_math.py            # Arithmetic
+├── test_school.py                 # School of Forms (13 tests)
+├── test_school_math.py            # Arithmetic (10 tests)
 ├── test_first_impression.py       # Emotion chambers (11 tests)
 ├── test_gravity.py                # Prompt gravity (6 tests)
 ├── test_subword.py                # SentencePiece vocab (7 tests)
+├── test_inner_world_bridge.py     # Go ctypes bridge (40 tests)
+├── test_leo_storage.py            # Async storage layer (21 tests)
+├── test_async_leo.py              # AsyncLeoField (9 tests)
 └── ...
 ```
 
-**Total: 400+ tests**
+**Total: 502 tests**
 
 ---
 
@@ -250,11 +308,15 @@ Leo was repeating "Sometimes he brings one back, like a gift..." in every respon
 
 ## Future Ideas
 
+- [x] Async migration: core (aiosqlite + asyncio.Lock per AsyncLeoField)
+- [x] leo_storage.py: extracted async storage layer
+- [ ] Migrate remaining sync modules to use async_observe/async_reply
 - [ ] CLOUD-inspired resonance layers (from Haze)
 - [ ] Anomaly detection heuristics
 - [ ] Cross-fire between expert "cameras"
 - [ ] Dynamic expert mixture (like Haze's HybridHead)
+- [ ] neoleo.py → binary shards self-learning (spoiler)
 
 ---
 
-*Last updated: January 2, 2026*
+*Last updated: February 1, 2026*

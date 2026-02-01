@@ -91,18 +91,16 @@ arousal = lib.leo_get_arousal()
 print(f"Valence: {valence}, Arousal: {arousal}")
 ```
 
-## Why Go + Julia?
+## Why Go?
 
 From arianna.c's architecture:
 
-1. **Go** — Concurrent emotional processing, fast ODE integration
-2. **Julia** (via Go) — Complex mathematical operations, matrix computations
-3. **Python** — High-level logic, language generation
+1. **Go** — Concurrent emotional processing, fast ODE integration, matrix computations
+2. **Python** — High-level logic, language generation
 
 Leo's emotional resonance runs in Go for speed, while Python handles the language field.
 
 ## Future
 
-- [ ] Julia integration for Schumann resonance (7.83 Hz coupling)
 - [ ] Parallel emotional channels (like arianna.c's blood.go)
 - [ ] Real-time emotional drift visualization

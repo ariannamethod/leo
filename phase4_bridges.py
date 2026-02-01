@@ -149,6 +149,8 @@ class EpisodeLogger:
     Collects steps of the current episode, flushes to Phase 4 store on end.
     """
 
+    MAX_COMPLETED_EPISODES = 100
+
     def __init__(self):
         self.current_episode: Optional[Episode] = None
         self.completed_episodes: List[Episode] = []
@@ -185,6 +187,9 @@ class EpisodeLogger:
         ep = self.current_episode
         if ep is not None:
             self.completed_episodes.append(ep)
+            # Cap to prevent unbounded memory growth
+            if len(self.completed_episodes) > self.MAX_COMPLETED_EPISODES:
+                self.completed_episodes = self.completed_episodes[-self.MAX_COMPLETED_EPISODES:]
         self.current_episode = None
         return ep
 
@@ -241,11 +246,15 @@ class BridgeMemory:
     Stores references to episodes / steps for Phase 4 bridge search.
     """
 
+    MAX_EPISODES = 100
+
     def __init__(self):
         self.episodes: List[Episode] = []
 
     def add_episode(self, episode: Episode) -> None:
         self.episodes.append(episode)
+        if len(self.episodes) > self.MAX_EPISODES:
+            self.episodes = self.episodes[-self.MAX_EPISODES:]
 
     def collect_candidates(
         self,

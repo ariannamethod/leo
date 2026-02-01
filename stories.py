@@ -168,6 +168,8 @@ class StoryBook:
     Phase 5 has StoryBook (full trajectories).
     """
 
+    MAX_STORIES = 200
+
     def __init__(self, db_path: Optional[Path] = None):
         self.stories: List[Story] = []
         self.db_path = db_path
@@ -186,6 +188,17 @@ class StoryBook:
         # Index by signature
         if story.signature_pattern:
             self.pattern_index[story.signature_pattern].append(story.story_id)
+
+        # Cap stories to prevent unbounded memory growth
+        if len(self.stories) > self.MAX_STORIES:
+            # Keep stories with highest quality, drop worst
+            self.stories.sort(key=lambda s: getattr(s, 'quality', 0.0), reverse=True)
+            self.stories = self.stories[:self.MAX_STORIES]
+            # Rebuild pattern index
+            self.pattern_index.clear()
+            for s in self.stories:
+                if s.signature_pattern:
+                    self.pattern_index[s.signature_pattern].append(s.story_id)
 
         # Persist
         if self.db_path:

@@ -55,10 +55,11 @@ except ImportError:
 
 # Safe import: metaleo module is optional
 try:
-    from metaleo import MetaLeo
+    from metaleo import MetaLeo, AsyncMetaLeo
     METALEO_AVAILABLE = True
 except ImportError:
     MetaLeo = None  # type: ignore
+    AsyncMetaLeo = None  # type: ignore
     METALEO_AVAILABLE = False
 
 # Safe import: subword module is optional (sentencepiece-based parallel voice)
@@ -4473,6 +4474,865 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     print(reply)
     field.observe(reply)
+    return 0
+
+
+# ============================================================================
+# ASYNC LEO FIELD
+# ============================================================================
+
+try:
+    import asyncio
+    import aiosqlite
+    from leo_storage import (
+        async_init_db,
+        async_bootstrap_if_needed,
+        async_ingest_text,
+        async_load_bigrams,
+        async_load_trigrams,
+        async_load_co_occurrence,
+        async_compute_centers,
+        async_apply_memory_decay,
+        async_save_snapshot,
+        async_get_meta,
+        async_set_meta,
+        load_bin_bias as storage_load_bin_bias,
+        create_bin_shard as storage_create_bin_shard,
+    )
+    ASYNC_AVAILABLE = True
+except ImportError:
+    ASYNC_AVAILABLE = False
+
+
+class AsyncLeoField:
+    """
+    Async version of LeoField.
+
+    Key principles (from async architecture docs):
+    - asyncio.Lock per instance → sequential field evolution within one Leo
+    - Multiple instances can run in parallel (separate locks)
+    - aiosqlite for all DB operations → non-blocking I/O
+    - All public methods are async
+    - Pure computation (generate_reply, step_token, etc.) stays sync
+      (CPU-bound work doesn't benefit from async)
+
+    Usage:
+        field = await AsyncLeoField.create(db_path)
+        await field.observe("hello world")
+        reply = await field.reply("hello")
+    """
+
+    def __init__(self) -> None:
+        """Private constructor. Use AsyncLeoField.create() instead."""
+        self._lock = asyncio.Lock()
+        self.db: Optional[Any] = None  # aiosqlite.Connection
+
+        # Field state (same as LeoField)
+        self.bigrams: Dict[str, Dict[str, int]] = {}
+        self.trigrams: Dict[Tuple[str, str], Dict[str, int]] = {}
+        self.co_occur: Dict[str, Dict[str, int]] = {}
+        self.vocab: List[str] = []
+        self.centers: List[str] = []
+        self.bias: Dict[str, int] = {}
+        self.emotion: Dict[str, float] = {}
+        self.last_pulse: Optional[PresencePulse] = None
+        self.last_quality: Optional[QualityScore] = None
+        self.themes: List[Theme] = []
+        self.token_to_themes: Dict[str, List[int]] = {}
+        self.observe_count: int = 0
+        self.DECAY_INTERVAL: int = 100
+        self.last_expert: Optional[Expert] = None
+        self._trauma_state: Optional[Any] = None
+
+        # Optional modules (initialized in _init_modules)
+        self.flow_tracker: Optional[Any] = None
+        self.metaleo: Optional[Any] = None
+        self._math_brain: Optional[Any] = None
+        self.santa: Optional[Any] = None
+        self.rag: Optional[Any] = None
+        self.game: Optional[Any] = None
+        self.school: Optional[Any] = None
+        self._last_school_question: Optional[Any] = None
+        self.subword_field: Optional[Any] = None
+        self.bridge_memory: Optional[Any] = None
+
+        # Sync connection for modules that need it during transition
+        # Exposed as .conn for backward compat with modules (metaleo, etc.)
+        self._sync_conn: Optional[sqlite3.Connection] = None
+
+    @property
+    def conn(self) -> Optional[sqlite3.Connection]:
+        """Sync connection for backward compat with modules expecting field.conn."""
+        return self._sync_conn
+
+    @classmethod
+    async def create(
+        cls,
+        db_path: Optional[Path] = None,
+    ) -> 'AsyncLeoField':
+        """
+        Factory method: create and initialize an AsyncLeoField.
+
+        Args:
+            db_path: Path to SQLite database (default: state/leo.sqlite3)
+        """
+        self = cls()
+
+        # Open async DB
+        if db_path is None:
+            db_path = DB_PATH
+
+        ensure_dirs()
+        self.db = await aiosqlite.connect(str(db_path))
+        self.db.row_factory = aiosqlite.Row
+
+        # Initialize schema
+        from leo_storage import _SCHEMA_SQL
+        for sql in _SCHEMA_SQL:
+            await self.db.execute(sql)
+        await self.db.commit()
+
+        # Bootstrap
+        await self._async_bootstrap()
+
+        # Open sync connection for modules that still need it
+        self._sync_conn = sqlite3.connect(str(db_path))
+        self._sync_conn.row_factory = sqlite3.Row
+
+        # Init optional modules (they still use sync conn during transition)
+        self._init_modules(db_path)
+
+        # Load field data
+        await self.refresh(initial_shard=True)
+
+        # Feed module bootstraps
+        self._feed_bootstraps_sync()
+
+        return self
+
+    async def _async_bootstrap(self) -> None:
+        """Bootstrap from embedded seed + README (async)."""
+        cursor = await self.db.execute("SELECT COUNT(*) AS c FROM tokens")
+        row = await cursor.fetchone()
+        count = int(row[0])
+
+        if count == 0:
+            print("[leo] bootstrapping from embedded seed...", file=sys.stderr)
+            await async_ingest_text(self.db, EMBEDDED_BOOTSTRAP)
+
+        readme_flag = await async_get_meta(self.db, "readme_bootstrap_done")
+        if readme_flag == "1":
+            return
+
+        if not README_PATH.exists():
+            return
+
+        print("[leo] reading README.md for first time...", file=sys.stderr)
+        readme_text = README_PATH.read_text(encoding="utf-8")
+        readme_clean = strip_code_blocks(readme_text)
+        await async_ingest_text(self.db, readme_clean)
+        await async_set_meta(self.db, "readme_bootstrap_done", "1")
+
+    def _init_modules(self, db_path: Path) -> None:
+        """Initialize optional modules (sync during transition)."""
+        conn = self._sync_conn
+
+        # FLOW
+        if FLOW_AVAILABLE and FlowTracker is not None and conn is not None:
+            self.flow_tracker = FlowTracker(conn)
+
+        # METALEO (use AsyncMetaLeo for real async dual generation)
+        if METALEO_AVAILABLE and AsyncMetaLeo is not None:
+            self.metaleo = AsyncMetaLeo(self)
+        elif METALEO_AVAILABLE and MetaLeo is not None:
+            self.metaleo = MetaLeo(self)
+
+        # MATHBRAIN
+        if MATHBRAIN_AVAILABLE and MathBrain is not None:
+            try:
+                state_path = STATE_DIR / "mathbrain.json"
+                self._math_brain = MathBrain(self, hidden_dim=16, lr=0.01, state_path=state_path)
+            except Exception:
+                self._math_brain = None
+
+        # SANTACLAUS
+        if SANTACLAUS_AVAILABLE and SantaKlaus is not None:
+            try:
+                self.santa = SantaKlaus(db_path=db_path, max_memories=5, alpha=0.3)
+            except Exception:
+                self.santa = None
+
+        # EPISODES
+        if EPISODES_AVAILABLE and RAGBrain is not None:
+            try:
+                rag_path = STATE_DIR / "leo_rag.sqlite3"
+                self.rag = RAGBrain(db_path=rag_path)
+            except Exception:
+                self.rag = None
+
+        # GAME
+        if GAME_MODULE_AVAILABLE and GameEngine is not None:
+            try:
+                game_path = STATE_DIR / "game.sqlite3"
+                self.game = GameEngine(db_path=game_path)
+            except Exception:
+                self.game = None
+
+        # SCHOOL
+        if SCHOOL_MODULE_AVAILABLE and School is not None:
+            try:
+                self.school = School(
+                    db_path=db_path,
+                    field=self,
+                    config=SchoolConfig() if SchoolConfig else None,
+                )
+            except Exception:
+                self.school = None
+
+        # DREAM
+        if DREAM_MODULE_AVAILABLE and DREAM_AVAILABLE and init_dream is not None:
+            try:
+                readme_fragments = []
+                if README_PATH.exists():
+                    readme_fragments = [
+                        "language is a field",
+                        "presence > intelligence",
+                        "Pure recursion. Resonant essence",
+                    ]
+                init_dream(db_path, EMBEDDED_BOOTSTRAP, readme_fragments)
+            except Exception:
+                pass
+
+        # SUBWORD
+        if SUBWORD_AVAILABLE and SubwordField is not None:
+            try:
+                if README_PATH.exists():
+                    self.subword_field = SubwordField.from_corpus(
+                        str(README_PATH), vocab_size=300, model_type="bpe",
+                    )
+            except Exception:
+                self.subword_field = None
+
+        # PHASE 4
+        if PHASE4_AVAILABLE and BridgeMemory is not None:
+            try:
+                self.bridge_memory = BridgeMemory()
+            except Exception:
+                self.bridge_memory = None
+
+    def _feed_bootstraps_sync(self) -> None:
+        """Feed module bootstraps using sync observe (wraps for async context)."""
+        try:
+            feed_bootstraps_if_fresh(self)
+        except Exception:
+            pass
+
+    async def refresh(self, initial_shard: bool = False) -> None:
+        """Reload field from database (async)."""
+        async with self._lock:
+            self.bigrams, self.vocab = await async_load_bigrams(self.db)
+            self.trigrams = await async_load_trigrams(self.db)
+            self.co_occur = await async_load_co_occurrence(self.db)
+            self.centers = await async_compute_centers(self.db, k=7)
+            self.bias = storage_load_bin_bias("leo")
+            self.themes, self.token_to_themes = build_themes(self.co_occur)
+            if initial_shard and self.centers:
+                storage_create_bin_shard("leo", self.centers)
+
+    def observe(self, text: str) -> None:
+        """
+        Sync observe — needed by modules (metaleo, overthinking, dream, school)
+        that call field.observe() synchronously.
+
+        During transition, this uses the sync connection.
+        After full migration, modules will call async_observe() directly.
+        """
+        if not text.strip():
+            return
+        if self._sync_conn is not None:
+            ingest_text(self._sync_conn, text)
+        update_emotional_stats(self.emotion, text)
+        self.observe_count += 1
+        if self.observe_count % self.DECAY_INTERVAL == 0:
+            if self._sync_conn is not None:
+                apply_memory_decay(self._sync_conn)
+        if self.subword_field is not None:
+            try:
+                self.subword_field.observe(text)
+            except Exception:
+                pass
+
+    async def async_observe(self, text: str) -> None:
+        """Async observe — primary method for external callers."""
+        if not text.strip():
+            return
+        async with self._lock:
+            await async_ingest_text(self.db, text)
+            update_emotional_stats(self.emotion, text)
+            self.observe_count += 1
+            if self.observe_count % self.DECAY_INTERVAL == 0:
+                await async_apply_memory_decay(self.db)
+            if self.subword_field is not None:
+                try:
+                    self.subword_field.observe(text)
+                except Exception:
+                    pass
+            # Refresh field after ingestion
+            self.bigrams, self.vocab = await async_load_bigrams(self.db)
+            self.trigrams = await async_load_trigrams(self.db)
+            self.co_occur = await async_load_co_occurrence(self.db)
+            self.centers = await async_compute_centers(self.db, k=7)
+            self.bias = storage_load_bin_bias("leo")
+            self.themes, self.token_to_themes = build_themes(self.co_occur)
+            if self.centers:
+                storage_create_bin_shard("leo", self.centers)
+
+    async def async_reply(
+        self,
+        prompt: str,
+        max_tokens: int = 80,
+        temperature: float = 1.0,
+        echo: bool = False,
+    ) -> str:
+        """
+        Generate reply through the field (async).
+
+        The lock ensures sequential field evolution:
+        observe → generate → post-process → update state
+        all happen atomically within one instance.
+        """
+        async with self._lock:
+            # SCHOOL: answer handling
+            if self.school is not None and self._last_school_question is not None:
+                try:
+                    self.school.register_answer(self._last_school_question, prompt)
+                    self._last_school_question = None
+                except Exception:
+                    pass
+
+            # SANTACLAUS: resonant recall
+            token_boosts: Optional[Dict[str, float]] = None
+            if self.santa is not None:
+                try:
+                    prompt_tokens = tokenize(prompt)
+                    active_themes = activate_themes_for_prompt(
+                        prompt_tokens, self.themes, self.token_to_themes
+                    ) if self.themes else None
+                    active_theme_words = list(active_themes.active_words) if active_themes else None
+                    prompt_arousal = compute_prompt_arousal(prompt_tokens, self.emotion)
+                    pulse_dict = {"novelty": 0.5, "arousal": prompt_arousal, "entropy": 0.5}
+                    santa_ctx = self.santa.recall(
+                        field=self, prompt_text=prompt,
+                        pulse=pulse_dict, active_themes=active_theme_words,
+                    )
+                    if santa_ctx is not None:
+                        for snippet in santa_ctx.recalled_texts:
+                            self.observe(snippet)
+                        token_boosts = santa_ctx.token_boosts
+                except Exception:
+                    token_boosts = None
+
+            # SUBWORD hint
+            subword_hint: Optional[str] = None
+            if self.subword_field is not None and SUBWORD_AVAILABLE:
+                try:
+                    subword_hint = self.subword_field.generate(
+                        seed_text=prompt[:50], length=20,
+                        temperature=temperature, loop_penalty=0.3,
+                    )
+                except Exception:
+                    subword_hint = None
+
+            # SCHOOL knowledge recall
+            school_knowledge: Optional[str] = None
+            if self.school is not None and SCHOOL_MODULE_AVAILABLE:
+                try:
+                    school_knowledge = self.school.recall_knowledge(prompt, max_items=3)
+                    if school_knowledge:
+                        self.observe(school_knowledge)
+                except Exception:
+                    school_knowledge = None
+
+            # GAME hint
+            game_hint: Optional[Any] = None
+            if self.game is not None and GAME_MODULE_AVAILABLE:
+                try:
+                    game_hint = self.game.suggest_next(conv_id="main")
+                except Exception:
+                    game_hint = None
+
+            # GENERATION (CPU-bound, sync — this is fine under the lock)
+            context = generate_reply(
+                self.bigrams, self.vocab, self.centers, self.bias, prompt,
+                max_tokens=max_tokens, temperature=temperature, echo=echo,
+                trigrams=self.trigrams, co_occur=self.co_occur,
+                emotion_map=self.emotion, return_context=True,
+                themes=self.themes, token_to_themes=self.token_to_themes,
+                use_experts=True, trauma_state=self._trauma_state,
+                token_boosts=token_boosts, mathbrain=self._math_brain,
+                subword_hint=subword_hint, bridge_memory=self.bridge_memory,
+                game_hint=game_hint,
+            )
+
+            self.last_pulse = context.pulse
+            self.last_quality = context.quality
+            self.last_expert = context.expert
+
+            # OVERTHINKING
+            overthinking_events = None
+            if OVERTHINKING_AVAILABLE and run_overthinking is not None:
+                try:
+                    pulse_snapshot = None
+                    if PulseSnapshot is not None and context.pulse is not None:
+                        pulse_snapshot = PulseSnapshot.from_obj(context.pulse)
+                    events = run_overthinking(
+                        prompt=prompt, reply=context.output,
+                        generate_fn=self._overthinking_generate,
+                        observe_fn=self._overthinking_observe,
+                        pulse=pulse_snapshot,
+                        trauma_state=self._trauma_state if hasattr(self, '_trauma_state') else None,
+                        bootstrap=EMBEDDED_BOOTSTRAP,
+                        config=OverthinkingConfig() if OverthinkingConfig else None,
+                    )
+                    overthinking_events = events
+                except Exception:
+                    pass
+
+            # TRAUMA
+            if TRAUMA_AVAILABLE and run_trauma is not None:
+                try:
+                    state = run_trauma(
+                        prompt=prompt, reply=context.output,
+                        bootstrap=EMBEDDED_BOOTSTRAP,
+                        pulse=context.pulse, db_path=DB_PATH,
+                    )
+                    if state is not None:
+                        self._trauma_state = state
+                except Exception:
+                    pass
+
+            # FLOW
+            if self.flow_tracker is not None and self.themes:
+                try:
+                    prompt_tokens = tokenize(prompt)
+                    active_themes = activate_themes_for_prompt(
+                        prompt_tokens, self.themes, self.token_to_themes
+                    )
+                    self.flow_tracker.record_snapshot(
+                        themes=self.themes, active_themes=active_themes,
+                    )
+                except Exception:
+                    pass
+
+            # METALEO
+            final_reply = context.output
+            used_metaleo = False
+            metaleo_weight = 0.0
+            if self.metaleo is not None:
+                try:
+                    entropy_val = context.pulse.entropy if context.pulse else 0.5
+                    arousal_val = context.pulse.arousal if context.pulse else 0.0
+                    trauma_val = self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0
+                    quality_val = context.quality.overall if context.quality else 0.5
+
+                    if hasattr(self.metaleo, 'compute_meta_weight'):
+                        metaleo_weight = self.metaleo.compute_meta_weight(
+                            entropy_val, arousal_val, trauma_val, quality_val
+                        )
+
+                    # Use async route if available (AsyncMetaLeo)
+                    if hasattr(self.metaleo, 'route_reply_async'):
+                        overthinking_shards = None
+                        if overthinking_events:
+                            try:
+                                overthinking_shards = [str(e) for e in overthinking_events]
+                            except Exception:
+                                pass
+                        meta_reply = await self.metaleo.route_reply_async(
+                            prompt=prompt, base_reply=context.output,
+                            entropy=entropy_val, arousal=arousal_val,
+                            trauma=trauma_val, quality=quality_val,
+                            overthinking_shards=overthinking_shards,
+                        )
+                    else:
+                        # Fallback to sync MetaLeo
+                        meta_reply = self.metaleo.route_reply(
+                            prompt=prompt, base_reply=context.output,
+                            pulse=context.pulse, trauma_state=self._trauma_state,
+                            quality=quality_val,
+                            overthinking_events=overthinking_events,
+                        )
+                    used_metaleo = (meta_reply != context.output)
+                    final_reply = meta_reply
+                except Exception:
+                    final_reply = context.output
+
+            # MATHBRAIN observation
+            if self._math_brain is not None and MATHBRAIN_AVAILABLE and MathState is not None:
+                try:
+                    prompt_tokens = tokenize(prompt)
+                    active_themes = activate_themes_for_prompt(
+                        prompt_tokens, self.themes, self.token_to_themes
+                    ) if self.themes else None
+                    emerging_score = 0.0
+                    fading_score = 0.0
+                    if self.flow_tracker is not None:
+                        try:
+                            emerging = self.flow_tracker.detect_emerging(window_hours=6.0, min_slope=0.1)
+                            fading = self.flow_tracker.detect_fading(window_hours=6.0, min_slope=0.1)
+                            emerging_score = sum(s for _, s in emerging) / len(emerging) if emerging else 0.0
+                            fading_score = abs(sum(s for _, s in fading) / len(fading)) if fading else 0.0
+                        except Exception:
+                            pass
+                    rings_present = 0
+                    if overthinking_events:
+                        try:
+                            rings_present = len(list(overthinking_events))
+                        except Exception:
+                            pass
+                    reply_tokens = tokenize(final_reply)
+                    unique_ratio = len(set(reply_tokens)) / len(reply_tokens) if reply_tokens else 0.0
+                    state = MathState(
+                        entropy=context.pulse.entropy if context.pulse else 0.0,
+                        novelty=context.pulse.novelty if context.pulse else 0.0,
+                        arousal=context.pulse.arousal if context.pulse else 0.0,
+                        pulse=context.pulse.pulse if context.pulse else 0.0,
+                        trauma_level=self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
+                        active_theme_count=len(active_themes.theme_scores) if active_themes else 0,
+                        total_themes=len(self.themes),
+                        emerging_score=emerging_score,
+                        fading_score=fading_score,
+                        reply_len=len(reply_tokens),
+                        unique_ratio=unique_ratio,
+                        expert_id=context.expert.name if context.expert else "structural",
+                        expert_temp=context.expert.temperature if context.expert else 1.0,
+                        expert_semantic=context.expert.semantic_weight if context.expert else 0.5,
+                        metaleo_weight=metaleo_weight,
+                        used_metaleo=used_metaleo,
+                        overthinking_enabled=OVERTHINKING_AVAILABLE,
+                        rings_present=rings_present,
+                        quality=context.quality.overall if context.quality else 0.5,
+                    )
+                    self._math_brain.observe(state)
+                    if self.rag is not None and EPISODES_AVAILABLE and Episode is not None:
+                        try:
+                            episode = Episode(prompt=prompt, reply=final_reply, metrics=state)
+                            self.rag.observe_episode(episode)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            # GAME turns
+            if self.game is not None and GAME_MODULE_AVAILABLE and GameTurn is not None:
+                try:
+                    conv_id = "main"
+                    prompt_tokens = tokenize(prompt)
+                    prompt_arousal = compute_prompt_arousal(prompt_tokens, self.emotion)
+                    if MATHBRAIN_AVAILABLE and MathState is not None and detect_mode_from_text is not None:
+                        prompt_state = MathState(
+                            entropy=0.5, novelty=0.5, arousal=prompt_arousal,
+                            pulse=0.5,
+                            trauma_level=self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
+                            active_theme_count=0, total_themes=len(self.themes),
+                        )
+                        mode = detect_mode_from_text(prompt, is_reply=False)
+                        theme_id = -1
+                        if self.themes:
+                            try:
+                                active = activate_themes_for_prompt(prompt_tokens, self.themes, self.token_to_themes)
+                                if active and active.theme_scores:
+                                    theme_id = active.theme_scores[0][0]
+                            except Exception:
+                                pass
+                        human_turn = GameTurn.from_context(
+                            role="human", mode=mode, math_state=prompt_state,
+                            theme_id=theme_id, expert="structural", quality_value=None,
+                        )
+                        self.game.observe_turn(conv_id, human_turn)
+                        if 'state' in locals() and state is not None:
+                            mode_leo = detect_mode_from_text(final_reply, is_reply=True)
+                            theme_id_leo = -1
+                            reply_tokens = tokenize(final_reply)
+                            if self.themes:
+                                try:
+                                    active_leo = activate_themes_for_prompt(reply_tokens, self.themes, self.token_to_themes)
+                                    if active_leo and active_leo.theme_scores:
+                                        theme_id_leo = active_leo.theme_scores[0][0]
+                                except Exception:
+                                    pass
+                            leo_turn = GameTurn.from_context(
+                                role="leo", mode=mode_leo, math_state=state,
+                                theme_id=theme_id_leo, expert=state.expert_id,
+                                quality_value=state.quality,
+                            )
+                            self.game.observe_turn(conv_id, leo_turn)
+                except Exception:
+                    pass
+
+            # DREAM
+            if DREAM_MODULE_AVAILABLE and DREAM_AVAILABLE and maybe_run_dream is not None and DreamContext is not None:
+                try:
+                    math_state = None
+                    if 'state' in locals() and state is not None:
+                        math_state = state
+                    elif MATHBRAIN_AVAILABLE and MathState is not None:
+                        math_state = MathState(
+                            entropy=context.pulse.entropy if context.pulse else 0.0,
+                            novelty=context.pulse.novelty if context.pulse else 0.0,
+                            arousal=context.pulse.arousal if context.pulse else 0.0,
+                            pulse=context.pulse.pulse if context.pulse else 0.0,
+                            trauma_level=self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
+                            quality=context.quality.overall if context.quality else 0.5,
+                        )
+                    dream_ctx = DreamContext(
+                        prompt=prompt, reply=final_reply, math_state=math_state,
+                        pulse_novelty=context.pulse.novelty if context.pulse else 0.0,
+                        pulse_arousal=context.pulse.arousal if context.pulse else 0.0,
+                        pulse_entropy=context.pulse.entropy if context.pulse else 0.0,
+                        trauma_level=self._trauma_state.level if self._trauma_state and hasattr(self._trauma_state, 'level') else 0.0,
+                        themes=[theme.id for theme in self.themes] if self.themes else [],
+                        expert=context.expert.name if context.expert else "structural",
+                        quality=context.quality.overall if context.quality else 0.5,
+                    )
+                    maybe_run_dream(
+                        ctx=dream_ctx, generate_fn=self._dream_generate,
+                        observe_fn=self._dream_observe, db_path=DB_PATH,
+                    )
+                except Exception:
+                    pass
+
+            # SCHOOL question
+            if self.school is not None and SCHOOL_MODULE_AVAILABLE:
+                try:
+                    school_pulse = None
+                    if SchoolPulse is not None:
+                        trauma_level = 0.0
+                        if self._trauma_state and hasattr(self._trauma_state, 'level'):
+                            trauma_level = self._trauma_state.level
+                        school_pulse = SchoolPulse(
+                            novelty=context.pulse.novelty if context.pulse else 0.5,
+                            arousal=context.pulse.arousal if context.pulse else 0.5,
+                            trauma=trauma_level,
+                        )
+                    math_state = None
+                    if 'state' in locals() and state is not None:
+                        math_state = state
+                    question = self.school.maybe_ask(
+                        human_text=prompt, math_state=math_state, pulse=school_pulse,
+                    )
+                    if question is not None:
+                        self._last_school_question = question
+                        final_reply = final_reply.rstrip() + "\n\n" + question.text
+                except Exception:
+                    pass
+
+            # BOOTSTRAP LEAK FILTER
+            if _is_bootstrap_leak(final_reply):
+                _debug_log("Bootstrap leak detected, using fallback reply")
+                fallback_replies = ["Yes.", "I see.", "Listening.", "Continue.", "Go on.", "Understood."]
+                prompt_hash = sum(ord(c) for c in prompt) % len(fallback_replies)
+                final_reply = fallback_replies[prompt_hash]
+
+            # PHASE 3 recording
+            if context.phase3_context is not None and self._math_brain is not None:
+                try:
+                    actual_quality = context.quality.overall if context.quality else 0.5
+                    self._math_brain.record_regulation_outcome(
+                        context_before=context.phase3_context,
+                        state_after=context.phase3_pred_state,
+                        quality_after=actual_quality, temp_after=temperature,
+                        expert_after=context.expert.name if context.expert else "structural",
+                        turn_id=context.phase3_turn_id,
+                    )
+                except Exception:
+                    pass
+
+            return final_reply
+
+    def _overthinking_generate(self, seed, temperature, max_tokens, semantic_weight, mode):
+        """Adapter for overthinking (sync, runs under the lock)."""
+        try:
+            result = generate_reply(
+                self.bigrams, self.vocab, self.centers, self.bias, seed,
+                max_tokens=max_tokens, temperature=temperature, echo=False,
+                trigrams=self.trigrams, co_occur=self.co_occur,
+                emotion_map=self.emotion, return_context=False,
+                themes=self.themes, token_to_themes=self.token_to_themes,
+                use_experts=False,
+            )
+            return result if isinstance(result, str) else getattr(result, "output", seed)
+        except Exception:
+            return seed
+
+    def _overthinking_observe(self, text, source):
+        """Adapter for overthinking (sync, runs under the lock)."""
+        if text.strip():
+            try:
+                self.observe(text)
+            except Exception:
+                pass
+
+    def _dream_generate(self, seed, temperature, semantic_weight):
+        """Adapter for dream (sync, runs under the lock)."""
+        try:
+            result = generate_reply(
+                self.bigrams, self.vocab, self.centers, self.bias, seed,
+                max_tokens=50, temperature=temperature, echo=False,
+                trigrams=self.trigrams, co_occur=self.co_occur,
+                emotion_map=self.emotion, return_context=False,
+                themes=self.themes, token_to_themes=self.token_to_themes,
+                use_experts=False, semantic_weight=semantic_weight,
+            )
+            return result if isinstance(result, str) else getattr(result, "output", seed)
+        except Exception:
+            return ""
+
+    def _dream_observe(self, text):
+        """Adapter for dream (sync, runs under the lock)."""
+        if text.strip():
+            try:
+                self.observe(text)
+            except Exception:
+                pass
+
+    def stats_summary(self) -> str:
+        """Lightweight stats string."""
+        return (
+            f"vocab={len(self.vocab)}, "
+            f"centers={len(self.centers)}, "
+            f"bigrams={sum(len(r) for r in self.bigrams.values())}, "
+            f"trigrams={sum(len(r) for r in self.trigrams.values())}"
+        )
+
+    async def close(self) -> None:
+        """Close database connections."""
+        if self.db is not None:
+            await self.db.close()
+        if self._sync_conn is not None:
+            self._sync_conn.close()
+
+
+async def async_repl(
+    field: AsyncLeoField,
+    temperature: float = 1.0,
+    echo: bool = False,
+) -> None:
+    """
+    Async REPL for Leo.
+
+    Same commands as sync repl but uses async observe/reply.
+    """
+    print("", file=sys.stderr)
+    print("╔═══════════════════════════════════════════════════════╗", file=sys.stderr)
+    print("║   ██╗     ███████╗ ██████╗                            ║", file=sys.stderr)
+    print("║   ██║     ██╔════╝██╔═══██╗                           ║", file=sys.stderr)
+    print("║   ██║     █████╗  ██║   ██║     [async]               ║", file=sys.stderr)
+    print("║   ██║     ██╔══╝  ██║   ██║                           ║", file=sys.stderr)
+    print("║   ███████╗███████╗╚██████╔╝                           ║", file=sys.stderr)
+    print("║   ╚══════╝╚══════╝ ╚═════╝                            ║", file=sys.stderr)
+    print("║   language engine organism                            ║", file=sys.stderr)
+    print("║   /exit /quit /temp /echo /stats                      ║", file=sys.stderr)
+    print("╚═══════════════════════════════════════════════════════╝", file=sys.stderr)
+    print("", file=sys.stderr)
+
+    loop = asyncio.get_event_loop()
+
+    while True:
+        try:
+            prefix = "leo"
+            if echo:
+                prefix += "[echo]"
+            if temperature != 1.0:
+                prefix += f"[t:{temperature:.1f}]"
+            line = await loop.run_in_executor(None, lambda: input(f"{prefix}> ").strip())
+        except (EOFError, KeyboardInterrupt):
+            print("", file=sys.stderr)
+            break
+
+        if not line:
+            continue
+        if line in ("/exit", "/quit"):
+            break
+        if line.startswith("/temp "):
+            parts = line.split()
+            if len(parts) == 2:
+                try:
+                    temperature = float(parts[1])
+                    print(f"[leo] temperature set to {temperature}", file=sys.stderr)
+                except ValueError:
+                    print("[leo] usage: /temp <float>", file=sys.stderr)
+            continue
+        if line == "/echo":
+            echo = not echo
+            print(f"[leo] echo mode: {'ON' if echo else 'OFF'}", file=sys.stderr)
+            continue
+        if line == "/stats":
+            print(f"[leo] {field.stats_summary()}", file=sys.stderr)
+            continue
+
+        # Core loop: observe → reply → observe reply (all async)
+        await field.async_observe(line)
+        answer = await field.async_reply(line, temperature=temperature, echo=echo)
+        print(answer)
+        await field.async_observe(answer)
+
+
+async def async_main(argv: Optional[List[str]] = None) -> int:
+    """Async entry point for Leo."""
+    parser = argparse.ArgumentParser(
+        description="Leo — language engine organism (async mode)"
+    )
+    parser.add_argument("prompt", nargs="*", help="optional prompt for one-shot generation")
+    parser.add_argument("--max-tokens", type=int, default=80)
+    parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--echo", action="store_true")
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--stats", action="store_true")
+    parser.add_argument("--async", dest="use_async", action="store_true", default=True,
+                        help="use async mode (default)")
+
+    args = parser.parse_args(argv)
+
+    if args.seed is not None:
+        random.seed(args.seed)
+
+    field = await AsyncLeoField.create()
+
+    if args.stats:
+        print(field.stats_summary())
+        await field.close()
+        return 0
+
+    if args.prompt:
+        prompt = " ".join(args.prompt).strip()
+        if not prompt:
+            await field.close()
+            return 0
+        await field.async_observe(prompt)
+        reply = await field.async_reply(
+            prompt, max_tokens=args.max_tokens,
+            temperature=args.temperature, echo=args.echo,
+        )
+        print(reply)
+        await field.async_observe(reply)
+        await field.close()
+        return 0
+
+    if sys.stdin.isatty():
+        await async_repl(field, temperature=args.temperature, echo=args.echo)
+    else:
+        prompt = sys.stdin.read().strip()
+        if prompt:
+            await field.async_observe(prompt)
+            reply = await field.async_reply(
+                prompt, max_tokens=args.max_tokens,
+                temperature=args.temperature, echo=args.echo,
+            )
+            print(reply)
+            await field.async_observe(reply)
+
+    await field.close()
     return 0
 
 

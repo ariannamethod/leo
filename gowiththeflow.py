@@ -169,10 +169,12 @@ class FlowTracker:
     - In-memory cache of recent trajectories
     """
 
+    MAX_CACHED_THEMES = 500
+
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
         self._ensure_schema()
-        # Cache of theme_id → activation count
+        # Cache of theme_id → activation count (capped to prevent unbounded growth)
         self._activation_counts: Dict[int, int] = {}
 
     def _ensure_schema(self) -> None:
@@ -260,6 +262,13 @@ class FlowTracker:
                 self._activation_counts[theme_id] += 1
 
             activation_count = self._activation_counts[theme_id]
+
+            # Evict least-used themes from cache if it grows too large
+            if len(self._activation_counts) > self.MAX_CACHED_THEMES:
+                sorted_themes = sorted(self._activation_counts.items(), key=lambda x: x[1])
+                # Drop bottom half
+                for k, _ in sorted_themes[:len(sorted_themes) // 2]:
+                    del self._activation_counts[k]
 
             # Serialize words (JSON-like simple format)
             words = theme.words if hasattr(theme, 'words') else set()
