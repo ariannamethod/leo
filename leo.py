@@ -429,9 +429,13 @@ def get_prompt_connection(
         chosen = random.choice(top_candidates)
         return chosen[0]
     
-    # Standard: Prefer vocab words, then prefer longer words
-    # Sort: vocab words first, then by length (descending)
-    meaningful.sort(key=lambda x: (not x[1], -len(x[0])))
+    # Standard: vocab words preferred, but long unknown words compete fairly.
+    # Sort key: 0 = in vocab, 0.5 = unknown but long (>=5), 1 = unknown short.
+    # Within tier, longer words preferred.
+    meaningful.sort(key=lambda x: (
+        0 if x[1] else (0.5 if len(x[0]) >= 5 else 1),
+        -len(x[0]),
+    ))
     
     # Return top candidate
     return meaningful[0][0]
@@ -597,13 +601,26 @@ def get_token_id(cur: sqlite3.Cursor, token: str) -> int:
 
 
 def ingest_tokens(conn: sqlite3.Connection, tokens: List[str]) -> None:
-    """Update bigram and trigram counts from a token sequence."""
+    """Update bigram and trigram counts from a token sequence.
+
+    Novelty bonus: tokens that are NEW to the field get their initial
+    co-occurrence count boosted to 2 (instead of 1). Like a child hearing
+    a word for the first time — it sticks more.
+    """
     if not tokens:
         return
     cur = conn.cursor()
 
-    # Convert tokens to IDs
-    token_ids = [get_token_id(cur, tok) for tok in tokens]
+    # Detect which tokens are NEW (not yet in tokens table)
+    new_token_ids: set = set()
+    token_ids = []
+    for tok in tokens:
+        cur.execute("SELECT id FROM tokens WHERE token = ?", (tok,))
+        existing = cur.fetchone()
+        tid = get_token_id(cur, tok)
+        token_ids.append(tid)
+        if existing is None:
+            new_token_ids.add(tid)
 
     # Build bigrams
     for i in range(len(token_ids) - 1):
@@ -630,6 +647,7 @@ def ingest_tokens(conn: sqlite3.Connection, tokens: List[str]) -> None:
         )
 
     # Build co-occurrence (sliding window of 5 tokens)
+    # Novelty bonus: pairs involving a NEW token start at count=2
     window_size = 5
     for i, center_id in enumerate(token_ids):
         start = max(0, i - window_size)
@@ -639,15 +657,17 @@ def ingest_tokens(conn: sqlite3.Connection, tokens: List[str]) -> None:
             if j == i:
                 continue
             context_id = token_ids[j]
+            # Novelty bonus: if either token is new, start at 2
+            initial = 2 if (center_id in new_token_ids or context_id in new_token_ids) else 1
 
             cur.execute(
                 """
                 INSERT INTO co_occurrence (word_id, context_id, count)
-                VALUES (?, ?, 1)
+                VALUES (?, ?, ?)
                 ON CONFLICT(word_id, context_id)
                 DO UPDATE SET count = count + 1
                 """,
-                (center_id, context_id),
+                (center_id, context_id, initial),
             )
 
     conn.commit()
@@ -2419,7 +2439,7 @@ def should_save_snapshot(quality: QualityScore, arousal: float) -> bool:
 def apply_memory_decay(
     conn: sqlite3.Connection,
     decay_factor: float = 0.95,
-    min_threshold: int = 2,
+    min_threshold: int = 1,
 ) -> int:
     """
     Apply natural forgetting to co-occurrence memories.
@@ -2427,8 +2447,8 @@ def apply_memory_decay(
     Multiplicative decay: count → count * decay_factor
     Delete entries below min_threshold.
 
-    This is Leo forgetting like a child - things fade over time
-    unless reinforced. No perfect memory, just resonance over time.
+    min_threshold=1 (was 2): new words survive longer before fading.
+    A word heard once lives ~200 observe cycles instead of ~100.
 
     Returns number of entries deleted.
     """

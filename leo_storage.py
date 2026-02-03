@@ -157,11 +157,23 @@ async def _async_get_token_id(db: aiosqlite.Connection, token: str) -> int:
 
 
 async def async_ingest_tokens(db: aiosqlite.Connection, tokens: List[str]) -> None:
-    """Update bigram and trigram counts from a token sequence (async)."""
+    """Update bigram and trigram counts from a token sequence (async).
+
+    Novelty bonus: NEW tokens get initial co-occurrence count of 2.
+    """
     if not tokens:
         return
 
-    token_ids = [await _async_get_token_id(db, tok) for tok in tokens]
+    # Detect which tokens are NEW (not yet in tokens table)
+    new_token_ids: set = set()
+    token_ids = []
+    for tok in tokens:
+        cursor = await db.execute("SELECT id FROM tokens WHERE token = ?", (tok,))
+        existing = await cursor.fetchone()
+        tid = await _async_get_token_id(db, tok)
+        token_ids.append(tid)
+        if existing is None:
+            new_token_ids.add(tid)
 
     # Bigrams
     for i in range(len(token_ids) - 1):
@@ -180,6 +192,7 @@ async def async_ingest_tokens(db: aiosqlite.Connection, tokens: List[str]) -> No
         )
 
     # Co-occurrence (sliding window of 5)
+    # Novelty bonus: pairs involving a NEW token start at count=2
     window_size = 5
     for i, center_id in enumerate(token_ids):
         start = max(0, i - window_size)
@@ -187,10 +200,12 @@ async def async_ingest_tokens(db: aiosqlite.Connection, tokens: List[str]) -> No
         for j in range(start, end):
             if j == i:
                 continue
+            context_id = token_ids[j]
+            initial = 2 if (center_id in new_token_ids or context_id in new_token_ids) else 1
             await db.execute(
-                "INSERT INTO co_occurrence (word_id, context_id, count) VALUES (?, ?, 1) "
+                "INSERT INTO co_occurrence (word_id, context_id, count) VALUES (?, ?, ?) "
                 "ON CONFLICT(word_id, context_id) DO UPDATE SET count = count + 1",
-                (center_id, token_ids[j]),
+                (center_id, context_id, initial),
             )
 
     await db.commit()
@@ -333,9 +348,12 @@ async def async_save_snapshot(
 async def async_apply_memory_decay(
     db: aiosqlite.Connection,
     decay_factor: float = 0.95,
-    min_threshold: int = 2,
+    min_threshold: int = 1,
 ) -> int:
-    """Apply natural forgetting to co-occurrence memories (async)."""
+    """Apply natural forgetting to co-occurrence memories (async).
+
+    min_threshold=1 (was 2): new words survive longer before fading.
+    """
     await db.execute(
         "UPDATE co_occurrence SET count = CAST(count * ? AS INTEGER) WHERE count > 0",
         (decay_factor,),

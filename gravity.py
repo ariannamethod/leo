@@ -175,32 +175,39 @@ def apply_gravity_to_candidates(
     candidates: Dict[str, int],
     gravity: Dict[str, float],
     gravity_strength: float = 0.5,
+    max_wonder_tokens: int = 2,
+    wonder_threshold: float = 0.3,
 ) -> Dict[str, int]:
     """
     Apply gravitational bias to candidate token counts.
-    
-    This doesn't add new tokens — only adjusts weights of existing candidates.
-    Philosophy: Gravity shapes, doesn't create.
-    
+
+    Gravity shapes existing candidates AND may introduce "wonder tokens" —
+    prompt words absent from field that appear as faint shadows.
+
+    Philosophy: Mama heard a word her child brought from kindergarten.
+    She doesn't use it right away, but it lingers.
+
     Args:
         candidates: Dict of token -> count from field
         gravity: Dict of token -> gravity weight
         gravity_strength: How much gravity affects selection (0-1)
-    
+        max_wonder_tokens: Max absent tokens to inject (default 2)
+        wonder_threshold: Min gravity weight to qualify as wonder (default 0.3)
+
     Returns:
-        Adjusted candidates with gravity applied
+        Adjusted candidates with gravity applied + wonder tokens
     """
     if not gravity or not candidates:
         return candidates
-    
+
     adjusted = {}
-    
+
     for token, count in candidates.items():
         base_weight = float(count)
-        
+
         # Get gravity for this token
         token_gravity = gravity.get(token.lower(), 0.0)
-        
+
         # Apply gravity as multiplicative boost
         # gravity_strength controls how much influence gravity has
         if token_gravity > 0:
@@ -208,7 +215,28 @@ def apply_gravity_to_candidates(
             adjusted[token] = int(base_weight * boost)
         else:
             adjusted[token] = count
-    
+
+    # Wonder gravity: inject absent tokens with strong gravity as faint shadows
+    if candidates and max_wonder_tokens > 0:
+        candidate_lower = {t.lower() for t in candidates}
+        counts = list(candidates.values())
+        counts.sort()
+        median_count = counts[len(counts) // 2] if counts else 1
+        wonder_count = max(1, int(median_count * 0.1))
+
+        # Collect absent tokens with strong gravity, sorted by weight
+        wonder_candidates = [
+            (tok, w) for tok, w in gravity.items()
+            if tok.lower() not in candidate_lower
+            and w >= wonder_threshold
+            and len(tok) >= 3  # skip fragments
+            and tok.isalpha()  # skip punctuation
+        ]
+        wonder_candidates.sort(key=lambda x: -x[1])
+
+        for tok, _w in wonder_candidates[:max_wonder_tokens]:
+            adjusted[tok] = wonder_count
+
     return adjusted
 
 
