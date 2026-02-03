@@ -2442,26 +2442,32 @@ def apply_memory_decay(
     min_threshold: int = 1,
 ) -> int:
     """
-    Apply natural forgetting to co-occurrence memories.
+    Apply hierarchical forgetting to co-occurrence memories.
 
-    Multiplicative decay: count → count * decay_factor
+    Three tiers inspired by stanley MemorySea:
+      Surface (count 1-4):  decay 0.90 — fresh, fragile memories
+      Middle  (count 5-49): decay 0.95 — working vocabulary
+      Deep    (count 50+):  decay 0.998 — crystallized core, near-permanent
+
+    Strong patterns crystallize. Weak ones fade faster.
     Delete entries below min_threshold.
-
-    min_threshold=1 (was 2): new words survive longer before fading.
-    A word heard once lives ~200 observe cycles instead of ~100.
 
     Returns number of entries deleted.
     """
     cur = conn.cursor()
 
-    # Decay all co-occurrence counts
+    # Hierarchical decay: strong patterns crystallize, weak ones fade faster
     cur.execute(
-        """
-        UPDATE co_occurrence
-        SET count = CAST(count * ? AS INTEGER)
-        WHERE count > 0
-        """,
-        (decay_factor,),
+        "UPDATE co_occurrence SET count = CAST(count * 0.90 AS INTEGER) "
+        "WHERE count BETWEEN 1 AND 4"
+    )
+    cur.execute(
+        "UPDATE co_occurrence SET count = CAST(count * 0.95 AS INTEGER) "
+        "WHERE count BETWEEN 5 AND 49"
+    )
+    cur.execute(
+        "UPDATE co_occurrence SET count = CAST(count * 0.998 AS INTEGER) "
+        "WHERE count >= 50"
     )
 
     # Delete weak memories (below threshold)
@@ -4158,6 +4164,37 @@ class LeoField:
                 # Silent fail - Phase 3 must never break generation
                 pass
 
+        # SELF-TRAINING: Leo learns from his own good speech
+        # Inspired by arianna.c notorch: signal-gated plasticity without gradients.
+        # Quality gates the update. Field debt (prophecy debt analog) prevents
+        # learning from lucky guesses — only confident, high-quality speech reinforces.
+        try:
+            quality_overall = context.quality.overall if context.quality else 0.0
+            # Field debt: high entropy-quality + low structural = field was guessing
+            # QualityScore.entropy is mapped (high=good), so invert for "struggle"
+            q_entropy = context.quality.entropy if context.quality else 0.5
+            q_structural = context.quality.structural if context.quality else 0.5
+            field_debt = (1.0 - q_entropy) * (1.0 - q_structural)
+
+            if quality_overall >= 0.7 and field_debt < 0.5:
+                # High quality + confident → full observe (subword, refresh, bin_shard)
+                self.observe(final_reply)
+            elif quality_overall >= 0.5 and field_debt < 0.3:
+                # Decent quality + very confident → light ingest (bigrams/trigrams only)
+                ingest_text(self.conn, final_reply)
+
+            # Re-enable snapshot saving (was frozen Dec 2025 — Jan 2026).
+            # SantaClaus recall needs fresh snapshots to work.
+            if quality_overall >= 0.6:
+                arousal_val = context.pulse.arousal if context.pulse else 0.0
+                save_snapshot(
+                    self.conn, text=final_reply, origin="leo",
+                    quality=quality_overall, emotional=arousal_val,
+                )
+        except Exception:
+            # Self-training must NEVER break normal flow
+            pass
+
         return final_reply
 
     def export_lexicon(self, out_path: Optional[Path] = None) -> Path:
@@ -5167,6 +5204,27 @@ class AsyncLeoField:
                     )
                 except Exception:
                     pass
+
+            # SELF-TRAINING (async path): same logic as sync reply()
+            try:
+                quality_overall = context.quality.overall if context.quality else 0.0
+                q_entropy = context.quality.entropy if context.quality else 0.5
+                q_structural = context.quality.structural if context.quality else 0.5
+                field_debt = (1.0 - q_entropy) * (1.0 - q_structural)
+
+                if quality_overall >= 0.7 and field_debt < 0.5:
+                    self.observe(final_reply)
+                elif quality_overall >= 0.5 and field_debt < 0.3:
+                    ingest_text(self._sync_conn, final_reply)
+
+                if quality_overall >= 0.6:
+                    arousal_val = context.pulse.arousal if context.pulse else 0.0
+                    save_snapshot(
+                        self._sync_conn, text=final_reply, origin="leo",
+                        quality=quality_overall, emotional=arousal_val,
+                    )
+            except Exception:
+                pass
 
             return final_reply
 

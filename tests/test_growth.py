@@ -86,7 +86,7 @@ class TestSofterDecay(unittest.TestCase):
             (nid, qid),
         ).fetchone()
         self.assertIsNotNone(row, "count=2 pair should survive one decay")
-        # 2 * 0.95 = 1.9 → CAST = 1, 1 >= 1 → survives
+        # 2 is in surface tier (1-4): 2 * 0.90 = 1.8 → CAST = 1, 1 >= 1 → survives
         self.assertEqual(row[0], 1)
         conn.close()
 
@@ -106,7 +106,7 @@ class TestSofterDecay(unittest.TestCase):
         )
         conn.commit()
 
-        # Decay 1: 2 * 0.95 = 1.9 → 1, survives (>= 1)
+        # Decay 1: count=2 in surface tier (1-4): 2*0.90=1.8→1, survives (>= 1)
         apply_memory_decay(conn)
         row = cur.execute(
             "SELECT count FROM co_occurrence WHERE word_id=? AND context_id=?",
@@ -115,7 +115,7 @@ class TestSofterDecay(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row[0], 1)
 
-        # Decay 2: 1 * 0.95 = 0.95 → 0, deleted (< 1)
+        # Decay 2: count=1 in surface tier: 1*0.90=0.9→0, deleted (< 1)
         apply_memory_decay(conn)
         row = cur.execute(
             "SELECT count FROM co_occurrence WHERE word_id=? AND context_id=?",

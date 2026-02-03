@@ -350,13 +350,22 @@ async def async_apply_memory_decay(
     decay_factor: float = 0.95,
     min_threshold: int = 1,
 ) -> int:
-    """Apply natural forgetting to co-occurrence memories (async).
+    """Apply hierarchical forgetting to co-occurrence memories (async).
 
-    min_threshold=1 (was 2): new words survive longer before fading.
+    Three tiers (stanley MemorySea):
+      Surface (1-4): 0.90, Middle (5-49): 0.95, Deep (50+): 0.998
     """
     await db.execute(
-        "UPDATE co_occurrence SET count = CAST(count * ? AS INTEGER) WHERE count > 0",
-        (decay_factor,),
+        "UPDATE co_occurrence SET count = CAST(count * 0.90 AS INTEGER) "
+        "WHERE count BETWEEN 1 AND 4"
+    )
+    await db.execute(
+        "UPDATE co_occurrence SET count = CAST(count * 0.95 AS INTEGER) "
+        "WHERE count BETWEEN 5 AND 49"
+    )
+    await db.execute(
+        "UPDATE co_occurrence SET count = CAST(count * 0.998 AS INTEGER) "
+        "WHERE count >= 50"
     )
     cursor = await db.execute(
         "DELETE FROM co_occurrence WHERE count < ?",
