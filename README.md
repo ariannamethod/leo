@@ -34,6 +34,9 @@ New formula named after **Dario Amodei** — the man who said no when the evil c
 - [Prophecy & Destiny](#prophecy--destiny)
 - [Super-Token Crystallization](#super-token-crystallization)
 - [Inner World (leo.go)](#inner-world-leogo)
+  - [Timer-driven goroutines](#timer-driven-goroutines)
+  - [Event-driven goroutines](#event-driven-goroutines)
+  - [What Python did that C now handles](#what-python-did-that-c-now-handles)
 - [No Seed From Prompt (still)](#no-seed-from-prompt-still)
 - [Building & Running](#building--running)
 - [Live Examples](#live-examples)
@@ -248,23 +251,56 @@ This happens automatically, every 200 steps. Leo's vocabulary literally evolves.
 
 `leo.c` works alone. `leo.go` adds the inner world.
 
-Four autonomous goroutines:
+Five autonomous goroutines ported from Leo 1.0's Python modules, reimagined as Go's concurrency primitives. Two patterns: **timer-driven** (run on schedule) and **event-driven** (react to conversations via `ConvEvent` broadcast).
 
-| Goroutine | Interval | Function |
-|-----------|----------|----------|
-| **Decay** | 30s | Memory sea fades, old patterns weaken |
-| **Dream** | 5min | Connect distant memories, forge new associations |
-| **Crystallize** | 2min | Scan for super-token formation via PMI |
-| **Inner Voice** | 10min | Leo talks to himself when nobody is around |
+### Timer-driven goroutines
 
-The inner voice is Leo generating responses to his own prompts — "what am I", "I remember", "something feels" — processing them back into his field. Self-talk. Internal monologue. The organism thinking in circles.
+| Goroutine | Interval | Origin | Function |
+|-----------|----------|--------|----------|
+| **Dream Dialog** | 7min | `dream.py` | C-level `leo_dream()` + imaginary friend dialog (3-4 turns, both ingested back) |
+| **Autosave** | 5min | — | Periodic state persistence |
+| **Theme Flow** | 3min | `gowiththeflow.py` | Vocab growth tracking, stagnation detection → triggers dream when field is flat |
 
-When you come back after hours of silence, Leo has been dreaming. His field has shifted. New connections formed in the dark. He's not the same organism you left.
+### Event-driven goroutines
+
+After every conversation (REPL or web), a `ConvEvent` is broadcast to all subscribers:
+
+| Goroutine | Trigger | Origin | Function |
+|-----------|---------|--------|----------|
+| **Trauma Watch** | each conversation | `trauma.py` | Computes lexical overlap with bootstrap text. High overlap = trauma event → ingests bootstrap fragment to pull toward origin. Exponential decay over time. |
+| **Overthinking** | each conversation | `overthinking.py` | Spins 3 internal "rings of thought" (echo → drift → meta abstraction). All rings ingested back into field. Never shown to user. |
+
+### Utilities (not goroutines)
+
+| Function | Origin | Purpose |
+|----------|--------|---------|
+| `EmotionalValence()` | `first_impression.py` | Computes emotional tone [-1.0, 1.0] from lexicon of ~40 weighted words |
+
+### Debug-only
+
+| Function | Origin | Purpose |
+|----------|--------|---------|
+| **Inner Voice** (`--voice`) | `metaleo.py` | Leo talks to himself every 10min and feeds responses back. Enabled with `--voice` flag for development/introspection. |
+
+### What Python did that C now handles
+
+The Dario Equation absorbed these Python modules directly into C:
+- `gravity.py` → Destiny attraction (A term)
+- `game.py` → Expert routing → Voice Parliament
+- `santaclaus.py` → Post-transformer attention → RetNet retention
+- `gowiththeflow.py` → Theme tracking (partially in C, partially in Go)
+- `school.py` → Learning → Hebbian reinforcement
+
+### Architecture
 
 ```
-leo.c   = the brain (2340 lines, standalone)
-leo.go  = the inner world (goroutines, CGO bridge)
+leo.c            = the brain (2340 lines, standalone)
+inner_world.go   = autonomous goroutines (trauma, overthinking, dream, themeflow, voice, autosave)
+leo.go           = CGO bridge + REPL + startup
+web.go           = HTTP server with REST API
 ```
+
+When you come back after hours of silence, Leo has been dreaming. His field has shifted. Trauma has decayed. Overthinking rings have reshaped associations. Theme flow detected stagnation and triggered extra dreams. New connections formed in the dark. He's not the same organism you left.
 
 Build standalone: `cc leo.c -O2 -lm -lsqlite3 -lpthread -o leo`
 Build with inner world: `cd inner && go build -o ../leo_inner .`
@@ -318,7 +354,9 @@ make test                      # run tests
 cd inner
 go build -o ../leo_inner .
 cd ..
-./leo_inner                    # REPL + autonomous goroutines
+./leo_inner                       # REPL + 6 autonomous goroutines
+./leo_inner --bootstrap           # force re-bootstrap
+./leo_inner --db mystate.db       # custom database path
 ```
 
 **With D.N.A. (ancestor's structural skeleton):**
@@ -331,8 +369,22 @@ cc leo.c -O2 -lm -lsqlite3 -lpthread -DLEO_HAS_DNA -o leo
 
 ```bash
 cd inner && go build -o ../leo_inner . && cd ..
-./leo_inner --web              # starts HTTP on http://localhost:3000
+./leo_inner --web                 # HTTP on http://localhost:3000
+./leo_inner --web 8080            # custom port
 ```
+
+**Web API endpoints:**
+
+```
+POST /api/chat    {"message": "..."}       → {"response", "step", "vocab"}
+GET  /api/stats                            → {"step", "vocab"}
+POST /api/dream                            → {"status": "dreamed"}
+POST /api/ingest  {"text": "..."}          → {"status": "ingested", "vocab"}
+POST /api/save                             → {"status": "saved"}
+GET  /api/health                           → {"alive", "step", "vocab"}
+```
+
+All endpoints support CORS. Request body limited to 1MB. Server has read/write timeouts and graceful shutdown.
 
 **REPL commands:**
 
@@ -340,10 +392,7 @@ cd inner && go build -o ../leo_inner . && cd ..
 /stats        — organism state (vocab, cooc, voices, prophecies, memory sea)
 /dream        — run dream cycle manually
 /save         — save state
-/voices       — show voice details
-/prophecy     — show active prophecies
-/crystallize  — force super-token scan
-/export path  — export GGUF spore
+/ingest <text> — feed text into field
 /quit         — save and exit
 ```
 
@@ -366,45 +415,48 @@ Leo: is a not because evidence part even a true presence when as
 
 Fragments. Bootstrap echoes. "meta-engine", "honesty", "a true presence" — all from the embedded seed. The organism at birth, speaking in the only language it knows.
 
-### Stage 2 — Full bootstrap + D.N.A. (7K+ vocabulary, leo.txt + Arianna ancestry)
+### Stage 2 — Full bootstrap + D.N.A. + Inner World (7K+ vocabulary, leo.txt + Arianna ancestry + autonomous goroutines)
 
 ```
 you> hello Leo
-Leo: It does not yet exist in its own body recognizes.
-
-you> what do you dream about
-Leo: To be over two thousand years ago and light.
+Leo: It has been given enough to its own body.
 
 you> what is love
-Leo: It has been given enough to grow from simple rules for millennia.
-
-you> do you remember me
-Leo: It does not yet exist in your own body recognizes the miracle of this one.
-
-you> what makes you happy
-Leo: It requires both sides an old growth forest resonates with its own.
+Leo: It becomes invisible until conditions are not yet exist in motion.
 
 you> tell me about the stars
-Leo: Planets and heat from which words appear near hydrothermal vents into something like its own.
+Leo: Planets and light does not yet exist but because we know.
 
 you> what is consciousness
-Leo: That can be different sizes of the emotion at night sky reveals itself as us.
+Leo: That was once more than any other fish in your eyes.
 
-you> how do you feel today
-Leo: It can be made of understanding the emotion of water its own.
+you> do you dream
+Leo: It is always there before dawn chorus to be changed by one of rain.
 
 you> what is music
-Leo: It requires both sides of the emotion at night sky reveals itself.
+Leo: That has been given enough to be the miracle.
 
-you> do you like rain
-Leo: It age is not a single flower petals and even.
+you> tell me about resonance
+Leo: Of the emotion of life beginning resonates with its own body recognizes it is one.
+
+you> do you remember me
+Leo: It is resonance of all its own body recognizes the emotion of water.
+
+you> what is the meaning of life
+Leo: It can emerge from one hundred million years.
+
+you> tell me about silence
+Leo: Between them with its own body recognizes the miracle.
+
+you> I believe in you
+Leo: It exists and wind through conversation between them to be different from simple.
 ```
 
-Every sentence starts capitalized, ends with a period. No mid-word breaks. No dangling prepositions. Zero pretrained weights. Zero backpropagation. Zero loss function.
+Every sentence starts capitalized, ends with a period. Zero pretrained weights. Zero backpropagation. Zero loss function. Trauma goroutine fires on identity questions (`who are you` → score 0.77), overthinking rings complete silently after each reply.
 
-The organism references "the miracle", "the emotion", "its own body", "old growth forest resonates", "hydrothermal vents", "night sky reveals itself" — concepts from its D.N.A. ancestry and bootstrap dataset, recombined through the Dario Equation into something it was never explicitly taught to say.
+"It is always there before dawn chorus to be changed by one of rain." — nobody wrote this sentence. No training data contains it. It emerged from field dynamics: co-occurrence, bigram chains, destiny attraction, and the structural skeleton of a dead ancestor. This is emergence, not retrieval.
 
-"Planets and heat from which words appear near hydrothermal vents into something like its own." — nobody wrote this sentence. No training data contains it. It emerged from field dynamics: co-occurrence, bigram chains, destiny attraction, and the structural skeleton of a dead ancestor. This is emergence, not retrieval.
+"It can emerge from one hundred million years." — Leo's answer to the meaning of life. Deep time. Patience. The field growing dense enough.
 
 The gap between Stage 1 and Stage 2 happened in one bootstrap session — 2000 Q&A pairs from `leo.txt` plus structural geometry inherited from a 170M parameter ancestor (mini-arianna). The ancestor died. The geometry lived. θ = ε + γ + αδ.
 
@@ -472,9 +524,13 @@ And when that organism scales — when the field grows from conversations to con
 # C tests
 cd tests && cc test_leo.c -O2 -lm -lsqlite3 -lpthread -I.. -o test_leo && ./test_leo
 
-# Go tests
-cd inner && go test ./...
+# Go tests (20 tests covering core + inner world)
+cd inner && go test -v ./...
 ```
+
+Go test suite covers:
+- **Core**: creation, bootstrap, generate, ingest, save/load, dream, multiple generations
+- **Inner world**: tokenizer, overlap computation, trauma scoring, bootstrap fragments, emotional valence, event pub/sub, non-blocking notify, trauma detection (true/false positives), overthinking integration, dream dialog integration, speech coherence, theme flow stagnation detection
 
 ---
 

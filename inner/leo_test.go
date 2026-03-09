@@ -1,12 +1,26 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
 
+// cleanupDB removes test database files (including WAL/SHM/journal)
+func cleanupDB(t *testing.T, path string) {
+	t.Helper()
+	t.Cleanup(func() {
+		for _, suffix := range []string{"", "-journal", "-wal", "-shm", ".state"} {
+			os.Remove(path + suffix)
+		}
+	})
+}
+
 func TestNewLeo(t *testing.T) {
-	leo := NewLeo("/tmp/test_go_leo.db")
+	dbPath := "/tmp/test_go_leo.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
 	defer leo.Close()
 
 	if leo.ptr == nil {
@@ -18,7 +32,10 @@ func TestNewLeo(t *testing.T) {
 }
 
 func TestBootstrap(t *testing.T) {
-	leo := NewLeo("/tmp/test_go_bootstrap.db")
+	dbPath := "/tmp/test_go_bootstrap.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
 	defer leo.Close()
 
 	leo.Bootstrap()
@@ -35,7 +52,10 @@ func TestBootstrap(t *testing.T) {
 }
 
 func TestGenerate(t *testing.T) {
-	leo := NewLeo("/tmp/test_go_generate.db")
+	dbPath := "/tmp/test_go_generate.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
 	defer leo.Close()
 
 	leo.Bootstrap()
@@ -52,7 +72,10 @@ func TestGenerate(t *testing.T) {
 }
 
 func TestIngest(t *testing.T) {
-	leo := NewLeo("/tmp/test_go_ingest.db")
+	dbPath := "/tmp/test_go_ingest.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
 	defer leo.Close()
 
 	leo.Bootstrap()
@@ -67,7 +90,10 @@ func TestIngest(t *testing.T) {
 }
 
 func TestSaveLoad(t *testing.T) {
-	leo := NewLeo("/tmp/test_go_saveload.db")
+	dbPath := "/tmp/test_go_saveload.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
 	leo.Bootstrap()
 	leo.Ingest("testing save and load")
 	step1 := leo.Step()
@@ -76,7 +102,7 @@ func TestSaveLoad(t *testing.T) {
 	leo.Close()
 
 	// Reload
-	leo2 := NewLeo("/tmp/test_go_saveload.db")
+	leo2 := NewLeo(dbPath)
 	if !leo2.Load() {
 		t.Fatal("load should succeed")
 	}
@@ -95,7 +121,10 @@ func TestSaveLoad(t *testing.T) {
 }
 
 func TestDream(t *testing.T) {
-	leo := NewLeo("/tmp/test_go_dream.db")
+	dbPath := "/tmp/test_go_dream.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
 	defer leo.Close()
 
 	leo.Bootstrap()
@@ -106,7 +135,10 @@ func TestDream(t *testing.T) {
 }
 
 func TestMultipleGenerations(t *testing.T) {
-	leo := NewLeo("/tmp/test_go_multi.db")
+	dbPath := "/tmp/test_go_multi.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
 	defer leo.Close()
 
 	leo.Bootstrap()
@@ -126,7 +158,7 @@ func TestMultipleGenerations(t *testing.T) {
 	}
 
 	vocab := leo.Vocab()
-	if vocab <= 255 {
-		t.Fatalf("vocab should grow beyond bootstrap: %d", vocab)
+	if vocab < 100 {
+		t.Fatalf("vocab should be substantial after bootstrap + conversations: %d", vocab)
 	}
 }

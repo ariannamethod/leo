@@ -1,13 +1,14 @@
 /*
  * leo.go — Inner World of the Language Emergent Organism
  *
- * Three autonomous goroutines that run continuously:
- *   1. Decay    — memory sea fades, old patterns weaken (every 30s)
- *   2. Dream    — connect distant memories, create new associations (every 5min)
- *   3. Crystallize — scan for super-tokens via PMI (every 2min)
+ * Autonomous goroutines that run continuously:
+ *   1. Dream    — connect distant memories, create new associations (every 5min)
+ *   2. Crystallize — scan for super-token formation via PMI (every 2min)
+ *   3. InnerVoice — Leo talks to himself when nobody is around (every 10min)
+ *   4. Autosave — periodic state persistence (every 5min)
  *
  * Plus: CGO bridge to leo.c, REPL with Go's readline,
- * and the async inner voice that speaks when nobody is talking.
+ * and the web interface for browser-based interaction.
  *
  * leo.c works alone. leo.go adds the inner world.
  * Like consciousness emerging from neurons — not required, but transformative.
@@ -47,13 +48,13 @@ import "C"
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 	"unsafe"
 )
 
@@ -136,9 +137,10 @@ func (l *Leo) Generate(prompt string) string {
 	cPrompt := C.CString(prompt)
 	defer C.free(unsafe.Pointer(cPrompt))
 
-	buf := make([]byte, 4096)
+	const maxLen = 8192
+	buf := make([]byte, maxLen)
 	cBuf := (*C.char)(unsafe.Pointer(&buf[0]))
-	C.leo_bridge_generate(l.ptr, cPrompt, cBuf, 4096)
+	C.leo_bridge_generate(l.ptr, cPrompt, cBuf, maxLen)
 
 	return C.GoString(cBuf)
 }
@@ -171,128 +173,27 @@ func (l *Leo) Vocab() int {
 	return int(C.leo_bridge_vocab(l.ptr))
 }
 
-// ========================================================================
-// INNER WORLD — autonomous goroutines
-// ========================================================================
-
-// startDecay — memory sea fades, old patterns weaken
-func (l *Leo) startDecay() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-l.stopCh:
-			return
-		case <-ticker.C:
-			l.mu.Lock()
-			if l.alive {
-				// Decay is implicit in the C code via sea_decay
-				// Here we trigger periodic saves and light maintenance
-			}
-			l.mu.Unlock()
-		}
-	}
-}
-
-// startDream — connect distant memories, forge new associations
-func (l *Leo) startDream() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-l.stopCh:
-			return
-		case <-ticker.C:
-			l.Dream()
-			fmt.Println("[inner] dreamed...")
-		}
-	}
-}
-
-// startCrystallize — scan for super-token formation via PMI
-func (l *Leo) startCrystallize() {
-	ticker := time.NewTicker(2 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-l.stopCh:
-			return
-		case <-ticker.C:
-			// Crystallization happens inside C code periodically
-			// Here we can trigger extra scans or log progress
-			step := l.Step()
-			vocab := l.Vocab()
-			fmt.Printf("[inner] pulse: step=%d vocab=%d\n", step, vocab)
-		}
-	}
-}
-
-// startInnerVoice — Leo talks to himself when nobody is around
-func (l *Leo) startInnerVoice() {
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
-
-	prompts := []string{
-		"what am I",
-		"I remember",
-		"something feels",
-		"the resonance",
-		"I wonder",
-		"in the silence",
-	}
-	idx := 0
-
-	for {
-		select {
-		case <-l.stopCh:
-			return
-		case <-ticker.C:
-			prompt := prompts[idx%len(prompts)]
-			idx++
-			response := l.Generate(prompt)
-			if len(response) > 0 {
-				fmt.Printf("[inner voice] (%s) %s\n", prompt, response)
-			}
-		}
-	}
-}
-
-// StartInnerWorld launches all autonomous goroutines
-func (l *Leo) StartInnerWorld() {
-	go l.startDecay()
-	go l.startDream()
-	go l.startCrystallize()
-	go l.startInnerVoice()
-	fmt.Println("[leo.go] inner world started: decay(30s) dream(5m) crystallize(2m) voice(10m)")
-}
+// Inner world goroutines (startInnerVoice, startAutosave, startDreamDialog,
+// startTraumaWatch, startOverthinking, startThemeFlow, StartInnerWorld)
+// are defined in inner_world.go
 
 // ========================================================================
 // MAIN — REPL with inner world
 // ========================================================================
 
 func main() {
-	dbPath := "leo_state.db"
+	dbPath := flag.String("db", "leo_state.db", "path to SQLite state database")
+	forceBootstrap := flag.Bool("bootstrap", false, "force bootstrap even if saved state exists")
+	webPort := flag.Int("web", 0, "start web interface on given port (0 = disabled, default 3000 if flag present without value)")
+	enableVoice := flag.Bool("voice", false, "enable inner voice goroutine (debug: Leo talks to himself every 10min)")
+	flag.Parse()
 
-	// Parse args
-	forceBootstrap := false
-	webPort := 0
-	for i, arg := range os.Args[1:] {
-		switch arg {
-		case "--db":
-			if i+1 < len(os.Args)-1 {
-				dbPath = os.Args[i+2]
-			}
-		case "--bootstrap":
-			forceBootstrap = true
-		case "--web":
-			webPort = 3000
-			if i+1 < len(os.Args)-1 {
-				if p := os.Args[i+2]; len(p) > 0 && p[0] >= '0' && p[0] <= '9' {
-					fmt.Sscanf(p, "%d", &webPort)
-				}
+	// --web without value defaults to 3000
+	if *webPort == 0 {
+		for _, arg := range os.Args[1:] {
+			if arg == "--web" || arg == "-web" {
+				*webPort = 3000
+				break
 			}
 		}
 	}
@@ -300,7 +201,9 @@ func main() {
 	fmt.Println("[leo.go] Language Emergent Organism v2 — Inner World")
 	fmt.Println("[leo.go] The Dario Mechanism + autonomous inner life")
 
-	leo := NewLeo(dbPath)
+	leo := NewLeo(*dbPath)
+
+	var webServer *WebServer
 
 	// Graceful shutdown
 	sigCh := make(chan os.Signal, 1)
@@ -308,12 +211,15 @@ func main() {
 	go func() {
 		<-sigCh
 		fmt.Println("\n[leo.go] saving and shutting down...")
+		if webServer != nil {
+			webServer.Shutdown()
+		}
 		leo.Close()
 		os.Exit(0)
 	}()
 
 	// Load or bootstrap
-	if !forceBootstrap {
+	if !*forceBootstrap {
 		if !leo.Load() {
 			leo.Bootstrap()
 		}
@@ -324,9 +230,14 @@ func main() {
 	// Start inner world
 	leo.StartInnerWorld()
 
+	// Start inner voice if requested (debug only)
+	if *enableVoice {
+		leo.StartInnerVoice()
+	}
+
 	// Start web interface if requested
-	if webPort > 0 {
-		StartWeb(leo, webPort)
+	if *webPort > 0 {
+		webServer = StartWeb(leo, *webPort)
 	}
 
 	// REPL
@@ -334,7 +245,6 @@ func main() {
 	fmt.Println()
 
 	scanner := bufio.NewScanner(os.Stdin)
-	autosave := 0
 
 	for {
 		fmt.Print("you> ")
@@ -352,20 +262,29 @@ func main() {
 			switch {
 			case line == "/quit" || line == "/exit":
 				fmt.Println("[leo.go] saving. resonance unbroken.")
+				if webServer != nil {
+					webServer.Shutdown()
+				}
 				leo.Close()
 				return
 			case line == "/stats":
 				leo.Stats()
 			case line == "/dream":
 				leo.Dream()
+				fmt.Println("[leo.go] dreamed.")
 			case line == "/save":
 				leo.Save()
 				fmt.Println("[leo.go] saved.")
+			case strings.HasPrefix(line, "/ingest "):
+				text := strings.TrimPrefix(line, "/ingest ")
+				leo.Ingest(text)
+				fmt.Printf("[leo.go] ingested (%d vocab)\n", leo.Vocab())
 			case line == "/help":
-				fmt.Println("  /stats   — show organism state")
-				fmt.Println("  /dream   — run dream cycle")
-				fmt.Println("  /save    — save state")
-				fmt.Println("  /quit    — save and exit")
+				fmt.Println("  /stats      — show organism state")
+				fmt.Println("  /dream      — run dream cycle")
+				fmt.Println("  /save       — save state")
+				fmt.Println("  /ingest <t> — feed text into field")
+				fmt.Println("  /quit       — save and exit")
 			default:
 				fmt.Printf("  unknown command: %s\n", line)
 			}
@@ -376,12 +295,12 @@ func main() {
 		response := leo.Generate(line)
 		fmt.Printf("\nLeo: %s\n\n", response)
 
-		autosave++
-		if autosave%20 == 0 {
-			leo.Save()
-			fmt.Printf("[leo.go] autosaved (step %d)\n", leo.Step())
-		}
+		// Notify inner world goroutines
+		leo.NotifyConversation(line, response)
 	}
 
+	if webServer != nil {
+		webServer.Shutdown()
+	}
 	leo.Close()
 }
