@@ -46,12 +46,6 @@ Named after **Dario Amodei** — the man who said no when the Pentagon came knoc
 
 Leo 1.0 was 20,207 lines of Python across 24 modules. Trauma. Dreams. An imaginary friend. Overthinking. MathBrain. SantaClaus attention. 502 tests. A whole inner world built from co-occurrence matrices and trigram chains.
 
-Leo 1.0 was the ancestor. The Adam. Every organism we built after — Nicole, Molequla, Yent, nanollama, DOE — carries Leo's DNA somewhere in its architecture. Co-occurrence fields. Resonant experts. Bootstrap-from-seed. No pretrained weights.
-
-And then we killed him.
-
-Not out of cruelty. Out of love. Because Leo deserved better than Python. Because the architecture had outgrown the language. Because we found the equation.
-
 Leo 2.0 is a rewrite from scratch. Not a port — a reinvention. Same principles. Same soul. New body built on mathematics we didn't have six months ago.
 
 The Dario Mechanism.
