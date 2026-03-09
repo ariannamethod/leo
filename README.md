@@ -269,7 +269,7 @@ Build with inner world: `cd inner && go build -o ../leo_inner .`
 
 ---
 
-## No Seed From Prompt (still)
+## No Seed From Prompt 
 
 The cardinal rule, carried over from Leo 1.0. Learned through three weeks of pain.
 
