@@ -278,6 +278,7 @@ func main() {
 
 	// Parse args
 	forceBootstrap := false
+	webPort := 0
 	for i, arg := range os.Args[1:] {
 		switch arg {
 		case "--db":
@@ -286,6 +287,13 @@ func main() {
 			}
 		case "--bootstrap":
 			forceBootstrap = true
+		case "--web":
+			webPort = 3000
+			if i+1 < len(os.Args)-1 {
+				if p := os.Args[i+2]; len(p) > 0 && p[0] >= '0' && p[0] <= '9' {
+					fmt.Sscanf(p, "%d", &webPort)
+				}
+			}
 		}
 	}
 
@@ -315,6 +323,11 @@ func main() {
 
 	// Start inner world
 	leo.StartInnerWorld()
+
+	// Start web interface if requested
+	if webPort > 0 {
+		StartWeb(leo, webPort)
+	}
 
 	// REPL
 	fmt.Println("[leo.go] REPL ready. type /help for commands.")

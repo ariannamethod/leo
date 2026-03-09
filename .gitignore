@@ -13,8 +13,8 @@ neoleo
 *.db-shm
 *.db.state
 
-# DNA (generated)
-leo.h
+# DNA (large, but needed for build)
+# leo.h is tracked — it's Leo's genetic material from Arianna
 
 # IDE
 .vscode/

@@ -60,7 +60,7 @@
 static const float LEO_GAMMA[LEO_RET_HEADS] = {0.99f, 0.95f, 0.85f, 0.50f};
 
 /* Dario equation coefficients */
-#define DARIO_ALPHA  1.0f   /* Hebbian weight */
+#define DARIO_ALPHA  0.2f   /* Hebbian weight (low = bigrams dominate) */
 #define DARIO_BETA   0.3f   /* Prophecy weight */
 #define DARIO_GAMMA  0.2f   /* Destiny weight */
 #define DARIO_TAU    1.0f   /* base temperature */
@@ -515,11 +515,12 @@ static void bigram_update(BigramTable *b, int src, int dst, float delta) {
     }
 }
 
-/* get all successors of src as logits vector */
+/* get all successors of src as logits vector.
+ * min_count: ignore entries with count < this (noise filter) */
 static void bigram_row(BigramTable *b, int src, float *out, int vocab_size) {
     vec_zero(out, vocab_size);
     for (int i = 0; i < b->n_entries; i++)
-        if (b->src[i] == src && b->dst[i] < vocab_size)
+        if (b->src[i] == src && b->dst[i] < vocab_size && b->count[i] >= 1.5f)
             out[b->dst[i]] = b->count[i];
 }
 
@@ -1025,6 +1026,10 @@ typedef struct {
     float          *embed_cache;   /* [MAX_VOCAB x DIM] */
     int             embed_valid;   /* how many cached */
 
+    /* sentence boundary tracking */
+    float          *sent_start;    /* [MAX_VOCAB] how often token starts a sentence */
+    float          *sent_end;      /* [MAX_VOCAB] how often token ends a sentence */
+
     /* generation state */
     float          *context_embed; /* [DIM] — current context */
     int            *context_ids;   /* recent token IDs */
@@ -1084,6 +1089,8 @@ void leo_init(Leo *leo, const char *db_path) {
 
     leo->embed_cache = calloc(LEO_MAX_VOCAB * LEO_DIM, sizeof(float));
     leo->embed_valid = 0;
+    leo->sent_start = calloc(LEO_MAX_VOCAB, sizeof(float));
+    leo->sent_end = calloc(LEO_MAX_VOCAB, sizeof(float));
     leo->context_embed = calloc(LEO_DIM, sizeof(float));
     leo->context_ids = calloc(LEO_BOOTSTRAP_WINDOW, sizeof(int));
     leo->context_len = 0;
@@ -1101,6 +1108,8 @@ void leo_free(Leo *leo) {
     destiny_free(&leo->destiny);
     sea_free(&leo->sea);
     free(leo->embed_cache);
+    free(leo->sent_start);
+    free(leo->sent_end);
     free(leo->context_embed);
     free(leo->context_ids);
     if (leo->db) sqlite3_close(leo->db);
@@ -1138,6 +1147,53 @@ void leo_ingest(Leo *leo, const char *text) {
     int ids[2048];
     int n = tok_tokenize(&leo->tok, text, ids, 2048);
     if (n == 0) return;
+
+    /* ---- sentence boundary detection ----
+     * Scan raw text to find which tokens appear after sentence-ending
+     * punctuation (.!?) and which appear before it.
+     * This lets Leo learn to start and end sentences properly. */
+    {
+        /* re-scan text to map word positions to sentence boundaries */
+        int word_idx = 0;
+        int after_punct = 1; /* first word is a sentence start */
+        const char *p = text;
+        while (*p && word_idx < n) {
+            /* skip non-word characters, tracking punctuation */
+            while (*p && !(isalnum((unsigned char)*p) || *p == '\'' || *p == '-')) {
+                if (*p == '.' || *p == '!' || *p == '?' || *p == '\n') {
+                    after_punct = 1;
+                }
+                p++;
+            }
+            if (!*p) break;
+
+            /* skip word characters */
+            while (*p && (isalnum((unsigned char)*p) || *p == '\'' || *p == '-')) p++;
+
+            /* this word is ids[word_idx] */
+            /* skip single-letter tokens for boundary tracking
+             * (avoids "q" and "a" from Q&A format dominating) */
+            const char *w = leo->tok.words[ids[word_idx]];
+            int wlen = (w) ? strlen(w) : 0;
+
+            if (after_punct && ids[word_idx] < LEO_MAX_VOCAB && wlen > 1) {
+                leo->sent_start[ids[word_idx]] += 1.0f;
+                after_punct = 0;
+            } else if (after_punct) {
+                after_punct = 0; /* consume but don't track */
+            }
+
+            /* check if next non-space char is sentence-ending punctuation */
+            const char *q = p;
+            while (*q == ' ' || *q == '\t') q++;
+            if ((*q == '.' || *q == '!' || *q == '?' || *q == '\n' || *q == '\0')
+                && ids[word_idx] < LEO_MAX_VOCAB && wlen > 1) {
+                leo->sent_end[ids[word_idx]] += 1.0f;
+            }
+
+            word_idx++;
+        }
+    }
 
     /* update frequencies */
     for (int i = 0; i < n; i++) {
@@ -1237,11 +1293,31 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
      * and organism finds its own voice.
      */
     float maturity = clampf((float)leo->conv_steps / 50000.0f, 0.0f, 1.0f);
-    float bigram_coeff = 5.0f * (1.0f - maturity) + 0.5f; /* 5.0→0.5 */
+    float bigram_coeff = 12.0f * (1.0f - maturity) + 2.0f; /* 12.0→2.0 */
 
     if (leo->context_len > 0) {
         int last_id = leo->context_ids[leo->context_len - 1];
         bigram_row(&leo->bigrams, last_id, B, vocab_size);
+
+        /* trigram bonus: if we have 2+ context tokens, find tokens that
+         * follow the bigram (prev→last), then boost those in B.
+         * This gives "X Y → Z" chain instead of just "Y → Z". */
+        if (leo->context_len >= 2) {
+            int prev_id = leo->context_ids[leo->context_len - 2];
+            /* find what follows prev_id */
+            float *B2 = calloc(vocab_size, sizeof(float));
+            bigram_row(&leo->bigrams, prev_id, B2, vocab_size);
+            /* B2[last_id] tells us how strong prev→last is.
+             * If strong, the current bigram chain is confident.
+             * Boost B entries that also have high B2 (trigram agreement) */
+            for (int i = 0; i < vocab_size; i++) {
+                if (B2[i] > 0 && B[i] > 0) {
+                    B[i] += 0.5f * B2[i]; /* trigram reinforcement */
+                }
+            }
+            free(B2);
+        }
+
         /* normalize B */
         float b_max = 0;
         for (int i = 0; i < vocab_size; i++)
@@ -1385,7 +1461,7 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
     int pos = 0;
     out[0] = '\0';
     int n_generated = 0;
-    int target_len = 5 + (int)(randf() * 20); /* 5-25 tokens */
+    int target_len = 5 + (int)(randf() * 10); /* 5-15 tokens */
 
     /* sometimes start from a resurfaced memory instead of prompt */
     float resurface_embed[LEO_DIM];
@@ -1396,7 +1472,11 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         vec_normalize(leo->context_embed, leo->dim);
     }
 
-    for (int t = 0; t < target_len && t < LEO_MAX_TOKENS; t++) {
+    for (int t = 0; ; t++) {
+        /* hard stop: either hit MAX_TOKENS or went 8 tokens past target seeking sentence end */
+        if (t >= LEO_MAX_TOKENS) break;
+        if (t >= target_len + 8) break; /* gave up finding sentence end */
+
         /* 1. Dario equation: B + H + F + A */
         dario_compute(leo, logits, vocab_size);
 
@@ -1406,14 +1486,47 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
             if (ctx_id < vocab_size) {
                 /* stronger penalty for more recent tokens */
                 float recency = (float)(c + 1) / (float)leo->context_len;
-                logits[ctx_id] *= (0.3f + 0.7f * (1.0f - recency));
+                float penalty = 0.1f + 0.9f * (1.0f - recency); /* harsh: 0.1 for most recent */
+                logits[ctx_id] *= penalty;
             }
         }
+        /* extra: if last token == candidate, kill it (no immediate repeats) */
+        if (leo->context_len > 0) {
+            int last = leo->context_ids[leo->context_len - 1];
+            if (last < vocab_size) logits[last] = -1e30f;
+        }
+
+        /* penalize single-letter tokens (noise from Q&A format) */
+        for (int i = 0; i < vocab_size; i++) {
+            const char *w = leo->tok.words[i];
+            if (w && strlen(w) == 1 && w[0] != 'i') {
+                logits[i] *= 0.1f; /* heavily penalize single letters */
+            }
+        }
+
+        /* 2b. Sentence boundary shaping */
+        if (t == 0) {
+            /* FIRST TOKEN: strongly prefer sentence starters */
+            float max_ss = 0;
+            for (int i = 0; i < vocab_size; i++)
+                if (leo->sent_start[i] > max_ss) max_ss = leo->sent_start[i];
+            if (max_ss > 0) {
+                for (int i = 0; i < vocab_size; i++) {
+                    float ss = leo->sent_start[i] / max_ss;
+                    if (ss > 0.01f)
+                        logits[i] += 3.0f * ss; /* boost starters */
+                    else
+                        logits[i] -= 2.0f;      /* penalize non-starters */
+                }
+            }
+        }
+        /* (sentence ending: no active boost — we just stop naturally
+         *  when we hit a sent_end token after target_len. See below.) */
 
         /* 3. Top-k filtering + temperature */
         /* Zero out everything below top-k to prevent long tail from drowning signal */
         {
-            int top_k = 30; /* keep top 30 candidates */
+            int top_k = 15; /* keep top 15 candidates */
             float threshold = -1e30f;
             /* find k-th largest value */
             float *sorted = calloc(vocab_size, sizeof(float));
@@ -1449,6 +1562,38 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         pos += wlen;
         out[pos] = '\0';
         n_generated++;
+
+        /* Check: if past target length, look for natural sentence boundary.
+         * Don't stop on function words (prepositions, articles, conjunctions). */
+        if (t >= target_len && next_id < LEO_MAX_VOCAB) {
+            const char *w = leo->tok.words[next_id];
+            int bad_ender = 0;
+            /* function words that should never end a sentence */
+            static const char *stopwords[] = {
+                "the", "a", "an", "in", "on", "at", "to", "for", "of",
+                "by", "with", "from", "and", "but", "or", "nor", "as",
+                "is", "are", "was", "were", "be", "been", "being",
+                "has", "have", "had", "do", "does", "did", "will",
+                "would", "could", "should", "may", "might", "shall",
+                "that", "which", "who", "whom", "whose", "this",
+                "these", "those", "its", "their", "your", "our",
+                "not", "no", "than", "so", "if", "when", "while",
+                "because", "although", "though", "since", "until",
+                "into", "upon", "about", "between", "through",
+                "during", "before", "after", "above", "below",
+                "it", "he", "she", "they", "we", "my", "his", "her",
+                NULL
+            };
+            for (const char **sw = stopwords; *sw; sw++) {
+                if (strcmp(w, *sw) == 0) { bad_ender = 1; break; }
+            }
+            if (!bad_ender) {
+                /* good ending word — stop here */
+                leo->step++;
+                leo->conv_steps++;
+                break;
+            }
+        }
 
         /* 8. Learn */
         /* bigram update: last context → generated token */
@@ -1546,6 +1691,10 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
     free(retention_bias);
     free(voice_bias);
 
+    /* post-processing: capitalize first letter */
+    if (pos > 0 && out[0] >= 'a' && out[0] <= 'z')
+        out[0] = out[0] - 'a' + 'A';
+
     /* periodic: memory sea decay */
     if (leo->step % 50 == 0) sea_decay(&leo->sea, 0.01f);
 
@@ -1603,6 +1752,10 @@ void leo_save(Leo *leo) {
         fwrite(&leo->bigrams.dst[i], sizeof(int), 1, f);
         fwrite(&leo->bigrams.count[i], sizeof(float), 1, f);
     }
+
+    /* sentence boundaries */
+    fwrite(leo->sent_start, sizeof(float), leo->tok.n_words, f);
+    fwrite(leo->sent_end, sizeof(float), leo->tok.n_words, f);
 
     /* retention states */
     int head_dim = leo->dim / LEO_RET_HEADS;
@@ -1714,6 +1867,10 @@ void leo_load(Leo *leo) {
         }
     }
 
+    /* sentence boundaries */
+    fread(leo->sent_start, sizeof(float), n_words, f);
+    fread(leo->sent_end, sizeof(float), n_words, f);
+
     /* retention states */
     int head_dim = leo->dim / LEO_RET_HEADS;
     for (int h = 0; h < LEO_RET_HEADS; h++)
@@ -1809,8 +1966,8 @@ void leo_bootstrap(Leo *leo) {
         int src = tok_find(&leo->tok, DNA_COACT_SRC[i]);
         int dst = tok_find(&leo->tok, DNA_COACT_DST[i]);
         if (src >= 0 && dst >= 0) {
-            bigram_update(&leo->bigrams, src, dst, DNA_COACT_STRENGTH[i]);
-            cooc_update(&leo->cooc, src, dst, DNA_COACT_STRENGTH[i] * 2.0f);
+            bigram_update(&leo->bigrams, src, dst, DNA_COACT_STRENGTH[i] * 3.0f);
+            cooc_update(&leo->cooc, src, dst, DNA_COACT_STRENGTH[i] * 3.0f);
         }
     }
 

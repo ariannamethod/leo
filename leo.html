@@ -231,30 +231,36 @@
     chat.scrollTop = chat.scrollHeight;
   }
 
-  function handleSend() {
+  async function handleSend() {
     const text = input.value.trim();
     if (!text) return;
 
     appendMessage(text, 'user');
     input.value = '';
     btn.disabled = true;
-    
+
     typing.classList.add('active');
     scrollToBottom();
 
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+
       typing.classList.remove('active');
-      
-      const responses = [
-        "a true presence.",
-        "i still believe learned never believe in miracles.",
-        "it feels like circles on water.",
-        "what does that mean?"
-      ];
-      const reply = responses[Math.floor(Math.random() * responses.length)];
-      
-      appendMessage(reply, 'leo');
-    }, 1500 + Math.random() * 2000); // pause imitiation
+
+      if (res.ok) {
+        const data = await res.json();
+        appendMessage(data.response, 'leo');
+      } else {
+        appendMessage('...', 'leo');
+      }
+    } catch (err) {
+      typing.classList.remove('active');
+      appendMessage('(Leo is sleeping. Start with: ./leo_inner --web)', 'leo');
+    }
   }
 
   btn.addEventListener('click', handleSend);
