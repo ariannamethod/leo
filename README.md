@@ -7,7 +7,8 @@
    ╚══════╝╚══════╝ ╚═════╝   
 ```
 
-# leo 2.0 — language emergent organism | the dario mechanism
+# leo 2.0 — language emergent organism | the dario mechanism  
+**by Arianna Method**
 
 > language is a field. dedicated to Leo.
   
