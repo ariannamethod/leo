@@ -43,6 +43,12 @@ extern void  leo_bridge_stats(void *leo);
 extern int   leo_bridge_step(void *leo);
 extern int   leo_bridge_vocab(void *leo);
 extern int   leo_bridge_bootstrapped(void *leo);
+extern void  leo_bridge_export_gguf(void *leo, const char *path);
+extern int   leo_bridge_import_gguf(void *leo, const char *path);
+extern void  leo_bridge_log_conversation(void *leo, const char *prompt, const char *response);
+extern void  leo_bridge_log_episode(void *leo, const char *event_type, const char *content, const char *metadata);
+extern int   leo_bridge_conversation_count(void *leo);
+extern int   leo_bridge_episode_count(void *leo, const char *event_type);
 */
 import "C"
 
@@ -173,6 +179,67 @@ func (l *Leo) Vocab() int {
 	return int(C.leo_bridge_vocab(l.ptr))
 }
 
+// ExportGGUF exports the organism as a GGUF spore
+func (l *Leo) ExportGGUF(path string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cPath := C.CString(path)
+	defer C.free(unsafe.Pointer(cPath))
+	C.leo_bridge_export_gguf(l.ptr, cPath)
+}
+
+// ImportGGUF loads a GGUF spore into the organism
+func (l *Leo) ImportGGUF(path string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cPath := C.CString(path)
+	defer C.free(unsafe.Pointer(cPath))
+	return C.leo_bridge_import_gguf(l.ptr, cPath) == 0
+}
+
+// LogConversation records a conversation turn in SQLite
+func (l *Leo) LogConversation(prompt, response string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cPrompt := C.CString(prompt)
+	cResp := C.CString(response)
+	defer C.free(unsafe.Pointer(cPrompt))
+	defer C.free(unsafe.Pointer(cResp))
+	C.leo_bridge_log_conversation(l.ptr, cPrompt, cResp)
+}
+
+// LogEpisode records an episode in SQLite
+func (l *Leo) LogEpisode(eventType, content, metadata string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cType := C.CString(eventType)
+	cContent := C.CString(content)
+	cMeta := C.CString(metadata)
+	defer C.free(unsafe.Pointer(cType))
+	defer C.free(unsafe.Pointer(cContent))
+	defer C.free(unsafe.Pointer(cMeta))
+	C.leo_bridge_log_episode(l.ptr, cType, cContent, cMeta)
+}
+
+// ConversationCount returns the number of logged conversations
+func (l *Leo) ConversationCount() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_conversation_count(l.ptr))
+}
+
+// EpisodeCount returns the number of logged episodes (optionally filtered by type)
+func (l *Leo) EpisodeCount(eventType string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if eventType == "" {
+		return int(C.leo_bridge_episode_count(l.ptr, nil))
+	}
+	cType := C.CString(eventType)
+	defer C.free(unsafe.Pointer(cType))
+	return int(C.leo_bridge_episode_count(l.ptr, cType))
+}
+
 // Inner world goroutines (startInnerVoice, startAutosave, startDreamDialog,
 // startTraumaWatch, startOverthinking, startThemeFlow, StartInnerWorld)
 // are defined in inner_world.go
@@ -279,12 +346,32 @@ func main() {
 				text := strings.TrimPrefix(line, "/ingest ")
 				leo.Ingest(text)
 				fmt.Printf("[leo.go] ingested (%d vocab)\n", leo.Vocab())
+			case strings.HasPrefix(line, "/export "):
+				path := strings.TrimPrefix(line, "/export ")
+				leo.ExportGGUF(path)
+			case strings.HasPrefix(line, "/import "):
+				path := strings.TrimPrefix(line, "/import ")
+				if leo.ImportGGUF(path) {
+					fmt.Println("[leo.go] spore imported.")
+				} else {
+					fmt.Println("[leo.go] import failed.")
+				}
+			case line == "/journal":
+				fmt.Printf("  conversations: %d\n", leo.ConversationCount())
+				fmt.Printf("  episodes:      %d total\n", leo.EpisodeCount(""))
+				fmt.Printf("    dreams:      %d\n", leo.EpisodeCount("dream"))
+				fmt.Printf("    bootstraps:  %d\n", leo.EpisodeCount("bootstrap"))
+				fmt.Printf("    exports:     %d\n", leo.EpisodeCount("gguf_export"))
+				fmt.Printf("    imports:     %d\n", leo.EpisodeCount("gguf_import"))
 			case line == "/help":
-				fmt.Println("  /stats      — show organism state")
-				fmt.Println("  /dream      — run dream cycle")
-				fmt.Println("  /save       — save state")
-				fmt.Println("  /ingest <t> — feed text into field")
-				fmt.Println("  /quit       — save and exit")
+				fmt.Println("  /stats        — show organism state")
+				fmt.Println("  /journal      — show SQLite journal stats")
+				fmt.Println("  /dream        — run dream cycle")
+				fmt.Println("  /save         — save state")
+				fmt.Println("  /ingest <t>   — feed text into field")
+				fmt.Println("  /export <p>   — export GGUF spore")
+				fmt.Println("  /import <p>   — import GGUF spore")
+				fmt.Println("  /quit         — save and exit")
 			default:
 				fmt.Printf("  unknown command: %s\n", line)
 			}

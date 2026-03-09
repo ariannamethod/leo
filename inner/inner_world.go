@@ -212,6 +212,10 @@ func (l *Leo) startTraumaWatch() {
 					l.Ingest(fragment)
 					fmt.Printf("[trauma] event (score=%.2f level=%.2f): gravitating toward origin\n",
 						score, trauma.level)
+
+					// Log trauma event to SQLite
+					meta := fmt.Sprintf("{\"score\":%.2f,\"level\":%.2f}", score, trauma.level)
+					l.LogEpisode("trauma", ev.Prompt, meta)
 				}
 			}
 
@@ -281,6 +285,9 @@ func (l *Leo) startOverthinking() {
 			}
 
 			fmt.Printf("[overthinking] 3 rings completed (step=%d)\n", l.Step())
+
+			// Log overthinking episode
+			l.LogEpisode("overthink", ev.Prompt, "{}")
 		}
 	}
 }
@@ -359,6 +366,10 @@ func (l *Leo) startDreamDialog() {
 			}
 
 			fmt.Printf("[dream] dialog completed: %d turns (step=%d)\n", turns, l.Step())
+
+			// Log dream episode to SQLite
+			meta := fmt.Sprintf("{\"turns\":%d,\"seed\":\"%s\"}", turns, seed)
+			l.LogEpisode("dream_dialog", lastUtterance, meta)
 		}
 	}
 }

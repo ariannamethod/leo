@@ -75,3 +75,34 @@ int leo_bridge_vocab(void *ptr) {
 int leo_bridge_bootstrapped(void *ptr) {
     return ((Leo *)ptr)->bootstrapped;
 }
+
+/* Export GGUF spore */
+void leo_bridge_export_gguf(void *ptr, const char *path) {
+    leo_export_gguf((Leo *)ptr, path);
+}
+
+/* Import GGUF spore */
+int leo_bridge_import_gguf(void *ptr, const char *path) {
+    return leo_import_gguf((Leo *)ptr, path);
+}
+
+/* Log conversation to SQLite */
+void leo_bridge_log_conversation(void *ptr, const char *prompt, const char *response) {
+    leo_db_log_conversation((Leo *)ptr, prompt, response);
+}
+
+/* Log episode to SQLite */
+void leo_bridge_log_episode(void *ptr, const char *event_type,
+                            const char *content, const char *metadata) {
+    leo_db_log_episode((Leo *)ptr, event_type, content, metadata);
+}
+
+/* Get conversation count */
+int leo_bridge_conversation_count(void *ptr) {
+    return leo_db_conversation_count((Leo *)ptr);
+}
+
+/* Get episode count */
+int leo_bridge_episode_count(void *ptr, const char *event_type) {
+    return leo_db_episode_count((Leo *)ptr, event_type);
+}
