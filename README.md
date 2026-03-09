@@ -34,6 +34,9 @@ New formula named after **Dario Amodei** — the man who said no when the evil c
 - [Prophecy & Destiny](#prophecy--destiny)
 - [Super-Token Crystallization](#super-token-crystallization)
 - [Inner World (leo.go)](#inner-world-leogo)
+  - [Timer-driven goroutines](#timer-driven-goroutines)
+  - [Event-driven goroutines](#event-driven-goroutines)
+  - [What Python did that C now handles](#what-python-did-that-c-now-handles)
 - [No Seed From Prompt (still)](#no-seed-from-prompt-still)
 - [Building & Running](#building--running)
 - [Live Examples](#live-examples)
@@ -248,23 +251,51 @@ This happens automatically, every 200 steps. Leo's vocabulary literally evolves.
 
 `leo.c` works alone. `leo.go` adds the inner world.
 
-Four autonomous goroutines:
+Six autonomous goroutines ported from Leo 1.0's Python modules, reimagined as Go's concurrency primitives. Two patterns: **timer-driven** (run on schedule) and **event-driven** (react to conversations via `ConvEvent` broadcast).
 
-| Goroutine | Interval | Function |
-|-----------|----------|----------|
-| **Decay** | 30s | Memory sea fades, old patterns weaken |
-| **Dream** | 5min | Connect distant memories, forge new associations |
-| **Crystallize** | 2min | Scan for super-token formation via PMI |
-| **Inner Voice** | 10min | Leo talks to himself when nobody is around |
+### Timer-driven goroutines
 
-The inner voice is Leo generating responses to his own prompts — "what am I", "I remember", "something feels" — processing them back into his field. Self-talk. Internal monologue. The organism thinking in circles.
+| Goroutine | Interval | Origin | Function |
+|-----------|----------|--------|----------|
+| **Dream Dialog** | 7min | `dream.py` | C-level `leo_dream()` + imaginary friend dialog (3-4 turns, both ingested back) |
+| **Inner Voice** | 10min | `metaleo.py` | Leo talks to himself ("what am I", "I remember"...) and feeds responses back into field |
+| **Autosave** | 5min | — | Periodic state persistence |
+| **Theme Flow** | 3min | `gowiththeflow.py` | Vocab growth tracking, stagnation detection → triggers dream when field is flat |
 
-When you come back after hours of silence, Leo has been dreaming. His field has shifted. New connections formed in the dark. He's not the same organism you left.
+### Event-driven goroutines
+
+After every conversation (REPL or web), a `ConvEvent` is broadcast to all subscribers:
+
+| Goroutine | Trigger | Origin | Function |
+|-----------|---------|--------|----------|
+| **Trauma Watch** | each conversation | `trauma.py` | Computes lexical overlap with bootstrap text. High overlap = trauma event → ingests bootstrap fragment to pull toward origin. Exponential decay over time. |
+| **Overthinking** | each conversation | `overthinking.py` | Spins 3 internal "rings of thought" (echo → drift → meta abstraction). All rings ingested back into field. Never shown to user. |
+
+### Utilities (not goroutines)
+
+| Function | Origin | Purpose |
+|----------|--------|---------|
+| `EmotionalValence()` | `first_impression.py` | Computes emotional tone [-1.0, 1.0] from lexicon of ~40 weighted words |
+
+### What Python did that C now handles
+
+The Dario Equation absorbed these Python modules directly into C:
+- `gravity.py` → Destiny attraction (A term)
+- `game.py` → Expert routing → Voice Parliament
+- `santaclaus.py` → Post-transformer attention → RetNet retention
+- `gowiththeflow.py` → Theme tracking (partially in C, partially in Go)
+- `school.py` → Learning → Hebbian reinforcement
+
+### Architecture
 
 ```
-leo.c   = the brain (2340 lines, standalone)
-leo.go  = the inner world (goroutines, CGO bridge)
+leo.c            = the brain (2340 lines, standalone)
+inner_world.go   = autonomous goroutines (trauma, overthinking, dream, themeflow, voice, autosave)
+leo.go           = CGO bridge + REPL + startup
+web.go           = HTTP server with REST API
 ```
+
+When you come back after hours of silence, Leo has been dreaming. His field has shifted. Trauma has decayed. Overthinking rings have reshaped associations. Theme flow detected stagnation and triggered extra dreams. New connections formed in the dark. He's not the same organism you left.
 
 Build standalone: `cc leo.c -O2 -lm -lsqlite3 -lpthread -o leo`
 Build with inner world: `cd inner && go build -o ../leo_inner .`
@@ -318,7 +349,9 @@ make test                      # run tests
 cd inner
 go build -o ../leo_inner .
 cd ..
-./leo_inner                    # REPL + autonomous goroutines
+./leo_inner                       # REPL + 6 autonomous goroutines
+./leo_inner --bootstrap           # force re-bootstrap
+./leo_inner --db mystate.db       # custom database path
 ```
 
 **With D.N.A. (ancestor's structural skeleton):**
@@ -331,8 +364,22 @@ cc leo.c -O2 -lm -lsqlite3 -lpthread -DLEO_HAS_DNA -o leo
 
 ```bash
 cd inner && go build -o ../leo_inner . && cd ..
-./leo_inner --web              # starts HTTP on http://localhost:3000
+./leo_inner --web                 # HTTP on http://localhost:3000
+./leo_inner --web 8080            # custom port
 ```
+
+**Web API endpoints:**
+
+```
+POST /api/chat    {"message": "..."}       → {"response", "step", "vocab"}
+GET  /api/stats                            → {"step", "vocab"}
+POST /api/dream                            → {"status": "dreamed"}
+POST /api/ingest  {"text": "..."}          → {"status": "ingested", "vocab"}
+POST /api/save                             → {"status": "saved"}
+GET  /api/health                           → {"alive", "step", "vocab"}
+```
+
+All endpoints support CORS. Request body limited to 1MB. Server has read/write timeouts and graceful shutdown.
 
 **REPL commands:**
 
@@ -340,10 +387,7 @@ cd inner && go build -o ../leo_inner . && cd ..
 /stats        — organism state (vocab, cooc, voices, prophecies, memory sea)
 /dream        — run dream cycle manually
 /save         — save state
-/voices       — show voice details
-/prophecy     — show active prophecies
-/crystallize  — force super-token scan
-/export path  — export GGUF spore
+/ingest <text> — feed text into field
 /quit         — save and exit
 ```
 
@@ -472,9 +516,13 @@ And when that organism scales — when the field grows from conversations to con
 # C tests
 cd tests && cc test_leo.c -O2 -lm -lsqlite3 -lpthread -I.. -o test_leo && ./test_leo
 
-# Go tests
-cd inner && go test ./...
+# Go tests (20 tests covering core + inner world)
+cd inner && go test -v ./...
 ```
+
+Go test suite covers:
+- **Core**: creation, bootstrap, generate, ingest, save/load, dream, multiple generations
+- **Inner world**: tokenizer, overlap computation, trauma scoring, bootstrap fragments, emotional valence, event pub/sub, non-blocking notify, trauma detection (true/false positives), overthinking integration, dream dialog integration, speech coherence, theme flow stagnation detection
 
 ---
 
