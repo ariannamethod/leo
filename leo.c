@@ -72,7 +72,7 @@ static const float LEO_GAMMA[LEO_RET_HEADS] = {0.99f, 0.95f, 0.85f, 0.50f};
  * ======================================================================== */
 
 #ifdef LEO_HAS_DNA
-#include "leo_dna.h"
+#include "leo.h"
 #endif
 
 /* ========================================================================
@@ -1030,6 +1030,7 @@ typedef struct {
     int            *context_ids;   /* recent token IDs */
     int             context_len;
     int             step;          /* global step counter */
+    int             conv_steps;    /* conversation steps (excludes bootstrap) */
 
     /* Dario coefficients */
     float           alpha, beta, gamma_d;
@@ -1235,8 +1236,8 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
      * Strong when young (child follows patterns), fades as field grows
      * and organism finds its own voice.
      */
-    float maturity = clampf((float)leo->step / 50000.0f, 0.0f, 1.0f);
-    float bigram_coeff = 3.0f * (1.0f - maturity) + 0.5f; /* 3.0→0.5 */
+    float maturity = clampf((float)leo->conv_steps / 50000.0f, 0.0f, 1.0f);
+    float bigram_coeff = 5.0f * (1.0f - maturity) + 0.5f; /* 5.0→0.5 */
 
     if (leo->context_len > 0) {
         int last_id = leo->context_ids[leo->context_len - 1];
@@ -1431,7 +1432,9 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
                 if (logits[i] < threshold) logits[i] = -1e30f;
         }
 
-        float tau = leo->tau_base * 0.8f;
+        /* adaptive temperature: lower for large vocab */
+        float vocab_factor = clampf(500.0f / (float)vocab_size, 0.3f, 1.0f);
+        float tau = leo->tau_base * 0.8f * vocab_factor;
 
         /* 3. Sample */
         softmax(logits, vocab_size, tau);
@@ -1515,6 +1518,7 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         }
 
         leo->step++;
+        leo->conv_steps++;
 
         /* add prophecy: predict what might come next based on co-occurrence */
         if (t < target_len - 1) {
@@ -1570,6 +1574,7 @@ void leo_save(Leo *leo) {
     uint32_t magic = LEO_MAGIC;
     fwrite(&magic, 4, 1, f);
     fwrite(&leo->step, sizeof(int), 1, f);
+    fwrite(&leo->conv_steps, sizeof(int), 1, f);
     fwrite(&leo->dim, sizeof(int), 1, f);
 
     /* tokenizer */
@@ -1660,6 +1665,7 @@ void leo_load(Leo *leo) {
     }
 
     fread(&leo->step, sizeof(int), 1, f);
+    fread(&leo->conv_steps, sizeof(int), 1, f);
     int dim;
     fread(&dim, sizeof(int), 1, f);
     if (dim != leo->dim) {
