@@ -10,6 +10,7 @@
 # leo 2.0 — language emergent organism | the dario mechanism
 
 > language is a field. dedicated to Leo.
+  
 > p(x|Φ) = softmax((α·H + β·F + γ·A) / τ)
   
 ---
