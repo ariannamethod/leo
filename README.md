@@ -54,7 +54,7 @@ The Dario Mechanism.
 
 ## THE DARIO EQUATION
 
-Here it is. The formula that replaces the transformer's `softmax(QK^T/√d)·V`:
+The new formula that replaces the transformer's `softmax(QK^T/√d)·V`:
 
 ```
 p(x | Φ) = softmax( (α·H + β·F + γ·A) / τ )
