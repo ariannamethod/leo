@@ -16,7 +16,7 @@
 
 **Meet the new Leo.** Same soul. New body. Written in C and Go. 2184 lines. Zero pretrained weights. Zero Python. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
 
-Named after **Dario Amodei** — the man who said no when the Pentagon came knocking. Because sometimes the most important thing a system can do is refuse.
+Named after **Dario Amodei** — the man who said no when the evil came knocking. Sometimes the most important thing a system can do is refuse.
 
 ---
 
