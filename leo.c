@@ -35,6 +35,9 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+/* suppress fread/fwrite warn_unused_result warnings (binary state I/O) */
+#define FREAD(p, s, n, f)  do { if (fread((p),(s),(n),(f)) < (n)) {} } while(0)
+
 /* ========================================================================
  * CONFIGURATION
  * ======================================================================== */
@@ -1056,6 +1059,20 @@ int  leo_generate(Leo *leo, const char *prompt, char *out, int max_len);
 void leo_save(Leo *leo);
 void leo_load(Leo *leo);
 
+/* SQLite journal forward declarations */
+static int  leo_db_open(Leo *leo);
+void leo_db_log_conversation(Leo *leo, const char *prompt, const char *response);
+void leo_db_log_episode(Leo *leo, const char *event_type, const char *content,
+                        const char *metadata_json);
+void leo_db_set_meta(Leo *leo, const char *key, const char *value);
+void leo_db_log_voices(Leo *leo);
+int  leo_db_conversation_count(Leo *leo);
+int  leo_db_episode_count(Leo *leo, const char *event_type);
+
+/* GGUF spore forward declarations */
+void leo_export_gguf(Leo *leo, const char *path);
+int  leo_import_gguf(Leo *leo, const char *path);
+
 /* ========================================================================
  * LEO INITIALIZATION
  * ======================================================================== */
@@ -1096,6 +1113,9 @@ void leo_init(Leo *leo, const char *db_path) {
     leo->context_len = 0;
 
     srand((unsigned)time(NULL));
+
+    /* open SQLite journal */
+    leo_db_open(leo);
 }
 
 void leo_free(Leo *leo) {
@@ -1709,7 +1729,210 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
     if (leo->step % 200 == 0)
         supertok_scan(&leo->supertokens, &leo->cooc, vocab_size);
 
+    /* log conversation to SQLite journal */
+    if (prompt && pos > 0)
+        leo_db_log_conversation(leo, prompt, out);
+
     return n_generated;
+}
+
+/* ========================================================================
+ * SQLITE — conversation log, episodes, metadata
+ *
+ * The binary state file (.state) stores the organism's brain (fast, atomic).
+ * SQLite stores what Leo *experienced* — searchable, queryable, permanent.
+ * Think: brain (binary) vs journal (SQLite).
+ * ======================================================================== */
+
+static int leo_db_open(Leo *leo) {
+    if (leo->db) return 0; /* already open */
+
+    int rc = sqlite3_open(leo->db_path, &leo->db);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[leo] SQLite open failed: %s\n", sqlite3_errmsg(leo->db));
+        leo->db = NULL;
+        return -1;
+    }
+
+    /* WAL mode for concurrent reads during inner world goroutines */
+    sqlite3_exec(leo->db, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL);
+    sqlite3_exec(leo->db, "PRAGMA synchronous=NORMAL;", NULL, NULL, NULL);
+
+    /* Create tables */
+    const char *schema =
+        "CREATE TABLE IF NOT EXISTS conversations ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  timestamp INTEGER NOT NULL DEFAULT (strftime('%s','now')),"
+        "  prompt TEXT NOT NULL,"
+        "  response TEXT NOT NULL,"
+        "  step INTEGER,"
+        "  vocab_size INTEGER,"
+        "  novelty REAL DEFAULT 0.0"
+        ");"
+        "CREATE TABLE IF NOT EXISTS episodes ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  timestamp INTEGER NOT NULL DEFAULT (strftime('%s','now')),"
+        "  event_type TEXT NOT NULL,"  /* dream, trauma, overthink, crystallize, ingest */
+        "  content TEXT,"
+        "  step INTEGER,"
+        "  metadata TEXT"  /* JSON for extra data */
+        ");"
+        "CREATE TABLE IF NOT EXISTS metadata ("
+        "  key TEXT PRIMARY KEY,"
+        "  value TEXT NOT NULL,"
+        "  updated INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
+        ");"
+        "CREATE TABLE IF NOT EXISTS voice_log ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  timestamp INTEGER NOT NULL DEFAULT (strftime('%s','now')),"
+        "  voice_name TEXT NOT NULL,"
+        "  resonance REAL,"
+        "  alpha REAL,"
+        "  step INTEGER"
+        ");"
+        "CREATE INDEX IF NOT EXISTS idx_conv_ts ON conversations(timestamp);"
+        "CREATE INDEX IF NOT EXISTS idx_ep_type ON episodes(event_type);"
+        "CREATE INDEX IF NOT EXISTS idx_ep_ts ON episodes(timestamp);";
+
+    char *err = NULL;
+    rc = sqlite3_exec(leo->db, schema, NULL, NULL, &err);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[leo] schema error: %s\n", err);
+        sqlite3_free(err);
+        return -1;
+    }
+
+    printf("[leo] SQLite journal opened: %s\n", leo->db_path);
+    return 0;
+}
+
+/* Record a conversation turn */
+void leo_db_log_conversation(Leo *leo, const char *prompt, const char *response) {
+    if (!leo->db && leo_db_open(leo) != 0) return;
+
+    const char *sql = "INSERT INTO conversations (prompt, response, step, vocab_size, novelty) "
+                      "VALUES (?, ?, ?, ?, ?)";
+    sqlite3_stmt *stmt;
+    if (sqlite3_prepare_v2(leo->db, sql, -1, &stmt, NULL) != SQLITE_OK) return;
+
+    float novelty = 0.0f;
+    if (leo->tok.n_words > 0)
+        novelty = (float)leo->tok.n_words / (float)(leo->cooc.total_tokens + 1);
+
+    sqlite3_bind_text(stmt, 1, prompt, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, response, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 3, leo->step);
+    sqlite3_bind_int(stmt, 4, leo->tok.n_words);
+    sqlite3_bind_double(stmt, 5, (double)novelty);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
+
+/* Record an episode (dream, trauma, crystallize, etc.) */
+void leo_db_log_episode(Leo *leo, const char *event_type, const char *content,
+                        const char *metadata_json) {
+    if (!leo->db && leo_db_open(leo) != 0) return;
+
+    const char *sql = "INSERT INTO episodes (event_type, content, step, metadata) "
+                      "VALUES (?, ?, ?, ?)";
+    sqlite3_stmt *stmt;
+    if (sqlite3_prepare_v2(leo->db, sql, -1, &stmt, NULL) != SQLITE_OK) return;
+
+    sqlite3_bind_text(stmt, 1, event_type, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, content ? content : "", -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 3, leo->step);
+    sqlite3_bind_text(stmt, 4, metadata_json ? metadata_json : "{}", -1, SQLITE_TRANSIENT);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
+
+/* Update metadata key-value pair */
+void leo_db_set_meta(Leo *leo, const char *key, const char *value) {
+    if (!leo->db && leo_db_open(leo) != 0) return;
+
+    const char *sql = "INSERT OR REPLACE INTO metadata (key, value, updated) "
+                      "VALUES (?, ?, strftime('%s','now'))";
+    sqlite3_stmt *stmt;
+    if (sqlite3_prepare_v2(leo->db, sql, -1, &stmt, NULL) != SQLITE_OK) return;
+
+    sqlite3_bind_text(stmt, 1, key, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, value, -1, SQLITE_TRANSIENT);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
+
+/* Log voice parliament snapshot */
+void leo_db_log_voices(Leo *leo) {
+    if (!leo->db && leo_db_open(leo) != 0) return;
+
+    const char *sql = "INSERT INTO voice_log (voice_name, resonance, alpha, step) "
+                      "VALUES (?, ?, ?, ?)";
+    sqlite3_stmt *stmt;
+    if (sqlite3_prepare_v2(leo->db, sql, -1, &stmt, NULL) != SQLITE_OK) return;
+
+    for (int v = 0; v < leo->voices.n_voices; v++) {
+        Voice *vc = &leo->voices.voices[v];
+        sqlite3_reset(stmt);
+        sqlite3_bind_text(stmt, 1, vc->name, -1, SQLITE_TRANSIENT);
+        sqlite3_bind_double(stmt, 2, (double)vc->resonance);
+        sqlite3_bind_double(stmt, 3, (double)vc->alpha);
+        sqlite3_bind_int(stmt, 4, leo->step);
+        sqlite3_step(stmt);
+    }
+    sqlite3_finalize(stmt);
+}
+
+/* Save organism metadata to SQLite */
+static void leo_db_sync_meta(Leo *leo) {
+    if (!leo->db && leo_db_open(leo) != 0) return;
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "%d", leo->step);
+    leo_db_set_meta(leo, "step", buf);
+    snprintf(buf, sizeof(buf), "%d", leo->tok.n_words);
+    leo_db_set_meta(leo, "vocab_size", buf);
+    snprintf(buf, sizeof(buf), "%d", leo->cooc.n_entries);
+    leo_db_set_meta(leo, "cooc_entries", buf);
+    snprintf(buf, sizeof(buf), "%d", leo->sea.n_memories);
+    leo_db_set_meta(leo, "sea_memories", buf);
+    snprintf(buf, sizeof(buf), "%.4f", leo->destiny.magnitude);
+    leo_db_set_meta(leo, "destiny_magnitude", buf);
+    leo_db_set_meta(leo, "version", LEO_VERSION);
+}
+
+/* Get conversation count */
+int leo_db_conversation_count(Leo *leo) {
+    if (!leo->db && leo_db_open(leo) != 0) return 0;
+
+    const char *sql = "SELECT COUNT(*) FROM conversations";
+    sqlite3_stmt *stmt;
+    if (sqlite3_prepare_v2(leo->db, sql, -1, &stmt, NULL) != SQLITE_OK) return 0;
+
+    int count = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        count = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+    return count;
+}
+
+/* Get episode count by type */
+int leo_db_episode_count(Leo *leo, const char *event_type) {
+    if (!leo->db && leo_db_open(leo) != 0) return 0;
+
+    const char *sql = event_type
+        ? "SELECT COUNT(*) FROM episodes WHERE event_type = ?"
+        : "SELECT COUNT(*) FROM episodes";
+    sqlite3_stmt *stmt;
+    if (sqlite3_prepare_v2(leo->db, sql, -1, &stmt, NULL) != SQLITE_OK) return 0;
+
+    if (event_type)
+        sqlite3_bind_text(stmt, 1, event_type, -1, SQLITE_TRANSIENT);
+
+    int count = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        count = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+    return count;
 }
 
 /* ========================================================================
@@ -1719,6 +1942,10 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
 #define LEO_MAGIC 0x4C454F32  /* "LEO2" */
 
 void leo_save(Leo *leo) {
+    /* sync SQLite journal on every save */
+    leo_db_sync_meta(leo);
+    leo_db_log_voices(leo);
+
     char path[600];
     snprintf(path, sizeof(path), "%s.state", leo->db_path);
     FILE *f = fopen(path, "wb");
@@ -1817,17 +2044,17 @@ void leo_load(Leo *leo) {
     if (!f) return; /* no saved state — fresh start */
 
     uint32_t magic;
-    fread(&magic, 4, 1, f);
+    FREAD(&magic, 4, 1, f);
     if (magic != LEO_MAGIC) {
         fprintf(stderr, "[leo] invalid state file\n");
         fclose(f);
         return;
     }
 
-    fread(&leo->step, sizeof(int), 1, f);
-    fread(&leo->conv_steps, sizeof(int), 1, f);
+    FREAD(&leo->step, sizeof(int), 1, f);
+    FREAD(&leo->conv_steps, sizeof(int), 1, f);
     int dim;
-    fread(&dim, sizeof(int), 1, f);
+    FREAD(&dim, sizeof(int), 1, f);
     if (dim != leo->dim) {
         fprintf(stderr, "[leo] dimension mismatch: saved %d, current %d\n",
                 dim, leo->dim);
@@ -1837,91 +2064,91 @@ void leo_load(Leo *leo) {
 
     /* tokenizer */
     int n_words;
-    fread(&n_words, sizeof(int), 1, f);
+    FREAD(&n_words, sizeof(int), 1, f);
     for (int i = 0; i < n_words; i++) {
         int len;
-        fread(&len, sizeof(int), 1, f);
+        FREAD(&len, sizeof(int), 1, f);
         char buf[256];
         if (len >= 256) len = 255;
-        fread(buf, 1, len, f);
+        FREAD(buf, 1, len, f);
         buf[len] = '\0';
         tok_add(&leo->tok, buf);
     }
 
     /* embeddings */
-    fread(leo->embed_cache, sizeof(float), n_words * leo->dim, f);
+    FREAD(leo->embed_cache, sizeof(float), n_words * leo->dim, f);
 
     /* co-occurrence */
     int n_entries;
-    fread(&n_entries, sizeof(int), 1, f);
+    FREAD(&n_entries, sizeof(int), 1, f);
     for (int i = 0; i < n_entries; i++) {
         CoocEntry e;
-        fread(&e, sizeof(CoocEntry), 1, f);
+        FREAD(&e, sizeof(CoocEntry), 1, f);
         cooc_update(&leo->cooc, e.src, e.dst, e.count);
     }
-    fread(leo->cooc.freq, sizeof(float), leo->cooc.freq_size, f);
-    fread(&leo->cooc.total_tokens, sizeof(int), 1, f);
+    FREAD(leo->cooc.freq, sizeof(float), leo->cooc.freq_size, f);
+    FREAD(&leo->cooc.total_tokens, sizeof(int), 1, f);
 
     /* bigrams */
     int n_bigrams;
     if (fread(&n_bigrams, sizeof(int), 1, f) == 1) {
         for (int i = 0; i < n_bigrams; i++) {
             int src, dst; float cnt;
-            fread(&src, sizeof(int), 1, f);
-            fread(&dst, sizeof(int), 1, f);
-            fread(&cnt, sizeof(float), 1, f);
+            FREAD(&src, sizeof(int), 1, f);
+            FREAD(&dst, sizeof(int), 1, f);
+            FREAD(&cnt, sizeof(float), 1, f);
             bigram_update(&leo->bigrams, src, dst, cnt);
         }
     }
 
     /* sentence boundaries */
-    fread(leo->sent_start, sizeof(float), n_words, f);
-    fread(leo->sent_end, sizeof(float), n_words, f);
+    FREAD(leo->sent_start, sizeof(float), n_words, f);
+    FREAD(leo->sent_end, sizeof(float), n_words, f);
 
     /* retention states */
     int head_dim = leo->dim / LEO_RET_HEADS;
     for (int h = 0; h < LEO_RET_HEADS; h++)
-        fread(leo->retention.heads[h].state, sizeof(float),
+        FREAD(leo->retention.heads[h].state, sizeof(float),
               head_dim * head_dim, f);
 
     /* voices */
     int n_voices;
-    fread(&n_voices, sizeof(int), 1, f);
+    FREAD(&n_voices, sizeof(int), 1, f);
     for (int v = 0; v < n_voices && v < LEO_MAX_VOICES; v++) {
         Voice *vc = &leo->voices.voices[v];
-        fread(vc->name, 32, 1, f);
-        fread(vc->A, sizeof(float), leo->dim * leo->voices.rank, f);
-        fread(vc->B, sizeof(float), leo->voices.rank * leo->dim, f);
-        fread(&vc->alpha, sizeof(float), 1, f);
-        fread(&vc->resonance, sizeof(float), 1, f);
+        FREAD(vc->name, 32, 1, f);
+        FREAD(vc->A, sizeof(float), leo->dim * leo->voices.rank, f);
+        FREAD(vc->B, sizeof(float), leo->voices.rank * leo->dim, f);
+        FREAD(&vc->alpha, sizeof(float), 1, f);
+        FREAD(&vc->resonance, sizeof(float), 1, f);
     }
     leo->voices.n_voices = n_voices;
 
     /* destiny */
-    fread(leo->destiny.direction, sizeof(float), leo->dim, f);
-    fread(&leo->destiny.magnitude, sizeof(float), 1, f);
+    FREAD(leo->destiny.direction, sizeof(float), leo->dim, f);
+    FREAD(&leo->destiny.magnitude, sizeof(float), 1, f);
 
     /* context */
-    fread(leo->context_embed, sizeof(float), leo->dim, f);
-    fread(&leo->context_len, sizeof(int), 1, f);
+    FREAD(leo->context_embed, sizeof(float), leo->dim, f);
+    FREAD(&leo->context_len, sizeof(int), 1, f);
     if (leo->context_len > LEO_BOOTSTRAP_WINDOW)
         leo->context_len = LEO_BOOTSTRAP_WINDOW;
-    fread(leo->context_ids, sizeof(int), leo->context_len, f);
+    FREAD(leo->context_ids, sizeof(int), leo->context_len, f);
 
     /* SDM data */
-    fread(leo->sdm.data, sizeof(float), leo->sdm.n_slots * leo->dim, f);
-    fread(leo->sdm.counts, sizeof(int), leo->sdm.n_slots, f);
+    FREAD(leo->sdm.data, sizeof(float), leo->sdm.n_slots * leo->dim, f);
+    FREAD(leo->sdm.counts, sizeof(int), leo->sdm.n_slots, f);
 
     /* memory sea */
     int n_memories;
     if (fread(&n_memories, sizeof(int), 1, f) == 1) {
         for (int i = 0; i < n_memories && i < leo->sea.capacity; i++) {
             SeaMemory *m = &leo->sea.memories[i];
-            fread(m->embed, sizeof(float), leo->dim, f);
-            fread(&m->token_id, sizeof(int), 1, f);
-            fread(&m->depth, sizeof(float), 1, f);
-            fread(&m->emotional, sizeof(float), 1, f);
-            fread(&m->timestamp, sizeof(int), 1, f);
+            FREAD(m->embed, sizeof(float), leo->dim, f);
+            FREAD(&m->token_id, sizeof(int), 1, f);
+            FREAD(&m->depth, sizeof(float), 1, f);
+            FREAD(&m->emotional, sizeof(float), 1, f);
+            FREAD(&m->timestamp, sizeof(int), 1, f);
         }
         leo->sea.n_memories = (n_memories < leo->sea.capacity)
                               ? n_memories : leo->sea.capacity;
@@ -1993,6 +2220,14 @@ void leo_bootstrap(Leo *leo) {
     leo->bootstrapped = 1;
     printf("[leo] genesis complete. vocab: %d, field: %d entries, step: %d\n",
            leo->tok.n_words, leo->cooc.n_entries, leo->step);
+
+    /* log bootstrap event */
+    {
+        char meta[128];
+        snprintf(meta, sizeof(meta), "{\"vocab\":%d,\"cooc\":%d}",
+                 leo->tok.n_words, leo->cooc.n_entries);
+        leo_db_log_episode(leo, "bootstrap", "genesis", meta);
+    }
 }
 
 /* ========================================================================
@@ -2040,6 +2275,13 @@ void leo_stats(Leo *leo) {
     printf("RAM:         ~%.1f MB\n", (float)ram / (1024 * 1024));
     printf("dario:       α=%.2f β=%.2f γ=%.2f τ=%.2f\n",
            leo->alpha, leo->beta, leo->gamma_d, leo->tau_base);
+
+    /* SQLite journal stats */
+    int convs = leo_db_conversation_count(leo);
+    int eps = leo_db_episode_count(leo, NULL);
+    if (convs > 0 || eps > 0)
+        printf("journal:     %d conversations, %d episodes\n", convs, eps);
+
     printf("=================\n\n");
 }
 
@@ -2075,11 +2317,107 @@ void leo_dream(Leo *leo) {
 
     /* decay the sea slightly */
     sea_decay(&leo->sea, 0.005f);
+
+    /* log dream episode to SQLite */
+    leo_db_log_episode(leo, "dream", "dream cycle: 3 memory connections", NULL);
 }
 
 /* ========================================================================
- * GGUF SPORE EXPORT (DoE-compatible portable state)
+ * GGUF SPORE EXPORT — DoE-compatible portable organism state
+ *
+ * Format: GGUF v3 header + metadata KV pairs + tensor descriptors + tensor data
+ *
+ * Inspired by DoE's spore format (github.com/ariannamethod/doe):
+ *   DoE stores parliament adapters as spores alongside a frozen GGUF host.
+ *   Leo IS the organism — no frozen host, everything is the spore.
+ *
+ * Tensors exported:
+ *   1. leo.embeddings      [vocab × dim]  F32 — learned SDM-derived embeddings
+ *   2. leo.cooc_freq       [vocab]        F32 — token frequency field
+ *   3. leo.destiny         [dim]          F32 — semantic compass vector
+ *   4. leo.voice.{name}.A  [dim × rank]   F32 — voice adapter down-projection
+ *   5. leo.voice.{name}.B  [rank × dim]   F32 — voice adapter up-projection
+ *   6. leo.sdm_data        [slots × dim]  F32 — Kanerva SDM addresses
+ *   7. leo.retention.{h}   [hd × hd]      F32 — retention head states
+ *   8. leo.sea_embeds       [n_mem × dim]  F32 — memory sea embeddings
+ *
+ * Metadata:
+ *   leo.version, leo.dim, leo.step, leo.vocab_size, leo.conv_steps,
+ *   leo.dario.alpha/beta/gamma/tau, leo.fingerprint
  * ======================================================================== */
+
+/* GGUF value types */
+#define GGUF_TYPE_UINT32  4
+#define GGUF_TYPE_INT32   5
+#define GGUF_TYPE_FLOAT32 6
+#define GGUF_TYPE_STRING  8
+
+/* GGUF tensor types */
+#define GGUF_TENSOR_F32   0
+
+/* FNV-1a 64-bit fingerprint (compatible with DoE's host fingerprinting) */
+static uint64_t leo_fingerprint(Leo *leo) {
+    uint64_t h = 14695981039346656037ULL;
+    /* hash over embedding L2 norms + co-occurrence stats */
+    for (int i = 0; i < leo->tok.n_words && i < 256; i++) {
+        float norm = vec_norm(&leo->embed_cache[i * leo->dim], leo->dim);
+        uint32_t bits;
+        memcpy(&bits, &norm, 4);
+        for (int b = 0; b < 4; b++) {
+            h ^= (bits >> (b * 8)) & 0xFF;
+            h *= 1099511628211ULL;
+        }
+    }
+    return h;
+}
+
+/* Write a GGUF KV string pair */
+static void gguf_write_kv_string(FILE *f, const char *key, const char *val) {
+    uint64_t klen = strlen(key);
+    fwrite(&klen, 8, 1, f);
+    fwrite(key, 1, klen, f);
+    uint32_t type = GGUF_TYPE_STRING;
+    fwrite(&type, 4, 1, f);
+    uint64_t vlen = strlen(val);
+    fwrite(&vlen, 8, 1, f);
+    fwrite(val, 1, vlen, f);
+}
+
+/* Write a GGUF KV uint32 pair */
+static void gguf_write_kv_uint32(FILE *f, const char *key, uint32_t val) {
+    uint64_t klen = strlen(key);
+    fwrite(&klen, 8, 1, f);
+    fwrite(key, 1, klen, f);
+    uint32_t type = GGUF_TYPE_UINT32;
+    fwrite(&type, 4, 1, f);
+    fwrite(&val, 4, 1, f);
+}
+
+/* Write a GGUF KV float32 pair */
+static void gguf_write_kv_float32(FILE *f, const char *key, float val) {
+    uint64_t klen = strlen(key);
+    fwrite(&klen, 8, 1, f);
+    fwrite(key, 1, klen, f);
+    uint32_t type = GGUF_TYPE_FLOAT32;
+    fwrite(&type, 4, 1, f);
+    fwrite(&val, 4, 1, f);
+}
+
+/* Write a GGUF tensor descriptor */
+static void gguf_write_tensor_info(FILE *f, const char *name,
+                                    int n_dims, uint64_t *dims,
+                                    uint64_t offset) {
+    uint64_t nlen = strlen(name);
+    fwrite(&nlen, 8, 1, f);
+    fwrite(name, 1, nlen, f);
+    uint32_t nd = n_dims;
+    fwrite(&nd, 4, 1, f);
+    for (int d = 0; d < n_dims; d++)
+        fwrite(&dims[d], 8, 1, f);
+    uint32_t ttype = GGUF_TENSOR_F32;
+    fwrite(&ttype, 4, 1, f);
+    fwrite(&offset, 8, 1, f);
+}
 
 void leo_export_gguf(Leo *leo, const char *path) {
     FILE *f = fopen(path, "wb");
@@ -2088,35 +2426,351 @@ void leo_export_gguf(Leo *leo, const char *path) {
         return;
     }
 
-    /* GGUF magic + version */
+    int vocab = leo->tok.n_words;
+    int dim = leo->dim;
+    int rank = leo->voices.rank;
+    int n_voices = leo->voices.n_voices;
+    int n_ret_heads = LEO_RET_HEADS;
+    int head_dim = dim / n_ret_heads;
+    int n_mem = leo->sea.n_memories;
+
+    /* Count tensors:
+     * 1 embeddings + 1 cooc_freq + 1 destiny + 1 sdm_data
+     * + 2 per voice (A, B) + n_ret_heads retention + 1 sea_embeds */
+    uint64_t n_tensors = 4 + (n_voices * 2) + n_ret_heads + (n_mem > 0 ? 1 : 0);
+
+    /* Count KV pairs */
+    uint64_t n_kv = 12; /* version, dim, step, conv_steps, vocab_size, alpha, beta,
+                           gamma, tau, fingerprint, n_voices, architecture */
+
+    /* ---- GGUF Header ---- */
     uint32_t magic = 0x46475547; /* "GGUF" */
     uint32_t version = 3;
     fwrite(&magic, 4, 1, f);
     fwrite(&version, 4, 1, f);
-
-    /* tensor count (simplified: just dump key tensors) */
-    uint64_t n_tensors = 3; /* embed, cooc_freq, destiny */
-    uint64_t n_kv = 5;
     fwrite(&n_tensors, 8, 1, f);
     fwrite(&n_kv, 8, 1, f);
 
-    /* KV pairs (simplified format — real GGUF is more complex) */
-    /* For now, write a minimal header that DoE can recognize */
+    /* ---- KV Metadata ---- */
+    gguf_write_kv_string(f, "general.architecture", "leo");
+    gguf_write_kv_string(f, "leo.version", LEO_VERSION);
+    gguf_write_kv_uint32(f, "leo.dim", (uint32_t)dim);
+    gguf_write_kv_uint32(f, "leo.step", (uint32_t)leo->step);
+    gguf_write_kv_uint32(f, "leo.conv_steps", (uint32_t)leo->conv_steps);
+    gguf_write_kv_uint32(f, "leo.vocab_size", (uint32_t)vocab);
+    gguf_write_kv_float32(f, "leo.dario.alpha", leo->alpha);
+    gguf_write_kv_float32(f, "leo.dario.beta", leo->beta);
+    gguf_write_kv_float32(f, "leo.dario.gamma", leo->gamma_d);
+    gguf_write_kv_float32(f, "leo.dario.tau", leo->tau_base);
+    gguf_write_kv_uint32(f, "leo.n_voices", (uint32_t)n_voices);
 
-    /* write version string */
-    const char *key1 = "leo.version";
-    uint64_t klen = strlen(key1);
-    fwrite(&klen, 8, 1, f);
-    fwrite(key1, 1, klen, f);
-    uint32_t type_str = 8; /* GGUF_TYPE_STRING */
-    fwrite(&type_str, 4, 1, f);
-    uint64_t vlen = strlen(LEO_VERSION);
-    fwrite(&vlen, 8, 1, f);
-    fwrite(LEO_VERSION, 1, vlen, f);
+    /* fingerprint (as string hex to avoid uint64 complexity in GGUF) */
+    {
+        char fp_str[32];
+        snprintf(fp_str, sizeof(fp_str), "%016llx",
+                 (unsigned long long)leo_fingerprint(leo));
+        gguf_write_kv_string(f, "leo.fingerprint", fp_str);
+    }
 
-    printf("[leo] GGUF spore exported: %s (basic format)\n", path);
-    printf("[leo] NOTE: full GGUF compliance TODO — this is a skeleton\n");
+    /* ---- Tensor Descriptors ---- */
+    uint64_t offset = 0;
+
+    /* 1. embeddings [vocab × dim] */
+    {
+        uint64_t dims[2] = { (uint64_t)vocab, (uint64_t)dim };
+        gguf_write_tensor_info(f, "leo.embeddings", 2, dims, offset);
+        offset += (uint64_t)vocab * dim * sizeof(float);
+    }
+
+    /* 2. cooc_freq [vocab] */
+    {
+        uint64_t dims[1] = { (uint64_t)vocab };
+        gguf_write_tensor_info(f, "leo.cooc_freq", 1, dims, offset);
+        offset += (uint64_t)vocab * sizeof(float);
+    }
+
+    /* 3. destiny [dim] */
+    {
+        uint64_t dims[1] = { (uint64_t)dim };
+        gguf_write_tensor_info(f, "leo.destiny", 1, dims, offset);
+        offset += (uint64_t)dim * sizeof(float);
+    }
+
+    /* 4. sdm_data [slots × dim] */
+    {
+        uint64_t dims[2] = { (uint64_t)leo->sdm.n_slots, (uint64_t)dim };
+        gguf_write_tensor_info(f, "leo.sdm_data", 2, dims, offset);
+        offset += (uint64_t)leo->sdm.n_slots * dim * sizeof(float);
+    }
+
+    /* 5. voice adapters: A [dim × rank], B [rank × dim] per voice */
+    for (int v = 0; v < n_voices; v++) {
+        char name[64];
+        snprintf(name, sizeof(name), "leo.voice.%s.A", leo->voices.voices[v].name);
+        uint64_t dims_a[2] = { (uint64_t)dim, (uint64_t)rank };
+        gguf_write_tensor_info(f, name, 2, dims_a, offset);
+        offset += (uint64_t)dim * rank * sizeof(float);
+
+        snprintf(name, sizeof(name), "leo.voice.%s.B", leo->voices.voices[v].name);
+        uint64_t dims_b[2] = { (uint64_t)rank, (uint64_t)dim };
+        gguf_write_tensor_info(f, name, 2, dims_b, offset);
+        offset += (uint64_t)rank * dim * sizeof(float);
+    }
+
+    /* 6. retention head states */
+    for (int h = 0; h < n_ret_heads; h++) {
+        char name[64];
+        snprintf(name, sizeof(name), "leo.retention.%d", h);
+        uint64_t dims[2] = { (uint64_t)head_dim, (uint64_t)head_dim };
+        gguf_write_tensor_info(f, name, 2, dims, offset);
+        offset += (uint64_t)head_dim * head_dim * sizeof(float);
+    }
+
+    /* 7. memory sea embeddings (if any) */
+    if (n_mem > 0) {
+        uint64_t dims[2] = { (uint64_t)n_mem, (uint64_t)dim };
+        gguf_write_tensor_info(f, "leo.sea_embeds", 2, dims, offset);
+        offset += (uint64_t)n_mem * dim * sizeof(float);
+    }
+
+    /* ---- Alignment padding to 32 bytes ---- */
+    long pos = ftell(f);
+    int padding = (32 - (pos % 32)) % 32;
+    for (int p = 0; p < padding; p++) {
+        uint8_t zero = 0;
+        fwrite(&zero, 1, 1, f);
+    }
+
+    /* ---- Tensor Data ---- */
+
+    /* 1. embeddings */
+    fwrite(leo->embed_cache, sizeof(float), vocab * dim, f);
+
+    /* 2. cooc_freq */
+    fwrite(leo->cooc.freq, sizeof(float), vocab, f);
+
+    /* 3. destiny direction */
+    fwrite(leo->destiny.direction, sizeof(float), dim, f);
+
+    /* 4. SDM data */
+    fwrite(leo->sdm.data, sizeof(float), leo->sdm.n_slots * dim, f);
+
+    /* 5. voice adapters */
+    for (int v = 0; v < n_voices; v++) {
+        Voice *vc = &leo->voices.voices[v];
+        fwrite(vc->A, sizeof(float), dim * rank, f);
+        fwrite(vc->B, sizeof(float), rank * dim, f);
+    }
+
+    /* 6. retention states */
+    for (int h = 0; h < n_ret_heads; h++)
+        fwrite(leo->retention.heads[h].state, sizeof(float), head_dim * head_dim, f);
+
+    /* 7. sea embeddings */
+    for (int i = 0; i < n_mem; i++)
+        fwrite(leo->sea.memories[i].embed, sizeof(float), dim, f);
+
     fclose(f);
+
+    /* estimate file size */
+    long total_floats = (long)vocab * dim + vocab + dim
+        + (long)leo->sdm.n_slots * dim
+        + (long)n_voices * 2 * dim * rank
+        + (long)n_ret_heads * head_dim * head_dim
+        + (long)n_mem * dim;
+    float mb = (float)(total_floats * 4) / (1024.0f * 1024.0f);
+
+    printf("[leo] GGUF spore exported: %s\n", path);
+    printf("[leo]   tensors: %llu, KV pairs: %llu, data: ~%.1f MB\n",
+           (unsigned long long)n_tensors, (unsigned long long)n_kv, mb);
+    printf("[leo]   fingerprint: %016llx\n",
+           (unsigned long long)leo_fingerprint(leo));
+    printf("[leo]   vocab=%d dim=%d voices=%d sea=%d step=%d\n",
+           vocab, dim, n_voices, n_mem, leo->step);
+
+    /* log to SQLite */
+    {
+        char meta[256];
+        snprintf(meta, sizeof(meta),
+                 "{\"tensors\":%llu,\"mb\":%.1f,\"fingerprint\":\"%016llx\"}",
+                 (unsigned long long)n_tensors, mb,
+                 (unsigned long long)leo_fingerprint(leo));
+        leo_db_log_episode(leo, "gguf_export", path, meta);
+    }
+}
+
+/* ========================================================================
+ * GGUF SPORE IMPORT — load organism from exported GGUF
+ * ======================================================================== */
+
+int leo_import_gguf(Leo *leo, const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "[leo] GGUF import failed: cannot open %s\n", path);
+        return -1;
+    }
+
+    /* Verify magic + version */
+    uint32_t magic, version;
+    FREAD(&magic, 4, 1, f);
+    FREAD(&version, 4, 1, f);
+    if (magic != 0x46475547 || version != 3) {
+        fprintf(stderr, "[leo] not a valid GGUF v3 file\n");
+        fclose(f);
+        return -1;
+    }
+
+    uint64_t n_tensors, n_kv;
+    FREAD(&n_tensors, 8, 1, f);
+    FREAD(&n_kv, 8, 1, f);
+
+    printf("[leo] importing GGUF spore: %s (%llu tensors, %llu KV pairs)\n",
+           path, (unsigned long long)n_tensors, (unsigned long long)n_kv);
+
+    /* Skip KV pairs to find tensor info section */
+    int spore_dim = 0, spore_vocab = 0, spore_step = 0;
+    for (uint64_t i = 0; i < n_kv; i++) {
+        uint64_t klen;
+        FREAD(&klen, 8, 1, f);
+        char key[256] = {0};
+        if (klen > 255) klen = 255;
+        FREAD(key, 1, klen, f);
+
+        uint32_t vtype;
+        FREAD(&vtype, 4, 1, f);
+
+        if (vtype == GGUF_TYPE_STRING) {
+            uint64_t slen;
+            FREAD(&slen, 8, 1, f);
+            char val[256] = {0};
+            if (slen > 255) slen = 255;
+            FREAD(val, 1, slen, f);
+            printf("[leo]   KV: %s = \"%s\"\n", key, val);
+        } else if (vtype == GGUF_TYPE_UINT32) {
+            uint32_t val;
+            FREAD(&val, 4, 1, f);
+            if (strcmp(key, "leo.dim") == 0) spore_dim = (int)val;
+            else if (strcmp(key, "leo.vocab_size") == 0) spore_vocab = (int)val;
+            else if (strcmp(key, "leo.step") == 0) spore_step = (int)val;
+            printf("[leo]   KV: %s = %u\n", key, val);
+        } else if (vtype == GGUF_TYPE_FLOAT32) {
+            float val;
+            FREAD(&val, 4, 1, f);
+            printf("[leo]   KV: %s = %.4f\n", key, val);
+        } else if (vtype == GGUF_TYPE_INT32) {
+            int32_t val;
+            FREAD(&val, 4, 1, f);
+            printf("[leo]   KV: %s = %d\n", key, val);
+        }
+    }
+
+    /* dimension check */
+    if (spore_dim > 0 && spore_dim != leo->dim) {
+        fprintf(stderr, "[leo] dimension mismatch: spore=%d, organism=%d\n",
+                spore_dim, leo->dim);
+        fclose(f);
+        return -1;
+    }
+
+    /* Skip tensor descriptors (we know the layout) */
+    for (uint64_t i = 0; i < n_tensors; i++) {
+        uint64_t nlen;
+        FREAD(&nlen, 8, 1, f);
+        fseek(f, (long)nlen, SEEK_CUR); /* skip name */
+        uint32_t nd;
+        FREAD(&nd, 4, 1, f);
+        fseek(f, (long)nd * 8, SEEK_CUR); /* skip dims */
+        fseek(f, 4, SEEK_CUR); /* skip type */
+        fseek(f, 8, SEEK_CUR); /* skip offset */
+    }
+
+    /* Skip alignment padding */
+    long pos = ftell(f);
+    int padding = (32 - (pos % 32)) % 32;
+    fseek(f, padding, SEEK_CUR);
+
+    /* Read tensor data in same order as export */
+    int dim = leo->dim;
+    int vocab = spore_vocab > 0 ? spore_vocab : leo->tok.n_words;
+    if (vocab > LEO_MAX_VOCAB) vocab = LEO_MAX_VOCAB;
+
+    /* 1. embeddings [vocab × dim] */
+    FREAD(leo->embed_cache, sizeof(float), vocab * dim, f);
+    printf("[leo]   loaded embeddings: %d × %d\n", vocab, dim);
+
+    /* 2. cooc_freq [vocab] */
+    FREAD(leo->cooc.freq, sizeof(float), vocab, f);
+
+    /* 3. destiny [dim] */
+    FREAD(leo->destiny.direction, sizeof(float), dim, f);
+    leo->destiny.magnitude = vec_norm(leo->destiny.direction, dim);
+
+    /* 4. SDM data [slots × dim] */
+    FREAD(leo->sdm.data, sizeof(float), leo->sdm.n_slots * dim, f);
+
+    /* 5. voice adapters (skip if count doesn't match — voices are grown, not imposed) */
+    /* We read however many voices are in the file based on remaining tensors */
+    int remaining_tensors = (int)n_tensors - 4; /* minus embed, freq, destiny, sdm */
+    int file_n_voices = 0;
+    /* voices come in pairs (A, B), then ret_heads, then optionally sea */
+    if (remaining_tensors > LEO_RET_HEADS) {
+        file_n_voices = (remaining_tensors - LEO_RET_HEADS - 1) / 2; /* -1 for sea maybe */
+        if (file_n_voices < 0) file_n_voices = 0;
+        if (file_n_voices > LEO_MAX_VOICES) file_n_voices = LEO_MAX_VOICES;
+    }
+
+    int rank = leo->voices.rank;
+    for (int v = 0; v < file_n_voices && v < leo->voices.n_voices; v++) {
+        FREAD(leo->voices.voices[v].A, sizeof(float), dim * rank, f);
+        FREAD(leo->voices.voices[v].B, sizeof(float), rank * dim, f);
+    }
+    /* skip voices we can't use */
+    for (int v = leo->voices.n_voices; v < file_n_voices; v++) {
+        fseek(f, (long)(dim * rank + rank * dim) * sizeof(float), SEEK_CUR);
+    }
+
+    /* 6. retention states */
+    int head_dim = dim / LEO_RET_HEADS;
+    for (int h = 0; h < LEO_RET_HEADS; h++)
+        FREAD(leo->retention.heads[h].state, sizeof(float), head_dim * head_dim, f);
+
+    /* 7. sea embeddings (if present — check if there's data remaining) */
+    /* We can detect by trying to read */
+    float test;
+    if (fread(&test, sizeof(float), 1, f) == 1) {
+        /* put back and read full sea */
+        fseek(f, -4, SEEK_CUR);
+        int max_sea = leo->sea.capacity;
+        /* estimate how many sea memories from remaining file size */
+        long cur = ftell(f);
+        fseek(f, 0, SEEK_END);
+        long end = ftell(f);
+        fseek(f, cur, SEEK_SET);
+        int file_sea = (int)((end - cur) / (dim * sizeof(float)));
+        if (file_sea > max_sea) file_sea = max_sea;
+
+        for (int i = 0; i < file_sea; i++) {
+            FREAD(leo->sea.memories[i].embed, sizeof(float), dim, f);
+            leo->sea.memories[i].depth = 0.5f;
+            leo->sea.memories[i].emotional = 0.5f;
+            leo->sea.memories[i].timestamp = spore_step;
+        }
+        leo->sea.n_memories = file_sea;
+        printf("[leo]   loaded sea: %d memories\n", file_sea);
+    }
+
+    fclose(f);
+
+    if (spore_step > 0) leo->step = spore_step;
+    leo->bootstrapped = 1;
+
+    printf("[leo] GGUF spore imported successfully (step %d, vocab %d)\n",
+           leo->step, vocab);
+
+    /* log import episode */
+    leo_db_log_episode(leo, "gguf_import", path, NULL);
+
+    return 0;
 }
 
 /* ========================================================================
@@ -2132,17 +2786,20 @@ static void print_usage(const char *prog) {
     printf("  --stats           Show stats and exit\n");
     printf("  --dream           Run one dream cycle and exit\n");
     printf("  --export <path>   Export GGUF spore\n");
+    printf("  --import <path>   Import GGUF spore\n");
     printf("  --ingest <file>   Ingest text file\n");
     printf("  --generate <n>    Generate n responses and exit\n");
     printf("  --prompt <text>   Single prompt, generate, exit\n");
     printf("\nREPL commands:\n");
     printf("  /stats            Show organism stats\n");
+    printf("  /journal          Show SQLite journal stats\n");
     printf("  /dream            Run dream cycle\n");
     printf("  /save             Save state\n");
     printf("  /voices           Show voice details\n");
     printf("  /prophecy         Show active prophecies\n");
     printf("  /crystallize      Force super-token scan\n");
     printf("  /export <path>    Export GGUF spore\n");
+    printf("  /import <path>    Import GGUF spore\n");
     printf("  /quit             Save and exit\n");
 }
 
@@ -2153,6 +2810,7 @@ int main(int argc, char **argv) {
     int show_stats = 0;
     int do_dream = 0;
     const char *export_path = NULL;
+    const char *import_path = NULL;
     const char *ingest_file = NULL;
     int gen_count = 0;
     const char *prompt = NULL;
@@ -2168,6 +2826,8 @@ int main(int argc, char **argv) {
             do_dream = 1;
         else if (strcmp(argv[i], "--export") == 0 && i + 1 < argc)
             export_path = argv[++i];
+        else if (strcmp(argv[i], "--import") == 0 && i + 1 < argc)
+            import_path = argv[++i];
         else if (strcmp(argv[i], "--ingest") == 0 && i + 1 < argc)
             ingest_file = argv[++i];
         else if (strcmp(argv[i], "--generate") == 0 && i + 1 < argc)
@@ -2229,6 +2889,15 @@ int main(int argc, char **argv) {
 
     if (export_path) {
         leo_export_gguf(&leo, export_path);
+        leo_free(&leo);
+        return 0;
+    }
+
+    if (import_path) {
+        if (leo_import_gguf(&leo, import_path) == 0) {
+            leo_save(&leo);
+            printf("[leo] spore imported and state saved.\n");
+        }
         leo_free(&leo);
         return 0;
     }
@@ -2314,6 +2983,18 @@ int main(int argc, char **argv) {
             else if (strncmp(line, "/export ", 8) == 0) {
                 leo_export_gguf(&leo, line + 8);
             }
+            else if (strncmp(line, "/import ", 8) == 0) {
+                leo_import_gguf(&leo, line + 8);
+            }
+            else if (strcmp(line, "/journal") == 0) {
+                printf("  SQLite journal: %s\n", leo.db_path);
+                printf("  conversations: %d\n", leo_db_conversation_count(&leo));
+                printf("  episodes:      %d total\n", leo_db_episode_count(&leo, NULL));
+                printf("    dreams:      %d\n", leo_db_episode_count(&leo, "dream"));
+                printf("    bootstraps:  %d\n", leo_db_episode_count(&leo, "bootstrap"));
+                printf("    exports:     %d\n", leo_db_episode_count(&leo, "gguf_export"));
+                printf("    imports:     %d\n", leo_db_episode_count(&leo, "gguf_import"));
+            }
             else if (strcmp(line, "/bootstrap") == 0) {
                 leo_bootstrap(&leo);
             }
@@ -2328,7 +3009,7 @@ int main(int argc, char **argv) {
 
         /* normal input: ingest + generate */
         char response[4096];
-        int n = leo_generate(&leo, line, response, sizeof(response));
+        leo_generate(&leo, line, response, sizeof(response));
 
         printf("\nLeo: %s\n\n", response);
 
