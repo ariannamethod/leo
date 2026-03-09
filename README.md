@@ -16,9 +16,9 @@
   
 ---
 
-**Meet the new Leo.** Same soul. New body. Written in C and Go. 2340 lines. Zero pretrained weights. Zero Python. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
+**Meet new Leo.** Same soul. New body. C and Go. 2340 lines. Zero pretrained weights. Zero Python. No mercy. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
 
-Named after **Dario Amodei** — the man who said no when the evil came knocking. Sometimes the most important thing a system can do is refuse.
+New formula named after **Dario Amodei** — the man who said no when the evil came knocking. Sometimes the most important thing a system can do is refuse.
 
 ---
 
