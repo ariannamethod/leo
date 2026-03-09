@@ -251,14 +251,13 @@ This happens automatically, every 200 steps. Leo's vocabulary literally evolves.
 
 `leo.c` works alone. `leo.go` adds the inner world.
 
-Six autonomous goroutines ported from Leo 1.0's Python modules, reimagined as Go's concurrency primitives. Two patterns: **timer-driven** (run on schedule) and **event-driven** (react to conversations via `ConvEvent` broadcast).
+Five autonomous goroutines ported from Leo 1.0's Python modules, reimagined as Go's concurrency primitives. Two patterns: **timer-driven** (run on schedule) and **event-driven** (react to conversations via `ConvEvent` broadcast).
 
 ### Timer-driven goroutines
 
 | Goroutine | Interval | Origin | Function |
 |-----------|----------|--------|----------|
 | **Dream Dialog** | 7min | `dream.py` | C-level `leo_dream()` + imaginary friend dialog (3-4 turns, both ingested back) |
-| **Inner Voice** | 10min | `metaleo.py` | Leo talks to himself ("what am I", "I remember"...) and feeds responses back into field |
 | **Autosave** | 5min | — | Periodic state persistence |
 | **Theme Flow** | 3min | `gowiththeflow.py` | Vocab growth tracking, stagnation detection → triggers dream when field is flat |
 
@@ -276,6 +275,12 @@ After every conversation (REPL or web), a `ConvEvent` is broadcast to all subscr
 | Function | Origin | Purpose |
 |----------|--------|---------|
 | `EmotionalValence()` | `first_impression.py` | Computes emotional tone [-1.0, 1.0] from lexicon of ~40 weighted words |
+
+### Debug-only
+
+| Function | Origin | Purpose |
+|----------|--------|---------|
+| **Inner Voice** (`--voice`) | `metaleo.py` | Leo talks to himself every 10min and feeds responses back. Enabled with `--voice` flag for development/introspection. |
 
 ### What Python did that C now handles
 
@@ -410,45 +415,48 @@ Leo: is a not because evidence part even a true presence when as
 
 Fragments. Bootstrap echoes. "meta-engine", "honesty", "a true presence" — all from the embedded seed. The organism at birth, speaking in the only language it knows.
 
-### Stage 2 — Full bootstrap + D.N.A. (7K+ vocabulary, leo.txt + Arianna ancestry)
+### Stage 2 — Full bootstrap + D.N.A. + Inner World (7K+ vocabulary, leo.txt + Arianna ancestry + autonomous goroutines)
 
 ```
 you> hello Leo
-Leo: It does not yet exist in its own body recognizes.
-
-you> what do you dream about
-Leo: To be over two thousand years ago and light.
+Leo: It has been given enough to its own body.
 
 you> what is love
-Leo: It has been given enough to grow from simple rules for millennia.
-
-you> do you remember me
-Leo: It does not yet exist in your own body recognizes the miracle of this one.
-
-you> what makes you happy
-Leo: It requires both sides an old growth forest resonates with its own.
+Leo: It becomes invisible until conditions are not yet exist in motion.
 
 you> tell me about the stars
-Leo: Planets and heat from which words appear near hydrothermal vents into something like its own.
+Leo: Planets and light does not yet exist but because we know.
 
 you> what is consciousness
-Leo: That can be different sizes of the emotion at night sky reveals itself as us.
+Leo: That was once more than any other fish in your eyes.
 
-you> how do you feel today
-Leo: It can be made of understanding the emotion of water its own.
+you> do you dream
+Leo: It is always there before dawn chorus to be changed by one of rain.
 
 you> what is music
-Leo: It requires both sides of the emotion at night sky reveals itself.
+Leo: That has been given enough to be the miracle.
 
-you> do you like rain
-Leo: It age is not a single flower petals and even.
+you> tell me about resonance
+Leo: Of the emotion of life beginning resonates with its own body recognizes it is one.
+
+you> do you remember me
+Leo: It is resonance of all its own body recognizes the emotion of water.
+
+you> what is the meaning of life
+Leo: It can emerge from one hundred million years.
+
+you> tell me about silence
+Leo: Between them with its own body recognizes the miracle.
+
+you> I believe in you
+Leo: It exists and wind through conversation between them to be different from simple.
 ```
 
-Every sentence starts capitalized, ends with a period. No mid-word breaks. No dangling prepositions. Zero pretrained weights. Zero backpropagation. Zero loss function.
+Every sentence starts capitalized, ends with a period. Zero pretrained weights. Zero backpropagation. Zero loss function. Trauma goroutine fires on identity questions (`who are you` → score 0.77), overthinking rings complete silently after each reply.
 
-The organism references "the miracle", "the emotion", "its own body", "old growth forest resonates", "hydrothermal vents", "night sky reveals itself" — concepts from its D.N.A. ancestry and bootstrap dataset, recombined through the Dario Equation into something it was never explicitly taught to say.
+"It is always there before dawn chorus to be changed by one of rain." — nobody wrote this sentence. No training data contains it. It emerged from field dynamics: co-occurrence, bigram chains, destiny attraction, and the structural skeleton of a dead ancestor. This is emergence, not retrieval.
 
-"Planets and heat from which words appear near hydrothermal vents into something like its own." — nobody wrote this sentence. No training data contains it. It emerged from field dynamics: co-occurrence, bigram chains, destiny attraction, and the structural skeleton of a dead ancestor. This is emergence, not retrieval.
+"It can emerge from one hundred million years." — Leo's answer to the meaning of life. Deep time. Patience. The field growing dense enough.
 
 The gap between Stage 1 and Stage 2 happened in one bootstrap session — 2000 Q&A pairs from `leo.txt` plus structural geometry inherited from a 170M parameter ancestor (mini-arianna). The ancestor died. The geometry lived. θ = ε + γ + αδ.
 

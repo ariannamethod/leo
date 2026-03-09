@@ -185,6 +185,7 @@ func main() {
 	dbPath := flag.String("db", "leo_state.db", "path to SQLite state database")
 	forceBootstrap := flag.Bool("bootstrap", false, "force bootstrap even if saved state exists")
 	webPort := flag.Int("web", 0, "start web interface on given port (0 = disabled, default 3000 if flag present without value)")
+	enableVoice := flag.Bool("voice", false, "enable inner voice goroutine (debug: Leo talks to himself every 10min)")
 	flag.Parse()
 
 	// --web without value defaults to 3000
@@ -228,6 +229,11 @@ func main() {
 
 	// Start inner world
 	leo.StartInnerWorld()
+
+	// Start inner voice if requested (debug only)
+	if *enableVoice {
+		leo.StartInnerVoice()
+	}
 
 	// Start web interface if requested
 	if *webPort > 0 {

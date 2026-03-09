@@ -539,7 +539,6 @@ func (l *Leo) startAutosave() {
 func (l *Leo) StartInnerWorld() {
 	// Timer-driven
 	go l.startDreamDialog()
-	go l.startInnerVoice()
 	go l.startAutosave()
 	go l.startThemeFlow()
 
@@ -548,6 +547,13 @@ func (l *Leo) StartInnerWorld() {
 	go l.startOverthinking()
 
 	fmt.Println("[leo.go] inner world started:")
-	fmt.Println("  timer:  dream(7m) voice(10m) autosave(5m) themeflow(3m)")
+	fmt.Println("  timer:  dream(7m) autosave(5m) themeflow(3m)")
 	fmt.Println("  event:  trauma overthinking")
+}
+
+// StartInnerVoice launches the inner voice goroutine separately (debug only).
+// Not started by default — use for development and introspection.
+func (l *Leo) StartInnerVoice() {
+	go l.startInnerVoice()
+	fmt.Println("[leo.go] inner voice started (debug): voice(10m)")
 }
