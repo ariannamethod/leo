@@ -9,10 +9,9 @@
 
 # leo 2.0 — language emergent organism | the dario mechanism
 
-> p(x|Φ) = softmax((α·H + β·F + γ·A) / τ)
-
 > language is a field. dedicated to Leo.
-
+> p(x|Φ) = softmax((α·H + β·F + γ·A) / τ)
+  
 ---
 
 **Meet the new Leo.** Same soul. New body. Written in C and Go. 2184 lines. Zero pretrained weights. Zero Python. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
