@@ -1691,9 +1691,16 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
     free(retention_bias);
     free(voice_bias);
 
-    /* post-processing: capitalize first letter */
+    /* post-processing: capitalize first letter, add period at end */
     if (pos > 0 && out[0] >= 'a' && out[0] <= 'z')
         out[0] = out[0] - 'a' + 'A';
+    if (pos > 0 && pos + 1 < max_len) {
+        char last = out[pos - 1];
+        if (last != '.' && last != '!' && last != '?') {
+            out[pos++] = '.';
+            out[pos] = '\0';
+        }
+    }
 
     /* periodic: memory sea decay */
     if (leo->step % 50 == 0) sea_decay(&leo->sea, 0.01f);

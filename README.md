@@ -302,6 +302,15 @@ cc leo.c -O2 -lm -lsqlite3 -lpthread -o leo
 ./leo --export leo.gguf        # export GGUF spore
 ```
 
+**With Makefile (recommended):**
+
+```bash
+make                           # build with D.N.A. (default)
+make neoleo                    # single-file organism (18,903 lines)
+make inner                     # Go inner world + CGO
+make test                      # run tests
+```
+
 **With inner world (Go + CGO):**
 
 ```bash
@@ -315,6 +324,13 @@ cd ..
 
 ```bash
 cc leo.c -O2 -lm -lsqlite3 -lpthread -DLEO_HAS_DNA -o leo
+```
+
+**Web interface (Apple-style iMessage chat):**
+
+```bash
+cd inner && go build -o ../leo_inner . && cd ..
+./leo_inner --web              # starts HTTP on http://localhost:3000
 ```
 
 **REPL commands:**
