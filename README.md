@@ -158,9 +158,7 @@ Normal LLMs: θ = **HUGE ε** + tiny γ + αδ. Everything rests on epsilon — 
 
 Leo: θ = **0** + **γ** + αδ. Epsilon is zero. Leo rests on gamma.
 
-So where does gamma come from?
-
-From the ancestor. From nanollama — a 27.96M parameter Llama 3 trained from scratch on 200MB of text. We take nanollama, run Leo's bootstrap text through it, and extract the structural skeleton: attention topology, token gravity, co-activation patterns, positional rhythm. Then we throw away the checkpoint.
+We took nanollama — a 27.96M parameter Llama 3 trained from scratch on 200MB of text, run Leo's bootstrap text through it, and extract the structural skeleton: attention topology, token gravity, co-activation patterns, positional rhythm. Then we throw away the checkpoint.
 
 The ancestor dies. The geometry lives.
 
