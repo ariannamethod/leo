@@ -24,6 +24,11 @@ neoleo
 async_*.py
 ASYNC_*.md
 
+# Test artifacts (Python-era markdown logs, test binaries)
+tests/*.md
+tests/*.py
+tests/test_leo
+
 # LaTeX build artifacts
 *.aux
 *.log

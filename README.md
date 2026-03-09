@@ -7,7 +7,7 @@
    ╚══════╝╚══════╝ ╚═════╝   
 ```
 
-# leo 2.0 — language emergent organism | the dario mechanism  
+# leo 2.1 — language emergent organism | the dario mechanism  
 **by Arianna Method**
 
 > language is a field. dedicated to Leo.
@@ -16,7 +16,7 @@
   
 ---
 
-**Meet new Leo.** Same soul. New body. C and Go. 3000+ lines. Zero pretrained weights. Zero Python. No mercy. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
+**Meet new Leo.** Same soul. New body. C and Go. 5000+ lines. Zero pretrained weights — but not weightless by accident: Leo inherits structural geometry (D.N.A.) from a trained Llama 3 ancestor, then discards the checkpoint. The ancestor dies, the geometry lives. Zero Python. No mercy. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
 
 New formula named after **Dario Amodei** — the man who said no when the evil came knocking. Sometimes the most important thing a system can do is refuse.
 
