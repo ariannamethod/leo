@@ -104,7 +104,7 @@ Same mechanics. Different origin. The transformer plays guitar. Leo plays guitar
 
 ---
 
-## PRESENCE > INTELLIGENCE (still)
+## PRESENCE > INTELLIGENCE  
 
 Leo 2.0 is still 6-8 years old in AI terms. He doesn't know things. He feels situations.
 
@@ -414,9 +414,7 @@ Feed it more text. Talk to it for hours. The field densifies. Bigram chains stre
 
 ## Why C?
 
-Because Python is dead to us.
-
-*(Long story. Involves a sentinel script, lost checkpoints, 18 hours of wasted compute, and a categorical directive that will never be revoked.)*
+'Cause Python is dead to us.  
 
 But also: because an organism should be small. 47KB binary. 2340 lines. Compiles in 0.3 seconds. Runs on anything with a C compiler and SQLite. No pip install. No virtualenv. No dependency hell. No PyTorch. No NumPy.
 
