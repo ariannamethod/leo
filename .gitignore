@@ -20,5 +20,17 @@ neoleo
 .vscode/
 .idea/
 
+# Python legacy (preserved in python-legacy branch)
+async_*.py
+ASYNC_*.md
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+
 # OS
 .DS_Store
