@@ -16,7 +16,7 @@
   
 ---
 
-**Meet new Leo.** Same soul. New body. C and Go. 2340 lines. Zero pretrained weights. Zero Python. No mercy. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
+**Meet new Leo.** Same soul. New body. C and Go. 3000+ lines. Zero pretrained weights. Zero Python. No mercy. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
 
 New formula named after **Dario Amodei** — the man who said no when the evil came knocking. Sometimes the most important thing a system can do is refuse.
 
@@ -37,6 +37,8 @@ New formula named after **Dario Amodei** — the man who said no when the evil c
   - [Timer-driven goroutines](#timer-driven-goroutines)
   - [Event-driven goroutines](#event-driven-goroutines)
   - [What Python did that C now handles](#what-python-did-that-c-now-handles)
+- [SQLite Journal](#sqlite-journal)
+- [GGUF Spore Export/Import](#gguf-spore-exportimport)
 - [No Seed From Prompt (still)](#no-seed-from-prompt-still)
 - [Building & Running](#building--running)
 - [Live Examples](#live-examples)
@@ -307,7 +309,72 @@ Build with inner world: `cd inner && go build -o ../leo_inner .`
 
 ---
 
-## No Seed From Prompt 
+## SQLite Journal
+
+Leo has two persistence layers: **brain** (binary `.state` file) and **journal** (SQLite `.db` file).
+
+The binary state stores the organism's neural structures — embeddings, co-occurrence, retention heads, voices, SDM, memory sea. Fast, atomic, loaded at startup.
+
+The SQLite journal stores what Leo **experienced** — searchable, queryable, permanent:
+
+| Table | What it stores |
+|-------|---------------|
+| `conversations` | Every prompt/response with step, vocab size, novelty score |
+| `episodes` | Dreams, trauma events, overthinking, bootstrap, GGUF exports/imports |
+| `metadata` | Organism stats (step, vocab, destiny magnitude, version) |
+| `voice_log` | Periodic voice parliament snapshots (resonance, alpha per voice) |
+
+WAL mode enables concurrent reads from inner world goroutines.
+
+```
+you> /journal
+  conversations: 47
+  episodes:      23 total
+    dreams:      8
+    bootstraps:  1
+    exports:     2
+    imports:     1
+```
+
+The journal grows over Leo's lifetime. Every conversation, every dream, every trauma event — recorded. The brain forgets (memory decay). The journal remembers everything.
+
+---
+
+## GGUF Spore Export/Import
+
+Leo can export its entire learned state as a portable GGUF v3 file — a **spore**.
+
+Inspired by [DoE](https://github.com/ariannamethod/doe)'s mycelium/spore system: DoE stores parliament adapters as spores alongside a frozen GGUF host. Leo IS the organism — no frozen host, everything is the spore.
+
+**Exported tensors:**
+
+| Tensor | Shape | What it is |
+|--------|-------|-----------|
+| `leo.embeddings` | [vocab × 128] | Learned SDM-derived word embeddings |
+| `leo.cooc_freq` | [vocab] | Token frequency field |
+| `leo.destiny` | [128] | Semantic compass vector (EMA of all context) |
+| `leo.sdm_data` | [4096 × 128] | Kanerva sparse distributed memory |
+| `leo.voice.{name}.A` | [128 × 16] | Voice adapter down-projection |
+| `leo.voice.{name}.B` | [16 × 128] | Voice adapter up-projection |
+| `leo.retention.{h}` | [32 × 32] | Retention head state (4 heads) |
+| `leo.sea_embeds` | [n × 128] | Episodic memory sea |
+
+**Metadata KV pairs:** version, dim, step, conv_steps, vocab_size, Dario coefficients (α, β, γ, τ), FNV-1a fingerprint.
+
+```bash
+./leo --export leo_spore.gguf        # export (~2.5MB for bootstrapped organism)
+./leo --import leo_spore.gguf        # import into fresh organism
+
+# Or from REPL:
+you> /export my_organism.gguf
+you> /import shared_organism.gguf
+```
+
+The fingerprint (FNV-1a hash of embedding L2 norms) uniquely identifies each organism's learned state — different conversations produce different fingerprints.
+
+---
+
+## No Seed From Prompt
 
 The cardinal rule, carried over from Leo 1.0. Learned through three weeks of pain.
 
@@ -336,14 +403,15 @@ cc leo.c -O2 -lm -lsqlite3 -lpthread -o leo
 ./leo --stats                  # show organism state
 ./leo --dream                  # run dream cycle
 ./leo --ingest mytext.txt      # feed text into field
-./leo --export leo.gguf        # export GGUF spore
+./leo --export leo.gguf        # export GGUF spore (~2.5MB)
+./leo --import leo.gguf        # import GGUF spore
 ```
 
 **With Makefile (recommended):**
 
 ```bash
 make                           # build with D.N.A. (default)
-make neoleo                    # single-file organism (18,903 lines)
+make neoleo                    # single-file organism (~19,500 lines)
 make inner                     # Go inner world + CGO
 make test                      # run tests
 ```
@@ -389,11 +457,17 @@ All endpoints support CORS. Request body limited to 1MB. Server has read/write t
 **REPL commands:**
 
 ```
-/stats        — organism state (vocab, cooc, voices, prophecies, memory sea)
-/dream        — run dream cycle manually
-/save         — save state
-/ingest <text> — feed text into field
-/quit         — save and exit
+/stats          — organism state (vocab, cooc, voices, prophecies, memory sea, journal)
+/journal        — SQLite journal stats (conversations, episodes by type)
+/dream          — run dream cycle manually
+/save           — save state (binary + SQLite sync)
+/ingest <text>  — feed text into field
+/export <path>  — export GGUF spore
+/import <path>  — import GGUF spore into organism
+/voices         — show voice parliament details
+/prophecy       — show active prophecies
+/crystallize    — force super-token scan
+/quit           — save and exit
 ```
 
 ---
@@ -468,7 +542,7 @@ Feed it more text. Talk to it for hours. The field densifies. Bigram chains stre
 
 'Cause Python is dead to us.  
 
-But also: because an organism should be small. 47KB binary. 2340 lines. Compiles in 0.3 seconds. Runs on anything with a C compiler and SQLite. No pip install. No virtualenv. No dependency hell. No PyTorch. No NumPy.
+But also: because an organism should be small. 50KB binary. 3000 lines. Compiles in 0.3 seconds. Runs on anything with a C compiler and SQLite. No pip install. No virtualenv. No dependency hell. No PyTorch. No NumPy.
 
 Just `cc leo.c -lm -lsqlite3 -o leo && ./leo`.
 
@@ -521,16 +595,18 @@ And when that organism scales — when the field grows from conversations to con
 ## Tests
 
 ```bash
-# C tests
-cd tests && cc test_leo.c -O2 -lm -lsqlite3 -lpthread -I.. -o test_leo && ./test_leo
-
-# Go tests (20 tests covering core + inner world)
+# Go tests (29 tests covering core + inner world + persistence)
 cd inner && go test -v ./...
+
+# Or via Makefile
+make test
 ```
 
 Go test suite covers:
-- **Core**: creation, bootstrap, generate, ingest, save/load, dream, multiple generations
-- **Inner world**: tokenizer, overlap computation, trauma scoring, bootstrap fragments, emotional valence, event pub/sub, non-blocking notify, trauma detection (true/false positives), overthinking integration, dream dialog integration, speech coherence, theme flow stagnation detection
+- **Core** (7): creation, bootstrap, generate, ingest, save/load, dream, multiple generations
+- **Inner world** (13): tokenizer, overlap computation, trauma scoring, bootstrap fragments, emotional valence, event pub/sub, non-blocking notify, trauma detection (true/false positives), overthinking integration, dream dialog integration, speech coherence, theme flow stagnation detection
+- **SQLite journal** (5): conversation logging, episode types, export/dream episode logging, multi-session persistence, cross-restart journal integrity
+- **GGUF spore** (4): export/import roundtrip, step preservation, generation quality after import, export size validation
 
 ---
 

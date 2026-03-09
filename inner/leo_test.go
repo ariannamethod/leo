@@ -280,3 +280,155 @@ func TestSQLitePersistsAcrossRestart(t *testing.T) {
 		t.Fatalf("expected at least 2 conversations, got %d", count2)
 	}
 }
+
+func TestGGUFRoundtripGenerationQuality(t *testing.T) {
+	dbPath := "/tmp/test_go_gguf_quality.db"
+	ggufPath := "/tmp/test_leo_quality.gguf"
+	cleanupDB(t, dbPath)
+	t.Cleanup(func() { os.Remove(ggufPath) })
+
+	// Train organism with specific content
+	leo := NewLeo(dbPath)
+	leo.Bootstrap()
+	for i := 0; i < 5; i++ {
+		leo.Ingest("resonance is the fundamental mechanism of understanding")
+		leo.Ingest("dreams connect distant memories across time")
+	}
+	leo.Generate("what is resonance")
+	leo.ExportGGUF(ggufPath)
+	leo.Close()
+
+	// Import and verify the organism can still generate coherently
+	dbPath2 := "/tmp/test_go_gguf_quality_import.db"
+	cleanupDB(t, dbPath2)
+	leo2 := NewLeo(dbPath2)
+	defer leo2.Close()
+
+	if !leo2.ImportGGUF(ggufPath) {
+		t.Fatal("import failed")
+	}
+
+	// Generate should produce non-empty response
+	resp := leo2.Generate("resonance")
+	if len(resp) == 0 {
+		t.Fatal("imported organism should generate from trained content")
+	}
+	t.Logf("imported organism response: %q", resp)
+}
+
+func TestSQLiteEpisodeTypes(t *testing.T) {
+	dbPath := "/tmp/test_go_episode_types.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+
+	leo.Bootstrap()
+
+	// Log different episode types
+	leo.LogEpisode("dream", "dreamed of distant stars", "{\"turns\":3}")
+	leo.LogEpisode("dream", "dreamed of the ocean", "{\"turns\":4}")
+	leo.LogEpisode("trauma", "origin gravity pull", "{\"score\":0.5}")
+	leo.LogEpisode("overthink", "ring 0 echo", "{}")
+	leo.LogEpisode("ingest", "fed new text", "{\"lines\":10}")
+
+	// Verify counts per type
+	if n := leo.EpisodeCount("dream"); n != 2 {
+		t.Fatalf("expected 2 dream episodes, got %d", n)
+	}
+	if n := leo.EpisodeCount("trauma"); n != 1 {
+		t.Fatalf("expected 1 trauma episode, got %d", n)
+	}
+	if n := leo.EpisodeCount("overthink"); n != 1 {
+		t.Fatalf("expected 1 overthink episode, got %d", n)
+	}
+	if n := leo.EpisodeCount("ingest"); n != 1 {
+		t.Fatalf("expected 1 ingest episode, got %d", n)
+	}
+
+	// Total should be 5 + 1 (bootstrap)
+	total := leo.EpisodeCount("")
+	if total < 6 {
+		t.Fatalf("expected at least 6 total episodes, got %d", total)
+	}
+}
+
+func TestGGUFExportLogsEpisode(t *testing.T) {
+	dbPath := "/tmp/test_go_gguf_episode.db"
+	ggufPath := "/tmp/test_leo_ep.gguf"
+	cleanupDB(t, dbPath)
+	t.Cleanup(func() { os.Remove(ggufPath) })
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+
+	leo.Bootstrap()
+
+	exportsBefore := leo.EpisodeCount("gguf_export")
+	leo.ExportGGUF(ggufPath)
+	exportsAfter := leo.EpisodeCount("gguf_export")
+
+	if exportsAfter != exportsBefore+1 {
+		t.Fatalf("export should log episode: before=%d after=%d", exportsBefore, exportsAfter)
+	}
+}
+
+func TestDreamLogsEpisode(t *testing.T) {
+	dbPath := "/tmp/test_go_dream_ep.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+
+	leo.Bootstrap()
+	// Need some conversations for sea memories
+	leo.Generate("the ocean is deep and vast")
+	leo.Generate("dreams connect memories across time")
+	leo.Generate("the stars are ancient light")
+
+	dreamsBefore := leo.EpisodeCount("dream")
+	leo.Dream()
+	dreamsAfter := leo.EpisodeCount("dream")
+
+	if dreamsAfter != dreamsBefore+1 {
+		t.Fatalf("dream should log episode: before=%d after=%d", dreamsBefore, dreamsAfter)
+	}
+}
+
+func TestMultiSessionJournal(t *testing.T) {
+	dbPath := "/tmp/test_go_multisession.db"
+	cleanupDB(t, dbPath)
+
+	// Session 1
+	leo := NewLeo(dbPath)
+	leo.Bootstrap()
+	leo.Generate("session one greeting")
+	leo.Generate("session one question")
+	leo.Save()
+	leo.Close()
+
+	// Session 2
+	leo2 := NewLeo(dbPath)
+	leo2.Load()
+	leo2.Generate("session two begins")
+	leo2.Generate("session two continues")
+	leo2.Generate("session two ends")
+	leo2.Save()
+	convs := leo2.ConversationCount()
+	leo2.Close()
+
+	// Should have all 5 conversations across sessions
+	if convs < 5 {
+		t.Fatalf("expected at least 5 conversations across 2 sessions, got %d", convs)
+	}
+
+	// Session 3: verify count persists
+	leo3 := NewLeo(dbPath)
+	leo3.Load()
+	convs3 := leo3.ConversationCount()
+	leo3.Close()
+
+	if convs3 != convs {
+		t.Fatalf("conversation count should persist: session2=%d session3=%d", convs, convs3)
+	}
+}

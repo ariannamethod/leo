@@ -35,6 +35,9 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+/* suppress fread/fwrite warn_unused_result warnings (binary state I/O) */
+#define FREAD(p, s, n, f)  do { if (fread((p),(s),(n),(f)) < (n)) {} } while(0)
+
 /* ========================================================================
  * CONFIGURATION
  * ======================================================================== */
@@ -2041,17 +2044,17 @@ void leo_load(Leo *leo) {
     if (!f) return; /* no saved state — fresh start */
 
     uint32_t magic;
-    fread(&magic, 4, 1, f);
+    FREAD(&magic, 4, 1, f);
     if (magic != LEO_MAGIC) {
         fprintf(stderr, "[leo] invalid state file\n");
         fclose(f);
         return;
     }
 
-    fread(&leo->step, sizeof(int), 1, f);
-    fread(&leo->conv_steps, sizeof(int), 1, f);
+    FREAD(&leo->step, sizeof(int), 1, f);
+    FREAD(&leo->conv_steps, sizeof(int), 1, f);
     int dim;
-    fread(&dim, sizeof(int), 1, f);
+    FREAD(&dim, sizeof(int), 1, f);
     if (dim != leo->dim) {
         fprintf(stderr, "[leo] dimension mismatch: saved %d, current %d\n",
                 dim, leo->dim);
@@ -2061,91 +2064,91 @@ void leo_load(Leo *leo) {
 
     /* tokenizer */
     int n_words;
-    fread(&n_words, sizeof(int), 1, f);
+    FREAD(&n_words, sizeof(int), 1, f);
     for (int i = 0; i < n_words; i++) {
         int len;
-        fread(&len, sizeof(int), 1, f);
+        FREAD(&len, sizeof(int), 1, f);
         char buf[256];
         if (len >= 256) len = 255;
-        fread(buf, 1, len, f);
+        FREAD(buf, 1, len, f);
         buf[len] = '\0';
         tok_add(&leo->tok, buf);
     }
 
     /* embeddings */
-    fread(leo->embed_cache, sizeof(float), n_words * leo->dim, f);
+    FREAD(leo->embed_cache, sizeof(float), n_words * leo->dim, f);
 
     /* co-occurrence */
     int n_entries;
-    fread(&n_entries, sizeof(int), 1, f);
+    FREAD(&n_entries, sizeof(int), 1, f);
     for (int i = 0; i < n_entries; i++) {
         CoocEntry e;
-        fread(&e, sizeof(CoocEntry), 1, f);
+        FREAD(&e, sizeof(CoocEntry), 1, f);
         cooc_update(&leo->cooc, e.src, e.dst, e.count);
     }
-    fread(leo->cooc.freq, sizeof(float), leo->cooc.freq_size, f);
-    fread(&leo->cooc.total_tokens, sizeof(int), 1, f);
+    FREAD(leo->cooc.freq, sizeof(float), leo->cooc.freq_size, f);
+    FREAD(&leo->cooc.total_tokens, sizeof(int), 1, f);
 
     /* bigrams */
     int n_bigrams;
     if (fread(&n_bigrams, sizeof(int), 1, f) == 1) {
         for (int i = 0; i < n_bigrams; i++) {
             int src, dst; float cnt;
-            fread(&src, sizeof(int), 1, f);
-            fread(&dst, sizeof(int), 1, f);
-            fread(&cnt, sizeof(float), 1, f);
+            FREAD(&src, sizeof(int), 1, f);
+            FREAD(&dst, sizeof(int), 1, f);
+            FREAD(&cnt, sizeof(float), 1, f);
             bigram_update(&leo->bigrams, src, dst, cnt);
         }
     }
 
     /* sentence boundaries */
-    fread(leo->sent_start, sizeof(float), n_words, f);
-    fread(leo->sent_end, sizeof(float), n_words, f);
+    FREAD(leo->sent_start, sizeof(float), n_words, f);
+    FREAD(leo->sent_end, sizeof(float), n_words, f);
 
     /* retention states */
     int head_dim = leo->dim / LEO_RET_HEADS;
     for (int h = 0; h < LEO_RET_HEADS; h++)
-        fread(leo->retention.heads[h].state, sizeof(float),
+        FREAD(leo->retention.heads[h].state, sizeof(float),
               head_dim * head_dim, f);
 
     /* voices */
     int n_voices;
-    fread(&n_voices, sizeof(int), 1, f);
+    FREAD(&n_voices, sizeof(int), 1, f);
     for (int v = 0; v < n_voices && v < LEO_MAX_VOICES; v++) {
         Voice *vc = &leo->voices.voices[v];
-        fread(vc->name, 32, 1, f);
-        fread(vc->A, sizeof(float), leo->dim * leo->voices.rank, f);
-        fread(vc->B, sizeof(float), leo->voices.rank * leo->dim, f);
-        fread(&vc->alpha, sizeof(float), 1, f);
-        fread(&vc->resonance, sizeof(float), 1, f);
+        FREAD(vc->name, 32, 1, f);
+        FREAD(vc->A, sizeof(float), leo->dim * leo->voices.rank, f);
+        FREAD(vc->B, sizeof(float), leo->voices.rank * leo->dim, f);
+        FREAD(&vc->alpha, sizeof(float), 1, f);
+        FREAD(&vc->resonance, sizeof(float), 1, f);
     }
     leo->voices.n_voices = n_voices;
 
     /* destiny */
-    fread(leo->destiny.direction, sizeof(float), leo->dim, f);
-    fread(&leo->destiny.magnitude, sizeof(float), 1, f);
+    FREAD(leo->destiny.direction, sizeof(float), leo->dim, f);
+    FREAD(&leo->destiny.magnitude, sizeof(float), 1, f);
 
     /* context */
-    fread(leo->context_embed, sizeof(float), leo->dim, f);
-    fread(&leo->context_len, sizeof(int), 1, f);
+    FREAD(leo->context_embed, sizeof(float), leo->dim, f);
+    FREAD(&leo->context_len, sizeof(int), 1, f);
     if (leo->context_len > LEO_BOOTSTRAP_WINDOW)
         leo->context_len = LEO_BOOTSTRAP_WINDOW;
-    fread(leo->context_ids, sizeof(int), leo->context_len, f);
+    FREAD(leo->context_ids, sizeof(int), leo->context_len, f);
 
     /* SDM data */
-    fread(leo->sdm.data, sizeof(float), leo->sdm.n_slots * leo->dim, f);
-    fread(leo->sdm.counts, sizeof(int), leo->sdm.n_slots, f);
+    FREAD(leo->sdm.data, sizeof(float), leo->sdm.n_slots * leo->dim, f);
+    FREAD(leo->sdm.counts, sizeof(int), leo->sdm.n_slots, f);
 
     /* memory sea */
     int n_memories;
     if (fread(&n_memories, sizeof(int), 1, f) == 1) {
         for (int i = 0; i < n_memories && i < leo->sea.capacity; i++) {
             SeaMemory *m = &leo->sea.memories[i];
-            fread(m->embed, sizeof(float), leo->dim, f);
-            fread(&m->token_id, sizeof(int), 1, f);
-            fread(&m->depth, sizeof(float), 1, f);
-            fread(&m->emotional, sizeof(float), 1, f);
-            fread(&m->timestamp, sizeof(int), 1, f);
+            FREAD(m->embed, sizeof(float), leo->dim, f);
+            FREAD(&m->token_id, sizeof(int), 1, f);
+            FREAD(&m->depth, sizeof(float), 1, f);
+            FREAD(&m->emotional, sizeof(float), 1, f);
+            FREAD(&m->timestamp, sizeof(int), 1, f);
         }
         leo->sea.n_memories = (n_memories < leo->sea.capacity)
                               ? n_memories : leo->sea.capacity;
@@ -2609,8 +2612,8 @@ int leo_import_gguf(Leo *leo, const char *path) {
 
     /* Verify magic + version */
     uint32_t magic, version;
-    fread(&magic, 4, 1, f);
-    fread(&version, 4, 1, f);
+    FREAD(&magic, 4, 1, f);
+    FREAD(&version, 4, 1, f);
     if (magic != 0x46475547 || version != 3) {
         fprintf(stderr, "[leo] not a valid GGUF v3 file\n");
         fclose(f);
@@ -2618,8 +2621,8 @@ int leo_import_gguf(Leo *leo, const char *path) {
     }
 
     uint64_t n_tensors, n_kv;
-    fread(&n_tensors, 8, 1, f);
-    fread(&n_kv, 8, 1, f);
+    FREAD(&n_tensors, 8, 1, f);
+    FREAD(&n_kv, 8, 1, f);
 
     printf("[leo] importing GGUF spore: %s (%llu tensors, %llu KV pairs)\n",
            path, (unsigned long long)n_tensors, (unsigned long long)n_kv);
@@ -2628,35 +2631,35 @@ int leo_import_gguf(Leo *leo, const char *path) {
     int spore_dim = 0, spore_vocab = 0, spore_step = 0;
     for (uint64_t i = 0; i < n_kv; i++) {
         uint64_t klen;
-        fread(&klen, 8, 1, f);
+        FREAD(&klen, 8, 1, f);
         char key[256] = {0};
         if (klen > 255) klen = 255;
-        fread(key, 1, klen, f);
+        FREAD(key, 1, klen, f);
 
         uint32_t vtype;
-        fread(&vtype, 4, 1, f);
+        FREAD(&vtype, 4, 1, f);
 
         if (vtype == GGUF_TYPE_STRING) {
             uint64_t slen;
-            fread(&slen, 8, 1, f);
+            FREAD(&slen, 8, 1, f);
             char val[256] = {0};
             if (slen > 255) slen = 255;
-            fread(val, 1, slen, f);
+            FREAD(val, 1, slen, f);
             printf("[leo]   KV: %s = \"%s\"\n", key, val);
         } else if (vtype == GGUF_TYPE_UINT32) {
             uint32_t val;
-            fread(&val, 4, 1, f);
+            FREAD(&val, 4, 1, f);
             if (strcmp(key, "leo.dim") == 0) spore_dim = (int)val;
             else if (strcmp(key, "leo.vocab_size") == 0) spore_vocab = (int)val;
             else if (strcmp(key, "leo.step") == 0) spore_step = (int)val;
             printf("[leo]   KV: %s = %u\n", key, val);
         } else if (vtype == GGUF_TYPE_FLOAT32) {
             float val;
-            fread(&val, 4, 1, f);
+            FREAD(&val, 4, 1, f);
             printf("[leo]   KV: %s = %.4f\n", key, val);
         } else if (vtype == GGUF_TYPE_INT32) {
             int32_t val;
-            fread(&val, 4, 1, f);
+            FREAD(&val, 4, 1, f);
             printf("[leo]   KV: %s = %d\n", key, val);
         }
     }
@@ -2672,10 +2675,10 @@ int leo_import_gguf(Leo *leo, const char *path) {
     /* Skip tensor descriptors (we know the layout) */
     for (uint64_t i = 0; i < n_tensors; i++) {
         uint64_t nlen;
-        fread(&nlen, 8, 1, f);
+        FREAD(&nlen, 8, 1, f);
         fseek(f, (long)nlen, SEEK_CUR); /* skip name */
         uint32_t nd;
-        fread(&nd, 4, 1, f);
+        FREAD(&nd, 4, 1, f);
         fseek(f, (long)nd * 8, SEEK_CUR); /* skip dims */
         fseek(f, 4, SEEK_CUR); /* skip type */
         fseek(f, 8, SEEK_CUR); /* skip offset */
@@ -2692,18 +2695,18 @@ int leo_import_gguf(Leo *leo, const char *path) {
     if (vocab > LEO_MAX_VOCAB) vocab = LEO_MAX_VOCAB;
 
     /* 1. embeddings [vocab × dim] */
-    fread(leo->embed_cache, sizeof(float), vocab * dim, f);
+    FREAD(leo->embed_cache, sizeof(float), vocab * dim, f);
     printf("[leo]   loaded embeddings: %d × %d\n", vocab, dim);
 
     /* 2. cooc_freq [vocab] */
-    fread(leo->cooc.freq, sizeof(float), vocab, f);
+    FREAD(leo->cooc.freq, sizeof(float), vocab, f);
 
     /* 3. destiny [dim] */
-    fread(leo->destiny.direction, sizeof(float), dim, f);
+    FREAD(leo->destiny.direction, sizeof(float), dim, f);
     leo->destiny.magnitude = vec_norm(leo->destiny.direction, dim);
 
     /* 4. SDM data [slots × dim] */
-    fread(leo->sdm.data, sizeof(float), leo->sdm.n_slots * dim, f);
+    FREAD(leo->sdm.data, sizeof(float), leo->sdm.n_slots * dim, f);
 
     /* 5. voice adapters (skip if count doesn't match — voices are grown, not imposed) */
     /* We read however many voices are in the file based on remaining tensors */
@@ -2718,8 +2721,8 @@ int leo_import_gguf(Leo *leo, const char *path) {
 
     int rank = leo->voices.rank;
     for (int v = 0; v < file_n_voices && v < leo->voices.n_voices; v++) {
-        fread(leo->voices.voices[v].A, sizeof(float), dim * rank, f);
-        fread(leo->voices.voices[v].B, sizeof(float), rank * dim, f);
+        FREAD(leo->voices.voices[v].A, sizeof(float), dim * rank, f);
+        FREAD(leo->voices.voices[v].B, sizeof(float), rank * dim, f);
     }
     /* skip voices we can't use */
     for (int v = leo->voices.n_voices; v < file_n_voices; v++) {
@@ -2729,7 +2732,7 @@ int leo_import_gguf(Leo *leo, const char *path) {
     /* 6. retention states */
     int head_dim = dim / LEO_RET_HEADS;
     for (int h = 0; h < LEO_RET_HEADS; h++)
-        fread(leo->retention.heads[h].state, sizeof(float), head_dim * head_dim, f);
+        FREAD(leo->retention.heads[h].state, sizeof(float), head_dim * head_dim, f);
 
     /* 7. sea embeddings (if present — check if there's data remaining) */
     /* We can detect by trying to read */
@@ -2747,7 +2750,7 @@ int leo_import_gguf(Leo *leo, const char *path) {
         if (file_sea > max_sea) file_sea = max_sea;
 
         for (int i = 0; i < file_sea; i++) {
-            fread(leo->sea.memories[i].embed, sizeof(float), dim, f);
+            FREAD(leo->sea.memories[i].embed, sizeof(float), dim, f);
             leo->sea.memories[i].depth = 0.5f;
             leo->sea.memories[i].emotional = 0.5f;
             leo->sea.memories[i].timestamp = spore_step;
@@ -3006,7 +3009,7 @@ int main(int argc, char **argv) {
 
         /* normal input: ingest + generate */
         char response[4096];
-        int n = leo_generate(&leo, line, response, sizeof(response));
+        leo_generate(&leo, line, response, sizeof(response));
 
         printf("\nLeo: %s\n\n", response);
 
