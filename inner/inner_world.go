@@ -185,6 +185,9 @@ func (l *Leo) startTraumaWatch() {
 
 	var trauma traumaState
 
+	// Per-token scar weights: token → accumulated weight (mirrors Python trauma_tokens table)
+	scarWeights := make(map[string]float64)
+
 	// Decay timer — trauma fades over time (half-life: 24h equiv ~30min in goroutine time)
 	decayTicker := time.NewTicker(5 * time.Minute)
 	defer decayTicker.Stop()
@@ -198,13 +201,30 @@ func (l *Leo) startTraumaWatch() {
 			promptTokens := tokenize(ev.Prompt)
 			replyTokens := tokenize(ev.Response)
 
-			overlapRatio, _ := computeOverlap(promptTokens, replyTokens, bootstrapTokens)
+			overlapRatio, overlapping := computeOverlap(promptTokens, replyTokens, bootstrapTokens)
 			score := computeTraumaScore(overlapRatio, ev.Prompt, ev.Response)
 
 			if score >= 0.3 {
 				// Trauma event — pull toward origin
 				trauma.level = 0.5*score + 0.5*trauma.level
 				trauma.lastEventTS = time.Now()
+
+				// Update per-token scar weights (from Python _update_token_weights)
+				increment := score
+				for tok := range overlapping {
+					scarWeights[tok] += increment
+				}
+
+				// Push trauma level to C organism's Dario equation
+				l.SetTrauma(float32(trauma.level))
+
+				// Push per-token scar weights to C
+				for tok, w := range scarWeights {
+					tid := l.TokenID(tok)
+					if tid >= 0 {
+						l.SetTraumaWeight(tid, float32(w))
+					}
+				}
 
 				// Ingest bootstrap fragment to strengthen origin gravity
 				fragment := randomBootstrapFragment()
@@ -217,14 +237,38 @@ func (l *Leo) startTraumaWatch() {
 					meta := fmt.Sprintf("{\"score\":%.2f,\"level\":%.2f}", score, trauma.level)
 					l.LogEpisode("trauma", ev.Prompt, meta)
 				}
+			} else {
+				// Even below threshold, push current (possibly decayed) level
+				l.SetTrauma(float32(trauma.level))
 			}
 
 		case <-decayTicker.C:
-			// Exponential decay of trauma level
+			// Exponential decay of trauma level (half-life ~30min in goroutine time)
 			if trauma.level > 0.01 {
 				trauma.level *= 0.85 // decay factor
-			} else {
+				l.SetTrauma(float32(trauma.level))
+			} else if trauma.level > 0 {
 				trauma.level = 0.0
+				l.SetTrauma(0)
+			}
+
+			// Decay per-token scar weights (from Python _apply_decay, half-life=24h)
+			for tok, w := range scarWeights {
+				newW := w * 0.85
+				if newW < 1e-4 {
+					delete(scarWeights, tok)
+					// zero out in C
+					tid := l.TokenID(tok)
+					if tid >= 0 {
+						l.SetTraumaWeight(tid, 0)
+					}
+				} else {
+					scarWeights[tok] = newW
+					tid := l.TokenID(tok)
+					if tid >= 0 {
+						l.SetTraumaWeight(tid, float32(newW))
+					}
+				}
 			}
 		}
 	}

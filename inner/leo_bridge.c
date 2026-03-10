@@ -106,3 +106,28 @@ int leo_bridge_conversation_count(void *ptr) {
 int leo_bridge_episode_count(void *ptr, const char *event_type) {
     return leo_db_episode_count((Leo *)ptr, event_type);
 }
+
+/* Set trauma level (0.0–1.0) */
+void leo_bridge_set_trauma(void *ptr, float level) {
+    leo_set_trauma((Leo *)ptr, level);
+}
+
+/* Get trauma level */
+float leo_bridge_get_trauma(void *ptr) {
+    return leo_get_trauma((Leo *)ptr);
+}
+
+/* Set per-token trauma weight */
+void leo_bridge_set_trauma_weight(void *ptr, int token_id, float weight) {
+    leo_set_trauma_weight((Leo *)ptr, token_id, weight);
+}
+
+/* Get per-token trauma weight */
+float leo_bridge_get_trauma_weight(void *ptr, int token_id) {
+    return leo_get_trauma_weight((Leo *)ptr, token_id);
+}
+
+/* Find token ID by word */
+int leo_bridge_token_id(void *ptr, const char *word) {
+    return leo_token_id((Leo *)ptr, word);
+}

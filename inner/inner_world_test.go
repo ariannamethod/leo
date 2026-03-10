@@ -465,6 +465,173 @@ func TestSpeechCoherence(t *testing.T) {
 // VOCABSNAPSHOT / THEMEFLOW UNIT TESTS
 // ========================================================================
 
+// ========================================================================
+// TRAUMA → C BRIDGE TESTS (new: verify trauma reaches dario_compute)
+// ========================================================================
+
+func TestTraumaSetGet(t *testing.T) {
+	dbPath := "/tmp/test_go_trauma_bridge.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Initially zero
+	level := leo.GetTrauma()
+	if level != 0.0 {
+		t.Errorf("initial trauma should be 0.0, got %.2f", level)
+	}
+
+	// Set trauma
+	leo.SetTrauma(0.7)
+	level = leo.GetTrauma()
+	if level < 0.69 || level > 0.71 {
+		t.Errorf("trauma should be ~0.7, got %.4f", level)
+	}
+
+	// Clamped to [0, 1]
+	leo.SetTrauma(5.0)
+	level = leo.GetTrauma()
+	if level > 1.01 {
+		t.Errorf("trauma should be clamped to 1.0, got %.2f", level)
+	}
+
+	leo.SetTrauma(-1.0)
+	level = leo.GetTrauma()
+	if level < -0.01 {
+		t.Errorf("trauma should be clamped to 0.0, got %.2f", level)
+	}
+}
+
+func TestTraumaWeightSetGet(t *testing.T) {
+	dbPath := "/tmp/test_go_trauma_weights.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Find a real token ID
+	tid := leo.TokenID("leo")
+	if tid < 0 {
+		t.Skip("token 'leo' not in vocab after bootstrap")
+	}
+
+	// Initially zero
+	w := leo.GetTraumaWeight(tid)
+	if w != 0.0 {
+		t.Errorf("initial trauma weight should be 0.0, got %.2f", w)
+	}
+
+	// Set weight
+	leo.SetTraumaWeight(tid, 1.5)
+	w = leo.GetTraumaWeight(tid)
+	if w < 1.49 || w > 1.51 {
+		t.Errorf("trauma weight should be ~1.5, got %.4f", w)
+	}
+
+	// Unknown token returns -1
+	tid2 := leo.TokenID("xyzzynonexistent")
+	if tid2 != -1 {
+		t.Errorf("unknown token should return -1, got %d", tid2)
+	}
+}
+
+func TestTraumaModulatesGeneration(t *testing.T) {
+	// Verify that setting trauma level changes generation behavior.
+	// We can't easily test the exact output, but we CAN verify:
+	// 1. No crash with high trauma
+	// 2. Generation still works
+	// 3. With trauma weights set, generation still produces output
+	dbPath := "/tmp/test_go_trauma_gen.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Generate baseline response
+	resp1 := leo.Generate("who are you")
+	if len(resp1) == 0 {
+		t.Fatal("baseline generation should not be empty")
+	}
+
+	// Set high trauma + scar weights on bootstrap tokens
+	leo.SetTrauma(0.9)
+
+	// Set weights on known bootstrap tokens
+	for _, word := range []string{"leo", "organism", "resonance", "field", "seed"} {
+		tid := leo.TokenID(word)
+		if tid >= 0 {
+			leo.SetTraumaWeight(tid, 2.0)
+		}
+	}
+
+	// Generate under trauma — should still work, no crash
+	resp2 := leo.Generate("who are you")
+	if len(resp2) == 0 {
+		t.Fatal("generation under high trauma should not be empty")
+	}
+
+	t.Logf("baseline: %q", resp1)
+	t.Logf("trauma:   %q", resp2)
+}
+
+func TestTraumaFullPipeline(t *testing.T) {
+	// Full pipeline: conversation → overlap → score → SetTrauma → SetTraumaWeight → Generate
+	dbPath := "/tmp/test_go_trauma_pipeline.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	bootstrapTokens := tokenize(bootstrapText)
+
+	// Simulate a conversation that touches bootstrap themes
+	prompt := "Leo is a language organism that resonates with presence"
+	response := leo.Generate(prompt)
+
+	// Run the trauma detection pipeline (what startTraumaWatch does)
+	promptTokens := tokenize(prompt)
+	replyTokens := tokenize(response)
+
+	overlapRatio, overlapping := computeOverlap(promptTokens, replyTokens, bootstrapTokens)
+	score := computeTraumaScore(overlapRatio, prompt, response)
+
+	t.Logf("overlap=%.2f score=%.2f overlapping=%v", overlapRatio, score, overlapping)
+
+	if score >= 0.3 {
+		// Trauma event — set level
+		traumaLevel := 0.5*score + 0.5*0.0 // first event, no prior level
+		leo.SetTrauma(float32(traumaLevel))
+
+		// Set per-token weights
+		for tok := range overlapping {
+			tid := leo.TokenID(tok)
+			if tid >= 0 {
+				leo.SetTraumaWeight(tid, float32(score))
+			}
+		}
+
+		// Verify level was set
+		got := leo.GetTrauma()
+		if got < 0.1 {
+			t.Errorf("trauma level should be set after event, got %.2f", got)
+		}
+
+		// Generate under trauma
+		resp := leo.Generate("tell me about yourself")
+		if len(resp) == 0 {
+			t.Fatal("generation under trauma should produce output")
+		}
+		t.Logf("trauma response: %q", resp)
+	} else {
+		t.Log("no trauma triggered (score < 0.3) — test passes vacuously")
+	}
+}
+
 func TestThemeFlowStagnation(t *testing.T) {
 	// Test the stagnation detection logic without goroutines
 	type snap struct {

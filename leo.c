@@ -1044,6 +1044,11 @@ typedef struct {
     float           alpha, beta, gamma_d;
     float           tau_base;
 
+    /* trauma state (set from Go via bridge) */
+    float           trauma_level;       /* 0.0–1.0, current trauma intensity */
+    float          *trauma_weights;     /* [MAX_VOCAB] per-token trauma weight (scars) */
+    int             trauma_weights_n;   /* how many slots allocated */
+
     /* database */
     sqlite3        *db;
     char            db_path[512];
@@ -1112,6 +1117,11 @@ void leo_init(Leo *leo, const char *db_path) {
     leo->context_ids = calloc(LEO_BOOTSTRAP_WINDOW, sizeof(int));
     leo->context_len = 0;
 
+    /* trauma state */
+    leo->trauma_level = 0.0f;
+    leo->trauma_weights = calloc(LEO_MAX_VOCAB, sizeof(float));
+    leo->trauma_weights_n = LEO_MAX_VOCAB;
+
     srand((unsigned)time(NULL));
 
     /* open SQLite journal */
@@ -1132,7 +1142,44 @@ void leo_free(Leo *leo) {
     free(leo->sent_end);
     free(leo->context_embed);
     free(leo->context_ids);
+    free(leo->trauma_weights);
     if (leo->db) sqlite3_close(leo->db);
+}
+
+/* ========================================================================
+ * TRAUMA API — called from Go via bridge
+ * ======================================================================== */
+
+/* Set trauma level (0.0–1.0). Called from Go's traumaWatch goroutine. */
+void leo_set_trauma(Leo *leo, float level) {
+    leo->trauma_level = clampf(level, 0.0f, 1.0f);
+}
+
+/* Get current trauma level */
+float leo_get_trauma(Leo *leo) {
+    return leo->trauma_level;
+}
+
+/* Set per-token trauma weight (scar). Called for overlapping bootstrap tokens. */
+void leo_set_trauma_weight(Leo *leo, int token_id, float weight) {
+    if (token_id >= 0 && token_id < leo->trauma_weights_n)
+        leo->trauma_weights[token_id] = weight;
+}
+
+/* Get per-token trauma weight */
+float leo_get_trauma_weight(Leo *leo, int token_id) {
+    if (token_id >= 0 && token_id < leo->trauma_weights_n)
+        return leo->trauma_weights[token_id];
+    return 0.0f;
+}
+
+/* Find token ID by word string (for Go to resolve token names → IDs) */
+int leo_token_id(Leo *leo, const char *word) {
+    for (int i = 0; i < leo->tok.n_words; i++) {
+        if (leo->tok.words[i] && strcmp(leo->tok.words[i], word) == 0)
+            return i;
+    }
+    return -1;
 }
 
 /* ========================================================================
@@ -1395,16 +1442,43 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
     if (a_max > 1e-6f)
         for (int i = 0; i < vocab_size; i++) A[i] /= a_max;
 
-    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A ---- */
+    /* ---- T: Trauma gravity (pull toward origin tokens) ---- */
+    /*
+     * When trauma_level > 0.3, wounded tokens get a boost proportional
+     * to their scar weight. This is the gravitational pull toward the
+     * bootstrap — the origin. Trauma doesn't suppress other signals,
+     * it adds a new attractor that grows with pain.
+     *
+     * From Python trauma.py: wounded expert routing.
+     * High trauma → speech gravitates toward origin themes.
+     */
+    float trauma_boost = 0.0f;
+    if (leo->trauma_level > 0.3f && leo->trauma_weights) {
+        trauma_boost = leo->trauma_level * 3.0f; /* scale: 0.3→0.9, 1.0→3.0 */
+    }
+
+    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + T ---- */
     /* B (bigram chain) is DOMINANT — this is what makes speech coherent.
      * H (field) adds semantic context.
      * F (prophecy) adds intentionality.
-     * A (destiny) adds direction. */
+     * A (destiny) adds direction.
+     * T (trauma) pulls toward origin when wounded. */
+    float gamma_eff = leo->gamma_d;
+    if (leo->trauma_level > 0.3f) {
+        /* wounded expert: boost destiny (origin pull) */
+        gamma_eff += leo->trauma_level * 2.0f;
+    }
+
     for (int i = 0; i < vocab_size; i++) {
+        float t_weight = 0.0f;
+        if (trauma_boost > 0.0f && i < leo->trauma_weights_n)
+            t_weight = trauma_boost * leo->trauma_weights[i];
+
         logits[i] = bigram_coeff * B[i]   /* sequential coherence */
                   + leo->alpha * H[i]      /* semantic field */
                   + leo->beta * F[i]        /* prophecy */
-                  + leo->gamma_d * A[i];    /* destiny */
+                  + gamma_eff * A[i]        /* destiny (boosted under trauma) */
+                  + t_weight;               /* trauma scar gravity */
     }
 
     free(H);
@@ -1568,6 +1642,12 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         /* adaptive temperature: lower for large vocab */
         float vocab_factor = clampf(500.0f / (float)vocab_size, 0.3f, 1.0f);
         float tau = leo->tau_base * 0.8f * vocab_factor;
+
+        /* wounded expert: higher temperature when traumatized
+         * (less certain speech, more exploratory — like Python's temp=0.9) */
+        if (leo->trauma_level > 0.3f) {
+            tau *= 1.0f + 0.3f * leo->trauma_level; /* up to +30% warmer */
+        }
 
         /* 3. Sample */
         softmax(logits, vocab_size, tau);

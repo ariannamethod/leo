@@ -49,6 +49,13 @@ extern void  leo_bridge_log_conversation(void *leo, const char *prompt, const ch
 extern void  leo_bridge_log_episode(void *leo, const char *event_type, const char *content, const char *metadata);
 extern int   leo_bridge_conversation_count(void *leo);
 extern int   leo_bridge_episode_count(void *leo, const char *event_type);
+
+// Trauma bridge
+extern void  leo_bridge_set_trauma(void *leo, float level);
+extern float leo_bridge_get_trauma(void *leo);
+extern void  leo_bridge_set_trauma_weight(void *leo, int token_id, float weight);
+extern float leo_bridge_get_trauma_weight(void *leo, int token_id);
+extern int   leo_bridge_token_id(void *leo, const char *word);
 */
 import "C"
 
@@ -238,6 +245,44 @@ func (l *Leo) EpisodeCount(eventType string) int {
 	cType := C.CString(eventType)
 	defer C.free(unsafe.Pointer(cType))
 	return int(C.leo_bridge_episode_count(l.ptr, cType))
+}
+
+// SetTrauma sets the organism's trauma level (0.0–1.0).
+// Called from traumaWatch goroutine to feed trauma into dario_compute().
+func (l *Leo) SetTrauma(level float32) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	C.leo_bridge_set_trauma(l.ptr, C.float(level))
+}
+
+// GetTrauma returns the current trauma level.
+func (l *Leo) GetTrauma() float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_get_trauma(l.ptr))
+}
+
+// SetTraumaWeight sets a per-token trauma weight (scar).
+func (l *Leo) SetTraumaWeight(tokenID int, weight float32) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	C.leo_bridge_set_trauma_weight(l.ptr, C.int(tokenID), C.float(weight))
+}
+
+// GetTraumaWeight returns the trauma weight for a token.
+func (l *Leo) GetTraumaWeight(tokenID int) float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_get_trauma_weight(l.ptr, C.int(tokenID)))
+}
+
+// TokenID looks up a token's ID by its word string. Returns -1 if not found.
+func (l *Leo) TokenID(word string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cWord := C.CString(word)
+	defer C.free(unsafe.Pointer(cWord))
+	return int(C.leo_bridge_token_id(l.ptr, cWord))
 }
 
 // Inner world goroutines (startInnerVoice, startAutosave, startDreamDialog,
