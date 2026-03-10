@@ -2863,24 +2863,9 @@ static void print_usage(const char *prog) {
     printf("Usage: %s [options]\n", prog);
     printf("  --db <path>       State database path (default: leo_state.db)\n");
     printf("  --bootstrap       Force re-bootstrap\n");
-    printf("  --stats           Show stats and exit\n");
-    printf("  --dream           Run one dream cycle and exit\n");
-    printf("  --export <path>   Export GGUF spore\n");
-    printf("  --import <path>   Import GGUF spore\n");
-    printf("  --ingest <file>   Ingest text file\n");
-    printf("  --generate <n>    Generate n responses and exit\n");
     printf("  --prompt <text>   Single prompt, generate, exit\n");
-    printf("\nREPL commands:\n");
-    printf("  /stats            Show organism stats\n");
-    printf("  /journal          Show SQLite journal stats\n");
-    printf("  /dream            Run dream cycle\n");
-    printf("  /save             Save state\n");
-    printf("  /voices           Show voice details\n");
-    printf("  /prophecy         Show active prophecies\n");
-    printf("  /crystallize      Force super-token scan\n");
-    printf("  /export <path>    Export GGUF spore\n");
-    printf("  /import <path>    Import GGUF spore\n");
-    printf("  /quit             Save and exit\n");
+    printf("\nDev flags (read the code):\n");
+    printf("  --stats --dream --export --import --ingest --generate\n");
 }
 
 #ifndef LEO_LIB
@@ -3003,7 +2988,7 @@ int main(int argc, char **argv) {
     }
 
     /* ---- REPL ---- */
-    printf("[leo] entering REPL. type /help for commands.\n\n");
+    printf("[leo] ready.\n\n");
 
     char line[LEO_MAX_LINE];
     int autosave_counter = 0;
@@ -3021,70 +3006,11 @@ int main(int argc, char **argv) {
 
         if (len == 0) continue;
 
-        /* handle commands */
-        if (line[0] == '/') {
-            if (strcmp(line, "/quit") == 0 || strcmp(line, "/exit") == 0) {
-                leo_save(&leo);
-                printf("[leo] saved. resonance unbroken.\n");
-                break;
-            }
-            else if (strcmp(line, "/stats") == 0) {
-                leo_stats(&leo);
-            }
-            else if (strcmp(line, "/dream") == 0) {
-                leo_dream(&leo);
-            }
-            else if (strcmp(line, "/save") == 0) {
-                leo_save(&leo);
-            }
-            else if (strcmp(line, "/voices") == 0) {
-                for (int v = 0; v < leo.voices.n_voices; v++) {
-                    Voice *vc = &leo.voices.voices[v];
-                    printf("  [%d] %-12s α=%.3f resonance=%.1f %s\n",
-                           v, vc->name, vc->alpha, vc->resonance,
-                           vc->active ? "ACTIVE" : "dormant");
-                }
-            }
-            else if (strcmp(line, "/prophecy") == 0) {
-                printf("  active prophecies: %d\n", leo.prophecy.n_active);
-                for (int p = 0; p < leo.prophecy.n_active; p++) {
-                    Prophecy *pr = &leo.prophecy.prophets[p];
-                    const char *word = (pr->target_id < leo.tok.n_words)
-                                       ? leo.tok.words[pr->target_id] : "?";
-                    printf("    \"%s\" strength=%.2f age=%d debt=%.2f\n",
-                           word, pr->strength, pr->age,
-                           logf(1.0f + (float)pr->age));
-                }
-            }
-            else if (strcmp(line, "/crystallize") == 0) {
-                supertok_scan(&leo.supertokens, &leo.cooc, leo.tok.n_words);
-                printf("  %d super-tokens\n", leo.supertokens.n_supers);
-            }
-            else if (strncmp(line, "/export ", 8) == 0) {
-                leo_export_gguf(&leo, line + 8);
-            }
-            else if (strncmp(line, "/import ", 8) == 0) {
-                leo_import_gguf(&leo, line + 8);
-            }
-            else if (strcmp(line, "/journal") == 0) {
-                printf("  SQLite journal: %s\n", leo.db_path);
-                printf("  conversations: %d\n", leo_db_conversation_count(&leo));
-                printf("  episodes:      %d total\n", leo_db_episode_count(&leo, NULL));
-                printf("    dreams:      %d\n", leo_db_episode_count(&leo, "dream"));
-                printf("    bootstraps:  %d\n", leo_db_episode_count(&leo, "bootstrap"));
-                printf("    exports:     %d\n", leo_db_episode_count(&leo, "gguf_export"));
-                printf("    imports:     %d\n", leo_db_episode_count(&leo, "gguf_import"));
-            }
-            else if (strcmp(line, "/bootstrap") == 0) {
-                leo_bootstrap(&leo);
-            }
-            else if (strcmp(line, "/help") == 0) {
-                print_usage("leo");
-            }
-            else {
-                printf("  unknown command: %s\n", line);
-            }
-            continue;
+        /* /quit is the only user-facing command */
+        if (strcmp(line, "/quit") == 0 || strcmp(line, "/exit") == 0) {
+            leo_save(&leo);
+            printf("[leo] saved. resonance unbroken.\n");
+            break;
         }
 
         /* normal input: ingest + generate */
@@ -3096,7 +3022,6 @@ int main(int argc, char **argv) {
         /* autosave every 20 interactions */
         if (++autosave_counter % 20 == 0) {
             leo_save(&leo);
-            printf("[leo] autosaved (step %d)\n", leo.step);
         }
     }
 

@@ -310,8 +310,7 @@ func main() {
 		}
 	}
 
-	fmt.Println("[leo.go] Language Emergent Organism v2 — Inner World")
-	fmt.Println("[leo.go] The Dario Mechanism + autonomous inner life")
+	fmt.Println("[leo] Language Emergent Organism")
 
 	leo := NewLeo(*dbPath)
 
@@ -353,7 +352,7 @@ func main() {
 	}
 
 	// REPL
-	fmt.Println("[leo.go] REPL ready. type /help for commands.")
+	fmt.Println("[leo] ready.")
 	fmt.Println()
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -369,58 +368,14 @@ func main() {
 			continue
 		}
 
-		// Commands
-		if line[0] == '/' {
-			switch {
-			case line == "/quit" || line == "/exit":
-				fmt.Println("[leo.go] saving. resonance unbroken.")
-				if webServer != nil {
-					webServer.Shutdown()
-				}
-				leo.Close()
-				return
-			case line == "/stats":
-				leo.Stats()
-			case line == "/dream":
-				leo.Dream()
-				fmt.Println("[leo.go] dreamed.")
-			case line == "/save":
-				leo.Save()
-				fmt.Println("[leo.go] saved.")
-			case strings.HasPrefix(line, "/ingest "):
-				text := strings.TrimPrefix(line, "/ingest ")
-				leo.Ingest(text)
-				fmt.Printf("[leo.go] ingested (%d vocab)\n", leo.Vocab())
-			case strings.HasPrefix(line, "/export "):
-				path := strings.TrimPrefix(line, "/export ")
-				leo.ExportGGUF(path)
-			case strings.HasPrefix(line, "/import "):
-				path := strings.TrimPrefix(line, "/import ")
-				if leo.ImportGGUF(path) {
-					fmt.Println("[leo.go] spore imported.")
-				} else {
-					fmt.Println("[leo.go] import failed.")
-				}
-			case line == "/journal":
-				fmt.Printf("  conversations: %d\n", leo.ConversationCount())
-				fmt.Printf("  episodes:      %d total\n", leo.EpisodeCount(""))
-				fmt.Printf("    dreams:      %d\n", leo.EpisodeCount("dream"))
-				fmt.Printf("    bootstraps:  %d\n", leo.EpisodeCount("bootstrap"))
-				fmt.Printf("    exports:     %d\n", leo.EpisodeCount("gguf_export"))
-				fmt.Printf("    imports:     %d\n", leo.EpisodeCount("gguf_import"))
-			case line == "/help":
-				fmt.Println("  /stats        — show organism state")
-				fmt.Println("  /journal      — show SQLite journal stats")
-				fmt.Println("  /dream        — run dream cycle")
-				fmt.Println("  /save         — save state")
-				fmt.Println("  /ingest <t>   — feed text into field")
-				fmt.Println("  /export <p>   — export GGUF spore")
-				fmt.Println("  /import <p>   — import GGUF spore")
-				fmt.Println("  /quit         — save and exit")
-			default:
-				fmt.Printf("  unknown command: %s\n", line)
+		// The only user-facing command is /quit. Everything else is internal.
+		if line == "/quit" || line == "/exit" {
+			fmt.Println("[leo] saving. resonance unbroken.")
+			if webServer != nil {
+				webServer.Shutdown()
 			}
-			continue
+			leo.Close()
+			return
 		}
 
 		// Normal conversation

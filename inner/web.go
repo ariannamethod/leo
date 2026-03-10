@@ -19,13 +19,6 @@ type chatRequest struct {
 
 type chatResponse struct {
 	Response string `json:"response"`
-	Step     int    `json:"step"`
-	Vocab    int    `json:"vocab"`
-}
-
-type statsResponse struct {
-	Step  int `json:"step"`
-	Vocab int `json:"vocab"`
 }
 
 // WebServer wraps http.Server for graceful shutdown
@@ -84,79 +77,13 @@ func StartWeb(leo *Leo, port int) *WebServer {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(chatResponse{
 			Response: response,
-			Step:     leo.Step(),
-			Vocab:    leo.Vocab(),
 		})
 	}))
 
-	// GET /api/stats — organism status
-	mux.HandleFunc("/api/stats", cors(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(statsResponse{
-			Step:  leo.Step(),
-			Vocab: leo.Vocab(),
-		})
-	}))
-
-	// POST /api/dream — trigger dream cycle
-	mux.HandleFunc("/api/dream", cors(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			http.Error(w, "POST only", 405)
-			return
-		}
-		leo.Dream()
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "dreamed"})
-	}))
-
-	// POST /api/ingest — feed text into field
-	mux.HandleFunc("/api/ingest", cors(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			http.Error(w, "POST only", 405)
-			return
-		}
-
-		var req struct {
-			Text string `json:"text"`
-		}
-		limited := io.LimitReader(r.Body, maxRequestBody)
-		if err := json.NewDecoder(limited).Decode(&req); err != nil {
-			http.Error(w, "bad json", 400)
-			return
-		}
-
-		if len(req.Text) == 0 {
-			http.Error(w, "empty text", 400)
-			return
-		}
-
-		leo.Ingest(req.Text)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "ingested",
-			"vocab":  leo.Vocab(),
-		})
-	}))
-
-	// POST /api/save — persist state
-	mux.HandleFunc("/api/save", cors(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			http.Error(w, "POST only", 405)
-			return
-		}
-		leo.Save()
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
-	}))
-
-	// GET /api/health — liveness check
+	// GET /api/health — liveness check (no internal metrics exposed)
 	mux.HandleFunc("/api/health", cors(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"alive": true,
-			"step":  leo.Step(),
-			"vocab": leo.Vocab(),
-		})
+		json.NewEncoder(w).Encode(map[string]bool{"alive": true})
 	}))
 
 	// GET / — serve leo.html
