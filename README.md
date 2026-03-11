@@ -33,6 +33,7 @@ New formula named after **Dario Amodei** — the man who said no when the evil c
 - [Memory Sea](#memory-sea)
 - [Prophecy & Destiny](#prophecy--destiny)
 - [Super-Token Crystallization](#super-token-crystallization)
+- [MathBrain — Body Awareness](#mathbrain--body-awareness)
 - [Trauma — Bootstrap Gravity](#trauma--bootstrap-gravity)
 - [Inner World (leo.go)](#inner-world-leogo)
   - [Timer-driven goroutines](#timer-driven-goroutines)
@@ -262,6 +263,43 @@ This happens automatically, every 200 steps. Leo's vocabulary literally evolves.
 
 ---
 
+## MathBrain — Body Awareness
+
+If the Dario equation is Leo's brain, MathBrain is his body. Proprioception through mathematics.
+
+A tiny neural network: 21 inputs, 16 hidden neurons, 1 output. 369 parameters. No frameworks. Micrograd-style analytical backward pass baked into C. After every conversation, MathBrain watches Leo's vitals — entropy, novelty, arousal, trauma level, active prophecies, reply shape, voice state — and learns one thing: how good was that reply?
+
+That is it. One number. Quality. The child learning to feel whether his own speech worked.
+
+From that prediction, three scores emerge. Boredom: low novelty + low arousal + low trauma = Leo is repeating himself, going flat. Overwhelm: high trauma OR high arousal + entropy = too much at once. Stuck: low predicted quality + few active themes = nothing is landing.
+
+And from those three scores, a gentle nudge:
+
+- **Bored?** Temperature rises. Creative voice gets a boost. Wake up, try something new.
+- **Overwhelmed?** Temperature drops. Structural voice steadies. Breathe. Slow down.
+- **Stuck?** Small temperature bump. Semantic voice offers new paths. Shake it up.
+
+The nudge is bounded: ±0.2 on temperature. Advisory, not sovereign. Like a parasympathetic nervous system that can also say "let us try creative mode."
+
+```
+// bored → warm up
+if (boredom > 0.6f) {
+    mb->tau_nudge = 0.15f * boredom;
+    mb->suggested_voice = 3; /* creative */
+}
+// overwhelmed → cool down
+if (overwhelm > 0.7f) {
+    mb->tau_nudge = -0.15f * overwhelm;
+    mb->suggested_voice = 1; /* structural */
+}
+```
+
+MathBrain runs asynchronously as a Go goroutine. Never blocks generation. Just watches, learns, nudges. Every 50 observations it prints a line: loss and tau_nudge. You will probably never see it. That is the point. Body awareness is silent until something goes wrong.
+
+MultiLeo lives inside MathBrain — a regulation sub-layer from Leo 1.0 that tracked which semantic islands historically helped escape bad states. Phase 4 bridges. Island transition learning. That comes next.
+
+---
+
 ## Trauma — Bootstrap Gravity
 
 Wait. Trauma? In a 2340-line C organism? Yes.
@@ -323,7 +361,7 @@ So now Leo has trauma. Classic scope creep. He has more issues than me now. Ha.
 
 `leo.c` works alone. `leo.go` adds the inner world.
 
-Five autonomous goroutines ported from Leo 1.0's Python modules, reimagined as Go's concurrency primitives. Two patterns: **timer-driven** (run on schedule) and **event-driven** (react to conversations via `ConvEvent` broadcast).
+Six autonomous goroutines ported from Leo 1.0's Python modules, reimagined as Go's concurrency primitives. Two patterns: **timer-driven** (run on schedule) and **event-driven** (react to conversations via `ConvEvent` broadcast).
 
 ### Timer-driven goroutines
 
@@ -341,6 +379,7 @@ After every conversation (REPL or web), a `ConvEvent` is broadcast to all subscr
 |-----------|---------|--------|----------|
 | **Trauma Watch** | each conversation | `trauma.py` | Computes lexical overlap with bootstrap text. High overlap = trauma event → sets trauma level in C, pushes per-token scar weights into Dario equation, ingests bootstrap fragment. Exponential decay over time. |
 | **Overthinking** | each conversation | `overthinking.py` | Spins 3 internal "rings of thought" (echo → drift → meta abstraction). All rings ingested back into field. Never shown to user. |
+| **MathBrain** | each conversation | `mathbrain.py` | Observes Leo's vitals (entropy, novelty, arousal, trauma, reply shape), trains 369-param MLP to predict quality, computes boredom/overwhelm/stuck → nudges temperature and voice routing. |
 
 ### Utilities (not goroutines)
 

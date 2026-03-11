@@ -632,6 +632,126 @@ func TestTraumaFullPipeline(t *testing.T) {
 	}
 }
 
+// ========================================================================
+// MATHBRAIN TESTS — body awareness MLP
+// ========================================================================
+
+func TestMathBrainObserve(t *testing.T) {
+	dbPath := "/tmp/test_go_mathbrain.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Initially zero observations
+	obs := leo.MathBrainObservations()
+	if obs != 0 {
+		t.Errorf("initial observations should be 0, got %d", obs)
+	}
+
+	// Observe a conversation
+	leo.MathBrainObserve("hello Leo", "resonance is the key")
+	obs = leo.MathBrainObservations()
+	if obs != 1 {
+		t.Errorf("after one observe, should be 1, got %d", obs)
+	}
+
+	// Observe more — loss should be finite
+	for i := 0; i < 20; i++ {
+		leo.MathBrainObserve("tell me about dreams", "dreams connect distant memories across time")
+	}
+	obs = leo.MathBrainObservations()
+	if obs != 21 {
+		t.Errorf("after 21 observations, got %d", obs)
+	}
+
+	loss := leo.MathBrainLoss()
+	if loss < 0 || loss > 10 {
+		t.Errorf("loss should be in reasonable range, got %.4f", loss)
+	}
+	t.Logf("after 21 obs: loss=%.4f tau_nudge=%.3f", loss, leo.MathBrainTauNudge())
+}
+
+func TestMathBrainRegulation(t *testing.T) {
+	dbPath := "/tmp/test_go_mathbrain_reg.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Feed many boring conversations (low novelty, low arousal)
+	for i := 0; i < 30; i++ {
+		leo.MathBrainObserve("hello", "hello")
+	}
+
+	nudge := leo.MathBrainTauNudge()
+	t.Logf("after boring conversations: tau_nudge=%.3f", nudge)
+	// tau_nudge should be bounded
+	if nudge < -0.2 || nudge > 0.2 {
+		t.Errorf("tau_nudge should be in [-0.2, 0.2], got %.3f", nudge)
+	}
+}
+
+func TestMathBrainDoesNotCrash(t *testing.T) {
+	dbPath := "/tmp/test_go_mathbrain_stress.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Diverse conversations — should never crash or produce NaN
+	prompts := []string{
+		"WHO ARE YOU?!", // high arousal
+		"",             // empty
+		"the silence speaks softly in the dark corners of the room where nobody goes anymore",
+		"Leo Leo Leo Leo Leo Leo", // trigger words
+		"a",                        // minimal
+	}
+	for _, p := range prompts {
+		resp := leo.Generate(p)
+		leo.MathBrainObserve(p, resp)
+	}
+
+	obs := leo.MathBrainObservations()
+	if obs != 5 {
+		t.Errorf("expected 5 observations, got %d", obs)
+	}
+
+	loss := leo.MathBrainLoss()
+	if loss < 0 {
+		t.Errorf("loss should not be negative: %.4f", loss)
+	}
+}
+
+func TestMathBrainWithTrauma(t *testing.T) {
+	// MathBrain should work alongside trauma system
+	dbPath := "/tmp/test_go_mathbrain_trauma.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Set trauma high
+	leo.SetTrauma(0.8)
+
+	// Observe under trauma
+	leo.MathBrainObserve("who are you", "resonance organism field")
+
+	// Should detect overwhelm (high trauma)
+	nudge := leo.MathBrainTauNudge()
+	t.Logf("under trauma: tau_nudge=%.3f (should be negative = cooling)", nudge)
+
+	// Observe normal conversation
+	leo.SetTrauma(0.0)
+	leo.MathBrainObserve("hello friend", "the sun is warm today")
+	nudge2 := leo.MathBrainTauNudge()
+	t.Logf("no trauma: tau_nudge=%.3f", nudge2)
+}
+
 func TestThemeFlowStagnation(t *testing.T) {
 	// Test the stagnation detection logic without goroutines
 	type snap struct {

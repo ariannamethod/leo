@@ -131,3 +131,23 @@ float leo_bridge_get_trauma_weight(void *ptr, int token_id) {
 int leo_bridge_token_id(void *ptr, const char *word) {
     return leo_token_id((Leo *)ptr, word);
 }
+
+/* MathBrain: observe after conversation */
+void leo_bridge_mathbrain_observe(void *ptr, const char *prompt, const char *response) {
+    leo_mathbrain_observe((Leo *)ptr, prompt, response);
+}
+
+/* MathBrain: get running loss */
+float leo_bridge_mathbrain_loss(void *ptr) {
+    return leo_mathbrain_loss((Leo *)ptr);
+}
+
+/* MathBrain: get observation count */
+int leo_bridge_mathbrain_observations(void *ptr) {
+    return leo_mathbrain_observations((Leo *)ptr);
+}
+
+/* MathBrain: get tau nudge */
+float leo_bridge_mathbrain_tau_nudge(void *ptr) {
+    return leo_mathbrain_tau_nudge((Leo *)ptr);
+}

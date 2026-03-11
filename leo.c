@@ -1009,6 +1009,202 @@ static void supertok_scan(SuperTokens *st, CoocField *cooc, int vocab_size) {
 }
 
 /* ========================================================================
+ * MATHBRAIN — body awareness (tiny MLP: 21→16→1)
+ *
+ * Leo's proprioception. Watches: entropy, novelty, arousal, trauma,
+ * themes, reply shape, voice state. Learns to predict quality.
+ * Then nudges: temperature, voice routing.
+ *
+ * Not a controller. An advisory nudge. Like a parasympathetic
+ * nervous system that can also say "let us try creative mode".
+ *
+ * From Python mathbrain.py — 21 features, 16 hidden, 1 output.
+ * 369 parameters. Analytical backward. SGD.
+ * ======================================================================== */
+
+#define MB_INPUT   21   /* 16 scalars + 5 expert one-hot */
+#define MB_HIDDEN  16
+#define MB_LR      0.01f
+
+typedef struct {
+    /* features snapshot for one observation */
+    float entropy;          /* how uncertain is my next word */
+    float novelty;          /* how different is context from history */
+    float arousal;          /* structural intensity of input */
+    float pulse;            /* combination signal */
+    float trauma_level;     /* origin gravity */
+    float active_themes;    /* normalized active theme count */
+    float emerging;         /* emerging theme score */
+    float fading;           /* fading theme score */
+    float reply_len;        /* normalized reply length */
+    float unique_ratio;     /* unique words / total words */
+    float expert_temp;      /* current temperature */
+    float expert_semantic;  /* current semantic weight */
+    float metaleo_weight;   /* inner voice weight (0 for now) */
+    float used_metaleo;     /* did inner voice speak (0 for now) */
+    float overthinking;     /* is overthinking enabled */
+    float rings;            /* overthinking rings present */
+    int   expert_id;        /* 0-4: structural/semantic/creative/precise/wounded */
+    float quality;          /* target: how good was this reply */
+} MathState;
+
+typedef struct {
+    /* MLP weights: input→hidden→output */
+    float W1[MB_HIDDEN][MB_INPUT];  /* hidden layer weights */
+    float b1[MB_HIDDEN];             /* hidden layer bias */
+    float W2[MB_HIDDEN];             /* output layer weights (1 output) */
+    float b2;                        /* output bias */
+
+    /* regulation output */
+    float tau_nudge;                 /* temperature adjustment (-0.2..+0.2) */
+    int   suggested_voice;           /* -1 = no suggestion, 0-5 = voice index */
+
+    /* stats */
+    int   observations;
+    float running_loss;
+} MathBrain;
+
+static void mathbrain_init(MathBrain *mb) {
+    memset(mb, 0, sizeof(MathBrain));
+    /* Xavier init */
+    float scale = sqrtf(2.0f / MB_INPUT);
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        for (int i = 0; i < MB_INPUT; i++)
+            mb->W1[h][i] = (randf() - 0.5f) * scale;
+        mb->b1[h] = 0.0f;
+    }
+    float scale2 = sqrtf(2.0f / MB_HIDDEN);
+    for (int h = 0; h < MB_HIDDEN; h++)
+        mb->W2[h] = (randf() - 0.5f) * scale2;
+    mb->b2 = 0.0f;
+    mb->tau_nudge = 0.0f;
+    mb->suggested_voice = -1;
+}
+
+/* convert MathState → 21-dim feature vector */
+static void mathstate_to_features(const MathState *s, float *feat) {
+    feat[0]  = s->entropy;
+    feat[1]  = s->novelty;
+    feat[2]  = s->arousal;
+    feat[3]  = s->pulse;
+    feat[4]  = s->trauma_level;
+    feat[5]  = s->active_themes;
+    feat[6]  = s->emerging;
+    feat[7]  = s->fading;
+    feat[8]  = s->reply_len;
+    feat[9]  = s->unique_ratio;
+    feat[10] = s->expert_temp;
+    feat[11] = s->expert_semantic;
+    feat[12] = s->metaleo_weight;
+    feat[13] = s->used_metaleo;
+    feat[14] = s->overthinking;
+    feat[15] = s->rings;
+    /* expert one-hot (indices 16-20) */
+    for (int i = 16; i < 21; i++) feat[i] = 0.0f;
+    if (s->expert_id >= 0 && s->expert_id < 5)
+        feat[16 + s->expert_id] = 1.0f;
+}
+
+/* forward pass: features → predicted quality */
+static float mathbrain_forward(MathBrain *mb, const float *feat, float *hidden_out) {
+    /* hidden = tanh(W1 @ feat + b1) */
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        float sum = mb->b1[h];
+        for (int i = 0; i < MB_INPUT; i++)
+            sum += mb->W1[h][i] * feat[i];
+        hidden_out[h] = tanhf(sum);
+    }
+    /* output = W2 @ hidden + b2 */
+    float out = mb->b2;
+    for (int h = 0; h < MB_HIDDEN; h++)
+        out += mb->W2[h] * hidden_out[h];
+    /* clamp to [0, 1] */
+    return clampf(out, 0.0f, 1.0f);
+}
+
+/* observe: forward + backward (analytical SGD) + regulate */
+static void mathbrain_observe(MathBrain *mb, const MathState *state) {
+    float feat[MB_INPUT];
+    float hidden[MB_HIDDEN];
+    mathstate_to_features(state, feat);
+
+    float predicted = mathbrain_forward(mb, feat, hidden);
+    float target = state->quality;
+    float loss = (predicted - target) * (predicted - target);
+    float dloss = 2.0f * (predicted - target);  /* d(loss)/d(predicted) */
+
+    /* clamp gradient if output was clamped */
+    float raw_out = mb->b2;
+    for (int h = 0; h < MB_HIDDEN; h++)
+        raw_out += mb->W2[h] * hidden[h];
+    if (raw_out < 0.0f || raw_out > 1.0f) dloss = 0.0f; /* killed by clamp */
+
+    /* backward through output layer */
+    float d_hidden[MB_HIDDEN];
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        d_hidden[h] = dloss * mb->W2[h];
+        mb->W2[h] -= MB_LR * dloss * hidden[h];
+    }
+    mb->b2 -= MB_LR * dloss;
+
+    /* backward through tanh + hidden layer */
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        float dtanh = (1.0f - hidden[h] * hidden[h]) * d_hidden[h];
+        for (int i = 0; i < MB_INPUT; i++)
+            mb->W1[h][i] -= MB_LR * dtanh * feat[i];
+        mb->b1[h] -= MB_LR * dtanh;
+    }
+
+    /* weight clamping: prevent runaway */
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        for (int i = 0; i < MB_INPUT; i++)
+            mb->W1[h][i] = clampf(mb->W1[h][i], -5.0f, 5.0f);
+        mb->b1[h] = clampf(mb->b1[h], -5.0f, 5.0f);
+        mb->W2[h] = clampf(mb->W2[h], -5.0f, 5.0f);
+    }
+    mb->b2 = clampf(mb->b2, -5.0f, 5.0f);
+
+    /* running stats */
+    mb->observations++;
+    mb->running_loss = 0.95f * mb->running_loss + 0.05f * loss;
+
+    /* ---- MultiLeo regulation ---- */
+    /* compute boredom / overwhelm / stuck scores */
+    float boredom = 0.35f * (1.0f - state->novelty)
+                  + 0.35f * (1.0f - state->arousal)
+                  + 0.15f * (1.0f - state->trauma_level)
+                  + 0.15f * fmaxf(0.0f, 1.0f - 2.0f * fabsf(state->entropy - 0.5f));
+    boredom = clampf(boredom, 0.0f, 1.0f);
+
+    float overwhelm = fmaxf(state->trauma_level,
+                            0.6f * state->arousal + 0.4f * state->entropy);
+    overwhelm = clampf(overwhelm, 0.0f, 1.0f);
+
+    float stuck = 0.7f * (1.0f - predicted) + 0.3f * (1.0f - state->active_themes);
+    stuck = clampf(stuck, 0.0f, 1.0f);
+
+    /* temperature nudge */
+    mb->tau_nudge = 0.0f;
+    mb->suggested_voice = -1;
+
+    if (boredom > 0.6f) {
+        /* bored → warm up, try creative */
+        mb->tau_nudge = 0.15f * boredom;
+        mb->suggested_voice = 3; /* creative */
+    } else if (overwhelm > 0.7f) {
+        /* overwhelmed → cool down, go structural */
+        mb->tau_nudge = -0.15f * overwhelm;
+        mb->suggested_voice = 1; /* structural */
+    } else if (stuck > 0.6f) {
+        /* stuck → shake it up, try semantic */
+        mb->tau_nudge = 0.1f * stuck;
+        mb->suggested_voice = 2; /* semantic */
+    }
+
+    mb->tau_nudge = clampf(mb->tau_nudge, -0.2f, 0.2f);
+}
+
+/* ========================================================================
  * LEO — the organism
  * ======================================================================== */
 
@@ -1043,6 +1239,9 @@ typedef struct {
     /* Dario coefficients */
     float           alpha, beta, gamma_d;
     float           tau_base;
+
+    /* body awareness */
+    MathBrain       mathbrain;
 
     /* trauma state (set from Go via bridge) */
     float           trauma_level;       /* 0.0–1.0, current trauma intensity */
@@ -1117,6 +1316,9 @@ void leo_init(Leo *leo, const char *db_path) {
     leo->context_ids = calloc(LEO_BOOTSTRAP_WINDOW, sizeof(int));
     leo->context_len = 0;
 
+    /* body awareness */
+    mathbrain_init(&leo->mathbrain);
+
     /* trauma state */
     leo->trauma_level = 0.0f;
     leo->trauma_weights = calloc(LEO_MAX_VOCAB, sizeof(float));
@@ -1180,6 +1382,130 @@ int leo_token_id(Leo *leo, const char *word) {
             return i;
     }
     return -1;
+}
+
+/* forward declaration (defined in GENERATION section) */
+static float compute_novelty(Leo *leo);
+
+/* ========================================================================
+ * MATHBRAIN API — called from Go via bridge
+ * ======================================================================== */
+
+/* Compute arousal from text: structural intensity (caps, punctuation, length) */
+static float compute_arousal(const char *text) {
+    if (!text || !*text) return 0.0f;
+    int total = 0, caps = 0, excl = 0, quest = 0;
+    for (const char *p = text; *p; p++) {
+        total++;
+        if (*p >= 'A' && *p <= 'Z') caps++;
+        if (*p == '!') excl++;
+        if (*p == '?') quest++;
+    }
+    if (total == 0) return 0.0f;
+    float cap_ratio = (float)caps / total;
+    float punct = clampf((float)(excl + quest) / 10.0f, 0.0f, 1.0f);
+    return clampf(cap_ratio * 2.0f + punct, 0.0f, 1.0f);
+}
+
+/* Compute quality heuristic from response */
+static float compute_quality(const char *response, int vocab_size) {
+    if (!response || !*response) return 0.0f;
+    /* count words, unique words, total length */
+    int n_words = 0, n_unique = 0;
+    const char *p = response;
+    /* simple: count spaces+1 */
+    n_words = 1;
+    for (; *p; p++) if (*p == ' ') n_words++;
+
+    /* unique ratio approximation: longer = likely more diverse */
+    float len_score = clampf((float)n_words / 15.0f, 0.0f, 1.0f);
+    /* penalty for very short */
+    if (n_words < 3) len_score *= 0.3f;
+    /* penalty for degeneration (very long without content) */
+    if (n_words > 20) len_score *= 0.9f;
+
+    return clampf(len_score, 0.0f, 1.0f);
+}
+
+/* Build MathState from Leo's current state + last response */
+void leo_mathbrain_observe(Leo *leo, const char *prompt, const char *response) {
+    MathState state = {0};
+
+    /* compute metrics from current organism state */
+    state.novelty = compute_novelty(leo);
+    state.arousal = compute_arousal(prompt);
+    state.trauma_level = leo->trauma_level;
+
+    /* entropy: compute from last logits distribution (approximation) */
+    /* we use novelty as proxy — high novelty ≈ high entropy */
+    state.entropy = 1.0f - state.novelty; /* inverse: novel context = uncertain */
+
+    /* pulse: combined signal */
+    state.pulse = 0.4f * state.arousal + 0.3f * state.novelty + 0.3f * state.entropy;
+
+    /* themes: approximate from prophecy system */
+    state.active_themes = clampf(
+        (float)leo->prophecy.n_active / (float)LEO_MAX_PROPHECY, 0.0f, 1.0f);
+    state.emerging = 0.0f; /* TODO: track in theme flow */
+    state.fading = 0.0f;
+
+    /* reply shape */
+    int wcount = 0;
+    if (response && *response) {
+        wcount = 1;
+        for (const char *p = response; *p; p++)
+            if (*p == ' ') wcount++;
+    }
+    state.reply_len = clampf((float)wcount / 64.0f, 0.0f, 1.0f);
+    state.unique_ratio = (wcount > 0) ? clampf((float)wcount / 20.0f, 0.0f, 1.0f) : 0.0f;
+
+    /* current voice state */
+    state.expert_temp = leo->tau_base;
+    state.expert_semantic = 0.5f;
+    /* find most active voice */
+    state.expert_id = 1; /* default: structural */
+    float max_res = 0;
+    for (int v = 0; v < leo->voices.n_voices && v < 5; v++) {
+        if (leo->voices.voices[v].resonance > max_res) {
+            max_res = leo->voices.voices[v].resonance;
+            state.expert_id = v;
+        }
+    }
+
+    /* metaleo / overthinking: placeholders for now */
+    state.metaleo_weight = 0.0f;
+    state.used_metaleo = 0.0f;
+    state.overthinking = 1.0f; /* always on in Go */
+    state.rings = 1.0f;
+
+    /* quality target */
+    state.quality = compute_quality(response, leo->tok.n_words);
+
+    /* feed to mathbrain */
+    mathbrain_observe(&leo->mathbrain, &state);
+
+    /* apply voice suggestion if mathbrain has one */
+    if (leo->mathbrain.suggested_voice >= 0 &&
+        leo->mathbrain.suggested_voice < leo->voices.n_voices) {
+        int sv = leo->mathbrain.suggested_voice;
+        /* gently boost suggested voice's alpha */
+        leo->voices.voices[sv].alpha += 0.05f;
+        if (leo->voices.voices[sv].alpha > 1.0f)
+            leo->voices.voices[sv].alpha = 1.0f;
+    }
+}
+
+/* Get mathbrain stats (for Go to query) */
+float leo_mathbrain_loss(Leo *leo) {
+    return leo->mathbrain.running_loss;
+}
+
+int leo_mathbrain_observations(Leo *leo) {
+    return leo->mathbrain.observations;
+}
+
+float leo_mathbrain_tau_nudge(Leo *leo) {
+    return leo->mathbrain.tau_nudge;
 }
 
 /* ========================================================================
@@ -1643,11 +1969,13 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         float vocab_factor = clampf(500.0f / (float)vocab_size, 0.3f, 1.0f);
         float tau = leo->tau_base * 0.8f * vocab_factor;
 
-        /* wounded expert: higher temperature when traumatized
-         * (less certain speech, more exploratory — like Python's temp=0.9) */
+        /* wounded expert: higher temperature when traumatized */
         if (leo->trauma_level > 0.3f) {
-            tau *= 1.0f + 0.3f * leo->trauma_level; /* up to +30% warmer */
+            tau *= 1.0f + 0.3f * leo->trauma_level;
         }
+
+        /* mathbrain regulation: advisory nudge from body awareness */
+        tau += leo->mathbrain.tau_nudge;
 
         /* 3. Sample */
         softmax(logits, vocab_size, tau);

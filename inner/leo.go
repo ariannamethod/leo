@@ -50,6 +50,12 @@ extern void  leo_bridge_log_episode(void *leo, const char *event_type, const cha
 extern int   leo_bridge_conversation_count(void *leo);
 extern int   leo_bridge_episode_count(void *leo, const char *event_type);
 
+// MathBrain bridge
+extern void  leo_bridge_mathbrain_observe(void *leo, const char *prompt, const char *response);
+extern float leo_bridge_mathbrain_loss(void *leo);
+extern int   leo_bridge_mathbrain_observations(void *leo);
+extern float leo_bridge_mathbrain_tau_nudge(void *leo);
+
 // Trauma bridge
 extern void  leo_bridge_set_trauma(void *leo, float level);
 extern float leo_bridge_get_trauma(void *leo);
@@ -245,6 +251,39 @@ func (l *Leo) EpisodeCount(eventType string) int {
 	cType := C.CString(eventType)
 	defer C.free(unsafe.Pointer(cType))
 	return int(C.leo_bridge_episode_count(l.ptr, cType))
+}
+
+// MathBrainObserve feeds a conversation to the body awareness MLP.
+// Computes metrics, trains the MLP, produces regulation output.
+func (l *Leo) MathBrainObserve(prompt, response string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cPrompt := C.CString(prompt)
+	cResp := C.CString(response)
+	defer C.free(unsafe.Pointer(cPrompt))
+	defer C.free(unsafe.Pointer(cResp))
+	C.leo_bridge_mathbrain_observe(l.ptr, cPrompt, cResp)
+}
+
+// MathBrainLoss returns the running loss of the body awareness MLP.
+func (l *Leo) MathBrainLoss() float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_mathbrain_loss(l.ptr))
+}
+
+// MathBrainObservations returns how many times the MLP has been trained.
+func (l *Leo) MathBrainObservations() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_mathbrain_observations(l.ptr))
+}
+
+// MathBrainTauNudge returns the current temperature adjustment from body awareness.
+func (l *Leo) MathBrainTauNudge() float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_mathbrain_tau_nudge(l.ptr))
 }
 
 // SetTrauma sets the organism's trauma level (0.0–1.0).

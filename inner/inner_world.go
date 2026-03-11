@@ -590,6 +590,41 @@ func (l *Leo) startAutosave() {
 // STARTUP — launch all inner world goroutines
 // ========================================================================
 
+// ========================================================================
+// MATHBRAIN — body awareness goroutine (from mathbrain.py)
+//
+// Event-driven: after each conversation, observes Leo's state,
+// trains the tiny MLP, and pushes regulation (tau nudge, voice
+// suggestion) into the C layer.
+//
+// Asynchronous: never blocks generation.
+// ========================================================================
+
+func (l *Leo) startMathBrain() {
+	events := l.subscribe("mathbrain")
+
+	for {
+		select {
+		case <-l.stopCh:
+			return
+
+		case ev := <-events:
+			// Feed the conversation to MathBrain in C
+			// This computes metrics, trains the MLP, and sets tau_nudge
+			l.MathBrainObserve(ev.Prompt, ev.Response)
+
+			// Debug logging (only when interesting)
+			obs := l.MathBrainObservations()
+			if obs > 0 && obs%50 == 0 {
+				loss := l.MathBrainLoss()
+				nudge := l.MathBrainTauNudge()
+				fmt.Printf("[mathbrain] obs=%d loss=%.4f tau_nudge=%.3f\n",
+					obs, loss, nudge)
+			}
+		}
+	}
+}
+
 // StartInnerWorld launches all autonomous goroutines
 func (l *Leo) StartInnerWorld() {
 	// Timer-driven
@@ -600,10 +635,9 @@ func (l *Leo) StartInnerWorld() {
 	// Event-driven (react to conversations)
 	go l.startTraumaWatch()
 	go l.startOverthinking()
+	go l.startMathBrain()
 
-	fmt.Println("[leo.go] inner world started:")
-	fmt.Println("  timer:  dream(7m) autosave(5m) themeflow(3m)")
-	fmt.Println("  event:  trauma overthinking")
+	fmt.Println("[leo] inner world alive")
 }
 
 // StartInnerVoice launches the inner voice goroutine separately (debug only).
