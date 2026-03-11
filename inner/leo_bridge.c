@@ -151,3 +151,23 @@ int leo_bridge_mathbrain_observations(void *ptr) {
 float leo_bridge_mathbrain_tau_nudge(void *ptr) {
     return leo_mathbrain_tau_nudge((Leo *)ptr);
 }
+
+/* Phase4: get transition count */
+int leo_bridge_phase4_transitions(void *ptr) {
+    return leo_phase4_transitions((Leo *)ptr);
+}
+
+/* Phase4: suggest next island from current */
+int leo_bridge_phase4_suggest(void *ptr, int from_island) {
+    return leo_phase4_suggest((Leo *)ptr, from_island);
+}
+
+/* Phase4: get island visit count */
+int leo_bridge_phase4_island_visits(void *ptr, int island) {
+    return leo_phase4_island_visits((Leo *)ptr, island);
+}
+
+/* Phase4: get island quality */
+float leo_bridge_phase4_island_quality(void *ptr, int island) {
+    return leo_phase4_island_quality((Leo *)ptr, island);
+}

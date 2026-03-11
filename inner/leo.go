@@ -56,6 +56,12 @@ extern float leo_bridge_mathbrain_loss(void *leo);
 extern int   leo_bridge_mathbrain_observations(void *leo);
 extern float leo_bridge_mathbrain_tau_nudge(void *leo);
 
+// Phase4 bridge
+extern int   leo_bridge_phase4_transitions(void *leo);
+extern int   leo_bridge_phase4_suggest(void *leo, int from_island);
+extern int   leo_bridge_phase4_island_visits(void *leo, int island);
+extern float leo_bridge_phase4_island_quality(void *leo, int island);
+
 // Trauma bridge
 extern void  leo_bridge_set_trauma(void *leo, float level);
 extern float leo_bridge_get_trauma(void *leo);
@@ -313,6 +319,34 @@ func (l *Leo) GetTraumaWeight(tokenID int) float32 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return float32(C.leo_bridge_get_trauma_weight(l.ptr, C.int(tokenID)))
+}
+
+// Phase4Transitions returns the number of recorded island transitions.
+func (l *Leo) Phase4Transitions() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_phase4_transitions(l.ptr))
+}
+
+// Phase4Suggest returns the best island to transition to from the given island.
+func (l *Leo) Phase4Suggest(fromIsland int) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_phase4_suggest(l.ptr, C.int(fromIsland)))
+}
+
+// Phase4IslandVisits returns how many times an island was visited.
+func (l *Leo) Phase4IslandVisits(island int) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_phase4_island_visits(l.ptr, C.int(island)))
+}
+
+// Phase4IslandQuality returns the running quality average for an island.
+func (l *Leo) Phase4IslandQuality(island int) float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_phase4_island_quality(l.ptr, C.int(island)))
 }
 
 // TokenID looks up a token's ID by its word string. Returns -1 if not found.

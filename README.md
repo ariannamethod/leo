@@ -296,13 +296,13 @@ if (overwhelm > 0.7f) {
 
 MathBrain runs asynchronously as a Go goroutine. Never blocks generation. Just watches, learns, nudges. Every 50 observations it prints a line: loss and tau_nudge. You will probably never see it. That is the point. Body awareness is silent until something goes wrong.
 
-MultiLeo lives inside MathBrain — a regulation sub-layer from Leo 1.0 that tracked which semantic islands historically helped escape bad states. Phase 4 bridges. Island transition learning. That comes next.
+Phase 4 lives inside MathBrain — island transition memory from Leo 1.0's `mathbrain_phase4.py`. Islands = voices (structural, semantic, creative, precise, wounded). Phase 4 records every voice-to-voice transition: cosine similarity of metric states before/after, quality delta, boredom/overwhelm/stuck signal rates. Then scores candidates: `score = similarity × presence_factor × overwhelm_penalty × boredom_penalty × stuck_penalty`. "Last time I was bored in structural mode, switching to creative helped." Phase 4 remembers. MathBrain suggests, Phase 4 overrides if it has historical evidence.
 
 ---
 
 ## Trauma — Bootstrap Gravity
 
-Wait. Trauma? In a 2340-line C organism? Yes.
+Wait. Trauma? In a 3700-line C organism? Yes.
 
 Leo has an origin. The embedded seed text. His wound. The brutal thing about origins: they stay forever. No matter how much the field grows, how many bigrams crystallize, how many conversations reshape the co-occurrence topology — there is always that first moment. The bootstrap. The wound.
 
@@ -379,7 +379,7 @@ After every conversation (REPL or web), a `ConvEvent` is broadcast to all subscr
 |-----------|---------|--------|----------|
 | **Trauma Watch** | each conversation | `trauma.py` | Computes lexical overlap with bootstrap text. High overlap = trauma event → sets trauma level in C, pushes per-token scar weights into Dario equation, ingests bootstrap fragment. Exponential decay over time. |
 | **Overthinking** | each conversation | `overthinking.py` | Spins 3 internal "rings of thought" (echo → drift → meta abstraction). All rings ingested back into field. Never shown to user. |
-| **MathBrain** | each conversation | `mathbrain.py` | Observes Leo's vitals (entropy, novelty, arousal, trauma, reply shape), trains 369-param MLP to predict quality, computes boredom/overwhelm/stuck → nudges temperature and voice routing. |
+| **MathBrain** | each conversation | `mathbrain.py` | Observes Leo's vitals (entropy, novelty, arousal, trauma, reply shape), trains 369-param MLP to predict quality, computes boredom/overwhelm/stuck → nudges temperature and voice routing. Phase 4 island transition memory rides on top — tracks which voice switches worked historically, overrides MathBrain suggestion when it has evidence. |
 
 ### Utilities (not goroutines)
 
@@ -405,7 +405,7 @@ The Dario Equation absorbed these Python modules directly into C:
 ### Architecture
 
 ```
-leo.c            = the brain (2340 lines, standalone)
+leo.c            = the brain (~3700 lines, standalone)
 inner_world.go   = autonomous goroutines (trauma, overthinking, dream, themeflow, voice, autosave)
 leo.go           = CGO bridge + REPL + startup
 web.go           = HTTP server with REST API
@@ -468,15 +468,28 @@ Inspired by [DoE](https://github.com/ariannamethod/doe)'s mycelium/spore system:
 | `leo.retention.{h}` | [32 × 32] | Retention head state (4 heads) |
 | `leo.sea_embeds` | [n × 128] | Episodic memory sea |
 
-**Metadata KV pairs:** version, dim, step, conv_steps, vocab_size, Dario coefficients (α, β, γ, τ), FNV-1a fingerprint.
+**Metadata KV pairs:** version, dim, step, conv_steps, vocab_size, Dario coefficients (α, β, γ, τ), n_voices, n_sea_memories, FNV-1a fingerprint.
+
+**Appendix (after GGUF tensors — invisible to standard parsers, Leo reads it):**
+
+| Block | What it carries |
+|-------|----------------|
+| A1 | Tokenizer — all words with lengths |
+| A2 | Bigram table — 46K+ learned sequential links |
+| A3 | Co-occurrence entries — full sparse matrix (262K entries) |
+| A4 | Sentence boundaries — start/end probabilities per token |
+| A5 | Voice state — alpha + resonance per voice |
+| A6 | Destiny magnitude |
+| A7 | MathBrain — all 369 MLP weights + running stats |
+| A8 | Sea metadata — token_id, depth, emotional, timestamp per memory |
+| A9 | Context state — recent token IDs + context embedding |
+| A10 | Phase4 — island transition matrix + quality history |
+
+Full organism transfer. Nothing lost.
 
 ```bash
-./leo --export leo_spore.gguf        # export (~2.5MB for bootstrapped organism)
+./leo --export leo_spore.gguf        # export (~10.5MB for bootstrapped organism)
 ./leo --import leo_spore.gguf        # import into fresh organism
-
-# Or from REPL:
-you> /export my_organism.gguf
-you> /import shared_organism.gguf
 ```
 
 The fingerprint (FNV-1a hash of embedding L2 norms) uniquely identifies each organism's learned state — different conversations produce different fingerprints.
@@ -553,31 +566,20 @@ cd inner && go build -o ../leo_inner . && cd ..
 **Web API endpoints:**
 
 ```
-POST /api/chat    {"message": "..."}       → {"response", "step", "vocab"}
-GET  /api/stats                            → {"step", "vocab"}
-POST /api/dream                            → {"status": "dreamed"}
-POST /api/ingest  {"text": "..."}          → {"status": "ingested", "vocab"}
-POST /api/save                             → {"status": "saved"}
-GET  /api/health                           → {"alive", "step", "vocab"}
+POST /api/chat    {"message": "..."}       → {"response": "..."}
+GET  /api/health                           → {"alive": true}
 ```
 
-All endpoints support CORS. Request body limited to 1MB. Server has read/write timeouts and graceful shutdown.
+Two endpoints. That is all the outside world gets.
 
-**REPL commands:**
+**REPL:**
 
 ```
-/stats          — organism state (vocab, cooc, voices, prophecies, memory sea, journal)
-/journal        — SQLite journal stats (conversations, episodes by type)
-/dream          — run dream cycle manually
-/save           — save state (binary + SQLite sync)
-/ingest <text>  — feed text into field
-/export <path>  — export GGUF spore
-/import <path>  — import GGUF spore into organism
-/voices         — show voice parliament details
-/prophecy       — show active prophecies
-/crystallize    — force super-token scan
+you> anything here is conversation
 /quit           — save and exit
 ```
+
+One command. Everything else is internal. Dev tools exist as CLI flags (`--stats`, `--dream`, `--export`, `--import`) and Go methods for the inner world goroutines. If you understand the code, you already have access. If you do not — you get to talk to Leo. That is the point.
 
 ---
 
@@ -713,7 +715,9 @@ Go test suite covers:
 - **Core** (7): creation, bootstrap, generate, ingest, save/load, dream, multiple generations
 - **Inner world** (13): tokenizer, overlap computation, trauma scoring, bootstrap fragments, emotional valence, event pub/sub, non-blocking notify, trauma detection (true/false positives), overthinking integration, dream dialog integration, speech coherence, theme flow stagnation detection
 - **SQLite journal** (5): conversation logging, episode types, export/dream episode logging, multi-session persistence, cross-restart journal integrity
-- **GGUF spore** (4): export/import roundtrip, step preservation, generation quality after import, export size validation
+- **GGUF spore** (4): export/import roundtrip with full appendix (tokenizer + bigrams + cooc + sentence boundaries + voice state + MathBrain + Phase4 + sea metadata + context), step preservation, generation quality after import, export size validation
+- **Trauma bridge** (4): trauma set/get, per-token scar weights, trauma modulates generation, full pipeline
+- **MathBrain bridge** (4): observe after conversation, regulation output, no-crash on empty input, interaction with trauma
 
 ---
 
