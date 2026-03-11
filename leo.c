@@ -528,6 +528,328 @@ static void bigram_row(BigramTable *b, int src, float *out, int vocab_size) {
 }
 
 /* ========================================================================
+ * SUBWORD FIELD — BPE tokenizer + bigram co-occurrence
+ *
+ * Runs parallel to word-level tokenizer. Two voices:
+ *   Word tokenizer:    semantic co-occurrence (what concepts associate)
+ *   Subword tokenizer: structural patterns (punctuation, morphology, rhythm)
+ *
+ * BPE merges learned incrementally during ingest.
+ * Subword bigram co-occurrence tracked alongside.
+ * Signal fed into dario_compute() as S (structural coherence).
+ *
+ * "hello, world!" →  word: ["hello", "world"]  (loses punctuation)
+ *                 → subword: ["he", "llo", ",", " ", "wo", "rld", "!"]
+ *
+ * From Python subword.py (SentencePiece BPE), reimplemented in pure C.
+ * ======================================================================== */
+
+#define SW_MAX_VOCAB   2048     /* subword vocabulary size */
+#define SW_MAX_MERGES  1024     /* max BPE merge rules */
+#define SW_MAX_TOK     32       /* max subword token length */
+#define SW_BIGRAM_CAP  65536    /* subword bigram table capacity */
+
+typedef struct {
+    int left, right;           /* merge pair: subword token IDs */
+    int result;                /* resulting merged token ID */
+} BPEMerge;
+
+typedef struct {
+    /* vocabulary: subword tokens */
+    char    tokens[SW_MAX_VOCAB][SW_MAX_TOK];
+    int     n_tokens;
+
+    /* BPE merge table (priority order — first merge = most frequent) */
+    BPEMerge merges[SW_MAX_MERGES];
+    int      n_merges;
+
+    /* bigram co-occurrence on subword tokens */
+    int     *bg_src;           /* [SW_BIGRAM_CAP] */
+    int     *bg_dst;           /* [SW_BIGRAM_CAP] */
+    float   *bg_count;         /* [SW_BIGRAM_CAP] */
+    int     *bg_hash;          /* [SW_BIGRAM_CAP * 2] */
+    int      bg_n;
+    int      bg_hash_size;
+
+    /* pair frequency accumulator for merge learning */
+    int     *pair_freq;        /* [pair_hash_size] packed: (left<<16|right) → count */
+    int     *pair_ids;         /* [pair_hash_size] packed pair ID */
+    int      pair_n;
+    int      pair_hash_size;
+
+    /* token frequency */
+    int      tok_freq[SW_MAX_VOCAB];
+    int      total_tokens;
+} SubwordField;
+
+static void sw_init(SubwordField *sw) {
+    memset(sw, 0, sizeof(SubwordField));
+
+    /* base vocabulary: individual bytes (printable ASCII + common punctuation) */
+    /* space gets its own token for word boundary tracking */
+    for (int c = 32; c < 127; c++) {
+        sw->tokens[sw->n_tokens][0] = (char)c;
+        sw->tokens[sw->n_tokens][1] = '\0';
+        sw->n_tokens++;
+    }
+    /* add common multi-byte starters for minimal UTF-8 support */
+    /* (Leo's D.N.A. is English, but let's not break on accents) */
+
+    /* bigram table */
+    sw->bg_src = calloc(SW_BIGRAM_CAP, sizeof(int));
+    sw->bg_dst = calloc(SW_BIGRAM_CAP, sizeof(int));
+    sw->bg_count = calloc(SW_BIGRAM_CAP, sizeof(float));
+    sw->bg_hash_size = SW_BIGRAM_CAP * 2;
+    sw->bg_hash = malloc(sw->bg_hash_size * sizeof(int));
+    for (int i = 0; i < sw->bg_hash_size; i++) sw->bg_hash[i] = -1;
+    sw->bg_n = 0;
+
+    /* pair frequency accumulator */
+    sw->pair_hash_size = 16384;
+    sw->pair_freq = calloc(sw->pair_hash_size, sizeof(int));
+    sw->pair_ids = calloc(sw->pair_hash_size, sizeof(int));
+    sw->pair_n = 0;
+}
+
+static void sw_free(SubwordField *sw) {
+    free(sw->bg_src); free(sw->bg_dst); free(sw->bg_count); free(sw->bg_hash);
+    free(sw->pair_freq); free(sw->pair_ids);
+}
+
+/* find subword token ID (linear scan — vocab is small) */
+static int sw_find(SubwordField *sw, const char *tok, int len) {
+    for (int i = 0; i < sw->n_tokens; i++) {
+        if (strncmp(sw->tokens[i], tok, len) == 0 && sw->tokens[i][len] == '\0')
+            return i;
+    }
+    return -1;
+}
+
+/* add subword token, return ID */
+static int sw_add_token(SubwordField *sw, const char *tok) {
+    int len = strlen(tok);
+    int id = sw_find(sw, tok, len);
+    if (id >= 0) return id;
+    if (sw->n_tokens >= SW_MAX_VOCAB) return -1;
+    id = sw->n_tokens++;
+    strncpy(sw->tokens[id], tok, SW_MAX_TOK - 1);
+    return id;
+}
+
+/* BPE encode: text → subword IDs
+ * Returns number of tokens written to out_ids (max max_ids) */
+static int sw_encode(SubwordField *sw, const char *text, int *out_ids, int max_ids) {
+    int len = strlen(text);
+    if (len == 0) return 0;
+
+    /* step 1: split into individual characters */
+    int buf[4096]; /* character-level token IDs */
+    int bn = 0;
+    for (int i = 0; i < len && bn < 4095; i++) {
+        unsigned char c = (unsigned char)text[i];
+        if (c < 32 || c >= 127) continue; /* skip non-ASCII for now */
+        int id = c - 32; /* base vocab: ASCII 32-126 = tokens 0-94 */
+        buf[bn++] = id;
+    }
+
+    /* step 2: apply merges in priority order */
+    for (int m = 0; m < sw->n_merges && bn > 1; m++) {
+        BPEMerge *merge = &sw->merges[m];
+        int new_bn = 0;
+        for (int i = 0; i < bn; i++) {
+            if (i + 1 < bn && buf[i] == merge->left && buf[i + 1] == merge->right) {
+                buf[new_bn++] = merge->result;
+                i++; /* skip next */
+            } else {
+                buf[new_bn++] = buf[i];
+            }
+        }
+        /* shift down */
+        bn = new_bn;
+    }
+
+    /* copy result */
+    int n = (bn < max_ids) ? bn : max_ids;
+    memcpy(out_ids, buf, n * sizeof(int));
+    return n;
+}
+
+/* update subword bigram table */
+static void sw_bigram_update(SubwordField *sw, int src, int dst, float delta) {
+    if (src < 0 || dst < 0) return;
+    uint32_t h = (uint32_t)(src * 65537 + dst * 31) % sw->bg_hash_size;
+    for (int probe = 0; probe < 64; probe++) {
+        int idx = (h + probe) % sw->bg_hash_size;
+        if (sw->bg_hash[idx] == -1) {
+            /* new entry */
+            if (sw->bg_n >= SW_BIGRAM_CAP) return;
+            sw->bg_hash[idx] = sw->bg_n;
+            sw->bg_src[sw->bg_n] = src;
+            sw->bg_dst[sw->bg_n] = dst;
+            sw->bg_count[sw->bg_n] = delta;
+            sw->bg_n++;
+            return;
+        }
+        int ei = sw->bg_hash[idx];
+        if (sw->bg_src[ei] == src && sw->bg_dst[ei] == dst) {
+            sw->bg_count[ei] += delta;
+            return;
+        }
+    }
+}
+
+/* get subword bigram row: all tokens that follow src */
+static void sw_bigram_row(SubwordField *sw, int src, float *out, int n) {
+    for (int i = 0; i < n; i++) out[i] = 0;
+    for (int i = 0; i < sw->bg_n; i++)
+        if (sw->bg_src[i] == src && sw->bg_dst[i] < n)
+            out[sw->bg_dst[i]] = sw->bg_count[i];
+}
+
+/* pair frequency hash operations for BPE learning */
+static int sw_pair_hash(int left, int right, int size) {
+    return (int)((uint32_t)(left * 65537 + right * 31) % size);
+}
+
+static void sw_pair_count(SubwordField *sw, int left, int right) {
+    int h = sw_pair_hash(left, right, sw->pair_hash_size);
+    int packed = (left << 16) | (right & 0xFFFF);
+    for (int probe = 0; probe < 64; probe++) {
+        int idx = (h + probe) % sw->pair_hash_size;
+        if (sw->pair_ids[idx] == 0 && sw->pair_freq[idx] == 0) {
+            sw->pair_ids[idx] = packed;
+            sw->pair_freq[idx] = 1;
+            sw->pair_n++;
+            return;
+        }
+        if (sw->pair_ids[idx] == packed) {
+            sw->pair_freq[idx]++;
+            return;
+        }
+    }
+}
+
+/* learn one BPE merge from accumulated pair frequencies */
+static int sw_learn_merge(SubwordField *sw) {
+    if (sw->n_merges >= SW_MAX_MERGES) return 0;
+
+    /* find most frequent pair */
+    int best_idx = -1, best_freq = 2; /* minimum frequency to merge */
+    for (int i = 0; i < sw->pair_hash_size; i++) {
+        if (sw->pair_freq[i] > best_freq) {
+            best_freq = sw->pair_freq[i];
+            best_idx = i;
+        }
+    }
+    if (best_idx < 0) return 0;
+
+    int packed = sw->pair_ids[best_idx];
+    int left = packed >> 16;
+    int right = packed & 0xFFFF;
+
+    if (left >= sw->n_tokens || right >= sw->n_tokens) return 0;
+
+    /* create merged token */
+    char merged[SW_MAX_TOK];
+    snprintf(merged, SW_MAX_TOK, "%s%s", sw->tokens[left], sw->tokens[right]);
+    int merged_id = sw_add_token(sw, merged);
+    if (merged_id < 0) return 0;
+
+    /* record merge */
+    BPEMerge *m = &sw->merges[sw->n_merges++];
+    m->left = left;
+    m->right = right;
+    m->result = merged_id;
+
+    /* clear pair frequencies for next round */
+    memset(sw->pair_freq, 0, sw->pair_hash_size * sizeof(int));
+    memset(sw->pair_ids, 0, sw->pair_hash_size * sizeof(int));
+    sw->pair_n = 0;
+
+    return 1;
+}
+
+/* ingest text into subword field: encode, update bigrams, accumulate pair freq */
+static void sw_ingest(SubwordField *sw, const char *text) {
+    int ids[4096];
+    int n = sw_encode(sw, text, ids, 4096);
+
+    /* update bigram co-occurrence */
+    for (int i = 0; i + 1 < n; i++) {
+        sw_bigram_update(sw, ids[i], ids[i + 1], 1.0f);
+        sw->tok_freq[ids[i]]++;
+        sw->total_tokens++;
+    }
+    if (n > 0) {
+        sw->tok_freq[ids[n - 1]]++;
+        sw->total_tokens++;
+    }
+
+    /* accumulate pair frequencies for BPE merge learning */
+    for (int i = 0; i + 1 < n; i++)
+        sw_pair_count(sw, ids[i], ids[i + 1]);
+
+    /* learn merges incrementally — more aggressive early, then stabilize */
+    int merge_interval = (sw->n_merges < 50) ? 500 : 2000;
+    if (sw->total_tokens % merge_interval == 0 && sw->total_tokens > 0) {
+        sw_learn_merge(sw);
+    }
+}
+
+/* compute subword signal S for word-level token i:
+ * "how likely is this word based on subword patterns?"
+ *
+ * BPE-encode the word, compute product of subword bigram probabilities
+ * conditioned on the last few subword context tokens.
+ */
+static float sw_word_score(SubwordField *sw, const char *word,
+                           const int *sw_context, int sw_ctx_len) {
+    if (sw->bg_n == 0 || sw->total_tokens < 100) return 0.0f;
+
+    /* BPE-encode the candidate word (with leading space) */
+    char buf[256];
+    snprintf(buf, sizeof(buf), " %s", word); /* space = word boundary */
+    int ids[64];
+    int n = sw_encode(sw, buf, ids, 64);
+    if (n == 0) return 0.0f;
+
+    /* score: how likely is the first subword given context? */
+    float score = 0.0f;
+    if (sw_ctx_len > 0) {
+        int last_sw = sw_context[sw_ctx_len - 1];
+        /* find bigram count for (last_context_subword → first_word_subword) */
+        uint32_t h = (uint32_t)(last_sw * 65537 + ids[0] * 31) % sw->bg_hash_size;
+        for (int probe = 0; probe < 64; probe++) {
+            int idx = (h + probe) % sw->bg_hash_size;
+            if (sw->bg_hash[idx] == -1) break;
+            int ei = sw->bg_hash[idx];
+            if (sw->bg_src[ei] == last_sw && sw->bg_dst[ei] == ids[0]) {
+                score = sw->bg_count[ei];
+                break;
+            }
+        }
+    }
+
+    /* internal coherence: average bigram probability within the word */
+    float internal = 0.0f;
+    for (int i = 0; i + 1 < n; i++) {
+        uint32_t h = (uint32_t)(ids[i] * 65537 + ids[i + 1] * 31) % sw->bg_hash_size;
+        for (int probe = 0; probe < 64; probe++) {
+            int idx = (h + probe) % sw->bg_hash_size;
+            if (sw->bg_hash[idx] == -1) break;
+            int ei = sw->bg_hash[idx];
+            if (sw->bg_src[ei] == ids[i] && sw->bg_dst[ei] == ids[i + 1]) {
+                internal += sw->bg_count[ei];
+                break;
+            }
+        }
+    }
+    if (n > 1) internal /= (n - 1);
+
+    return score + 0.5f * internal;
+}
+
+/* ========================================================================
  * RoPE — Rotary Position Embedding (pure math, zero parameters)
  * ======================================================================== */
 
@@ -1354,6 +1676,7 @@ typedef struct {
     KanervaSDM      sdm;
     CoocField       cooc;
     BigramTable     bigrams;       /* direct sequential links */
+    SubwordField    subword;       /* BPE tokenizer + subword bigrams */
     RetentionLayer  retention;
     VoiceParliament voices;
     ProphecySystem  prophecy;
@@ -1373,6 +1696,8 @@ typedef struct {
     float          *context_embed; /* [DIM] — current context */
     int            *context_ids;   /* recent token IDs */
     int             context_len;
+    int             sw_context[256]; /* recent subword token IDs */
+    int             sw_context_len;
     int             step;          /* global step counter */
     int             conv_steps;    /* conversation steps (excludes bootstrap) */
 
@@ -1442,6 +1767,7 @@ void leo_init(Leo *leo, const char *db_path) {
     sdm_init(&leo->sdm, LEO_SDM_SLOTS, LEO_DIM);
     cooc_init(&leo->cooc, 256 * 1024); /* 256K co-occurrence entries */
     bigram_init(&leo->bigrams, 128 * 1024); /* 128K bigram entries */
+    sw_init(&leo->subword);
     ret_init(&leo->retention, LEO_DIM);
     voices_init(&leo->voices, LEO_DIM, LEO_VOICE_RANK);
     prophecy_init(&leo->prophecy);
@@ -1477,6 +1803,7 @@ void leo_free(Leo *leo) {
     sdm_free(&leo->sdm);
     cooc_free(&leo->cooc);
     bigram_free(&leo->bigrams);
+    sw_free(&leo->subword);
     ret_free(&leo->retention);
     voices_free(&leo->voices);
     destiny_free(&leo->destiny);
@@ -1800,6 +2127,24 @@ void leo_ingest(Leo *leo, const char *text) {
     for (int i = 0; i < n - 1; i++)
         bigram_update(&leo->bigrams, ids[i], ids[i + 1], 1.0f);
 
+    /* subword field: parallel BPE tokenization + bigram learning */
+    sw_ingest(&leo->subword, text);
+
+    /* update subword context (rolling buffer for generation) */
+    {
+        int sw_ids[4096];
+        int sw_n = sw_encode(&leo->subword, text, sw_ids, 4096);
+        /* keep last 256 subword tokens in context */
+        for (int i = 0; i < sw_n && i < 256; i++) {
+            if (leo->sw_context_len < 256) {
+                leo->sw_context[leo->sw_context_len++] = sw_ids[i];
+            } else {
+                memmove(leo->sw_context, leo->sw_context + 1, 255 * sizeof(int));
+                leo->sw_context[255] = sw_ids[i];
+            }
+        }
+    }
+
     /* update co-occurrence (windowed, distance-weighted)
      * Adjacent words (bigrams) get weight 3.0,
      * distance 2 gets 1.5, distance 3+ gets 1.0.
@@ -1983,11 +2328,35 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
         trauma_boost = leo->trauma_level * 3.0f; /* scale: 0.3→0.9, 1.0→3.0 */
     }
 
-    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + T ---- */
+    /* ---- S: Subword Structural Coherence ---- */
+    /* BPE-level signal: how likely is each word based on subword patterns?
+     * This is what gives Leo punctuation awareness and morphological sense.
+     * Two voices: word tokenizer (semantic), subword tokenizer (structural). */
+    float *S = calloc(vocab_size, sizeof(float));
+    if (leo->subword.bg_n > 0 && leo->subword.total_tokens > 100) {
+        for (int i = 0; i < vocab_size; i++) {
+            const char *w = leo->tok.words[i];
+            if (w)
+                S[i] = sw_word_score(&leo->subword, w,
+                                     leo->sw_context, leo->sw_context_len);
+        }
+        /* normalize S */
+        float s_max = 0;
+        for (int i = 0; i < vocab_size; i++)
+            if (S[i] > s_max) s_max = S[i];
+        if (s_max > 1e-6f)
+            for (int i = 0; i < vocab_size; i++) S[i] /= s_max;
+    }
+
+    /* subword coefficient: grows with data, complements bigram chain */
+    float sw_coeff = clampf((float)leo->subword.n_merges / 200.0f, 0.0f, 2.0f);
+
+    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + sw·S + T ---- */
     /* B (bigram chain) is DOMINANT — this is what makes speech coherent.
      * H (field) adds semantic context.
      * F (prophecy) adds intentionality.
      * A (destiny) adds direction.
+     * S (subword) adds structural/morphological coherence.
      * T (trauma) pulls toward origin when wounded. */
     float gamma_eff = leo->gamma_d;
     if (leo->trauma_level > 0.3f) {
@@ -2004,6 +2373,7 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
                   + leo->alpha * H[i]      /* semantic field */
                   + leo->beta * F[i]        /* prophecy */
                   + gamma_eff * A[i]        /* destiny (boosted under trauma) */
+                  + sw_coeff * S[i]         /* subword structural */
                   + t_weight;               /* trauma scar gravity */
     }
 
@@ -2011,6 +2381,7 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
     free(F);
     free(A);
     free(B);
+    free(S);
 }
 
 /* ========================================================================
@@ -2288,6 +2659,26 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
             memmove(leo->context_ids, leo->context_ids + 1,
                     (LEO_BOOTSTRAP_WINDOW - 1) * sizeof(int));
             leo->context_ids[LEO_BOOTSTRAP_WINDOW - 1] = next_id;
+        }
+
+        /* update subword context with generated word */
+        {
+            const char *w = leo->tok.words[next_id];
+            if (w) {
+                char buf[256];
+                snprintf(buf, sizeof(buf), " %s", w);
+                int sw_ids[64];
+                int sw_n = sw_encode(&leo->subword, buf, sw_ids, 64);
+                for (int si = 0; si < sw_n; si++) {
+                    if (leo->sw_context_len < 256) {
+                        leo->sw_context[leo->sw_context_len++] = sw_ids[si];
+                    } else {
+                        memmove(leo->sw_context, leo->sw_context + 1,
+                                255 * sizeof(int));
+                        leo->sw_context[255] = sw_ids[si];
+                    }
+                }
+            }
         }
 
         leo->step++;
@@ -2644,9 +3035,22 @@ void leo_save(Leo *leo) {
     fwrite(&leo->mathbrain, sizeof(MathBrain), 1, f);
     fwrite(&leo->phase4, sizeof(Phase4), 1, f);
 
+    /* subword field: vocabulary + merges + bigrams */
+    fwrite(&leo->subword.n_tokens, sizeof(int), 1, f);
+    for (int i = 0; i < leo->subword.n_tokens; i++)
+        fwrite(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+    fwrite(&leo->subword.n_merges, sizeof(int), 1, f);
+    fwrite(leo->subword.merges, sizeof(BPEMerge), leo->subword.n_merges, f);
+    fwrite(&leo->subword.bg_n, sizeof(int), 1, f);
+    fwrite(leo->subword.bg_src, sizeof(int), leo->subword.bg_n, f);
+    fwrite(leo->subword.bg_dst, sizeof(int), leo->subword.bg_n, f);
+    fwrite(leo->subword.bg_count, sizeof(float), leo->subword.bg_n, f);
+    fwrite(&leo->subword.total_tokens, sizeof(int), 1, f);
+    fwrite(leo->subword.tok_freq, sizeof(int), leo->subword.n_tokens, f);
+
     fclose(f);
-    printf("[leo] state saved: %s (step %d, vocab %d)\n",
-           path, leo->step, leo->tok.n_words);
+    printf("[leo] state saved: %s (step %d, vocab %d, sw %d merges)\n",
+           path, leo->step, leo->tok.n_words, leo->subword.n_merges);
 }
 
 void leo_load(Leo *leo) {
@@ -2776,6 +3180,44 @@ void leo_load(Leo *leo) {
                leo->phase4.n_transitions);
     }
 
+    /* subword field (optional — old saves won't have this) */
+    {
+        int sw_n_tokens = 0;
+        if (fread(&sw_n_tokens, sizeof(int), 1, f) == 1 && sw_n_tokens > 0) {
+            leo->subword.n_tokens = sw_n_tokens;
+            for (int i = 0; i < sw_n_tokens && i < SW_MAX_VOCAB; i++)
+                FREAD(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+            int sw_n_merges = 0;
+            FREAD(&sw_n_merges, sizeof(int), 1, f);
+            leo->subword.n_merges = sw_n_merges;
+            FREAD(leo->subword.merges, sizeof(BPEMerge), sw_n_merges, f);
+            int sw_bg_n = 0;
+            FREAD(&sw_bg_n, sizeof(int), 1, f);
+            leo->subword.bg_n = sw_bg_n;
+            FREAD(leo->subword.bg_src, sizeof(int), sw_bg_n, f);
+            FREAD(leo->subword.bg_dst, sizeof(int), sw_bg_n, f);
+            FREAD(leo->subword.bg_count, sizeof(float), sw_bg_n, f);
+            /* rebuild hash table */
+            for (int i = 0; i < leo->subword.bg_hash_size; i++)
+                leo->subword.bg_hash[i] = -1;
+            for (int i = 0; i < sw_bg_n; i++) {
+                uint32_t h = (uint32_t)(leo->subword.bg_src[i] * 65537 +
+                             leo->subword.bg_dst[i] * 31) % leo->subword.bg_hash_size;
+                for (int p = 0; p < 64; p++) {
+                    int idx = (h + p) % leo->subword.bg_hash_size;
+                    if (leo->subword.bg_hash[idx] == -1) {
+                        leo->subword.bg_hash[idx] = i;
+                        break;
+                    }
+                }
+            }
+            FREAD(&leo->subword.total_tokens, sizeof(int), 1, f);
+            FREAD(leo->subword.tok_freq, sizeof(int), sw_n_tokens, f);
+            printf("[leo]   subword loaded: %d tokens, %d merges, %d bigrams\n",
+                   sw_n_tokens, sw_n_merges, sw_bg_n);
+        }
+    }
+
     fclose(f);
     leo->bootstrapped = 1;
     printf("[leo] state loaded: %s (step %d, vocab %d)\n",
@@ -2886,6 +3328,23 @@ void leo_stats(Leo *leo) {
     }
 
     printf("bigrams:     %d entries\n", leo->bigrams.n_entries);
+    printf("subword:     %d tokens, %d merges, %d bigrams\n",
+           leo->subword.n_tokens, leo->subword.n_merges, leo->subword.bg_n);
+    if (leo->subword.n_merges > 0) {
+        int show = leo->subword.n_merges < 10 ? leo->subword.n_merges : 10;
+        printf("  top merges:\n");
+        for (int i = 0; i < show; i++) {
+            BPEMerge *m = &leo->subword.merges[i];
+            printf("    \"%s\" + \"%s\" → \"%s\"\n",
+                   leo->subword.tokens[m->left],
+                   leo->subword.tokens[m->right],
+                   leo->subword.tokens[m->result]);
+        }
+    }
+    printf("mathbrain:   %d obs, loss=%.4f, tau_nudge=%.3f\n",
+           leo->mathbrain.observations, leo->mathbrain.running_loss,
+           leo->mathbrain.tau_nudge);
+    printf("phase4:      %d transitions\n", leo->phase4.n_transitions);
 
     /* estimate RAM */
     size_t ram = sizeof(Leo);
@@ -3257,6 +3716,18 @@ void leo_export_gguf(Leo *leo, const char *path) {
     /* A10. Phase4 island transition memory */
     fwrite(&leo->phase4, sizeof(Phase4), 1, f);
 
+    /* A11. Subword field (BPE vocabulary + merges + bigrams) */
+    fwrite(&leo->subword.n_tokens, sizeof(int), 1, f);
+    for (int i = 0; i < leo->subword.n_tokens; i++)
+        fwrite(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+    fwrite(&leo->subword.n_merges, sizeof(int), 1, f);
+    fwrite(leo->subword.merges, sizeof(BPEMerge), leo->subword.n_merges, f);
+    fwrite(&leo->subword.bg_n, sizeof(int), 1, f);
+    fwrite(leo->subword.bg_src, sizeof(int), leo->subword.bg_n, f);
+    fwrite(leo->subword.bg_dst, sizeof(int), leo->subword.bg_n, f);
+    fwrite(leo->subword.bg_count, sizeof(float), leo->subword.bg_n, f);
+    fwrite(&leo->subword.total_tokens, sizeof(int), 1, f);
+
     long file_size = ftell(f);
     fclose(f);
 
@@ -3546,6 +4017,43 @@ int leo_import_gguf(Leo *leo, const char *path) {
         if (fread(&leo->phase4, sizeof(Phase4), 1, f) == 1) {
             printf("[leo]   phase4: %d transitions, prev_island=%d\n",
                    leo->phase4.n_transitions, leo->phase4.prev_island);
+        }
+
+        /* A11. Subword field */
+        {
+            int sw_n = 0;
+            if (fread(&sw_n, sizeof(int), 1, f) == 1 && sw_n > 0) {
+                leo->subword.n_tokens = sw_n;
+                for (int i = 0; i < sw_n && i < SW_MAX_VOCAB; i++)
+                    FREAD(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+                int n_merges = 0;
+                FREAD(&n_merges, sizeof(int), 1, f);
+                leo->subword.n_merges = n_merges;
+                FREAD(leo->subword.merges, sizeof(BPEMerge), n_merges, f);
+                int bg_n = 0;
+                FREAD(&bg_n, sizeof(int), 1, f);
+                leo->subword.bg_n = bg_n;
+                FREAD(leo->subword.bg_src, sizeof(int), bg_n, f);
+                FREAD(leo->subword.bg_dst, sizeof(int), bg_n, f);
+                FREAD(leo->subword.bg_count, sizeof(float), bg_n, f);
+                /* rebuild hash */
+                for (int i = 0; i < leo->subword.bg_hash_size; i++)
+                    leo->subword.bg_hash[i] = -1;
+                for (int i = 0; i < bg_n; i++) {
+                    uint32_t hv = (uint32_t)(leo->subword.bg_src[i] * 65537 +
+                                  leo->subword.bg_dst[i] * 31) % leo->subword.bg_hash_size;
+                    for (int p = 0; p < 64; p++) {
+                        int idx = (hv + p) % leo->subword.bg_hash_size;
+                        if (leo->subword.bg_hash[idx] == -1) {
+                            leo->subword.bg_hash[idx] = i;
+                            break;
+                        }
+                    }
+                }
+                FREAD(&leo->subword.total_tokens, sizeof(int), 1, f);
+                printf("[leo]   subword: %d tokens, %d merges, %d bigrams\n",
+                       sw_n, n_merges, bg_n);
+            }
         }
 
         printf("[leo]   appendix loaded successfully\n");
