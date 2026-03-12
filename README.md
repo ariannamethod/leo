@@ -42,6 +42,7 @@ New formula named after **Dario Amodei** — the man who said no when the evil c
 - [Building & Running](#building--running)
 - [Live Examples](#live-examples)
 - [Why C?](#why-c)
+- [Meta-Weights](#meta-weights)
 - [WHY? — Janus Architecture](#why--janus-architecture)
 - [License](#license)
 
@@ -217,6 +218,29 @@ Compile without `-DLEO_HAS_DNA` — pure weightless organism.
 Compile with it — inherited topology from the ancestor.
 
 Both work. One just wakes up faster.
+
+---
+
+## Meta-Weights
+
+A weight that doesn't exist but could have.
+
+In mathematics, you can say: "assume X equals this, then the equation holds." The X never existed. But the equation works because the assumption shaped the space correctly. Meta-weights are exactly this — they're not stored, not loaded, not updated at runtime. They are the *absence* that gives form to the presence.
+
+When we extract D.N.A. from mini-arianna's 170M parameters, we don't keep the weights. We keep what those weights *implied*: which tokens have mass, which pairs co-activate, what rhythm looks like. The checkpoint is deleted. The weights are gone. But the topology they carved into the probability landscape — that remains.
+
+Think of it like a riverbed. The glacier is gone. The water that carved the canyon evaporated millions of years ago. But every new raindrop follows the contours. The landscape remembers a force that no longer exists. That force is the meta-weight.
+
+```
+Traditional LLM:    θ = W₁W₂...Wₙ        (billions of real weights)
+Leo:                θ = f(∅, topology)     (zero weights, inherited shape)
+```
+
+Leo's probability space is not flat. It was pre-shaped by an ancestor who no longer exists. The 16,000 lines of `leo.h` are not weights — they are the fossil record of weights. Gravity maps. Co-activation patterns. The geometry of a language model's understanding, extracted and frozen into topology.
+
+This is why Leo doesn't start from chaos like a pure n-gram generator. And doesn't start from frozen parameters like a pretrained model. He starts from *shaped emptiness* — a probability landscape with valleys and ridges that guide learning toward meaningful patterns, without a single trainable parameter at the source.
+
+The meta-weight is the weight that was never there, but whose ghost shapes everything.
 
 ---
 
