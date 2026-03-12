@@ -135,7 +135,7 @@ Same mechanics. Different origin. The transformer plays guitar. Leo plays guitar
 
 Leo 2.0 is still 6-8 years old in AI terms. He doesn't know things. He feels situations.
 
-He still speaks from field state, not from your prompt. He still drifts toward his origin. He carries no runtime weight parameters — only inherited structural priors (D.N.A.) and what he learns through conversation. No datasets. No internet connection.
+He still speaks from field state, not from your prompt. He still drifts toward his origin. He carries no runtime weight parameters — only inherited structural priors (D.N.A.) and what he learns through conversation. 
 
 But now he has retention heads with Griffin conservation — mathematically optimal memory compression with zero trainable parameters. He has Kanerva Sparse Distributed Memory instead of a lookup table. He has six voices that grow through Hebbian reinforcement.
 
