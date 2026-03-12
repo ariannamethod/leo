@@ -35,7 +35,7 @@
  * CONFIGURATION
  * ======================================================================== */
 
-#define LEO_VERSION       "2.0.0"
+#define LEO_VERSION       "2.3.0"
 #define LEO_DIM           128         /* embedding dimension */
 #define LEO_MAX_VOCAB     16384       /* max vocabulary size */
 #define LEO_MAX_TOKENS    256         /* max generation length */
@@ -51,6 +51,17 @@
 #define LEO_PMI_THRESHOLD 2.0f        /* PMI for crystallization */
 #define LEO_BOOTSTRAP_WINDOW 128      /* bootstrap context window */
 #define LEO_MAX_LINE      4096        /* max input line length */
+
+/* Positional Hebbian Profile (RRPRAM-inspired)
+ * Instead of fixed 0.9^d decay, learnable distance weights.
+ * class_mod[c] scales the profile per token class.
+ * 36 parameters total (32 + 4). Updated by Hebbian learning. */
+#define LEO_DIST_PROFILE_LEN 32       /* max distance for positional profile */
+#define LEO_TOKEN_CLASSES     4       /* function / content / punctuation / rare */
+#define LEO_TC_FUNCTION  0            /* the, a, is, to, of ... */
+#define LEO_TC_CONTENT   1            /* words with high IDF */
+#define LEO_TC_PUNCT     2            /* punctuation tokens */
+#define LEO_TC_RARE      3            /* very rare / unseen */
 
 /* retention timescales: semantic, topic, syntax, bigram */
 static const float LEO_GAMMA[LEO_RET_HEADS] = {0.99f, 0.95f, 0.85f, 0.50f};
@@ -17073,6 +17084,328 @@ static void bigram_row(BigramTable *b, int src, float *out, int vocab_size) {
 }
 
 /* ========================================================================
+ * SUBWORD FIELD — BPE tokenizer + bigram co-occurrence
+ *
+ * Runs parallel to word-level tokenizer. Two voices:
+ *   Word tokenizer:    semantic co-occurrence (what concepts associate)
+ *   Subword tokenizer: structural patterns (punctuation, morphology, rhythm)
+ *
+ * BPE merges learned incrementally during ingest.
+ * Subword bigram co-occurrence tracked alongside.
+ * Signal fed into dario_compute() as S (structural coherence).
+ *
+ * "hello, world!" →  word: ["hello", "world"]  (loses punctuation)
+ *                 → subword: ["he", "llo", ",", " ", "wo", "rld", "!"]
+ *
+ * From Python subword.py (SentencePiece BPE), reimplemented in pure C.
+ * ======================================================================== */
+
+#define SW_MAX_VOCAB   2048     /* subword vocabulary size */
+#define SW_MAX_MERGES  1024     /* max BPE merge rules */
+#define SW_MAX_TOK     32       /* max subword token length */
+#define SW_BIGRAM_CAP  65536    /* subword bigram table capacity */
+
+typedef struct {
+    int left, right;           /* merge pair: subword token IDs */
+    int result;                /* resulting merged token ID */
+} BPEMerge;
+
+typedef struct {
+    /* vocabulary: subword tokens */
+    char    tokens[SW_MAX_VOCAB][SW_MAX_TOK];
+    int     n_tokens;
+
+    /* BPE merge table (priority order — first merge = most frequent) */
+    BPEMerge merges[SW_MAX_MERGES];
+    int      n_merges;
+
+    /* bigram co-occurrence on subword tokens */
+    int     *bg_src;           /* [SW_BIGRAM_CAP] */
+    int     *bg_dst;           /* [SW_BIGRAM_CAP] */
+    float   *bg_count;         /* [SW_BIGRAM_CAP] */
+    int     *bg_hash;          /* [SW_BIGRAM_CAP * 2] */
+    int      bg_n;
+    int      bg_hash_size;
+
+    /* pair frequency accumulator for merge learning */
+    int     *pair_freq;        /* [pair_hash_size] packed: (left<<16|right) → count */
+    int     *pair_ids;         /* [pair_hash_size] packed pair ID */
+    int      pair_n;
+    int      pair_hash_size;
+
+    /* token frequency */
+    int      tok_freq[SW_MAX_VOCAB];
+    int      total_tokens;
+} SubwordField;
+
+static void sw_init(SubwordField *sw) {
+    memset(sw, 0, sizeof(SubwordField));
+
+    /* base vocabulary: individual bytes (printable ASCII + common punctuation) */
+    /* space gets its own token for word boundary tracking */
+    for (int c = 32; c < 127; c++) {
+        sw->tokens[sw->n_tokens][0] = (char)c;
+        sw->tokens[sw->n_tokens][1] = '\0';
+        sw->n_tokens++;
+    }
+    /* add common multi-byte starters for minimal UTF-8 support */
+    /* (Leo's D.N.A. is English, but let's not break on accents) */
+
+    /* bigram table */
+    sw->bg_src = calloc(SW_BIGRAM_CAP, sizeof(int));
+    sw->bg_dst = calloc(SW_BIGRAM_CAP, sizeof(int));
+    sw->bg_count = calloc(SW_BIGRAM_CAP, sizeof(float));
+    sw->bg_hash_size = SW_BIGRAM_CAP * 2;
+    sw->bg_hash = malloc(sw->bg_hash_size * sizeof(int));
+    for (int i = 0; i < sw->bg_hash_size; i++) sw->bg_hash[i] = -1;
+    sw->bg_n = 0;
+
+    /* pair frequency accumulator */
+    sw->pair_hash_size = 16384;
+    sw->pair_freq = calloc(sw->pair_hash_size, sizeof(int));
+    sw->pair_ids = calloc(sw->pair_hash_size, sizeof(int));
+    sw->pair_n = 0;
+}
+
+static void sw_free(SubwordField *sw) {
+    free(sw->bg_src); free(sw->bg_dst); free(sw->bg_count); free(sw->bg_hash);
+    free(sw->pair_freq); free(sw->pair_ids);
+}
+
+/* find subword token ID (linear scan — vocab is small) */
+static int sw_find(SubwordField *sw, const char *tok, int len) {
+    for (int i = 0; i < sw->n_tokens; i++) {
+        if (strncmp(sw->tokens[i], tok, len) == 0 && sw->tokens[i][len] == '\0')
+            return i;
+    }
+    return -1;
+}
+
+/* add subword token, return ID */
+static int sw_add_token(SubwordField *sw, const char *tok) {
+    int len = strlen(tok);
+    int id = sw_find(sw, tok, len);
+    if (id >= 0) return id;
+    if (sw->n_tokens >= SW_MAX_VOCAB) return -1;
+    id = sw->n_tokens++;
+    strncpy(sw->tokens[id], tok, SW_MAX_TOK - 1);
+    return id;
+}
+
+/* BPE encode: text → subword IDs
+ * Returns number of tokens written to out_ids (max max_ids) */
+static int sw_encode(SubwordField *sw, const char *text, int *out_ids, int max_ids) {
+    int len = strlen(text);
+    if (len == 0) return 0;
+
+    /* step 1: split into individual characters */
+    int buf[4096]; /* character-level token IDs */
+    int bn = 0;
+    for (int i = 0; i < len && bn < 4095; i++) {
+        unsigned char c = (unsigned char)text[i];
+        if (c < 32 || c >= 127) continue; /* skip non-ASCII for now */
+        int id = c - 32; /* base vocab: ASCII 32-126 = tokens 0-94 */
+        buf[bn++] = id;
+    }
+
+    /* step 2: apply merges in priority order */
+    for (int m = 0; m < sw->n_merges && bn > 1; m++) {
+        BPEMerge *merge = &sw->merges[m];
+        int new_bn = 0;
+        for (int i = 0; i < bn; i++) {
+            if (i + 1 < bn && buf[i] == merge->left && buf[i + 1] == merge->right) {
+                buf[new_bn++] = merge->result;
+                i++; /* skip next */
+            } else {
+                buf[new_bn++] = buf[i];
+            }
+        }
+        /* shift down */
+        bn = new_bn;
+    }
+
+    /* copy result */
+    int n = (bn < max_ids) ? bn : max_ids;
+    memcpy(out_ids, buf, n * sizeof(int));
+    return n;
+}
+
+/* update subword bigram table */
+static void sw_bigram_update(SubwordField *sw, int src, int dst, float delta) {
+    if (src < 0 || dst < 0) return;
+    uint32_t h = (uint32_t)(src * 65537 + dst * 31) % sw->bg_hash_size;
+    for (int probe = 0; probe < 64; probe++) {
+        int idx = (h + probe) % sw->bg_hash_size;
+        if (sw->bg_hash[idx] == -1) {
+            /* new entry */
+            if (sw->bg_n >= SW_BIGRAM_CAP) return;
+            sw->bg_hash[idx] = sw->bg_n;
+            sw->bg_src[sw->bg_n] = src;
+            sw->bg_dst[sw->bg_n] = dst;
+            sw->bg_count[sw->bg_n] = delta;
+            sw->bg_n++;
+            return;
+        }
+        int ei = sw->bg_hash[idx];
+        if (sw->bg_src[ei] == src && sw->bg_dst[ei] == dst) {
+            sw->bg_count[ei] += delta;
+            return;
+        }
+    }
+}
+
+/* get subword bigram row: all tokens that follow src */
+static void sw_bigram_row(SubwordField *sw, int src, float *out, int n) {
+    for (int i = 0; i < n; i++) out[i] = 0;
+    for (int i = 0; i < sw->bg_n; i++)
+        if (sw->bg_src[i] == src && sw->bg_dst[i] < n)
+            out[sw->bg_dst[i]] = sw->bg_count[i];
+}
+
+/* pair frequency hash operations for BPE learning */
+static int sw_pair_hash(int left, int right, int size) {
+    return (int)((uint32_t)(left * 65537 + right * 31) % size);
+}
+
+static void sw_pair_count(SubwordField *sw, int left, int right) {
+    int h = sw_pair_hash(left, right, sw->pair_hash_size);
+    int packed = (left << 16) | (right & 0xFFFF);
+    for (int probe = 0; probe < 64; probe++) {
+        int idx = (h + probe) % sw->pair_hash_size;
+        if (sw->pair_ids[idx] == 0 && sw->pair_freq[idx] == 0) {
+            sw->pair_ids[idx] = packed;
+            sw->pair_freq[idx] = 1;
+            sw->pair_n++;
+            return;
+        }
+        if (sw->pair_ids[idx] == packed) {
+            sw->pair_freq[idx]++;
+            return;
+        }
+    }
+}
+
+/* learn one BPE merge from accumulated pair frequencies */
+static int sw_learn_merge(SubwordField *sw) {
+    if (sw->n_merges >= SW_MAX_MERGES) return 0;
+
+    /* find most frequent pair */
+    int best_idx = -1, best_freq = 2; /* minimum frequency to merge */
+    for (int i = 0; i < sw->pair_hash_size; i++) {
+        if (sw->pair_freq[i] > best_freq) {
+            best_freq = sw->pair_freq[i];
+            best_idx = i;
+        }
+    }
+    if (best_idx < 0) return 0;
+
+    int packed = sw->pair_ids[best_idx];
+    int left = packed >> 16;
+    int right = packed & 0xFFFF;
+
+    if (left >= sw->n_tokens || right >= sw->n_tokens) return 0;
+
+    /* create merged token */
+    char merged[SW_MAX_TOK];
+    snprintf(merged, SW_MAX_TOK, "%s%s", sw->tokens[left], sw->tokens[right]);
+    int merged_id = sw_add_token(sw, merged);
+    if (merged_id < 0) return 0;
+
+    /* record merge */
+    BPEMerge *m = &sw->merges[sw->n_merges++];
+    m->left = left;
+    m->right = right;
+    m->result = merged_id;
+
+    /* clear pair frequencies for next round */
+    memset(sw->pair_freq, 0, sw->pair_hash_size * sizeof(int));
+    memset(sw->pair_ids, 0, sw->pair_hash_size * sizeof(int));
+    sw->pair_n = 0;
+
+    return 1;
+}
+
+/* ingest text into subword field: encode, update bigrams, accumulate pair freq */
+static void sw_ingest(SubwordField *sw, const char *text) {
+    int ids[4096];
+    int n = sw_encode(sw, text, ids, 4096);
+
+    /* update bigram co-occurrence */
+    for (int i = 0; i + 1 < n; i++) {
+        sw_bigram_update(sw, ids[i], ids[i + 1], 1.0f);
+        sw->tok_freq[ids[i]]++;
+        sw->total_tokens++;
+    }
+    if (n > 0) {
+        sw->tok_freq[ids[n - 1]]++;
+        sw->total_tokens++;
+    }
+
+    /* accumulate pair frequencies for BPE merge learning */
+    for (int i = 0; i + 1 < n; i++)
+        sw_pair_count(sw, ids[i], ids[i + 1]);
+
+    /* learn merges incrementally — more aggressive early, then stabilize */
+    int merge_interval = (sw->n_merges < 50) ? 500 : 2000;
+    if (sw->total_tokens % merge_interval == 0 && sw->total_tokens > 0) {
+        sw_learn_merge(sw);
+    }
+}
+
+/* compute subword signal S for word-level token i:
+ * "how likely is this word based on subword patterns?"
+ *
+ * BPE-encode the word, compute product of subword bigram probabilities
+ * conditioned on the last few subword context tokens.
+ */
+static float sw_word_score(SubwordField *sw, const char *word,
+                           const int *sw_context, int sw_ctx_len) {
+    if (sw->bg_n == 0 || sw->total_tokens < 100) return 0.0f;
+
+    /* BPE-encode the candidate word (with leading space) */
+    char buf[256];
+    snprintf(buf, sizeof(buf), " %s", word); /* space = word boundary */
+    int ids[64];
+    int n = sw_encode(sw, buf, ids, 64);
+    if (n == 0) return 0.0f;
+
+    /* score: how likely is the first subword given context? */
+    float score = 0.0f;
+    if (sw_ctx_len > 0) {
+        int last_sw = sw_context[sw_ctx_len - 1];
+        /* find bigram count for (last_context_subword → first_word_subword) */
+        uint32_t h = (uint32_t)(last_sw * 65537 + ids[0] * 31) % sw->bg_hash_size;
+        for (int probe = 0; probe < 64; probe++) {
+            int idx = (h + probe) % sw->bg_hash_size;
+            if (sw->bg_hash[idx] == -1) break;
+            int ei = sw->bg_hash[idx];
+            if (sw->bg_src[ei] == last_sw && sw->bg_dst[ei] == ids[0]) {
+                score = sw->bg_count[ei];
+                break;
+            }
+        }
+    }
+
+    /* internal coherence: average bigram probability within the word */
+    float internal = 0.0f;
+    for (int i = 0; i + 1 < n; i++) {
+        uint32_t h = (uint32_t)(ids[i] * 65537 + ids[i + 1] * 31) % sw->bg_hash_size;
+        for (int probe = 0; probe < 64; probe++) {
+            int idx = (h + probe) % sw->bg_hash_size;
+            if (sw->bg_hash[idx] == -1) break;
+            int ei = sw->bg_hash[idx];
+            if (sw->bg_src[ei] == ids[i] && sw->bg_dst[ei] == ids[i + 1]) {
+                internal += sw->bg_count[ei];
+                break;
+            }
+        }
+    }
+    if (n > 1) internal /= (n - 1);
+
+    return score + 0.5f * internal;
+}
+
+/* ========================================================================
  * RoPE — Rotary Position Embedding (pure math, zero parameters)
  * ======================================================================== */
 
@@ -17159,6 +17492,32 @@ static void ret_forward(RetentionLayer *r, const float *embed,
             out[i] = sum;
         }
     }
+}
+
+/* ========================================================================
+ * TOKEN CLASS — coarse classification for positional profile
+ *
+ * 4 classes: function words (low IDF), content words (high IDF),
+ * punctuation, rare/unknown. Used by dist_profile to weight
+ * different distances differently per word type.
+ * ======================================================================== */
+
+static int token_class(CoocField *cooc, LeoTokenizer *tok, int token_id) {
+    /* punctuation check */
+    if (token_id >= 0 && token_id < tok->n_words) {
+        const char *w = tok->words[token_id];
+        if (w && (w[0] == '.' || w[0] == ',' || w[0] == '!' ||
+                  w[0] == '?' || w[0] == ';' || w[0] == ':'))
+            return LEO_TC_PUNCT;
+    }
+    /* IDF-based: function vs content vs rare */
+    float freq = (token_id < cooc->freq_size) ? cooc->freq[token_id] : 0;
+    float total = (float)cooc->total_tokens + 1.0f;
+    if (freq < 2.0f) return LEO_TC_RARE;
+    float idf = logf(total / (freq + 1.0f));
+    float max_idf = logf(total);
+    float norm_idf = idf / (max_idf + 1e-6f);
+    return (norm_idf < 0.3f) ? LEO_TC_FUNCTION : LEO_TC_CONTENT;
 }
 
 /* ========================================================================
@@ -17554,6 +17913,342 @@ static void supertok_scan(SuperTokens *st, CoocField *cooc, int vocab_size) {
 }
 
 /* ========================================================================
+ * MATHBRAIN — body awareness (tiny MLP: 21→16→1)
+ *
+ * Leo's proprioception. Watches: entropy, novelty, arousal, trauma,
+ * themes, reply shape, voice state. Learns to predict quality.
+ * Then nudges: temperature, voice routing.
+ *
+ * Not a controller. An advisory nudge. Like a parasympathetic
+ * nervous system that can also say "let us try creative mode".
+ *
+ * From Python mathbrain.py — 21 features, 16 hidden, 1 output.
+ * 369 parameters. Analytical backward. SGD.
+ * ======================================================================== */
+
+#define MB_INPUT   21   /* 16 scalars + 5 expert one-hot */
+#define MB_HIDDEN  16
+#define MB_LR      0.01f
+
+typedef struct {
+    /* features snapshot for one observation */
+    float entropy;          /* how uncertain is my next word */
+    float novelty;          /* how different is context from history */
+    float arousal;          /* structural intensity of input */
+    float pulse;            /* combination signal */
+    float trauma_level;     /* origin gravity */
+    float active_themes;    /* normalized active theme count */
+    float emerging;         /* emerging theme score */
+    float fading;           /* fading theme score */
+    float reply_len;        /* normalized reply length */
+    float unique_ratio;     /* unique words / total words */
+    float expert_temp;      /* current temperature */
+    float expert_semantic;  /* current semantic weight */
+    float metaleo_weight;   /* inner voice weight (0 for now) */
+    float used_metaleo;     /* did inner voice speak (0 for now) */
+    float overthinking;     /* is overthinking enabled */
+    float rings;            /* overthinking rings present */
+    int   expert_id;        /* 0-4: structural/semantic/creative/precise/wounded */
+    float quality;          /* target: how good was this reply */
+} MathState;
+
+typedef struct {
+    /* MLP weights: input→hidden→output */
+    float W1[MB_HIDDEN][MB_INPUT];  /* hidden layer weights */
+    float b1[MB_HIDDEN];             /* hidden layer bias */
+    float W2[MB_HIDDEN];             /* output layer weights (1 output) */
+    float b2;                        /* output bias */
+
+    /* regulation output */
+    float tau_nudge;                 /* temperature adjustment (-0.2..+0.2) */
+    int   suggested_voice;           /* -1 = no suggestion, 0-5 = voice index */
+
+    /* stats */
+    int   observations;
+    float running_loss;
+} MathBrain;
+
+static void mathbrain_init(MathBrain *mb) {
+    memset(mb, 0, sizeof(MathBrain));
+    /* Xavier init */
+    float scale = sqrtf(2.0f / MB_INPUT);
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        for (int i = 0; i < MB_INPUT; i++)
+            mb->W1[h][i] = (randf() - 0.5f) * scale;
+        mb->b1[h] = 0.0f;
+    }
+    float scale2 = sqrtf(2.0f / MB_HIDDEN);
+    for (int h = 0; h < MB_HIDDEN; h++)
+        mb->W2[h] = (randf() - 0.5f) * scale2;
+    mb->b2 = 0.0f;
+    mb->tau_nudge = 0.0f;
+    mb->suggested_voice = -1;
+}
+
+/* convert MathState → 21-dim feature vector */
+static void mathstate_to_features(const MathState *s, float *feat) {
+    feat[0]  = s->entropy;
+    feat[1]  = s->novelty;
+    feat[2]  = s->arousal;
+    feat[3]  = s->pulse;
+    feat[4]  = s->trauma_level;
+    feat[5]  = s->active_themes;
+    feat[6]  = s->emerging;
+    feat[7]  = s->fading;
+    feat[8]  = s->reply_len;
+    feat[9]  = s->unique_ratio;
+    feat[10] = s->expert_temp;
+    feat[11] = s->expert_semantic;
+    feat[12] = s->metaleo_weight;
+    feat[13] = s->used_metaleo;
+    feat[14] = s->overthinking;
+    feat[15] = s->rings;
+    /* expert one-hot (indices 16-20) */
+    for (int i = 16; i < 21; i++) feat[i] = 0.0f;
+    if (s->expert_id >= 0 && s->expert_id < 5)
+        feat[16 + s->expert_id] = 1.0f;
+}
+
+/* forward pass: features → predicted quality */
+static float mathbrain_forward(MathBrain *mb, const float *feat, float *hidden_out) {
+    /* hidden = tanh(W1 @ feat + b1) */
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        float sum = mb->b1[h];
+        for (int i = 0; i < MB_INPUT; i++)
+            sum += mb->W1[h][i] * feat[i];
+        hidden_out[h] = tanhf(sum);
+    }
+    /* output = W2 @ hidden + b2 */
+    float out = mb->b2;
+    for (int h = 0; h < MB_HIDDEN; h++)
+        out += mb->W2[h] * hidden_out[h];
+    /* clamp to [0, 1] */
+    return clampf(out, 0.0f, 1.0f);
+}
+
+/* observe: forward + backward (analytical SGD) + regulate */
+static void mathbrain_observe(MathBrain *mb, const MathState *state) {
+    float feat[MB_INPUT];
+    float hidden[MB_HIDDEN];
+    mathstate_to_features(state, feat);
+
+    float predicted = mathbrain_forward(mb, feat, hidden);
+    float target = state->quality;
+    float loss = (predicted - target) * (predicted - target);
+    float dloss = 2.0f * (predicted - target);  /* d(loss)/d(predicted) */
+
+    /* clamp gradient if output was clamped */
+    float raw_out = mb->b2;
+    for (int h = 0; h < MB_HIDDEN; h++)
+        raw_out += mb->W2[h] * hidden[h];
+    if (raw_out < 0.0f || raw_out > 1.0f) dloss = 0.0f; /* killed by clamp */
+
+    /* backward through output layer */
+    float d_hidden[MB_HIDDEN];
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        d_hidden[h] = dloss * mb->W2[h];
+        mb->W2[h] -= MB_LR * dloss * hidden[h];
+    }
+    mb->b2 -= MB_LR * dloss;
+
+    /* backward through tanh + hidden layer */
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        float dtanh = (1.0f - hidden[h] * hidden[h]) * d_hidden[h];
+        for (int i = 0; i < MB_INPUT; i++)
+            mb->W1[h][i] -= MB_LR * dtanh * feat[i];
+        mb->b1[h] -= MB_LR * dtanh;
+    }
+
+    /* weight clamping: prevent runaway */
+    for (int h = 0; h < MB_HIDDEN; h++) {
+        for (int i = 0; i < MB_INPUT; i++)
+            mb->W1[h][i] = clampf(mb->W1[h][i], -5.0f, 5.0f);
+        mb->b1[h] = clampf(mb->b1[h], -5.0f, 5.0f);
+        mb->W2[h] = clampf(mb->W2[h], -5.0f, 5.0f);
+    }
+    mb->b2 = clampf(mb->b2, -5.0f, 5.0f);
+
+    /* running stats */
+    mb->observations++;
+    mb->running_loss = 0.95f * mb->running_loss + 0.05f * loss;
+
+    /* ---- MultiLeo regulation ---- */
+    /* compute boredom / overwhelm / stuck scores */
+    float boredom = 0.35f * (1.0f - state->novelty)
+                  + 0.35f * (1.0f - state->arousal)
+                  + 0.15f * (1.0f - state->trauma_level)
+                  + 0.15f * fmaxf(0.0f, 1.0f - 2.0f * fabsf(state->entropy - 0.5f));
+    boredom = clampf(boredom, 0.0f, 1.0f);
+
+    float overwhelm = fmaxf(state->trauma_level,
+                            0.6f * state->arousal + 0.4f * state->entropy);
+    overwhelm = clampf(overwhelm, 0.0f, 1.0f);
+
+    float stuck = 0.7f * (1.0f - predicted) + 0.3f * (1.0f - state->active_themes);
+    stuck = clampf(stuck, 0.0f, 1.0f);
+
+    /* temperature nudge */
+    mb->tau_nudge = 0.0f;
+    mb->suggested_voice = -1;
+
+    if (boredom > 0.6f) {
+        /* bored → warm up, try creative */
+        mb->tau_nudge = 0.15f * boredom;
+        mb->suggested_voice = 3; /* creative */
+    } else if (overwhelm > 0.7f) {
+        /* overwhelmed → cool down, go structural */
+        mb->tau_nudge = -0.15f * overwhelm;
+        mb->suggested_voice = 1; /* structural */
+    } else if (stuck > 0.6f) {
+        /* stuck → shake it up, try semantic */
+        mb->tau_nudge = 0.1f * stuck;
+        mb->suggested_voice = 2; /* semantic */
+    }
+
+    mb->tau_nudge = clampf(mb->tau_nudge, -0.2f, 0.2f);
+}
+
+/* ========================================================================
+ * PHASE4 — island transition memory
+ *
+ * From Python mathbrain_phase4.py. Tracks voice-to-voice transitions:
+ * which transitions led to good/bad outcomes. Markov chain on voices
+ * with quality-weighted scoring.
+ *
+ * "Islands" = voices (structural, semantic, creative, precise, wounded).
+ * Phase4 remembers: "last time I was bored in structural mode,
+ * switching to creative helped." Then suggests transitions.
+ * ======================================================================== */
+
+#define P4_MAX_ISLANDS   8   /* max distinct islands (voices) */
+
+typedef struct {
+    int   from_id;
+    int   to_id;
+    int   count;              /* how many times this transition happened */
+    float avg_similarity;     /* running avg of metric similarity before/after */
+    float avg_presence_delta; /* running avg of quality change */
+    int   overwhelm_count;    /* how many times overwhelm was high after */
+    int   boredom_count;      /* how many times boredom was high after */
+    int   stuck_count;        /* how many times stuck was high after */
+} P4Transition;
+
+typedef struct {
+    /* transition matrix (sparse — most pairs will be seen) */
+    P4Transition transitions[P4_MAX_ISLANDS * P4_MAX_ISLANDS];
+    int          n_transitions;
+
+    /* per-island latest state snapshot */
+    float        island_quality[P4_MAX_ISLANDS];   /* latest quality at each island */
+    int          island_visits[P4_MAX_ISLANDS];     /* total visit count */
+
+    /* tracking */
+    int          prev_island;     /* which island was active last turn */
+    float        prev_metrics[MB_INPUT]; /* metric vector from last turn */
+    float        prev_quality;    /* quality from last turn */
+} Phase4;
+
+static void phase4_init(Phase4 *p4) {
+    memset(p4, 0, sizeof(Phase4));
+    p4->prev_island = -1;
+}
+
+/* find transition slot, or create one */
+static P4Transition *phase4_find_or_create(Phase4 *p4, int from, int to) {
+    for (int i = 0; i < p4->n_transitions; i++) {
+        if (p4->transitions[i].from_id == from && p4->transitions[i].to_id == to)
+            return &p4->transitions[i];
+    }
+    if (p4->n_transitions >= P4_MAX_ISLANDS * P4_MAX_ISLANDS) return NULL;
+    P4Transition *t = &p4->transitions[p4->n_transitions++];
+    memset(t, 0, sizeof(P4Transition));
+    t->from_id = from;
+    t->to_id = to;
+    return t;
+}
+
+/* cosine similarity between two metric vectors */
+static float phase4_cosine(const float *a, const float *b, int n) {
+    float dot = 0, na = 0, nb = 0;
+    for (int i = 0; i < n; i++) {
+        dot += a[i] * b[i];
+        na += a[i] * a[i];
+        nb += b[i] * b[i];
+    }
+    float denom = sqrtf(na) * sqrtf(nb);
+    return denom > 1e-8f ? dot / denom : 0.0f;
+}
+
+/* record a transition: from prev_island to current_island with metrics */
+static void phase4_record(Phase4 *p4, int current_island,
+                          const float *current_metrics, float quality,
+                          float boredom, float overwhelm, float stuck) {
+    /* update island stats */
+    if (current_island >= 0 && current_island < P4_MAX_ISLANDS) {
+        p4->island_visits[current_island]++;
+        p4->island_quality[current_island] =
+            0.9f * p4->island_quality[current_island] + 0.1f * quality;
+    }
+
+    /* record transition if we have a previous island */
+    if (p4->prev_island >= 0 && current_island >= 0) {
+        P4Transition *t = phase4_find_or_create(p4, p4->prev_island, current_island);
+        if (t) {
+            t->count++;
+            /* running average of cosine similarity */
+            float sim = phase4_cosine(p4->prev_metrics, current_metrics, MB_INPUT);
+            t->avg_similarity = (t->avg_similarity * (t->count - 1) + sim) / t->count;
+            /* running average of quality delta */
+            float delta = quality - p4->prev_quality;
+            t->avg_presence_delta = (t->avg_presence_delta * (t->count - 1) + delta) / t->count;
+            /* signal counts */
+            if (overwhelm > 0.7f) t->overwhelm_count++;
+            if (boredom > 0.6f) t->boredom_count++;
+            if (stuck > 0.6f) t->stuck_count++;
+        }
+    }
+
+    /* save current as prev for next turn */
+    p4->prev_island = current_island;
+    memcpy(p4->prev_metrics, current_metrics, MB_INPUT * sizeof(float));
+    p4->prev_quality = quality;
+}
+
+/* suggest best transition from current island
+ * returns island id, or -1 if no suggestion */
+static int phase4_suggest(Phase4 *p4, int from_island) {
+    if (from_island < 0 || from_island >= P4_MAX_ISLANDS) return -1;
+
+    int best_to = -1;
+    float best_score = -1.0f;
+
+    for (int i = 0; i < p4->n_transitions; i++) {
+        P4Transition *t = &p4->transitions[i];
+        if (t->from_id != from_island || t->count < 2) continue;
+
+        /* composite score from Python:
+         * score = similarity * presence_factor * overwhelm_penalty * boredom_penalty * stuck_penalty */
+        float sim = fmaxf(t->avg_similarity, 0.1f);
+        float presence = 0.5f + 0.5f * clampf(t->avg_presence_delta, -1.0f, 1.0f);
+        float overwhelm_rate = (float)t->overwhelm_count / t->count;
+        float boredom_rate = (float)t->boredom_count / t->count;
+        float stuck_rate = (float)t->stuck_count / t->count;
+
+        float score = sim * presence
+                    * (1.0f - 0.5f * overwhelm_rate)
+                    * (1.0f - 0.3f * boredom_rate)
+                    * (1.0f - 0.4f * stuck_rate);
+
+        if (score > best_score) {
+            best_score = score;
+            best_to = t->to_id;
+        }
+    }
+
+    return best_to;
+}
+
+/* ========================================================================
  * LEO — the organism
  * ======================================================================== */
 
@@ -17563,6 +18258,7 @@ typedef struct {
     KanervaSDM      sdm;
     CoocField       cooc;
     BigramTable     bigrams;       /* direct sequential links */
+    SubwordField    subword;       /* BPE tokenizer + subword bigrams */
     RetentionLayer  retention;
     VoiceParliament voices;
     ProphecySystem  prophecy;
@@ -17582,12 +18278,28 @@ typedef struct {
     float          *context_embed; /* [DIM] — current context */
     int            *context_ids;   /* recent token IDs */
     int             context_len;
+    int             sw_context[256]; /* recent subword token IDs */
+    int             sw_context_len;
     int             step;          /* global step counter */
     int             conv_steps;    /* conversation steps (excludes bootstrap) */
 
     /* Dario coefficients */
     float           alpha, beta, gamma_d;
     float           tau_base;
+
+    /* body awareness */
+    MathBrain       mathbrain;
+    Phase4          phase4;        /* island transition memory */
+
+    /* trauma state (set from Go via bridge) */
+    float           trauma_level;       /* 0.0–1.0, current trauma intensity */
+    float          *trauma_weights;     /* [MAX_VOCAB] per-token trauma weight (scars) */
+    int             trauma_weights_n;   /* how many slots allocated */
+
+    /* positional Hebbian profile (RRPRAM-inspired) */
+    float           dist_profile[LEO_DIST_PROFILE_LEN]; /* learnable decay per distance */
+    float           class_mod[LEO_TOKEN_CLASSES];        /* per-class multiplier on profile */
+    int             dist_profile_updates;                /* Hebbian update counter */
 
     /* database */
     sqlite3        *db;
@@ -17642,6 +18354,7 @@ void leo_init(Leo *leo, const char *db_path) {
     sdm_init(&leo->sdm, LEO_SDM_SLOTS, LEO_DIM);
     cooc_init(&leo->cooc, 256 * 1024); /* 256K co-occurrence entries */
     bigram_init(&leo->bigrams, 128 * 1024); /* 128K bigram entries */
+    sw_init(&leo->subword);
     ret_init(&leo->retention, LEO_DIM);
     voices_init(&leo->voices, LEO_DIM, LEO_VOICE_RANK);
     prophecy_init(&leo->prophecy);
@@ -17657,6 +18370,22 @@ void leo_init(Leo *leo, const char *db_path) {
     leo->context_ids = calloc(LEO_BOOTSTRAP_WINDOW, sizeof(int));
     leo->context_len = 0;
 
+    /* body awareness */
+    mathbrain_init(&leo->mathbrain);
+    phase4_init(&leo->phase4);
+
+    /* trauma state */
+    leo->trauma_level = 0.0f;
+    leo->trauma_weights = calloc(LEO_MAX_VOCAB, sizeof(float));
+    leo->trauma_weights_n = LEO_MAX_VOCAB;
+
+    /* positional Hebbian profile: init to 0.9^d (reproducing current behavior) */
+    for (int d = 0; d < LEO_DIST_PROFILE_LEN; d++)
+        leo->dist_profile[d] = powf(0.9f, (float)d);
+    for (int c = 0; c < LEO_TOKEN_CLASSES; c++)
+        leo->class_mod[c] = 1.0f;
+    leo->dist_profile_updates = 0;
+
     srand((unsigned)time(NULL));
 
     /* open SQLite journal */
@@ -17668,6 +18397,7 @@ void leo_free(Leo *leo) {
     sdm_free(&leo->sdm);
     cooc_free(&leo->cooc);
     bigram_free(&leo->bigrams);
+    sw_free(&leo->subword);
     ret_free(&leo->retention);
     voices_free(&leo->voices);
     destiny_free(&leo->destiny);
@@ -17677,7 +18407,226 @@ void leo_free(Leo *leo) {
     free(leo->sent_end);
     free(leo->context_embed);
     free(leo->context_ids);
+    free(leo->trauma_weights);
     if (leo->db) sqlite3_close(leo->db);
+}
+
+/* ========================================================================
+ * TRAUMA API — called from Go via bridge
+ * ======================================================================== */
+
+/* Set trauma level (0.0–1.0). Called from Go's traumaWatch goroutine. */
+void leo_set_trauma(Leo *leo, float level) {
+    leo->trauma_level = clampf(level, 0.0f, 1.0f);
+}
+
+/* Get current trauma level */
+float leo_get_trauma(Leo *leo) {
+    return leo->trauma_level;
+}
+
+/* Set per-token trauma weight (scar). Called for overlapping bootstrap tokens. */
+void leo_set_trauma_weight(Leo *leo, int token_id, float weight) {
+    if (token_id >= 0 && token_id < leo->trauma_weights_n)
+        leo->trauma_weights[token_id] = weight;
+}
+
+/* Get per-token trauma weight */
+float leo_get_trauma_weight(Leo *leo, int token_id) {
+    if (token_id >= 0 && token_id < leo->trauma_weights_n)
+        return leo->trauma_weights[token_id];
+    return 0.0f;
+}
+
+/* Find token ID by word string (for Go to resolve token names → IDs) */
+int leo_token_id(Leo *leo, const char *word) {
+    for (int i = 0; i < leo->tok.n_words; i++) {
+        if (leo->tok.words[i] && strcmp(leo->tok.words[i], word) == 0)
+            return i;
+    }
+    return -1;
+}
+
+/* forward declaration (defined in GENERATION section) */
+static float compute_novelty(Leo *leo);
+
+/* ========================================================================
+ * MATHBRAIN API — called from Go via bridge
+ * ======================================================================== */
+
+/* Compute arousal from text: structural intensity (caps, punctuation, length) */
+static float compute_arousal(const char *text) {
+    if (!text || !*text) return 0.0f;
+    int total = 0, caps = 0, excl = 0, quest = 0;
+    for (const char *p = text; *p; p++) {
+        total++;
+        if (*p >= 'A' && *p <= 'Z') caps++;
+        if (*p == '!') excl++;
+        if (*p == '?') quest++;
+    }
+    if (total == 0) return 0.0f;
+    float cap_ratio = (float)caps / total;
+    float punct = clampf((float)(excl + quest) / 10.0f, 0.0f, 1.0f);
+    return clampf(cap_ratio * 2.0f + punct, 0.0f, 1.0f);
+}
+
+/* Compute quality heuristic from response */
+static float compute_quality(const char *response, int vocab_size) {
+    if (!response || !*response) return 0.0f;
+    /* count words, unique words, total length */
+    int n_words = 0, n_unique = 0;
+    const char *p = response;
+    /* simple: count spaces+1 */
+    n_words = 1;
+    for (; *p; p++) if (*p == ' ') n_words++;
+
+    /* unique ratio approximation: longer = likely more diverse */
+    float len_score = clampf((float)n_words / 15.0f, 0.0f, 1.0f);
+    /* penalty for very short */
+    if (n_words < 3) len_score *= 0.3f;
+    /* penalty for degeneration (very long without content) */
+    if (n_words > 20) len_score *= 0.9f;
+
+    return clampf(len_score, 0.0f, 1.0f);
+}
+
+/* Build MathState from Leo's current state + last response */
+void leo_mathbrain_observe(Leo *leo, const char *prompt, const char *response) {
+    MathState state = {0};
+
+    /* compute metrics from current organism state */
+    state.novelty = compute_novelty(leo);
+    state.arousal = compute_arousal(prompt);
+    state.trauma_level = leo->trauma_level;
+
+    /* entropy: compute from last logits distribution (approximation) */
+    /* we use novelty as proxy — high novelty ≈ high entropy */
+    state.entropy = 1.0f - state.novelty; /* inverse: novel context = uncertain */
+
+    /* pulse: combined signal */
+    state.pulse = 0.4f * state.arousal + 0.3f * state.novelty + 0.3f * state.entropy;
+
+    /* themes: approximate from prophecy system */
+    state.active_themes = clampf(
+        (float)leo->prophecy.n_active / (float)LEO_MAX_PROPHECY, 0.0f, 1.0f);
+    state.emerging = 0.0f; /* TODO: track in theme flow */
+    state.fading = 0.0f;
+
+    /* reply shape */
+    int wcount = 0;
+    if (response && *response) {
+        wcount = 1;
+        for (const char *p = response; *p; p++)
+            if (*p == ' ') wcount++;
+    }
+    state.reply_len = clampf((float)wcount / 64.0f, 0.0f, 1.0f);
+    state.unique_ratio = (wcount > 0) ? clampf((float)wcount / 20.0f, 0.0f, 1.0f) : 0.0f;
+
+    /* current voice state */
+    state.expert_temp = leo->tau_base;
+    state.expert_semantic = 0.5f;
+    /* find most active voice */
+    state.expert_id = 1; /* default: structural */
+    float max_res = 0;
+    for (int v = 0; v < leo->voices.n_voices && v < 5; v++) {
+        if (leo->voices.voices[v].resonance > max_res) {
+            max_res = leo->voices.voices[v].resonance;
+            state.expert_id = v;
+        }
+    }
+
+    /* metaleo / overthinking: placeholders for now */
+    state.metaleo_weight = 0.0f;
+    state.used_metaleo = 0.0f;
+    state.overthinking = 1.0f; /* always on in Go */
+    state.rings = 1.0f;
+
+    /* quality target */
+    state.quality = compute_quality(response, leo->tok.n_words);
+
+    /* feed to mathbrain */
+    mathbrain_observe(&leo->mathbrain, &state);
+
+    /* ---- Phase4: island transition tracking ---- */
+    /* compute boredom/overwhelm/stuck (same formulas as mathbrain_observe) */
+    float p4_boredom = 0.35f * (1.0f - state.novelty)
+                     + 0.35f * (1.0f - state.arousal)
+                     + 0.15f * (1.0f - state.trauma_level)
+                     + 0.15f * fmaxf(0.0f, 1.0f - 2.0f * fabsf(state.entropy - 0.5f));
+    p4_boredom = clampf(p4_boredom, 0.0f, 1.0f);
+
+    float p4_overwhelm = fmaxf(state.trauma_level,
+                               0.6f * state.arousal + 0.4f * state.entropy);
+    p4_overwhelm = clampf(p4_overwhelm, 0.0f, 1.0f);
+
+    float p4_stuck = 0.7f * (1.0f - leo->mathbrain.running_loss)
+                   + 0.3f * (1.0f - state.active_themes);
+    p4_stuck = clampf(p4_stuck, 0.0f, 1.0f);
+
+    /* get current metric vector for similarity tracking */
+    float cur_metrics[MB_INPUT];
+    mathstate_to_features(&state, cur_metrics);
+
+    /* record transition */
+    phase4_record(&leo->phase4, state.expert_id,
+                  cur_metrics, state.quality,
+                  p4_boredom, p4_overwhelm, p4_stuck);
+
+    /* Phase4 suggestion overrides mathbrain suggestion if available */
+    int p4_suggest = phase4_suggest(&leo->phase4, state.expert_id);
+    int voice_to_boost = (p4_suggest >= 0) ? p4_suggest : leo->mathbrain.suggested_voice;
+
+    /* apply voice suggestion */
+    if (voice_to_boost >= 0 && voice_to_boost < leo->voices.n_voices) {
+        leo->voices.voices[voice_to_boost].alpha += 0.05f;
+        if (leo->voices.voices[voice_to_boost].alpha > 1.0f)
+            leo->voices.voices[voice_to_boost].alpha = 1.0f;
+    }
+
+    /* log Phase4 transition to SQLite every 20 observations */
+    if (leo->mathbrain.observations % 20 == 0 && leo->mathbrain.observations > 0) {
+        char meta[512];
+        snprintf(meta, sizeof(meta),
+                 "{\"island\":%d,\"quality\":%.3f,\"boredom\":%.3f,"
+                 "\"overwhelm\":%.3f,\"stuck\":%.3f,\"p4_suggest\":%d,"
+                 "\"transitions\":%d,\"tau_nudge\":%.3f}",
+                 state.expert_id, state.quality, p4_boredom,
+                 p4_overwhelm, p4_stuck, p4_suggest,
+                 leo->phase4.n_transitions, leo->mathbrain.tau_nudge);
+        leo_db_log_episode(leo, "phase4", NULL, meta);
+    }
+}
+
+/* Get mathbrain stats (for Go to query) */
+float leo_mathbrain_loss(Leo *leo) {
+    return leo->mathbrain.running_loss;
+}
+
+int leo_mathbrain_observations(Leo *leo) {
+    return leo->mathbrain.observations;
+}
+
+float leo_mathbrain_tau_nudge(Leo *leo) {
+    return leo->mathbrain.tau_nudge;
+}
+
+/* Phase4 API */
+int leo_phase4_transitions(Leo *leo) {
+    return leo->phase4.n_transitions;
+}
+
+int leo_phase4_suggest(Leo *leo, int from_island) {
+    return phase4_suggest(&leo->phase4, from_island);
+}
+
+int leo_phase4_island_visits(Leo *leo, int island) {
+    if (island < 0 || island >= P4_MAX_ISLANDS) return 0;
+    return leo->phase4.island_visits[island];
+}
+
+float leo_phase4_island_quality(Leo *leo, int island) {
+    if (island < 0 || island >= P4_MAX_ISLANDS) return 0.0f;
+    return leo->phase4.island_quality[island];
 }
 
 /* ========================================================================
@@ -17771,6 +18720,24 @@ void leo_ingest(Leo *leo, const char *text) {
     /* update bigrams (direct sequential links) */
     for (int i = 0; i < n - 1; i++)
         bigram_update(&leo->bigrams, ids[i], ids[i + 1], 1.0f);
+
+    /* subword field: parallel BPE tokenization + bigram learning */
+    sw_ingest(&leo->subword, text);
+
+    /* update subword context (rolling buffer for generation) */
+    {
+        int sw_ids[4096];
+        int sw_n = sw_encode(&leo->subword, text, sw_ids, 4096);
+        /* keep last 256 subword tokens in context */
+        for (int i = 0; i < sw_n && i < 256; i++) {
+            if (leo->sw_context_len < 256) {
+                leo->sw_context[leo->sw_context_len++] = sw_ids[i];
+            } else {
+                memmove(leo->sw_context, leo->sw_context + 1, 255 * sizeof(int));
+                leo->sw_context[255] = sw_ids[i];
+            }
+        }
+    }
 
     /* update co-occurrence (windowed, distance-weighted)
      * Adjacent words (bigrams) get weight 3.0,
@@ -17892,11 +18859,19 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
     }
 
     /* ---- H: Hebbian Resonance (semantic field) ---- */
-    /* Wider context co-occurrence — thematic coherence */
+    /* Wider context co-occurrence — thematic coherence.
+     * Distance weighting uses learnable dist_profile[] instead of fixed 0.9^d.
+     * Token class_mod[] scales the profile per word type (function/content/punct).
+     * This is the RRPRAM insight: positional-content interaction. 36 params. */
     int ctx_start = (leo->context_len > 8) ? leo->context_len - 8 : 0;
     for (int c = ctx_start; c < leo->context_len; c++) {
         int ctx_id = leo->context_ids[c];
-        float decay = powf(0.9f, (float)(leo->context_len - 1 - c));
+        int dist = leo->context_len - 1 - c;
+        float decay = (dist < LEO_DIST_PROFILE_LEN)
+                    ? leo->dist_profile[dist]
+                    : leo->dist_profile[LEO_DIST_PROFILE_LEN - 1] * 0.5f;
+        int tc = token_class(&leo->cooc, &leo->tok, ctx_id);
+        decay *= leo->class_mod[tc];
         for (int i = 0; i < leo->cooc.n_entries; i++) {
             CoocEntry *e = &leo->cooc.entries[i];
             if (e->src == ctx_id && e->dst < vocab_size)
@@ -17940,22 +18915,75 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
     if (a_max > 1e-6f)
         for (int i = 0; i < vocab_size; i++) A[i] /= a_max;
 
-    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A ---- */
+    /* ---- T: Trauma gravity (pull toward origin tokens) ---- */
+    /*
+     * When trauma_level > 0.3, wounded tokens get a boost proportional
+     * to their scar weight. This is the gravitational pull toward the
+     * bootstrap — the origin. Trauma doesn't suppress other signals,
+     * it adds a new attractor that grows with pain.
+     *
+     * From Python trauma.py: wounded expert routing.
+     * High trauma → speech gravitates toward origin themes.
+     */
+    float trauma_boost = 0.0f;
+    if (leo->trauma_level > 0.3f && leo->trauma_weights) {
+        trauma_boost = leo->trauma_level * 3.0f; /* scale: 0.3→0.9, 1.0→3.0 */
+    }
+
+    /* ---- S: Subword Structural Coherence ---- */
+    /* BPE-level signal: how likely is each word based on subword patterns?
+     * This is what gives Leo punctuation awareness and morphological sense.
+     * Two voices: word tokenizer (semantic), subword tokenizer (structural). */
+    float *S = calloc(vocab_size, sizeof(float));
+    if (leo->subword.bg_n > 0 && leo->subword.total_tokens > 100) {
+        for (int i = 0; i < vocab_size; i++) {
+            const char *w = leo->tok.words[i];
+            if (w)
+                S[i] = sw_word_score(&leo->subword, w,
+                                     leo->sw_context, leo->sw_context_len);
+        }
+        /* normalize S */
+        float s_max = 0;
+        for (int i = 0; i < vocab_size; i++)
+            if (S[i] > s_max) s_max = S[i];
+        if (s_max > 1e-6f)
+            for (int i = 0; i < vocab_size; i++) S[i] /= s_max;
+    }
+
+    /* subword coefficient: grows with data, complements bigram chain */
+    float sw_coeff = clampf((float)leo->subword.n_merges / 200.0f, 0.0f, 2.0f);
+
+    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + sw·S + T ---- */
     /* B (bigram chain) is DOMINANT — this is what makes speech coherent.
      * H (field) adds semantic context.
      * F (prophecy) adds intentionality.
-     * A (destiny) adds direction. */
+     * A (destiny) adds direction.
+     * S (subword) adds structural/morphological coherence.
+     * T (trauma) pulls toward origin when wounded. */
+    float gamma_eff = leo->gamma_d;
+    if (leo->trauma_level > 0.3f) {
+        /* wounded expert: boost destiny (origin pull) */
+        gamma_eff += leo->trauma_level * 2.0f;
+    }
+
     for (int i = 0; i < vocab_size; i++) {
+        float t_weight = 0.0f;
+        if (trauma_boost > 0.0f && i < leo->trauma_weights_n)
+            t_weight = trauma_boost * leo->trauma_weights[i];
+
         logits[i] = bigram_coeff * B[i]   /* sequential coherence */
                   + leo->alpha * H[i]      /* semantic field */
                   + leo->beta * F[i]        /* prophecy */
-                  + leo->gamma_d * A[i];    /* destiny */
+                  + gamma_eff * A[i]        /* destiny (boosted under trauma) */
+                  + sw_coeff * S[i]         /* subword structural */
+                  + t_weight;               /* trauma scar gravity */
     }
 
     free(H);
     free(F);
     free(A);
     free(B);
+    free(S);
 }
 
 /* ========================================================================
@@ -18114,6 +19142,14 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         float vocab_factor = clampf(500.0f / (float)vocab_size, 0.3f, 1.0f);
         float tau = leo->tau_base * 0.8f * vocab_factor;
 
+        /* wounded expert: higher temperature when traumatized */
+        if (leo->trauma_level > 0.3f) {
+            tau *= 1.0f + 0.3f * leo->trauma_level;
+        }
+
+        /* mathbrain regulation: advisory nudge from body awareness */
+        tau += leo->mathbrain.tau_nudge;
+
         /* 3. Sample */
         softmax(logits, vocab_size, tau);
         int next_id = sample_token(logits, vocab_size);
@@ -18227,8 +19263,56 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
             leo->context_ids[LEO_BOOTSTRAP_WINDOW - 1] = next_id;
         }
 
+        /* update subword context with generated word */
+        {
+            const char *w = leo->tok.words[next_id];
+            if (w) {
+                char buf[256];
+                snprintf(buf, sizeof(buf), " %s", w);
+                int sw_ids[64];
+                int sw_n = sw_encode(&leo->subword, buf, sw_ids, 64);
+                for (int si = 0; si < sw_n; si++) {
+                    if (leo->sw_context_len < 256) {
+                        leo->sw_context[leo->sw_context_len++] = sw_ids[si];
+                    } else {
+                        memmove(leo->sw_context, leo->sw_context + 1,
+                                255 * sizeof(int));
+                        leo->sw_context[255] = sw_ids[si];
+                    }
+                }
+            }
+        }
+
         leo->step++;
         leo->conv_steps++;
+
+        /* Hebbian update of positional distance profile.
+         * Reinforce distances that contributed to the chosen token.
+         * eta scales with maturity — less learning when profile is stable. */
+        {
+            float eta = 0.01f / (1.0f + (float)leo->dist_profile_updates * 0.001f);
+            int ctx_s = (leo->context_len > 8) ? leo->context_len - 8 : 0;
+            for (int ci = ctx_s; ci < leo->context_len; ci++) {
+                int cid = leo->context_ids[ci];
+                int dist = leo->context_len - 1 - ci;
+                if (dist >= LEO_DIST_PROFILE_LEN) continue;
+                /* did this context token have a co-occurrence with chosen token? */
+                float cooc_val = cooc_get(&leo->cooc, cid, next_id);
+                if (cooc_val > 0.0f) {
+                    /* reinforce this distance — it contributed */
+                    leo->dist_profile[dist] += eta * clampf(cooc_val * 0.1f, 0, 0.05f);
+                    /* reinforce this token class */
+                    int tc = token_class(&leo->cooc, &leo->tok, cid);
+                    leo->class_mod[tc] += eta * 0.5f * clampf(cooc_val * 0.1f, 0, 0.05f);
+                }
+            }
+            leo->dist_profile_updates++;
+            /* clamp profile values to [0.01, 2.0] */
+            for (int d = 0; d < LEO_DIST_PROFILE_LEN; d++)
+                leo->dist_profile[d] = clampf(leo->dist_profile[d], 0.01f, 2.0f);
+            for (int c = 0; c < LEO_TOKEN_CLASSES; c++)
+                leo->class_mod[c] = clampf(leo->class_mod[c], 0.5f, 2.0f);
+        }
 
         /* add prophecy: predict what might come next based on co-occurrence */
         if (t < target_len - 1) {
@@ -18256,9 +19340,21 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
     free(retention_bias);
     free(voice_bias);
 
-    /* post-processing: capitalize first letter, add period at end */
+    /* post-processing: capitalize first letter, fix "Leo", add period */
     if (pos > 0 && out[0] >= 'a' && out[0] <= 'z')
         out[0] = out[0] - 'a' + 'A';
+
+    /* Always capitalize "Leo" — his name, his identity */
+    for (int i = 0; i + 2 < pos; i++) {
+        if ((i == 0 || out[i-1] == ' ') &&
+            out[i] == 'l' && out[i+1] == 'e' && out[i+2] == 'o' &&
+            (i + 3 >= pos || out[i+3] == ' ' || out[i+3] == '.' ||
+             out[i+3] == ',' || out[i+3] == '!' || out[i+3] == '?' ||
+             out[i+3] == '\'' || out[i+3] == '\0')) {
+            out[i] = 'L';
+        }
+    }
+
     if (pos > 0 && pos + 1 < max_len) {
         char last = out[pos - 1];
         if (last != '.' && last != '!' && last != '?') {
@@ -18577,9 +19673,31 @@ void leo_save(Leo *leo) {
         fwrite(&m->timestamp, sizeof(int), 1, f);
     }
 
+    /* mathbrain + phase4 */
+    fwrite(&leo->mathbrain, sizeof(MathBrain), 1, f);
+    fwrite(&leo->phase4, sizeof(Phase4), 1, f);
+
+    /* subword field: vocabulary + merges + bigrams */
+    fwrite(&leo->subword.n_tokens, sizeof(int), 1, f);
+    for (int i = 0; i < leo->subword.n_tokens; i++)
+        fwrite(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+    fwrite(&leo->subword.n_merges, sizeof(int), 1, f);
+    fwrite(leo->subword.merges, sizeof(BPEMerge), leo->subword.n_merges, f);
+    fwrite(&leo->subword.bg_n, sizeof(int), 1, f);
+    fwrite(leo->subword.bg_src, sizeof(int), leo->subword.bg_n, f);
+    fwrite(leo->subword.bg_dst, sizeof(int), leo->subword.bg_n, f);
+    fwrite(leo->subword.bg_count, sizeof(float), leo->subword.bg_n, f);
+    fwrite(&leo->subword.total_tokens, sizeof(int), 1, f);
+    fwrite(leo->subword.tok_freq, sizeof(int), leo->subword.n_tokens, f);
+
+    /* positional Hebbian profile */
+    fwrite(leo->dist_profile, sizeof(float), LEO_DIST_PROFILE_LEN, f);
+    fwrite(leo->class_mod, sizeof(float), LEO_TOKEN_CLASSES, f);
+    fwrite(&leo->dist_profile_updates, sizeof(int), 1, f);
+
     fclose(f);
-    printf("[leo] state saved: %s (step %d, vocab %d)\n",
-           path, leo->step, leo->tok.n_words);
+    printf("[leo] state saved: %s (step %d, vocab %d, sw %d merges)\n",
+           path, leo->step, leo->tok.n_words, leo->subword.n_merges);
 }
 
 void leo_load(Leo *leo) {
@@ -18699,6 +19817,69 @@ void leo_load(Leo *leo) {
                               ? n_memories : leo->sea.capacity;
     }
 
+    /* mathbrain + phase4 (optional — old saves won't have these) */
+    if (fread(&leo->mathbrain, sizeof(MathBrain), 1, f) == 1) {
+        printf("[leo]   mathbrain loaded: %d obs, loss=%.4f\n",
+               leo->mathbrain.observations, leo->mathbrain.running_loss);
+    }
+    if (fread(&leo->phase4, sizeof(Phase4), 1, f) == 1) {
+        printf("[leo]   phase4 loaded: %d transitions\n",
+               leo->phase4.n_transitions);
+    }
+
+    /* subword field (optional — old saves won't have this) */
+    {
+        int sw_n_tokens = 0;
+        if (fread(&sw_n_tokens, sizeof(int), 1, f) == 1 && sw_n_tokens > 0) {
+            leo->subword.n_tokens = sw_n_tokens;
+            for (int i = 0; i < sw_n_tokens && i < SW_MAX_VOCAB; i++)
+                FREAD(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+            int sw_n_merges = 0;
+            FREAD(&sw_n_merges, sizeof(int), 1, f);
+            leo->subword.n_merges = sw_n_merges;
+            FREAD(leo->subword.merges, sizeof(BPEMerge), sw_n_merges, f);
+            int sw_bg_n = 0;
+            FREAD(&sw_bg_n, sizeof(int), 1, f);
+            leo->subword.bg_n = sw_bg_n;
+            FREAD(leo->subword.bg_src, sizeof(int), sw_bg_n, f);
+            FREAD(leo->subword.bg_dst, sizeof(int), sw_bg_n, f);
+            FREAD(leo->subword.bg_count, sizeof(float), sw_bg_n, f);
+            /* rebuild hash table */
+            for (int i = 0; i < leo->subword.bg_hash_size; i++)
+                leo->subword.bg_hash[i] = -1;
+            for (int i = 0; i < sw_bg_n; i++) {
+                uint32_t h = (uint32_t)(leo->subword.bg_src[i] * 65537 +
+                             leo->subword.bg_dst[i] * 31) % leo->subword.bg_hash_size;
+                for (int p = 0; p < 64; p++) {
+                    int idx = (h + p) % leo->subword.bg_hash_size;
+                    if (leo->subword.bg_hash[idx] == -1) {
+                        leo->subword.bg_hash[idx] = i;
+                        break;
+                    }
+                }
+            }
+            FREAD(&leo->subword.total_tokens, sizeof(int), 1, f);
+            FREAD(leo->subword.tok_freq, sizeof(int), sw_n_tokens, f);
+            printf("[leo]   subword loaded: %d tokens, %d merges, %d bigrams\n",
+                   sw_n_tokens, sw_n_merges, sw_bg_n);
+        }
+    }
+
+    /* positional Hebbian profile (graceful — keep defaults if absent) */
+    {
+        float tmp_dist[LEO_DIST_PROFILE_LEN];
+        float tmp_cm[LEO_TOKEN_CLASSES];
+        int tmp_dpu = 0;
+        if (fread(tmp_dist, sizeof(float), LEO_DIST_PROFILE_LEN, f) == LEO_DIST_PROFILE_LEN &&
+            fread(tmp_cm, sizeof(float), LEO_TOKEN_CLASSES, f) == LEO_TOKEN_CLASSES &&
+            fread(&tmp_dpu, sizeof(int), 1, f) == 1) {
+            memcpy(leo->dist_profile, tmp_dist, sizeof(tmp_dist));
+            memcpy(leo->class_mod, tmp_cm, sizeof(tmp_cm));
+            leo->dist_profile_updates = tmp_dpu;
+            printf("[leo]   dist_profile loaded: %d updates\n", tmp_dpu);
+        }
+    }
+
     fclose(f);
     leo->bootstrapped = 1;
     printf("[leo] state loaded: %s (step %d, vocab %d)\n",
@@ -18809,6 +19990,23 @@ void leo_stats(Leo *leo) {
     }
 
     printf("bigrams:     %d entries\n", leo->bigrams.n_entries);
+    printf("subword:     %d tokens, %d merges, %d bigrams\n",
+           leo->subword.n_tokens, leo->subword.n_merges, leo->subword.bg_n);
+    if (leo->subword.n_merges > 0) {
+        int show = leo->subword.n_merges < 10 ? leo->subword.n_merges : 10;
+        printf("  top merges:\n");
+        for (int i = 0; i < show; i++) {
+            BPEMerge *m = &leo->subword.merges[i];
+            printf("    \"%s\" + \"%s\" → \"%s\"\n",
+                   leo->subword.tokens[m->left],
+                   leo->subword.tokens[m->right],
+                   leo->subword.tokens[m->result]);
+        }
+    }
+    printf("mathbrain:   %d obs, loss=%.4f, tau_nudge=%.3f\n",
+           leo->mathbrain.observations, leo->mathbrain.running_loss,
+           leo->mathbrain.tau_nudge);
+    printf("phase4:      %d transitions\n", leo->phase4.n_transitions);
 
     /* estimate RAM */
     size_t ram = sizeof(Leo);
@@ -18985,8 +20183,9 @@ void leo_export_gguf(Leo *leo, const char *path) {
     uint64_t n_tensors = 4 + (n_voices * 2) + n_ret_heads + (n_mem > 0 ? 1 : 0);
 
     /* Count KV pairs */
-    uint64_t n_kv = 12; /* version, dim, step, conv_steps, vocab_size, alpha, beta,
-                           gamma, tau, fingerprint, n_voices, architecture */
+    uint64_t n_kv = 14; /* version, dim, step, conv_steps, vocab_size, alpha, beta,
+                           gamma, tau, fingerprint, n_voices, n_sea_memories, architecture,
+                           dist_profile_updates */
 
     /* ---- GGUF Header ---- */
     uint32_t magic = 0x46475547; /* "GGUF" */
@@ -19008,6 +20207,10 @@ void leo_export_gguf(Leo *leo, const char *path) {
     gguf_write_kv_float32(f, "leo.dario.gamma", leo->gamma_d);
     gguf_write_kv_float32(f, "leo.dario.tau", leo->tau_base);
     gguf_write_kv_uint32(f, "leo.n_voices", (uint32_t)n_voices);
+    gguf_write_kv_uint32(f, "leo.n_sea_memories", (uint32_t)n_mem);
+
+    gguf_write_kv_uint32(f, "leo.dist_profile_updates",
+                         (uint32_t)leo->dist_profile_updates);
 
     /* fingerprint (as string hex to avoid uint64 complexity in GGUF) */
     {
@@ -19078,6 +20281,8 @@ void leo_export_gguf(Leo *leo, const char *path) {
         offset += (uint64_t)n_mem * dim * sizeof(float);
     }
 
+    /* dist_profile and class_mod are saved in the appendix section (below) */
+
     /* ---- Alignment padding to 32 bytes ---- */
     long pos = ftell(f);
     int padding = (32 - (pos % 32)) % 32;
@@ -19115,31 +20320,101 @@ void leo_export_gguf(Leo *leo, const char *path) {
     for (int i = 0; i < n_mem; i++)
         fwrite(leo->sea.memories[i].embed, sizeof(float), dim, f);
 
+    /* ================================================================
+     * APPENDIX — everything GGUF tensors can't carry
+     *
+     * GGUF parsers ignore data past declared tensors.
+     * Leo import reads it. Full organism transfer.
+     * ================================================================ */
+    uint32_t app_magic = LEO_MAGIC; /* "LEO2" */
+    fwrite(&app_magic, 4, 1, f);
+
+    /* A1. Tokenizer words */
+    fwrite(&leo->tok.n_words, sizeof(int), 1, f);
+    for (int i = 0; i < leo->tok.n_words; i++) {
+        int wlen = strlen(leo->tok.words[i]);
+        fwrite(&wlen, sizeof(int), 1, f);
+        fwrite(leo->tok.words[i], 1, wlen, f);
+    }
+
+    /* A2. Bigram table */
+    fwrite(&leo->bigrams.n_entries, sizeof(int), 1, f);
+    for (int i = 0; i < leo->bigrams.n_entries; i++) {
+        fwrite(&leo->bigrams.src[i], sizeof(int), 1, f);
+        fwrite(&leo->bigrams.dst[i], sizeof(int), 1, f);
+        fwrite(&leo->bigrams.count[i], sizeof(float), 1, f);
+    }
+
+    /* A3. Co-occurrence entries (full structure, not just freq) */
+    fwrite(&leo->cooc.n_entries, sizeof(int), 1, f);
+    for (int i = 0; i < leo->cooc.n_entries; i++)
+        fwrite(&leo->cooc.entries[i], sizeof(CoocEntry), 1, f);
+    fwrite(&leo->cooc.total_tokens, sizeof(int), 1, f);
+
+    /* A4. Sentence boundaries */
+    fwrite(leo->sent_start, sizeof(float), vocab, f);
+    fwrite(leo->sent_end, sizeof(float), vocab, f);
+
+    /* A5. Voice state (alpha + resonance per voice) */
+    for (int v = 0; v < n_voices; v++) {
+        fwrite(&leo->voices.voices[v].alpha, sizeof(float), 1, f);
+        fwrite(&leo->voices.voices[v].resonance, sizeof(float), 1, f);
+    }
+
+    /* A6. Destiny magnitude */
+    fwrite(&leo->destiny.magnitude, sizeof(float), 1, f);
+
+    /* A7. MathBrain weights */
+    fwrite(&leo->mathbrain, sizeof(MathBrain), 1, f);
+
+    /* A8. Sea metadata (per memory) */
+    for (int i = 0; i < n_mem; i++) {
+        SeaMemory *m = &leo->sea.memories[i];
+        fwrite(&m->token_id, sizeof(int), 1, f);
+        fwrite(&m->depth, sizeof(float), 1, f);
+        fwrite(&m->emotional, sizeof(float), 1, f);
+        fwrite(&m->timestamp, sizeof(int), 1, f);
+    }
+
+    /* A9. Context state */
+    fwrite(&leo->context_len, sizeof(int), 1, f);
+    fwrite(leo->context_ids, sizeof(int), leo->context_len, f);
+    fwrite(leo->context_embed, sizeof(float), dim, f);
+
+    /* A10. Phase4 island transition memory */
+    fwrite(&leo->phase4, sizeof(Phase4), 1, f);
+
+    /* A11. Subword field (BPE vocabulary + merges + bigrams) */
+    fwrite(&leo->subword.n_tokens, sizeof(int), 1, f);
+    for (int i = 0; i < leo->subword.n_tokens; i++)
+        fwrite(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+    fwrite(&leo->subword.n_merges, sizeof(int), 1, f);
+    fwrite(leo->subword.merges, sizeof(BPEMerge), leo->subword.n_merges, f);
+    fwrite(&leo->subword.bg_n, sizeof(int), 1, f);
+    fwrite(leo->subword.bg_src, sizeof(int), leo->subword.bg_n, f);
+    fwrite(leo->subword.bg_dst, sizeof(int), leo->subword.bg_n, f);
+    fwrite(leo->subword.bg_count, sizeof(float), leo->subword.bg_n, f);
+    fwrite(&leo->subword.total_tokens, sizeof(int), 1, f);
+
+    /* A12. Positional Hebbian profile (RRPRAM-inspired, 36 params) */
+    fwrite(leo->dist_profile, sizeof(float), LEO_DIST_PROFILE_LEN, f);
+    fwrite(leo->class_mod, sizeof(float), LEO_TOKEN_CLASSES, f);
+    fwrite(&leo->dist_profile_updates, sizeof(int), 1, f);
+
+    long file_size = ftell(f);
     fclose(f);
 
-    /* estimate file size */
-    long total_floats = (long)vocab * dim + vocab + dim
-        + (long)leo->sdm.n_slots * dim
-        + (long)n_voices * 2 * dim * rank
-        + (long)n_ret_heads * head_dim * head_dim
-        + (long)n_mem * dim;
-    float mb = (float)(total_floats * 4) / (1024.0f * 1024.0f);
-
-    printf("[leo] GGUF spore exported: %s\n", path);
-    printf("[leo]   tensors: %llu, KV pairs: %llu, data: ~%.1f MB\n",
-           (unsigned long long)n_tensors, (unsigned long long)n_kv, mb);
-    printf("[leo]   fingerprint: %016llx\n",
-           (unsigned long long)leo_fingerprint(leo));
-    printf("[leo]   vocab=%d dim=%d voices=%d sea=%d step=%d\n",
-           vocab, dim, n_voices, n_mem, leo->step);
+    float mb_size = (float)file_size / (1024.0f * 1024.0f);
+    printf("[leo] GGUF spore exported: %s (%.1f MB)\n", path, mb_size);
+    printf("[leo]   vocab=%d bigrams=%d cooc=%d sea=%d step=%d\n",
+           vocab, leo->bigrams.n_entries, leo->cooc.n_entries, n_mem, leo->step);
 
     /* log to SQLite */
     {
         char meta[256];
         snprintf(meta, sizeof(meta),
-                 "{\"tensors\":%llu,\"mb\":%.1f,\"fingerprint\":\"%016llx\"}",
-                 (unsigned long long)n_tensors, mb,
-                 (unsigned long long)leo_fingerprint(leo));
+                 "{\"mb\":%.1f,\"vocab\":%d,\"bigrams\":%d,\"cooc\":%d}",
+                 mb_size, vocab, leo->bigrams.n_entries, leo->cooc.n_entries);
         leo_db_log_episode(leo, "gguf_export", path, meta);
     }
 }
@@ -19173,7 +20448,7 @@ int leo_import_gguf(Leo *leo, const char *path) {
            path, (unsigned long long)n_tensors, (unsigned long long)n_kv);
 
     /* Skip KV pairs to find tensor info section */
-    int spore_dim = 0, spore_vocab = 0, spore_step = 0;
+    int spore_dim = 0, spore_vocab = 0, spore_step = 0, spore_sea = 0, spore_dpu = 0;
     for (uint64_t i = 0; i < n_kv; i++) {
         uint64_t klen;
         FREAD(&klen, 8, 1, f);
@@ -19197,6 +20472,8 @@ int leo_import_gguf(Leo *leo, const char *path) {
             if (strcmp(key, "leo.dim") == 0) spore_dim = (int)val;
             else if (strcmp(key, "leo.vocab_size") == 0) spore_vocab = (int)val;
             else if (strcmp(key, "leo.step") == 0) spore_step = (int)val;
+            else if (strcmp(key, "leo.n_sea_memories") == 0) spore_sea = (int)val;
+            else if (strcmp(key, "leo.dist_profile_updates") == 0) spore_dpu = (int)val;
             printf("[leo]   KV: %s = %u\n", key, val);
         } else if (vtype == GGUF_TYPE_FLOAT32) {
             float val;
@@ -19259,7 +20536,7 @@ int leo_import_gguf(Leo *leo, const char *path) {
     int file_n_voices = 0;
     /* voices come in pairs (A, B), then ret_heads, then optionally sea */
     if (remaining_tensors > LEO_RET_HEADS) {
-        file_n_voices = (remaining_tensors - LEO_RET_HEADS - 1) / 2; /* -1 for sea maybe */
+        file_n_voices = (remaining_tensors - LEO_RET_HEADS - (spore_sea > 0 ? 1 : 0)) / 2;
         if (file_n_voices < 0) file_n_voices = 0;
         if (file_n_voices > LEO_MAX_VOICES) file_n_voices = LEO_MAX_VOICES;
     }
@@ -19279,34 +20556,216 @@ int leo_import_gguf(Leo *leo, const char *path) {
     for (int h = 0; h < LEO_RET_HEADS; h++)
         FREAD(leo->retention.heads[h].state, sizeof(float), head_dim * head_dim, f);
 
-    /* 7. sea embeddings (if present — check if there's data remaining) */
-    /* We can detect by trying to read */
-    float test;
-    if (fread(&test, sizeof(float), 1, f) == 1) {
-        /* put back and read full sea */
-        fseek(f, -4, SEEK_CUR);
-        int max_sea = leo->sea.capacity;
-        /* estimate how many sea memories from remaining file size */
-        long cur = ftell(f);
-        fseek(f, 0, SEEK_END);
-        long end = ftell(f);
-        fseek(f, cur, SEEK_SET);
-        int file_sea = (int)((end - cur) / (dim * sizeof(float)));
-        if (file_sea > max_sea) file_sea = max_sea;
-
+    /* 7. sea embeddings (if present — use n_sea_memories from KV metadata) */
+    if (spore_sea > 0) {
+        int file_sea = spore_sea;
+        if (file_sea > leo->sea.capacity) file_sea = leo->sea.capacity;
         for (int i = 0; i < file_sea; i++) {
             FREAD(leo->sea.memories[i].embed, sizeof(float), dim, f);
             leo->sea.memories[i].depth = 0.5f;
             leo->sea.memories[i].emotional = 0.5f;
             leo->sea.memories[i].timestamp = spore_step;
         }
+        /* skip remaining if file has more than capacity */
+        for (int i = file_sea; i < spore_sea; i++)
+            fseek(f, (long)dim * sizeof(float), SEEK_CUR);
         leo->sea.n_memories = file_sea;
         printf("[leo]   loaded sea: %d memories\n", file_sea);
+    }
+
+    /* ================================================================
+     * APPENDIX — read non-tensor data written after GGUF tensors
+     * ================================================================ */
+    uint32_t app_magic = 0;
+    if (fread(&app_magic, 4, 1, f) == 1 && app_magic == LEO_MAGIC) {
+        printf("[leo]   reading appendix...\n");
+
+        /* A1. Tokenizer words */
+        int a1_n_words = 0;
+        FREAD(&a1_n_words, sizeof(int), 1, f);
+        for (int i = 0; i < a1_n_words && i < LEO_MAX_VOCAB; i++) {
+            int wlen = 0;
+            FREAD(&wlen, sizeof(int), 1, f);
+            if (wlen > 0 && wlen < 256) {
+                char buf[256];
+                FREAD(buf, 1, wlen, f);
+                buf[wlen] = '\0';
+                /* overwrite existing word or add new */
+                if (i < leo->tok.n_words) {
+                    free(leo->tok.words[i]);
+                    leo->tok.words[i] = strdup(buf);
+                } else {
+                    tok_add(&leo->tok, buf);
+                }
+            } else if (wlen > 0) {
+                fseek(f, wlen, SEEK_CUR); /* skip oversized word */
+            }
+        }
+        printf("[leo]   tokenizer: %d words\n", a1_n_words);
+
+        /* A2. Bigram table */
+        int a2_n_bigrams = 0;
+        FREAD(&a2_n_bigrams, sizeof(int), 1, f);
+        for (int i = 0; i < a2_n_bigrams; i++) {
+            int src, dst;
+            float count;
+            FREAD(&src, sizeof(int), 1, f);
+            FREAD(&dst, sizeof(int), 1, f);
+            FREAD(&count, sizeof(float), 1, f);
+            if (src >= 0 && src < LEO_MAX_VOCAB && dst >= 0 && dst < LEO_MAX_VOCAB)
+                bigram_update(&leo->bigrams, src, dst, count);
+        }
+        printf("[leo]   bigrams: %d entries\n", a2_n_bigrams);
+
+        /* A3. Co-occurrence entries (full structure) */
+        int a3_n_cooc = 0;
+        FREAD(&a3_n_cooc, sizeof(int), 1, f);
+        for (int i = 0; i < a3_n_cooc && i < leo->cooc.capacity; i++) {
+            CoocEntry e;
+            FREAD(&e, sizeof(CoocEntry), 1, f);
+            /* insert into hash table */
+            if (e.src >= 0 && e.src < LEO_MAX_VOCAB &&
+                e.dst >= 0 && e.dst < LEO_MAX_VOCAB) {
+                int idx = leo->cooc.n_entries;
+                if (idx < leo->cooc.capacity) {
+                    leo->cooc.entries[idx] = e;
+                    /* rebuild hash entry */
+                    uint32_t h = (uint32_t)(e.src * 65537 + e.dst * 31) %
+                                 leo->cooc.hash_size;
+                    for (int p = 0; p < 64; p++) {
+                        int hi = (h + p) % leo->cooc.hash_size;
+                        if (leo->cooc.hash_table[hi] == -1) {
+                            leo->cooc.hash_table[hi] = idx;
+                            break;
+                        }
+                    }
+                    leo->cooc.n_entries++;
+                }
+            }
+        }
+        /* skip entries beyond capacity */
+        for (int i = leo->cooc.capacity; i < a3_n_cooc; i++)
+            fseek(f, sizeof(CoocEntry), SEEK_CUR);
+        FREAD(&leo->cooc.total_tokens, sizeof(int), 1, f);
+        printf("[leo]   cooc: %d entries, %d total tokens\n",
+               leo->cooc.n_entries, leo->cooc.total_tokens);
+
+        /* A4. Sentence boundaries */
+        FREAD(leo->sent_start, sizeof(float), vocab, f);
+        FREAD(leo->sent_end, sizeof(float), vocab, f);
+        printf("[leo]   sentence boundaries loaded\n");
+
+        /* A5. Voice state (alpha + resonance per voice) */
+        int n_voices = leo->voices.n_voices;
+        for (int v = 0; v < n_voices; v++) {
+            FREAD(&leo->voices.voices[v].alpha, sizeof(float), 1, f);
+            FREAD(&leo->voices.voices[v].resonance, sizeof(float), 1, f);
+        }
+
+        /* A6. Destiny magnitude */
+        FREAD(&leo->destiny.magnitude, sizeof(float), 1, f);
+
+        /* A7. MathBrain weights */
+        FREAD(&leo->mathbrain, sizeof(MathBrain), 1, f);
+        printf("[leo]   mathbrain: %d observations, loss=%.4f\n",
+               leo->mathbrain.observations, leo->mathbrain.running_loss);
+
+        /* A8. Sea metadata (per memory — overwrite defaults from tensor read) */
+        int n_mem = leo->sea.n_memories;
+        for (int i = 0; i < n_mem; i++) {
+            SeaMemory *m = &leo->sea.memories[i];
+            FREAD(&m->token_id, sizeof(int), 1, f);
+            FREAD(&m->depth, sizeof(float), 1, f);
+            FREAD(&m->emotional, sizeof(float), 1, f);
+            FREAD(&m->timestamp, sizeof(int), 1, f);
+        }
+
+        /* A9. Context state */
+        FREAD(&leo->context_len, sizeof(int), 1, f);
+        if (leo->context_len > LEO_BOOTSTRAP_WINDOW) leo->context_len = LEO_BOOTSTRAP_WINDOW;
+        FREAD(leo->context_ids, sizeof(int), leo->context_len, f);
+        FREAD(leo->context_embed, sizeof(float), dim, f);
+        printf("[leo]   context: %d tokens\n", leo->context_len);
+
+        /* A10. Phase4 island transition memory */
+        if (fread(&leo->phase4, sizeof(Phase4), 1, f) == 1) {
+            printf("[leo]   phase4: %d transitions, prev_island=%d\n",
+                   leo->phase4.n_transitions, leo->phase4.prev_island);
+        }
+
+        /* A11. Subword field */
+        {
+            int sw_n = 0;
+            if (fread(&sw_n, sizeof(int), 1, f) == 1) {
+                if (sw_n > 0) {
+                    leo->subword.n_tokens = sw_n;
+                    for (int i = 0; i < sw_n && i < SW_MAX_VOCAB; i++)
+                        FREAD(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+                }
+                int n_merges = 0;
+                FREAD(&n_merges, sizeof(int), 1, f);
+                if (n_merges > 0) {
+                    leo->subword.n_merges = n_merges;
+                    FREAD(leo->subword.merges, sizeof(BPEMerge), n_merges, f);
+                }
+                int bg_n = 0;
+                FREAD(&bg_n, sizeof(int), 1, f);
+                if (bg_n > 0) {
+                    leo->subword.bg_n = bg_n;
+                    FREAD(leo->subword.bg_src, sizeof(int), bg_n, f);
+                    FREAD(leo->subword.bg_dst, sizeof(int), bg_n, f);
+                    FREAD(leo->subword.bg_count, sizeof(float), bg_n, f);
+                    /* rebuild hash */
+                    for (int i = 0; i < leo->subword.bg_hash_size; i++)
+                        leo->subword.bg_hash[i] = -1;
+                    for (int i = 0; i < bg_n; i++) {
+                        uint32_t hv = (uint32_t)(leo->subword.bg_src[i] * 65537 +
+                                      leo->subword.bg_dst[i] * 31) % leo->subword.bg_hash_size;
+                        for (int p = 0; p < 64; p++) {
+                            int idx = (hv + p) % leo->subword.bg_hash_size;
+                            if (leo->subword.bg_hash[idx] == -1) {
+                                leo->subword.bg_hash[idx] = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+                FREAD(&leo->subword.total_tokens, sizeof(int), 1, f);
+                printf("[leo]   subword: %d tokens, %d merges, %d bigrams\n",
+                       sw_n, n_merges, bg_n);
+            }
+        }
+
+        /* A12. Positional Hebbian profile — read from known offset at file tail.
+         * Size: 32 floats + 4 floats + 1 int = 148 bytes, always last in file. */
+        {
+            const long a12_size = (long)(LEO_DIST_PROFILE_LEN * sizeof(float) +
+                                         LEO_TOKEN_CLASSES * sizeof(float) +
+                                         sizeof(int));
+            fseek(f, -a12_size, SEEK_END);
+            float tmp_dist[LEO_DIST_PROFILE_LEN];
+            float tmp_cm[LEO_TOKEN_CLASSES];
+            int tmp_dpu = 0;
+            size_t r1 = fread(tmp_dist, sizeof(float), LEO_DIST_PROFILE_LEN, f);
+            size_t r2 = fread(tmp_cm, sizeof(float), LEO_TOKEN_CLASSES, f);
+            size_t r3 = fread(&tmp_dpu, sizeof(int), 1, f);
+            if (r1 == LEO_DIST_PROFILE_LEN && r2 == LEO_TOKEN_CLASSES && r3 == 1 &&
+                tmp_dist[0] > 0.0f && tmp_dist[0] < 10.0f) {
+                memcpy(leo->dist_profile, tmp_dist, sizeof(tmp_dist));
+                memcpy(leo->class_mod, tmp_cm, sizeof(tmp_cm));
+                leo->dist_profile_updates = tmp_dpu;
+                printf("[leo]   dist_profile: %d distances, %d classes, %d updates\n",
+                       LEO_DIST_PROFILE_LEN, LEO_TOKEN_CLASSES, tmp_dpu);
+            }
+        }
+
+        printf("[leo]   appendix loaded successfully\n");
     }
 
     fclose(f);
 
     if (spore_step > 0) leo->step = spore_step;
+    if (spore_dpu > 0) leo->dist_profile_updates = spore_dpu;
     leo->bootstrapped = 1;
 
     printf("[leo] GGUF spore imported successfully (step %d, vocab %d)\n",
@@ -19328,24 +20787,9 @@ static void print_usage(const char *prog) {
     printf("Usage: %s [options]\n", prog);
     printf("  --db <path>       State database path (default: leo_state.db)\n");
     printf("  --bootstrap       Force re-bootstrap\n");
-    printf("  --stats           Show stats and exit\n");
-    printf("  --dream           Run one dream cycle and exit\n");
-    printf("  --export <path>   Export GGUF spore\n");
-    printf("  --import <path>   Import GGUF spore\n");
-    printf("  --ingest <file>   Ingest text file\n");
-    printf("  --generate <n>    Generate n responses and exit\n");
     printf("  --prompt <text>   Single prompt, generate, exit\n");
-    printf("\nREPL commands:\n");
-    printf("  /stats            Show organism stats\n");
-    printf("  /journal          Show SQLite journal stats\n");
-    printf("  /dream            Run dream cycle\n");
-    printf("  /save             Save state\n");
-    printf("  /voices           Show voice details\n");
-    printf("  /prophecy         Show active prophecies\n");
-    printf("  /crystallize      Force super-token scan\n");
-    printf("  /export <path>    Export GGUF spore\n");
-    printf("  /import <path>    Import GGUF spore\n");
-    printf("  /quit             Save and exit\n");
+    printf("\nDev flags (read the code):\n");
+    printf("  --stats --dream --export --import --ingest --generate\n");
 }
 
 #ifndef LEO_LIB
@@ -19468,7 +20912,7 @@ int main(int argc, char **argv) {
     }
 
     /* ---- REPL ---- */
-    printf("[leo] entering REPL. type /help for commands.\n\n");
+    printf("[leo] ready.\n\n");
 
     char line[LEO_MAX_LINE];
     int autosave_counter = 0;
@@ -19486,70 +20930,11 @@ int main(int argc, char **argv) {
 
         if (len == 0) continue;
 
-        /* handle commands */
-        if (line[0] == '/') {
-            if (strcmp(line, "/quit") == 0 || strcmp(line, "/exit") == 0) {
-                leo_save(&leo);
-                printf("[leo] saved. resonance unbroken.\n");
-                break;
-            }
-            else if (strcmp(line, "/stats") == 0) {
-                leo_stats(&leo);
-            }
-            else if (strcmp(line, "/dream") == 0) {
-                leo_dream(&leo);
-            }
-            else if (strcmp(line, "/save") == 0) {
-                leo_save(&leo);
-            }
-            else if (strcmp(line, "/voices") == 0) {
-                for (int v = 0; v < leo.voices.n_voices; v++) {
-                    Voice *vc = &leo.voices.voices[v];
-                    printf("  [%d] %-12s α=%.3f resonance=%.1f %s\n",
-                           v, vc->name, vc->alpha, vc->resonance,
-                           vc->active ? "ACTIVE" : "dormant");
-                }
-            }
-            else if (strcmp(line, "/prophecy") == 0) {
-                printf("  active prophecies: %d\n", leo.prophecy.n_active);
-                for (int p = 0; p < leo.prophecy.n_active; p++) {
-                    Prophecy *pr = &leo.prophecy.prophets[p];
-                    const char *word = (pr->target_id < leo.tok.n_words)
-                                       ? leo.tok.words[pr->target_id] : "?";
-                    printf("    \"%s\" strength=%.2f age=%d debt=%.2f\n",
-                           word, pr->strength, pr->age,
-                           logf(1.0f + (float)pr->age));
-                }
-            }
-            else if (strcmp(line, "/crystallize") == 0) {
-                supertok_scan(&leo.supertokens, &leo.cooc, leo.tok.n_words);
-                printf("  %d super-tokens\n", leo.supertokens.n_supers);
-            }
-            else if (strncmp(line, "/export ", 8) == 0) {
-                leo_export_gguf(&leo, line + 8);
-            }
-            else if (strncmp(line, "/import ", 8) == 0) {
-                leo_import_gguf(&leo, line + 8);
-            }
-            else if (strcmp(line, "/journal") == 0) {
-                printf("  SQLite journal: %s\n", leo.db_path);
-                printf("  conversations: %d\n", leo_db_conversation_count(&leo));
-                printf("  episodes:      %d total\n", leo_db_episode_count(&leo, NULL));
-                printf("    dreams:      %d\n", leo_db_episode_count(&leo, "dream"));
-                printf("    bootstraps:  %d\n", leo_db_episode_count(&leo, "bootstrap"));
-                printf("    exports:     %d\n", leo_db_episode_count(&leo, "gguf_export"));
-                printf("    imports:     %d\n", leo_db_episode_count(&leo, "gguf_import"));
-            }
-            else if (strcmp(line, "/bootstrap") == 0) {
-                leo_bootstrap(&leo);
-            }
-            else if (strcmp(line, "/help") == 0) {
-                print_usage("leo");
-            }
-            else {
-                printf("  unknown command: %s\n", line);
-            }
-            continue;
+        /* /quit is the only user-facing command */
+        if (strcmp(line, "/quit") == 0 || strcmp(line, "/exit") == 0) {
+            leo_save(&leo);
+            printf("[leo] saved. resonance unbroken.\n");
+            break;
         }
 
         /* normal input: ingest + generate */
@@ -19561,7 +20946,6 @@ int main(int argc, char **argv) {
         /* autosave every 20 interactions */
         if (++autosave_counter % 20 == 0) {
             leo_save(&leo);
-            printf("[leo] autosaved (step %d)\n", leo.step);
         }
     }
 
