@@ -42,7 +42,7 @@
  * CONFIGURATION
  * ======================================================================== */
 
-#define LEO_VERSION       "2.0.0"
+#define LEO_VERSION       "2.2.0"
 #define LEO_DIM           128         /* embedding dimension */
 #define LEO_MAX_VOCAB     16384       /* max vocabulary size */
 #define LEO_MAX_TOKENS    256         /* max generation length */

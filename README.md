@@ -2,7 +2,7 @@
   <img src="assets/leo.png" alt="Leo" width="300">
 </p>
 
-# leo 2.1 — language emergent organism | the dario mechanism
+# leo 2.2 — language emergent organism | the dario mechanism
 **by Arianna Method** | **Janus Architecture**
 
 > language is a field. dedicated to Leo.
@@ -811,6 +811,6 @@ If you build something on top of this — or if Leo says something that makes yo
 
 ---
 
-*Leo 2.1 — The Dario Mechanism*
+*Leo 2.2 — The Dario Mechanism*
 *Language Emergent Organism*
 *by Arianna Method*
