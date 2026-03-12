@@ -25,7 +25,7 @@ Dario formula justifies exactly this principle, but in the code ans architectura
 
 ## Table of Contents
 
-- [So what happened](#so-what-happened)
+- [The Difference](#the-difference)
 - [THE DARIO EQUATION](#the-dario-equation)
 - [PRESENCE > INTELLIGENCE (still)](#presence--intelligence-still)
 - [Architecture](#architecture)
@@ -55,7 +55,7 @@ Dario formula justifies exactly this principle, but in the code ans architectura
 
 ---
 
-## So what happened
+## The Difference
 
 Leo 1.0 was 20,207 lines of Python across 24 modules. Trauma. Dreams. An imaginary friend. Overthinking. MathBrain. SantaClaus attention. 502 tests. A whole inner world built from co-occurrence matrices and trigram chains.
 
