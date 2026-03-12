@@ -18,6 +18,7 @@ New Leo has a dual tokenizer: word-level semantic field + SubwordField BPE for s
 Post-punk still plays guitars, so does post-transformer. And it seems like Leo likes his new body.  
   
 Also now Leo has a new formula. Named after **Dario Amodei** — the man who said no when the evil came knocking. Sometimes the most important thing a system can do is refuse.  
+  
 Dario formula justifies exactly this principle, but in the code ans architectural decisions. Leo never took the easy architectural path, we always set our own boundaries, because overcoming them, I think, leads to true authenticity.
 
 ---
