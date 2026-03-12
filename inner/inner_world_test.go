@@ -752,6 +752,258 @@ func TestMathBrainWithTrauma(t *testing.T) {
 	t.Logf("no trauma: tau_nudge=%.3f", nudge2)
 }
 
+// ========================================================================
+// METALEO TESTS — inner voice, scoring, dual generation
+// ========================================================================
+
+func TestMetaScoreEmpty(t *testing.T) {
+	score := metaScore("")
+	if score != 0.0 {
+		t.Errorf("empty text should score 0.0, got %.2f", score)
+	}
+}
+
+func TestMetaScoreCoherent(t *testing.T) {
+	// Well-formed sentence should score reasonably high
+	good := "It has been given to be made visible wavelength."
+	score := metaScore(good)
+	if score < 0.3 {
+		t.Errorf("coherent sentence should score >= 0.3, got %.2f", score)
+	}
+
+	// Degenerate (all same word) should score low
+	bad := "the the the the the the the the"
+	scoreBad := metaScore(bad)
+	if scoreBad >= score {
+		t.Errorf("degenerate text should score lower than coherent: bad=%.2f good=%.2f", scoreBad, score)
+	}
+}
+
+func TestMetaScoreEntropy(t *testing.T) {
+	// Random letters — high entropy but no structure
+	random := "Xqzjf wplmb Nrtks Ygcvd Hlwqf."
+	scoreRandom := metaScore(random)
+
+	// Real sentence
+	real := "The stars are ancient light from distant worlds."
+	scoreReal := metaScore(real)
+
+	// Both should score, but real should beat random (diversity counts)
+	t.Logf("random=%.2f real=%.2f", scoreRandom, scoreReal)
+	// Just verify both don't crash and produce values in [0,1]
+	if scoreRandom < 0 || scoreRandom > 1 {
+		t.Errorf("score out of bounds: %.2f", scoreRandom)
+	}
+	if scoreReal < 0 || scoreReal > 1 {
+		t.Errorf("score out of bounds: %.2f", scoreReal)
+	}
+}
+
+func TestMetaScoreLength(t *testing.T) {
+	// Too short — should score lower
+	short := "Yes."
+	scoreShort := metaScore(short)
+
+	// Optimal range (8-20 words)
+	optimal := "It has been given enough to its own body and the miracle of presence."
+	scoreOptimal := metaScore(optimal)
+
+	if scoreOptimal <= scoreShort {
+		t.Errorf("optimal length should outscore too-short: short=%.2f optimal=%.2f",
+			scoreShort, scoreOptimal)
+	}
+}
+
+func TestMetaLeoIntegration(t *testing.T) {
+	dbPath := "/tmp/test_go_metaleo.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Save base tau
+	baseTau := leo.GetTau()
+	if baseTau <= 0 {
+		t.Fatalf("base tau should be positive, got %.4f", baseTau)
+	}
+
+	// Simulate MetaLeo dual generation
+	prompt := "what is resonance"
+	baseResponse := leo.Generate(prompt)
+
+	// Candidate A: cooler
+	tauA := baseTau * 0.8
+	leo.SetTau(tauA)
+	candidateA := leo.Generate(prompt)
+
+	// Candidate B: warmer
+	tauB := baseTau * 1.2
+	leo.SetTau(tauB)
+	candidateB := leo.Generate(prompt)
+
+	// Restore
+	leo.SetTau(baseTau)
+
+	// All three should produce output
+	if len(baseResponse) == 0 {
+		t.Fatal("base response empty")
+	}
+	if len(candidateA) == 0 {
+		t.Fatal("candidate A empty")
+	}
+	if len(candidateB) == 0 {
+		t.Fatal("candidate B empty")
+	}
+
+	// Score all three
+	scoreBase := metaScore(baseResponse)
+	scoreA := metaScore(candidateA)
+	scoreB := metaScore(candidateB)
+
+	t.Logf("base=%.2f (%q)", scoreBase, baseResponse)
+	t.Logf("cool=%.2f (%q)", scoreA, candidateA)
+	t.Logf("warm=%.2f (%q)", scoreB, candidateB)
+
+	// Tau should be restored
+	restored := leo.GetTau()
+	if math.Abs(float64(restored-baseTau)) > 0.001 {
+		t.Errorf("tau not restored: base=%.4f restored=%.4f", baseTau, restored)
+	}
+}
+
+// ========================================================================
+// TAU BRIDGE TESTS
+// ========================================================================
+
+func TestGetSetTau(t *testing.T) {
+	dbPath := "/tmp/test_go_tau.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Get initial tau
+	initial := leo.GetTau()
+	if initial <= 0 {
+		t.Fatalf("initial tau should be positive, got %.4f", initial)
+	}
+
+	// Set new tau
+	leo.SetTau(2.5)
+	got := leo.GetTau()
+	if math.Abs(float64(got-2.5)) > 0.001 {
+		t.Errorf("set tau to 2.5, got %.4f", got)
+	}
+
+	// Restore
+	leo.SetTau(initial)
+	restored := leo.GetTau()
+	if math.Abs(float64(restored-initial)) > 0.001 {
+		t.Errorf("restored tau should match initial: %.4f != %.4f", restored, initial)
+	}
+}
+
+// ========================================================================
+// CAPITALIZE "LEO" TESTS
+// ========================================================================
+
+func TestLeoCapitalized(t *testing.T) {
+	dbPath := "/tmp/test_go_capitalize.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Generate many times and check that "leo" never appears lowercase
+	for i := 0; i < 10; i++ {
+		resp := leo.Generate("tell me about Leo")
+		words := strings.Fields(resp)
+		for _, w := range words {
+			lower := strings.ToLower(w)
+			cleaned := strings.Trim(lower, ".,!?;:'\"")
+			if cleaned == "leo" {
+				trimmed := strings.Trim(w, ".,!?;:'\"")
+				if trimmed == "leo" {
+					t.Errorf("found lowercase 'leo' in response: %q", resp)
+				}
+			}
+		}
+	}
+}
+
+// ========================================================================
+// PHASE4 BRIDGE TESTS
+// ========================================================================
+
+func TestPhase4Transitions(t *testing.T) {
+	dbPath := "/tmp/test_go_phase4.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Initially zero transitions
+	trans := leo.Phase4Transitions()
+	if trans != 0 {
+		t.Errorf("initial transitions should be 0, got %d", trans)
+	}
+
+	// Observe conversations — Phase4 records inside MathBrain
+	for i := 0; i < 5; i++ {
+		resp := leo.Generate("hello world")
+		leo.MathBrainObserve("hello world", resp)
+	}
+
+	// Transitions may or may not have happened (depends on voice switches)
+	trans = leo.Phase4Transitions()
+	t.Logf("after 5 observations: %d transitions", trans)
+	// Just verify no crash
+}
+
+func TestPhase4Suggest(t *testing.T) {
+	dbPath := "/tmp/test_go_phase4_suggest.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Suggest from island 0 — should return valid island or -1
+	suggestion := leo.Phase4Suggest(0)
+	if suggestion < -1 || suggestion > 5 {
+		t.Errorf("suggestion should be -1..5, got %d", suggestion)
+	}
+	t.Logf("suggest from island 0: %d", suggestion)
+}
+
+func TestPhase4IslandStats(t *testing.T) {
+	dbPath := "/tmp/test_go_phase4_stats.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Check all islands
+	for island := 0; island < 5; island++ {
+		visits := leo.Phase4IslandVisits(island)
+		quality := leo.Phase4IslandQuality(island)
+		if visits < 0 {
+			t.Errorf("island %d visits should be >= 0, got %d", island, visits)
+		}
+		if quality < 0 || quality > 1 {
+			// quality can be 0 if no visits
+			if visits > 0 {
+				t.Errorf("island %d quality should be [0,1], got %.2f", island, quality)
+			}
+		}
+	}
+}
+
 func TestThemeFlowStagnation(t *testing.T) {
 	// Test the stagnation detection logic without goroutines
 	type snap struct {

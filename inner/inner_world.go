@@ -634,7 +634,9 @@ func metaScore(text string) float64 {
 		entropyScore = 0.3
 	}
 
-	score := coherence + diversity*0.3 + lenScore + entropyScore - repPenalty
+	// Weighted sum normalized to [0, 1]
+	// Max possible: coherence(0.5) + diversity(0.3) + length(0.5) + entropy(0.3) = 1.6
+	score := (coherence + diversity*0.3 + lenScore + entropyScore - repPenalty) / 1.6
 	return math.Max(0.0, math.Min(1.0, score))
 }
 
