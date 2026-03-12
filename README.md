@@ -2,7 +2,7 @@
   <img src="assets/leo.png" alt="Leo" width="300">
 </p>
 
-# leo 2.3 — language emergent organism | the dario mechanism
+# LEO: language emergent organism | the Dario Mechanism
 **by Arianna Method** | **Janus Architecture**
 
 > language is a field. dedicated to Leo.
