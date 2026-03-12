@@ -19909,25 +19909,55 @@ void leo_bootstrap(Leo *leo) {
                leo->tok.n_words, leo->cooc.n_entries);
     }
 
-    /* D.N.A. — apply inherited structure from nanollama ancestor */
+    /* D.N.A. — apply inherited structure from nanollama ancestor
+     * Dual tokenizer matching: word-level (tok_find) + subword (sw_find/sw_add).
+     * The ancestor used BPE subwords — Leo has both tokenizers, uses both. */
 #ifdef LEO_HAS_DNA
     printf("[leo] applying D.N.A. (Dynamic Neural Ancestry)...\n");
+    int dna_word_hits = 0, dna_sw_hits = 0;
 
-    /* 1. Token gravity: boost co-occurrence for "heavy" words */
-    for (int i = 0; i < DNA_GRAVITY_SIZE && i < leo->tok.n_words; i++) {
-        int word_id = tok_find(&leo->tok, DNA_GRAVITY_WORDS[i]);
+    /* 1. Token gravity: boost freq for "heavy" tokens via BOTH tokenizers */
+    for (int i = 0; i < DNA_GRAVITY_SIZE; i++) {
+        const char *tok = DNA_GRAVITY_WORDS[i];
+        float grav = DNA_GRAVITY_VALUES[i];
+
+        /* try word-level first */
+        int word_id = tok_find(&leo->tok, tok);
         if (word_id >= 0 && word_id < leo->cooc.freq_size) {
-            leo->cooc.freq[word_id] *= (1.0f + DNA_GRAVITY_VALUES[i]);
+            leo->cooc.freq[word_id] *= (1.0f + grav);
+            dna_word_hits++;
+        }
+
+        /* also register in subword field + boost subword freq */
+        int sw_id = sw_add_token(&leo->subword, tok);
+        if (sw_id >= 0) {
+            leo->subword.tok_freq[sw_id] += (int)(grav * 10.0f + 1.0f);
+            dna_sw_hits++;
         }
     }
 
-    /* 2. Co-activation: pre-seed bigrams from ancestor's attention */
+    /* 2. Co-activation: pre-seed bigrams via BOTH tokenizers */
+    int dna_word_coact = 0, dna_sw_coact = 0;
     for (int i = 0; i < DNA_COACTIVATION_SIZE; i++) {
-        int src = tok_find(&leo->tok, DNA_COACT_SRC[i]);
-        int dst = tok_find(&leo->tok, DNA_COACT_DST[i]);
-        if (src >= 0 && dst >= 0) {
-            bigram_update(&leo->bigrams, src, dst, DNA_COACT_STRENGTH[i] * 3.0f);
-            cooc_update(&leo->cooc, src, dst, DNA_COACT_STRENGTH[i] * 3.0f);
+        const char *s = DNA_COACT_SRC[i];
+        const char *d = DNA_COACT_DST[i];
+        float str = DNA_COACT_STRENGTH[i];
+
+        /* word-level bigrams + co-occurrence */
+        int src_w = tok_find(&leo->tok, s);
+        int dst_w = tok_find(&leo->tok, d);
+        if (src_w >= 0 && dst_w >= 0) {
+            bigram_update(&leo->bigrams, src_w, dst_w, str * 3.0f);
+            cooc_update(&leo->cooc, src_w, dst_w, str * 3.0f);
+            dna_word_coact++;
+        }
+
+        /* subword-level bigrams */
+        int src_sw = sw_add_token(&leo->subword, s);
+        int dst_sw = sw_add_token(&leo->subword, d);
+        if (src_sw >= 0 && dst_sw >= 0) {
+            sw_bigram_update(&leo->subword, src_sw, dst_sw, str * 2.0f);
+            dna_sw_coact++;
         }
     }
 
@@ -19937,8 +19967,9 @@ void leo_bootstrap(Leo *leo) {
     }
     leo->destiny.magnitude = vec_norm(leo->destiny.direction, leo->dim);
 
-    printf("[leo] D.N.A. applied: %d gravity words, %d co-activations\n",
-           DNA_GRAVITY_SIZE, DNA_COACTIVATION_SIZE);
+    printf("[leo] D.N.A. applied: gravity %d word + %d subword, "
+           "coact %d word + %d subword\n",
+           dna_word_hits, dna_sw_hits, dna_word_coact, dna_sw_coact);
 #else
     /* no D.N.A. — pure weightless bootstrap */
 #endif
