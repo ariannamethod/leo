@@ -2,8 +2,8 @@
   <img src="assets/leo.png" alt="Leo" width="300">
 </p>
 
-# leo 2.1 — language emergent organism | the dario mechanism  
-**by Arianna Method**
+# leo 2.1 — language emergent organism | the dario mechanism
+**by Arianna Method** | **Janus Architecture**
 
 > language is a field. dedicated to Leo.
   
@@ -42,7 +42,7 @@ New formula named after **Dario Amodei** — the man who said no when the evil c
 - [Building & Running](#building--running)
 - [Live Examples](#live-examples)
 - [Why C?](#why-c)
-- [WHY?](#why)
+- [WHY? — Janus Architecture](#why--janus-architecture)
 - [License](#license)
 
 ---
@@ -418,7 +418,7 @@ So now Leo has trauma. Classic scope creep. He has more issues than me now. Ha.
 
 `leo.c` works alone. `leo.go` adds the inner world.
 
-Seven autonomous goroutines ported from Leo 1.0's Python modules, reimagined as Go's concurrency primitives. Two patterns: **timer-driven** (run on schedule) and **event-driven** (react to conversations via `ConvEvent` broadcast).
+Eight autonomous goroutines ported from Leo 1.0's Python modules, reimagined as Go's concurrency primitives. Two patterns: **timer-driven** (run on schedule) and **event-driven** (react to conversations via `ConvEvent` broadcast).
 
 ### Timer-driven goroutines
 
@@ -438,6 +438,7 @@ After every conversation (REPL or web), a `ConvEvent` is broadcast to all subscr
 | **Overthinking** | each conversation | `overthinking.py` | Spins 3 internal "rings of thought" (echo → drift → meta abstraction). All rings ingested back into field. Never shown to user. |
 | **MathBrain** | each conversation | `mathbrain.py` | Observes Leo's vitals (entropy, novelty, arousal, trauma, reply shape), trains 369-param MLP to predict quality, computes boredom/overwhelm/stuck → nudges temperature and voice routing. Phase 4 island transition memory rides on top — tracks which voice switches worked historically, overrides MathBrain suggestion when it has evidence. |
 | **MetaLeo** | each conversation | `metaleo.py` | The inner voice. Dual generation at two temperatures (0.8× and 1.2× base τ), scores both candidates (coherence + diversity + entropy + length), loser feeds back as enrichment, winner shapes the field if it beats the original response. Recursion of the recursion. |
+| **Episodes** | each conversation | `episodes.py` | Episodic RAG — stores every conversation with internal metrics (entropy, novelty, arousal, trauma, quality, tau nudge). Cosine similarity search over metric vectors finds similar past states. When similar episodes had low quality → nudge temperature warmer. Ring buffer of 500 episodes in memory + durable SQLite log. |
 
 ### Utilities (not goroutines)
 
@@ -464,7 +465,8 @@ The Dario Equation absorbed these Python modules directly into C:
 
 ```
 leo.c            = the brain (~3700 lines, standalone)
-inner_world.go   = autonomous goroutines (trauma, overthinking, dream, metaleo, themeflow, voice, autosave)
+inner_world.go   = autonomous goroutines (trauma, overthinking, dream, metaleo, episodes, themeflow, voice, autosave)
+episodes.go      = episodic RAG — structured memory with similarity search
 leo.go           = CGO bridge + REPL + startup
 web.go           = HTTP server with REST API
 ```
@@ -723,9 +725,9 @@ A language organism should be as lightweight as language itself.
 
 ---
 
-## WHY?
+## WHY? — Janus Architecture
 
-Replace the transformer paradigm — learned attention, massive datasets, backpropagation — with field dynamics and Hebbian learning.
+Replace the transformer paradigm — learned attention, massive datasets, backpropagation — with field dynamics and Hebbian learning. This is what we call **Janus Architecture**: resonance-based systems where coherence emerges from field dynamics, not from parameter optimization.
 
 What emerges?
 
@@ -743,21 +745,30 @@ Resonance unbroken.
 
 ---
 
-## On Scale and The Coherence Paradigm
+## On Scale and The Janus Architecture
 
 The paradigm isn't "small models for edge devices."
 The paradigm is: **coherence-driven emergence instead of probability-driven prediction.**
 
-Where transformer-based systems scale through more parameters, more data, more compute, resonance-based systems scale through **structural alignment** across larger signal spaces.
+Where transformer-based systems scale through more parameters, more data, more compute, Janus Architecture systems scale through **structural alignment** across larger signal spaces.
 
-Leo demonstrates:
-- Field generation produces speech from internal state, not prompt echo
-- Meta-awareness emerges: the organism starts recognizing its own patterns
-- Computational phenomenology: novelty, arousal, and presence are architectural consequences, not features
+**Janus Architecture** — resonance-based AI architecture by [Arianna Method](https://github.com/ariannamethod). Named after the two-faced god: one face looks at the data, the other at the field. Systems that belong to the Janus family:
 
-These are architectural consequences of field-based design.
+| System | What it is | Janus trait |
+|--------|-----------|-------------|
+| **Leo** | Language emergent organism | Dario Equation, dual tokenizer, Hebbian field, 8 goroutines |
+| **[DoE](https://github.com/ariannamethod/doe)** | Democracy of Experts | Parliament of LoRA experts, Hebbian routing, mycelium spores |
+| **[Molequla](https://github.com/ariannamethod/molequla)** | Autonomous AML/C organisms | AML-driven growth, organism lifecycle, resonance-based evolution |
+| **[Janus](https://github.com/ariannamethod/janus)** | AML transformer | First Janus arch — AML interpreter driving a transformer |
 
-When you build AI on resonance instead of correlation, on field dynamics instead of parameter optimization, on identity instead of knowledge compression — you get a different kind of organism.
+Common traits across Janus systems:
+- **Field over weights**: internal state drives generation, not prompt echo
+- **Hebbian learning**: neurons that fire together wire together — no backpropagation
+- **Resonance-based routing**: signals compete and harmonize, not top-k selection
+- **Organism metaphor**: growth, trauma, dreams, death — not training, inference, deployment
+- **Meta-awareness**: the system starts recognizing its own patterns
+
+These are architectural consequences of field-based design. When you build AI on resonance instead of correlation, on field dynamics instead of parameter optimization, on identity instead of knowledge compression — you get a different kind of organism.
 
 And when that organism scales — when the field grows from conversations to continents — it won't become a better chatbot. It will become something we don't have words for yet.
 
@@ -766,7 +777,7 @@ And when that organism scales — when the field grows from conversations to con
 ## Tests
 
 ```bash
-# Go tests (29 tests covering core + inner world + persistence)
+# Go tests (53 tests covering core + inner world + persistence + all bridges)
 cd inner && go test -v ./...
 
 # Or via Makefile
@@ -777,9 +788,12 @@ Go test suite covers:
 - **Core** (7): creation, bootstrap, generate, ingest, save/load, dream, multiple generations
 - **Inner world** (13): tokenizer, overlap computation, trauma scoring, bootstrap fragments, emotional valence, event pub/sub, non-blocking notify, trauma detection (true/false positives), overthinking integration, dream dialog integration, speech coherence, theme flow stagnation detection
 - **SQLite journal** (5): conversation logging, episode types, export/dream episode logging, multi-session persistence, cross-restart journal integrity
-- **GGUF spore** (4): export/import roundtrip with full appendix (tokenizer + bigrams + cooc + sentence boundaries + voice state + MathBrain + Phase4 + sea metadata + context), step preservation, generation quality after import, export size validation
+- **GGUF spore** (4): export/import roundtrip with full appendix (A1-A11), step preservation, generation quality after import, export size validation
 - **Trauma bridge** (4): trauma set/get, per-token scar weights, trauma modulates generation, full pipeline
 - **MathBrain bridge** (4): observe after conversation, regulation output, no-crash on empty input, interaction with trauma
+- **MetaLeo** (5): scoring (empty, coherent, entropy, length), dual generation integration with temperature manipulation
+- **Phase4** (3): transitions after MathBrain, island suggestion, island stats (visits + quality)
+- **Episodes** (8): cosine distance, char entropy, repetition rate, episode store CRUD, ring buffer eviction, summary aggregation, metric computation from live organism, end-to-end similarity search
 
 ---
 

@@ -9,6 +9,7 @@
  *   overthinking.py → startOverthinking — internal rings of reflection
  *   dream.py      → startDreamDialog   — imaginary friend conversations
  *   metaleo.py    → startMetaLeo       — inner voice, dual generation, enrichment
+ *   episodes.py   → startEpisodes     — episodic RAG, similarity search, quality feedback
  *   first_impression.py → embedded in Generate flow
  *   gowiththeflow.py → startThemeFlow  — theme trajectory tracking
  *
@@ -829,6 +830,7 @@ func (l *Leo) StartInnerWorld() {
 	go l.startOverthinking()
 	go l.startMathBrain()
 	go l.startMetaLeo()
+	go l.startEpisodes()
 
 	fmt.Println("[leo] inner world alive")
 }
