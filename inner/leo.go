@@ -62,6 +62,10 @@ extern int   leo_bridge_phase4_suggest(void *leo, int from_island);
 extern int   leo_bridge_phase4_island_visits(void *leo, int island);
 extern float leo_bridge_phase4_island_quality(void *leo, int island);
 
+// Temperature bridge (for MetaLeo)
+extern float leo_bridge_get_tau(void *leo);
+extern void  leo_bridge_set_tau(void *leo, float tau);
+
 // Trauma bridge
 extern void  leo_bridge_set_trauma(void *leo, float level);
 extern float leo_bridge_get_trauma(void *leo);
@@ -356,6 +360,20 @@ func (l *Leo) TokenID(word string) int {
 	cWord := C.CString(word)
 	defer C.free(unsafe.Pointer(cWord))
 	return int(C.leo_bridge_token_id(l.ptr, cWord))
+}
+
+// GetTau returns the current base temperature.
+func (l *Leo) GetTau() float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_get_tau(l.ptr))
+}
+
+// SetTau sets the base temperature (used by MetaLeo for dual generation).
+func (l *Leo) SetTau(tau float32) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	C.leo_bridge_set_tau(l.ptr, C.float(tau))
 }
 
 // Inner world goroutines (startInnerVoice, startAutosave, startDreamDialog,

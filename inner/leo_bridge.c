@@ -171,3 +171,13 @@ int leo_bridge_phase4_island_visits(void *ptr, int island) {
 float leo_bridge_phase4_island_quality(void *ptr, int island) {
     return leo_phase4_island_quality((Leo *)ptr, island);
 }
+
+/* Get tau_base */
+float leo_bridge_get_tau(void *ptr) {
+    return ((Leo *)ptr)->tau_base;
+}
+
+/* Set tau_base */
+void leo_bridge_set_tau(void *ptr, float tau) {
+    ((Leo *)ptr)->tau_base = tau;
+}

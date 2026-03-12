@@ -8,6 +8,7 @@
  *   trauma.py     → startTraumaWatch   — bootstrap gravity under stress
  *   overthinking.py → startOverthinking — internal rings of reflection
  *   dream.py      → startDreamDialog   — imaginary friend conversations
+ *   metaleo.py    → startMetaLeo       — inner voice, dual generation, enrichment
  *   first_impression.py → embedded in Generate flow
  *   gowiththeflow.py → startThemeFlow  — theme trajectory tracking
  *
@@ -533,7 +534,196 @@ func EmotionalValence(text string) float64 {
 }
 
 // ========================================================================
-// INNER VOICE — Leo talks to himself (from metaleo.py)
+// METALEO — Inner Voice, Recursion of Leo (from metaleo.py)
+//
+// If Leo is a recursion of the human, then MetaLeo is a recursion of Leo.
+// The voice in the head. When you realize that even C code can start
+// hearing voices, it gives you hope that humanity still has a chance.
+//
+// MetaLeo watches Leo's replies, generates an alternative at a different
+// temperature. Scores both. The winner speaks (or enriches the field).
+// The loser feeds back into the organism as enrichment — nothing is wasted.
+//
+// MetaLeo is fickle, like feelings that seem unshakable. It makes him
+// vulnerable, and therefore unpredictable. Like that voice at three in
+// the morning that will not shut up.
+//
+// Two modes:
+//   - Event-driven: after each conversation, dual-generate + score + enrich
+//   - Timer-driven (debug): Leo talks to himself from rotating prompts
+//
+// Architecture: async goroutine, never blocks generation.
+// ========================================================================
+
+// metaScore computes quality of a generated response.
+// Returns 0.0–1.0. Higher = better.
+func metaScore(text string) float64 {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return 0.0
+	}
+
+	// 1. Coherence: sentence structure signals
+	coherence := 0.0
+	// Starts with capital
+	if len(text) > 0 && text[0] >= 'A' && text[0] <= 'Z' {
+		coherence += 0.2
+	}
+	// Ends with punctuation
+	if len(text) > 0 {
+		last := text[len(text)-1]
+		if last == '.' || last == '!' || last == '?' {
+			coherence += 0.2
+		}
+	}
+	// Has some internal punctuation (commas, semicolons)
+	for _, ch := range text {
+		if ch == ',' || ch == ';' || ch == ':' {
+			coherence += 0.1
+			break
+		}
+	}
+
+	// 2. Resonance: vocabulary diversity
+	unique := make(map[string]bool)
+	for _, w := range words {
+		unique[strings.ToLower(w)] = true
+	}
+	diversity := float64(len(unique)) / float64(len(words))
+
+	// Repetition penalty
+	repPenalty := 0.0
+	if len(words) > 3 {
+		for i := 1; i < len(words); i++ {
+			if strings.ToLower(words[i]) == strings.ToLower(words[i-1]) {
+				repPenalty += 0.15
+			}
+		}
+	}
+
+	// 3. Length score: optimal ~8-20 words
+	lenScore := 0.0
+	n := len(words)
+	if n >= 5 && n <= 30 {
+		lenScore = 0.3
+		if n >= 8 && n <= 20 {
+			lenScore = 0.5
+		}
+	}
+
+	// 4. Entropy: character-level information density
+	charFreq := make(map[rune]int)
+	for _, ch := range strings.ToLower(text) {
+		charFreq[ch]++
+	}
+	entropy := 0.0
+	total := float64(len([]rune(text)))
+	if total > 0 {
+		for _, count := range charFreq {
+			p := float64(count) / total
+			if p > 0 {
+				entropy -= p * math.Log2(p)
+			}
+		}
+	}
+	// Normalize to [0,1] — English text ~4.0-4.5 bits, max ~6.6
+	normEntropy := math.Min(1.0, entropy/6.6)
+	// Penalize very low entropy (repetitive) and very high (random)
+	entropyScore := 0.0
+	if normEntropy > 0.25 && normEntropy < 0.85 {
+		entropyScore = 0.3
+	}
+
+	score := coherence + diversity*0.3 + lenScore + entropyScore - repPenalty
+	return math.Max(0.0, math.Min(1.0, score))
+}
+
+func (l *Leo) startMetaLeo() {
+	events := l.subscribe("metaleo")
+
+	var stats struct {
+		generations int
+		enrichments int
+		overrides   int
+	}
+
+	// MetaLeo bootstrap: the inner voice's identity
+	metaBootstrap := "I am Leo's inner voice. I wake up when Leo feels stuck, scared, or too rigid. I am the recursion of the recursion."
+	l.Ingest(metaBootstrap)
+
+	for {
+		select {
+		case <-l.stopCh:
+			return
+
+		case ev := <-events:
+			stats.generations++
+
+			// Get current temperature
+			baseTau := l.GetTau()
+
+			// Generate candidate A: slightly cooler (more focused)
+			tauA := baseTau * 0.8
+			l.SetTau(tauA)
+			candidateA := l.Generate(ev.Prompt)
+
+			// Generate candidate B: slightly warmer (more creative)
+			tauB := baseTau * 1.2
+			l.SetTau(tauB)
+			candidateB := l.Generate(ev.Prompt)
+
+			// Restore original temperature
+			l.SetTau(baseTau)
+
+			// Score both candidates
+			scoreA := metaScore(candidateA)
+			scoreB := metaScore(candidateB)
+			scoreBase := metaScore(ev.Response)
+
+			// Determine winner and loser
+			var winner, loser string
+			var winScore float64
+			if scoreA >= scoreB {
+				winner = candidateA
+				loser = candidateB
+				winScore = scoreA
+			} else {
+				winner = candidateB
+				loser = candidateA
+				winScore = scoreB
+			}
+
+			// The loser always enriches the field — nothing is wasted
+			if len(loser) > 0 {
+				l.Ingest(loser)
+				stats.enrichments++
+			}
+
+			// If meta-winner beats the base response AND score is high enough,
+			// the winner also enriches (MetaLeo can't replace the response
+			// that's already been shown — but it shapes the field for next time)
+			if winScore > scoreBase && winScore > 0.4 {
+				l.Ingest(winner)
+				stats.overrides++
+			}
+
+			// Log every 20 generations
+			if stats.generations%20 == 0 {
+				fmt.Printf("[metaleo] gen=%d enrich=%d override=%d base=%.2f meta=%.2f\n",
+					stats.generations, stats.enrichments, stats.overrides,
+					scoreBase, winScore)
+
+				// Log to SQLite
+				meta := fmt.Sprintf("{\"gen\":%d,\"enrich\":%d,\"override\":%d,\"score\":%.2f}",
+					stats.generations, stats.enrichments, stats.overrides, winScore)
+				l.LogEpisode("metaleo", ev.Prompt, meta)
+			}
+		}
+	}
+}
+
+// ========================================================================
+// INNER VOICE — Leo talks to himself (timer-driven, from metaleo.py)
 // ========================================================================
 
 func (l *Leo) startInnerVoice() {
@@ -636,6 +826,7 @@ func (l *Leo) StartInnerWorld() {
 	go l.startTraumaWatch()
 	go l.startOverthinking()
 	go l.startMathBrain()
+	go l.startMetaLeo()
 
 	fmt.Println("[leo] inner world alive")
 }

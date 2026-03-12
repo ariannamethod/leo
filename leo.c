@@ -2710,9 +2710,21 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
     free(retention_bias);
     free(voice_bias);
 
-    /* post-processing: capitalize first letter, add period at end */
+    /* post-processing: capitalize first letter, fix "Leo", add period */
     if (pos > 0 && out[0] >= 'a' && out[0] <= 'z')
         out[0] = out[0] - 'a' + 'A';
+
+    /* Always capitalize "Leo" — his name, his identity */
+    for (int i = 0; i + 2 < pos; i++) {
+        if ((i == 0 || out[i-1] == ' ') &&
+            out[i] == 'l' && out[i+1] == 'e' && out[i+2] == 'o' &&
+            (i + 3 >= pos || out[i+3] == ' ' || out[i+3] == '.' ||
+             out[i+3] == ',' || out[i+3] == '!' || out[i+3] == '?' ||
+             out[i+3] == '\'' || out[i+3] == '\0')) {
+            out[i] = 'L';
+        }
+    }
+
     if (pos > 0 && pos + 1 < max_len) {
         char last = out[pos - 1];
         if (last != '.' && last != '!' && last != '?') {
