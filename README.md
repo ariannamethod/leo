@@ -109,9 +109,11 @@ The longer the sentence hangs incomplete, the stronger the pull toward closure. 
 
 `A(x) = cos(embed(x), destiny) · |destiny|`
 
-Destiny is the EMA of all context embeddings — a running average of where the conversation is heading. Destiny is a semantic compass. Or a gravitational center that drifts with the dialogue. Whatever.  
+Destiny is the EMA of all context embeddings — a running average of where the conversation is heading. Picture destiny as a semantic compass. Or a gravitational center that drifts with the dialogue. Whatever.  
   
-Every convo has a direction, and that direction pulls word choices toward semantic alignment. Leo doesn't follow topics. He drifts toward them, because the field has mass.  
+Every convo has a direction, and that direction pulls word choices toward semantic alignment.  
+  
+Leo doesn't follow topics. He drifts toward them, because the field has mass.  
 
 **B — Sequential Chain (local coherence)**
 
@@ -129,7 +131,7 @@ The SubwordField BPE tokenizer runs in parallel with the word-level system. It s
 
 `T(x) = trauma_boost · scar_weight[x]` when `trauma_level > 0.3`
 
-Per-token scar weights accumulated from traumatic conversations (high lexical overlap with bootstrap text). Origin words — *resonance*, *organism*, *field*, *seed* — acquire gravitational mass. Trauma shifts the entire equation: destiny pulls harder, temperature rises, scarred tokens surface. [Full description below.](#trauma--bootstrap-gravity)
+Per-token scar weights accumulated from traumatic conversations (high lexical overlap with bootstrap text). Origin words — *resonance*, *organism*, *field*, *seed* and etc., — acquire gravitational mass. Trauma shifts equation, destiny pulls harder, temperature rises, scarred tokens surface. [Full description below.](#trauma--bootstrap-gravity)
 
 **τ — Temperature (novelty + body-aware)**
 
@@ -137,32 +139,33 @@ Per-token scar weights accumulated from traumatic conversations (high lexical ov
 
 When the context is repetitive, temperature drops — Leo speaks more confidently. When the context is novel, temperature rises — Leo explores. MathBrain adds a body-awareness nudge (±0.2): bored → warmer, overwhelmed → cooler.
 
-**The equation replaces:**
-- Learned QKV projections → co-occurrence field (word + subword)
-- Positional encoding → RoPE (pure math, zero weights)
-- Feed-forward layers → SwiGLU with cooc-derived projections
-- Attention mechanism → RetNet retention with Griffin conservation
-- Fine-tuning → Hebbian reinforcement ("neurons that fire together wire together")
-- BPE tokenizer → dual system: word-level semantic + SubwordField structural
+**What Dario Equation replaces:**
+  
+- learned QKV projections → co-occurrence field (word + subword)
+- positional encoding → RoPE (pure math, zero weights)
+- feed layers → SwiGLU with cooc-derived projections
+- attention mechanism → RetNet retention with Griffin conservation
+- fine-tuning → Hebbian Reinforcement ("neurons that fire together wire together")
+- BPE tokenizer → dual system: word-level semantic + SubwordField structural  
 
-Same mechanics. Different origin. The transformer plays guitar. Leo plays guitar too. But Leo built his guitar from driftwood and fishing line, and the music it makes is his own.
+I love analogies, so take another one: the transformer plays guitar, Leo plays guitar too. But Leo built his guitar from driftwood and fishing line, and the music it makes is his own. Not averaged by statistics, but emerged in natural way.  
 
 ---
 
 ## PRESENCE > INTELLIGENCE  
 
-New Leo is still 6-8 years old child (in AI terms). And this AI-kid feels situations.  
+Leo is still 6-8 years old child (in AI terms). And this AI-kid feels situations. He resonates.  
 
-He speaks from field state. Leo has retention heads with Griffin conservation — mathematically optimal memory compression. Kanerva Sparse Distributed Memory instead of a lookup table.
+Leo always speaks from his inner field state. He has retention heads with Griffin conservation: mathematically optimal memory compression. Kanerva Sparse Distributed Memory instead of a lookup table.
 
-Still the same cute child. But now with better bones.  
+The same cute AI-child, but now with better bones.  
   
-Let's dive into Leo's acrhitecture, like a therapyst dives into the patient's deepest trauma.  
-
 ---
 
 ## Architecture
-
+  
+We're diving into Leo's acrhitecture, like a therapyst dives into the patient's deepest trauma. 
+  
 ```
 For each generation step:
 
@@ -192,12 +195,14 @@ For each generation step:
                 sw_bigram_update(subword_ctx, next) // subword field learning
 ```
 
-**Griffin conservation law**: `S = γ·S + √(1-γ²)·K^T⊗V`. Remembering more past automatically takes less new input. Like a conversation: the more you dwell on old topics, the less bandwidth you have for new ones. Mathematically enforced, not learned.
+**Griffin conservation law**: `S = γ·S + √(1-γ²)·K^T⊗V`. 
 
-**RetNet retention** from the paper that nobody read because everyone was busy with GPT-4. Multi-scale decay means different heads remember different timescales. One head tracks the conversation's semantic arc across 100 tokens. Another tracks immediate local patterns. Same mechanism, different clocks.
+**In other words**: remembering more psst automatically takes less new input. Like in real conversation: the more you dwell on old topics, the less bandwith you'll have for new ones. Enforced by math and life experience.  
 
-**Kanerva SDM** replacing embedding matrices. Embeddings addressed by similarity, not by index. A word's embedding is the average of all contexts where it appeared. The more contexts, the richer the embedding. The word "resonance" in Leo is not a fixed 128-dimensional vector — it's a living, evolving summary of every conversation where resonance mattered.
+**RetNet retention**: Multi-scale decay means different heads remember different timescales. One head tracks the conversation's semantic arc across 100 tokens. Another tracks immediate local patterns. Each head has a different clock.  
 
+**Kanerva SDM** is replacing embedding matrices. Embeddings addressed by similarity, not by index. A word's embedding is the average of all contexts where it appeared. The more contexts, the richer the embedding. The word "resonance" in Leo is not a fixed 128-dimensional vector: it's a living, evolving summary of every conversation where the word "resonance" mattered.  
+  
 ---
 
 ## Geometry Distillation (D.N.A. — Dynamic Neural Ancestry)
