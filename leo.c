@@ -8,10 +8,14 @@
  * Uses transformer MECHANICS (RoPE, SwiGLU, retention) but NOT pretrained weights.
  * Weights are born from conversation via Hebbian learning.
  *
- * p(x|Φ) = softmax((α·H + β·F + γ·A) / τ)
- *   H = Hebbian Resonance (co-occurrence → attention)
+ * p(x|Φ) = softmax((B + α·H + β·F + γ·A + sw·S + r·R + T) / τ)
+ *   B = Bigram Chain (sequential coherence, dominant when young)
+ *   H = Hebbian Resonance (positional profile, learnable 36 params)
  *   F = Prophecy Fulfillment (unfulfilled predictions → generation pressure)
  *   A = Destiny Attraction (EMA context → semantic direction)
+ *   S = Subword Structural Coherence (BPE morphological signal)
+ *   R = Recursive D.N.A. Resonance (RRPRAM clusters/chains/hubs)
+ *   T = Trauma gravity (wounded → origin pull)
  *
  * Single C file. Zero deps (libc + math + sqlite3).
  * Works autonomously without leo.go.
@@ -42,7 +46,7 @@
  * CONFIGURATION
  * ======================================================================== */
 
-#define LEO_VERSION       "2.3.0"
+#define LEO_VERSION       "2.4.0"
 #define LEO_DIM           128         /* embedding dimension */
 #define LEO_MAX_VOCAB     16384       /* max vocabulary size */
 #define LEO_MAX_TOKENS    256         /* max generation length */
@@ -69,6 +73,43 @@
 #define LEO_TC_CONTENT   1            /* words with high IDF */
 #define LEO_TC_PUNCT     2            /* punctuation tokens */
 #define LEO_TC_RARE      3            /* very rare / unseen */
+
+/* RRPRAM D.N.A. Scanner — recursive pattern discovery in ancestral geometry.
+ * Finds clusters (strongly connected subgraphs), chains (longest weighted paths),
+ * and hubs (high-gravity high-degree nodes) in the coactivation graph.
+ * Runs once at bootstrap. Results feed signal R in Dario Equation. */
+#define LEO_RRPRAM_MAX_CLUSTERS   64
+#define LEO_RRPRAM_MAX_CLUSTER_SZ  8
+#define LEO_RRPRAM_MAX_CHAINS     32
+#define LEO_RRPRAM_MAX_CHAIN_LEN   6
+#define LEO_RRPRAM_MAX_HUBS       32
+#define LEO_RRPRAM_STRENGTH_THRESH 3.0f  /* minimum edge strength for cluster/chain */
+
+typedef struct {
+    int   tokens[LEO_RRPRAM_MAX_CLUSTER_SZ]; /* token IDs (word-level or -1) */
+    char  words[LEO_RRPRAM_MAX_CLUSTER_SZ][64]; /* token strings for matching */
+    float strength;                          /* combined resonance */
+    int   size;                              /* actual # tokens in cluster */
+} DnaCluster;
+
+typedef struct {
+    int   tokens[LEO_RRPRAM_MAX_CHAIN_LEN];  /* ordered token IDs */
+    char  words[LEO_RRPRAM_MAX_CHAIN_LEN][64];
+    float strength;
+    int   len;
+} DnaChain;
+
+typedef struct {
+    DnaCluster clusters[LEO_RRPRAM_MAX_CLUSTERS];
+    int        n_clusters;
+    DnaChain   chains[LEO_RRPRAM_MAX_CHAINS];
+    int        n_chains;
+    int        hub_tokens[LEO_RRPRAM_MAX_HUBS];  /* word-level IDs or -1 */
+    char       hub_words[LEO_RRPRAM_MAX_HUBS][64];
+    float      hub_strength[LEO_RRPRAM_MAX_HUBS];
+    int        n_hubs;
+    float      r_coeff;  /* coefficient for R signal (auto-tuned) */
+} DnaRrpram;
 
 /* retention timescales: semantic, topic, syntax, bigram */
 static const float LEO_GAMMA[LEO_RET_HEADS] = {0.99f, 0.95f, 0.85f, 0.50f};
@@ -1756,6 +1797,9 @@ typedef struct {
     float           class_mod[LEO_TOKEN_CLASSES];        /* per-class multiplier on profile */
     int             dist_profile_updates;                /* Hebbian update counter */
 
+    /* RRPRAM D.N.A. scanner — recursive patterns from ancestral geometry */
+    DnaRrpram       rrpram;
+
     /* database */
     sqlite3        *db;
     char            db_path[512];
@@ -1784,6 +1828,262 @@ int  leo_db_episode_count(Leo *leo, const char *event_type);
 /* GGUF spore forward declarations */
 void leo_export_gguf(Leo *leo, const char *path);
 int  leo_import_gguf(Leo *leo, const char *path);
+
+/* ========================================================================
+ * RRPRAM D.N.A. SCANNER — recursive pattern discovery
+ *
+ * Scans the coactivation graph from leo.h to find:
+ *   1. Clusters: strongly connected token groups (mutual coactivation)
+ *   2. Chains: longest weighted paths (attention flow directions)
+ *   3. Hubs: high-gravity + high-degree nodes (resonance centers)
+ *
+ * Called once from leo_bootstrap() after D.N.A. application.
+ * Results stored in leo->rrpram, consumed by signal R in dario_compute().
+ * ======================================================================== */
+
+#ifdef LEO_HAS_DNA
+
+/* adjacency list for coactivation graph */
+typedef struct { int dst; float strength; } RrpEdge;
+typedef struct {
+    RrpEdge *edges;
+    int       n_edges;
+    int       capacity;
+    float     gravity;       /* from DNA_GRAVITY if present */
+    char      word[64];
+} RrpNode;
+
+static void rrp_add_edge(RrpNode *node, int dst, float strength) {
+    if (node->n_edges >= node->capacity) {
+        node->capacity = node->capacity ? node->capacity * 2 : 8;
+        node->edges = realloc(node->edges, node->capacity * sizeof(RrpEdge));
+    }
+    node->edges[node->n_edges++] = (RrpEdge){dst, strength};
+}
+
+static void dna_rrpram_scan(Leo *leo) {
+    DnaRrpram *rr = &leo->rrpram;
+    memset(rr, 0, sizeof(DnaRrpram));
+    rr->r_coeff = 0.5f; /* starting coefficient, auto-tunable */
+
+    /* --- Phase 1: Build node map from coactivation graph --- */
+    /* Collect unique tokens from DNA_COACT_SRC/DST */
+    int max_nodes = DNA_COACTIVATION_SIZE * 2;
+    char (*node_words)[64] = calloc(max_nodes, 64);
+    int n_nodes = 0;
+
+    /* helper: find or add node index by word string */
+    #define RRP_FIND_NODE(w) ({ \
+        int _found = -1; \
+        for (int _k = 0; _k < n_nodes; _k++) { \
+            if (strcmp(node_words[_k], (w)) == 0) { _found = _k; break; } \
+        } \
+        if (_found < 0 && n_nodes < max_nodes) { \
+            _found = n_nodes; \
+            strncpy(node_words[n_nodes], (w), 63); \
+            n_nodes++; \
+        } \
+        _found; \
+    })
+
+    /* first pass: identify all unique nodes */
+    for (int i = 0; i < DNA_COACTIVATION_SIZE; i++) {
+        RRP_FIND_NODE(DNA_COACT_SRC[i]);
+        RRP_FIND_NODE(DNA_COACT_DST[i]);
+    }
+
+    /* allocate adjacency + in/out degree counters */
+    RrpNode *nodes = calloc(n_nodes, sizeof(RrpNode));
+    int *in_degree = calloc(n_nodes, sizeof(int));
+    int *out_degree = calloc(n_nodes, sizeof(int));
+
+    for (int i = 0; i < n_nodes; i++)
+        strncpy(nodes[i].word, node_words[i], 63);
+
+    /* populate gravity for each node */
+    for (int i = 0; i < DNA_GRAVITY_SIZE; i++) {
+        for (int j = 0; j < n_nodes; j++) {
+            if (strcmp(nodes[j].word, DNA_GRAVITY_WORDS[i]) == 0) {
+                nodes[j].gravity = DNA_GRAVITY_VALUES[i];
+                break;
+            }
+        }
+    }
+
+    /* build edges */
+    for (int i = 0; i < DNA_COACTIVATION_SIZE; i++) {
+        int src = -1, dst = -1;
+        for (int j = 0; j < n_nodes; j++) {
+            if (strcmp(nodes[j].word, DNA_COACT_SRC[i]) == 0) src = j;
+            if (strcmp(nodes[j].word, DNA_COACT_DST[i]) == 0) dst = j;
+            if (src >= 0 && dst >= 0) break;
+        }
+        if (src >= 0 && dst >= 0) {
+            rrp_add_edge(&nodes[src], dst, DNA_COACT_STRENGTH[i]);
+            out_degree[src]++;
+            in_degree[dst]++;
+        }
+    }
+
+    /* --- Phase 2: Find clusters (connected component groups) --- */
+    /* A cluster = set of nodes connected by strong edges (directed).
+     * Start from high-degree nodes, BFS/grow outward following strong edges.
+     * Attention is mostly unidirectional, so mutual pairs are rare — use
+     * connected components instead. */
+    int *used = calloc(n_nodes, sizeof(int));
+
+    /* sort nodes by out_degree (highest first) for better seed selection */
+    for (int a = 0; a < n_nodes && rr->n_clusters < LEO_RRPRAM_MAX_CLUSTERS; a++) {
+        if (used[a] || out_degree[a] < 2) continue;
+
+        DnaCluster *cl = &rr->clusters[rr->n_clusters];
+        int members[LEO_RRPRAM_MAX_CLUSTER_SZ];
+        members[0] = a;
+        int n_members = 1;
+        cl->strength = 0;
+
+        /* BFS: add neighbors connected by strong edges */
+        for (int qi = 0; qi < n_members && n_members < LEO_RRPRAM_MAX_CLUSTER_SZ; qi++) {
+            int cur = members[qi];
+            for (int e = 0; e < nodes[cur].n_edges && n_members < LEO_RRPRAM_MAX_CLUSTER_SZ; e++) {
+                int nb = nodes[cur].edges[e].dst;
+                float str = nodes[cur].edges[e].strength;
+                if (str < LEO_RRPRAM_STRENGTH_THRESH || used[nb]) continue;
+                /* check not already in cluster */
+                int dup = 0;
+                for (int mi = 0; mi < n_members; mi++)
+                    if (members[mi] == nb) { dup = 1; break; }
+                if (dup) { cl->strength += str; continue; } /* internal edge */
+                members[n_members++] = nb;
+                cl->strength += str;
+            }
+        }
+
+        if (n_members >= 3) { /* only keep clusters of 3+ */
+            cl->size = n_members;
+            for (int mi = 0; mi < n_members; mi++) {
+                cl->tokens[mi] = -1;
+                strncpy(cl->words[mi], nodes[members[mi]].word, 63);
+                used[members[mi]] = 1;
+            }
+            rr->n_clusters++;
+        }
+    }
+
+    /* --- Phase 3: Find chains (longest weighted paths) --- */
+    /* Greedy: start from highest-strength edges, extend forward/backward */
+    memset(used, 0, n_nodes * sizeof(int)); /* reset */
+
+    for (int i = 0; i < DNA_COACTIVATION_SIZE && rr->n_chains < LEO_RRPRAM_MAX_CHAINS; i++) {
+        int src = -1, dst = -1;
+        float str = DNA_COACT_STRENGTH[i];
+        if (str < LEO_RRPRAM_STRENGTH_THRESH * 1.5f) continue; /* higher threshold for chains */
+
+        for (int j = 0; j < n_nodes; j++) {
+            if (strcmp(nodes[j].word, DNA_COACT_SRC[i]) == 0) src = j;
+            if (strcmp(nodes[j].word, DNA_COACT_DST[i]) == 0) dst = j;
+        }
+        if (src < 0 || dst < 0 || used[src] || used[dst]) continue;
+
+        /* build chain starting with src→dst */
+        DnaChain *ch = &rr->chains[rr->n_chains];
+        int path[LEO_RRPRAM_MAX_CHAIN_LEN];
+        path[0] = src; path[1] = dst;
+        int path_len = 2;
+        ch->strength = str;
+
+        /* extend forward from dst */
+        int cur = dst;
+        while (path_len < LEO_RRPRAM_MAX_CHAIN_LEN) {
+            int best_next = -1;
+            float best_str = LEO_RRPRAM_STRENGTH_THRESH;
+            for (int e = 0; e < nodes[cur].n_edges; e++) {
+                int next = nodes[cur].edges[e].dst;
+                if (used[next]) continue;
+                /* check not already in path */
+                int in_path = 0;
+                for (int p = 0; p < path_len; p++)
+                    if (path[p] == next) { in_path = 1; break; }
+                if (in_path) continue;
+                if (nodes[cur].edges[e].strength > best_str) {
+                    best_str = nodes[cur].edges[e].strength;
+                    best_next = next;
+                }
+            }
+            if (best_next < 0) break;
+            path[path_len++] = best_next;
+            ch->strength += best_str;
+            cur = best_next;
+        }
+
+        if (path_len >= 3) { /* only keep chains of length 3+ */
+            ch->len = path_len;
+            for (int p = 0; p < path_len; p++) {
+                ch->tokens[p] = -1; /* resolved later */
+                strncpy(ch->words[p], nodes[path[p]].word, 63);
+                used[path[p]] = 1;
+            }
+            rr->n_chains++;
+        }
+    }
+
+    /* --- Phase 4: Find hubs (high gravity + high degree) --- */
+    for (int i = 0; i < n_nodes && rr->n_hubs < LEO_RRPRAM_MAX_HUBS; i++) {
+        int degree = in_degree[i] + out_degree[i];
+        if (degree < 4) continue; /* need decent connectivity */
+
+        float hub_score = (float)degree * (1.0f + nodes[i].gravity);
+        if (hub_score < 5.0f) continue;
+
+        rr->hub_tokens[rr->n_hubs] = -1; /* resolved later */
+        strncpy(rr->hub_words[rr->n_hubs], nodes[i].word, 63);
+        rr->hub_strength[rr->n_hubs] = hub_score;
+        rr->n_hubs++;
+    }
+
+    /* --- Phase 5: Resolve token IDs via word-level tokenizer --- */
+    /* Most D.N.A. tokens are BPE subwords (e.g. "▁which", "ated", "ions").
+     * These won't match word-level tok_find(). That's OK — the R signal
+     * in dario_compute() falls back to string matching via subword field
+     * when token ID is -1. But some tokens DO match (e.g. "out", "per"). */
+    int resolved = 0;
+    for (int i = 0; i < rr->n_clusters; i++) {
+        DnaCluster *cl = &rr->clusters[i];
+        for (int j = 0; j < cl->size; j++) {
+            cl->tokens[j] = tok_find(&leo->tok, cl->words[j]);
+            if (cl->tokens[j] >= 0) resolved++;
+        }
+    }
+    for (int i = 0; i < rr->n_chains; i++) {
+        DnaChain *ch = &rr->chains[i];
+        for (int j = 0; j < ch->len; j++) {
+            ch->tokens[j] = tok_find(&leo->tok, ch->words[j]);
+            if (ch->tokens[j] >= 0) resolved++;
+        }
+    }
+    for (int i = 0; i < rr->n_hubs; i++) {
+        rr->hub_tokens[i] = tok_find(&leo->tok, rr->hub_words[i]);
+        if (rr->hub_tokens[i] >= 0) resolved++;
+    }
+
+    printf("[leo] RRPRAM scan: %d clusters, %d chains, %d hubs "
+           "(%d resolved, from %d nodes)\n",
+           rr->n_clusters, rr->n_chains, rr->n_hubs,
+           resolved, n_nodes);
+
+    /* cleanup */
+    for (int i = 0; i < n_nodes; i++)
+        free(nodes[i].edges);
+    free(nodes);
+    free(node_words);
+    free(in_degree);
+    free(out_degree);
+    free(used);
+
+    #undef RRP_FIND_NODE
+}
+
+#endif /* LEO_HAS_DNA */
 
 /* ========================================================================
  * LEO INITIALIZATION
@@ -1840,6 +2140,9 @@ void leo_init(Leo *leo, const char *db_path) {
     for (int c = 0; c < LEO_TOKEN_CLASSES; c++)
         leo->class_mod[c] = 1.0f;
     leo->dist_profile_updates = 0;
+
+    /* RRPRAM: zeroed by memset, r_coeff defaults to 0 until scan */
+    leo->rrpram.r_coeff = 0.0f;
 
     srand((unsigned)time(NULL));
 
@@ -2408,12 +2711,126 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
     /* subword coefficient: grows with data, complements bigram chain */
     float sw_coeff = clampf((float)leo->subword.n_merges / 200.0f, 0.0f, 2.0f);
 
-    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + sw·S + T ---- */
+    /* ---- R: Recursive D.N.A. Resonance (RRPRAM) ---- */
+    /* Clusters: if any token from a cluster is in context, boost all others.
+     * Chains: if context tail matches chain prefix, boost next in chain.
+     * Hubs: always-on baseline boost for resonance centers.
+     * Signal only active when rrpram.r_coeff > 0 (set after D.N.A. scan). */
+    float *R = calloc(vocab_size, sizeof(float));
+    DnaRrpram *rr = &leo->rrpram;
+    float r_coeff = rr->r_coeff;
+
+    if (r_coeff > 0.0f) {
+        /* cluster boost: if any cluster member is in context, boost all.
+         * Checks both word-level IDs and subword string matches. */
+        for (int cl = 0; cl < rr->n_clusters; cl++) {
+            DnaCluster *c = &rr->clusters[cl];
+            int active = 0;
+            for (int j = 0; j < c->size && !active; j++) {
+                int tid = c->tokens[j];
+                if (tid >= 0) {
+                    for (int k = 0; k < leo->context_len; k++)
+                        if (leo->context_ids[k] == tid) { active = 1; break; }
+                } else {
+                    /* subword match: check if any recent word contains this subword */
+                    for (int k = 0; k < leo->context_len && !active; k++) {
+                        int wid = leo->context_ids[k];
+                        if (wid >= 0 && wid < leo->tok.n_words && leo->tok.words[wid]) {
+                            if (strstr(leo->tok.words[wid], c->words[j]))
+                                active = 1;
+                        }
+                    }
+                }
+            }
+            if (active) {
+                float boost = c->strength * 0.1f / (float)c->size;
+                for (int j = 0; j < c->size; j++) {
+                    int tid = c->tokens[j];
+                    if (tid >= 0 && tid < vocab_size) {
+                        R[tid] += boost;
+                    } else {
+                        /* boost all words containing this subword */
+                        for (int w = 0; w < vocab_size && w < leo->tok.n_words; w++) {
+                            if (leo->tok.words[w] && strstr(leo->tok.words[w], c->words[j]))
+                                R[w] += boost * 0.5f; /* weaker for substring match */
+                        }
+                    }
+                }
+            }
+        }
+
+        /* chain boost: if context tail matches chain prefix, boost next.
+         * Uses subword substring matching for unresolved tokens. */
+        for (int ch = 0; ch < rr->n_chains; ch++) {
+            DnaChain *chain = &rr->chains[ch];
+            if (chain->len < 3) continue;
+            if (leo->context_len < 1) continue;
+
+            /* check if last context word matches chain[0] */
+            int match_len = 0;
+            for (int p = 0; p < chain->len - 1 && p < leo->context_len; p++) {
+                int ctx_pos = leo->context_len - 1 - p;
+                int ctx_wid = leo->context_ids[ctx_pos];
+                int chain_tid = chain->tokens[p];
+                int matched = 0;
+                if (chain_tid >= 0 && ctx_wid == chain_tid) {
+                    matched = 1;
+                } else if (ctx_wid >= 0 && ctx_wid < leo->tok.n_words &&
+                           leo->tok.words[ctx_wid] &&
+                           strstr(leo->tok.words[ctx_wid], chain->words[p])) {
+                    matched = 1;
+                }
+                if (matched) {
+                    match_len = p + 1;
+                } else {
+                    break;
+                }
+            }
+            if (match_len > 0 && match_len < chain->len) {
+                int next_tid = chain->tokens[match_len];
+                if (next_tid >= 0 && next_tid < vocab_size) {
+                    R[next_tid] += chain->strength * 0.05f * (float)match_len;
+                } else {
+                    /* boost words containing next subword */
+                    for (int w = 0; w < vocab_size && w < leo->tok.n_words; w++) {
+                        if (leo->tok.words[w] &&
+                            strstr(leo->tok.words[w], chain->words[match_len]))
+                            R[w] += chain->strength * 0.03f * (float)match_len;
+                    }
+                }
+            }
+        }
+
+        /* hub gravity: always-on baseline for resonance centers.
+         * For unresolved hubs, boost words containing the hub subword. */
+        for (int h = 0; h < rr->n_hubs; h++) {
+            int tid = rr->hub_tokens[h];
+            if (tid >= 0 && tid < vocab_size) {
+                R[tid] += rr->hub_strength[h] * 0.02f;
+            } else {
+                for (int w = 0; w < vocab_size && w < leo->tok.n_words; w++) {
+                    if (leo->tok.words[w] &&
+                        strstr(leo->tok.words[w], rr->hub_words[h]))
+                        R[w] += rr->hub_strength[h] * 0.01f;
+                }
+            }
+        }
+
+        /* normalize R */
+        float r_max = 0;
+        for (int i = 0; i < vocab_size; i++)
+            if (R[i] > r_max) r_max = R[i];
+        if (r_max > 1e-6f)
+            for (int i = 0; i < vocab_size; i++) R[i] /= r_max;
+    }
+
+    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + sw·S + r·R + T ---- */
     /* B (bigram chain) is DOMINANT — this is what makes speech coherent.
      * H (field) adds semantic context.
      * F (prophecy) adds intentionality.
      * A (destiny) adds direction.
      * S (subword) adds structural/morphological coherence.
+     * R (RRPRAM) adds recursive D.N.A. resonance.
      * T (trauma) pulls toward origin when wounded. */
     float gamma_eff = leo->gamma_d;
     if (leo->trauma_level > 0.3f) {
@@ -2431,6 +2848,7 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
                   + leo->beta * F[i]        /* prophecy */
                   + gamma_eff * A[i]        /* destiny (boosted under trauma) */
                   + sw_coeff * S[i]         /* subword structural */
+                  + r_coeff * R[i]          /* recursive D.N.A. resonance */
                   + t_weight;               /* trauma scar gravity */
     }
 
@@ -2439,6 +2857,7 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
     free(A);
     free(B);
     free(S);
+    free(R);
 }
 
 /* ========================================================================
@@ -3150,6 +3569,9 @@ void leo_save(Leo *leo) {
     fwrite(leo->class_mod, sizeof(float), LEO_TOKEN_CLASSES, f);
     fwrite(&leo->dist_profile_updates, sizeof(int), 1, f);
 
+    /* RRPRAM D.N.A. scanner results */
+    fwrite(&leo->rrpram, sizeof(DnaRrpram), 1, f);
+
     fclose(f);
     printf("[leo] state saved: %s (step %d, vocab %d, sw %d merges)\n",
            path, leo->step, leo->tok.n_words, leo->subword.n_merges);
@@ -3335,6 +3757,16 @@ void leo_load(Leo *leo) {
         }
     }
 
+    /* RRPRAM D.N.A. scanner (optional — old saves won't have it) */
+    {
+        DnaRrpram tmp_rr;
+        if (fread(&tmp_rr, sizeof(DnaRrpram), 1, f) == 1) {
+            memcpy(&leo->rrpram, &tmp_rr, sizeof(DnaRrpram));
+            printf("[leo]   rrpram loaded: %d clusters, %d chains, %d hubs\n",
+                   leo->rrpram.n_clusters, leo->rrpram.n_chains, leo->rrpram.n_hubs);
+        }
+    }
+
     fclose(f);
     leo->bootstrapped = 1;
     printf("[leo] state loaded: %s (step %d, vocab %d)\n",
@@ -3425,6 +3857,9 @@ void leo_bootstrap(Leo *leo) {
     printf("[leo] D.N.A. applied: gravity %d word + %d subword, "
            "coact %d word + %d subword\n",
            dna_word_hits, dna_sw_hits, dna_word_coact, dna_sw_coact);
+
+    /* 4. RRPRAM scanner: discover recursive patterns in D.N.A. */
+    dna_rrpram_scan(leo);
 #else
     /* no D.N.A. — pure weightless bootstrap */
 #endif
@@ -3887,6 +4322,9 @@ void leo_export_gguf(Leo *leo, const char *path) {
     fwrite(leo->class_mod, sizeof(float), LEO_TOKEN_CLASSES, f);
     fwrite(&leo->dist_profile_updates, sizeof(int), 1, f);
 
+    /* A13. RRPRAM D.N.A. scanner results */
+    fwrite(&leo->rrpram, sizeof(DnaRrpram), 1, f);
+
     long file_size = ftell(f);
     fclose(f);
 
@@ -4222,13 +4660,14 @@ int leo_import_gguf(Leo *leo, const char *path) {
             }
         }
 
-        /* A12. Positional Hebbian profile — read from known offset at file tail.
-         * Size: 32 floats + 4 floats + 1 int = 148 bytes, always last in file. */
+        /* A12 + A13: Positional Hebbian profile + RRPRAM — read from known offset at file tail.
+         * A13 (DnaRrpram) is last, A12 (dist_profile) is right before it. */
         {
+            const long a13_size = (long)sizeof(DnaRrpram);
             const long a12_size = (long)(LEO_DIST_PROFILE_LEN * sizeof(float) +
                                          LEO_TOKEN_CLASSES * sizeof(float) +
                                          sizeof(int));
-            fseek(f, -a12_size, SEEK_END);
+            fseek(f, -(a12_size + a13_size), SEEK_END);
             float tmp_dist[LEO_DIST_PROFILE_LEN];
             float tmp_cm[LEO_TOKEN_CLASSES];
             int tmp_dpu = 0;
@@ -4242,6 +4681,14 @@ int leo_import_gguf(Leo *leo, const char *path) {
                 leo->dist_profile_updates = tmp_dpu;
                 printf("[leo]   dist_profile: %d distances, %d classes, %d updates\n",
                        LEO_DIST_PROFILE_LEN, LEO_TOKEN_CLASSES, tmp_dpu);
+            }
+
+            /* A13. RRPRAM */
+            DnaRrpram tmp_rr;
+            if (fread(&tmp_rr, sizeof(DnaRrpram), 1, f) == 1 && tmp_rr.n_clusters >= 0) {
+                memcpy(&leo->rrpram, &tmp_rr, sizeof(DnaRrpram));
+                printf("[leo]   rrpram: %d clusters, %d chains, %d hubs\n",
+                       leo->rrpram.n_clusters, leo->rrpram.n_chains, leo->rrpram.n_hubs);
             }
         }
 

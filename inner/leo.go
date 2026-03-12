@@ -20,7 +20,7 @@
 package main
 
 /*
-#cgo CFLAGS: -O2
+#cgo CFLAGS: -O2 -DLEO_HAS_DNA
 #cgo LDFLAGS: -lm -lsqlite3 -lpthread
 #include <stdlib.h>
 
@@ -85,6 +85,10 @@ extern int   leo_bridge_sw_merges(void *leo);
 extern int   leo_bridge_sw_tokens(void *leo);
 extern int   leo_bridge_sea_count(void *leo);
 extern int   leo_bridge_super_token_count(void *leo);
+extern int   leo_bridge_rrpram_clusters(void *leo);
+extern int   leo_bridge_rrpram_chains(void *leo);
+extern int   leo_bridge_rrpram_hubs(void *leo);
+extern float leo_bridge_rrpram_r_coeff(void *leo);
 */
 import "C"
 
@@ -450,6 +454,34 @@ func (l *Leo) VocabTotal() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return int(C.leo_bridge_super_token_count(l.ptr))
+}
+
+// RrpramClusters returns the number of RRPRAM clusters discovered in D.N.A.
+func (l *Leo) RrpramClusters() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_rrpram_clusters(l.ptr))
+}
+
+// RrpramChains returns the number of RRPRAM chains discovered in D.N.A.
+func (l *Leo) RrpramChains() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_rrpram_chains(l.ptr))
+}
+
+// RrpramHubs returns the number of RRPRAM hubs discovered in D.N.A.
+func (l *Leo) RrpramHubs() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_rrpram_hubs(l.ptr))
+}
+
+// RrpramRCoeff returns the RRPRAM signal coefficient.
+func (l *Leo) RrpramRCoeff() float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_rrpram_r_coeff(l.ptr))
 }
 
 // Inner world goroutines (startInnerVoice, startAutosave, startDreamDialog,

@@ -229,3 +229,23 @@ int leo_bridge_sea_count(void *ptr) {
 int leo_bridge_super_token_count(void *ptr) {
     return ((Leo *)ptr)->tok.n_words;
 }
+
+/* RRPRAM: number of clusters discovered */
+int leo_bridge_rrpram_clusters(void *ptr) {
+    return ((Leo *)ptr)->rrpram.n_clusters;
+}
+
+/* RRPRAM: number of chains discovered */
+int leo_bridge_rrpram_chains(void *ptr) {
+    return ((Leo *)ptr)->rrpram.n_chains;
+}
+
+/* RRPRAM: number of hubs discovered */
+int leo_bridge_rrpram_hubs(void *ptr) {
+    return ((Leo *)ptr)->rrpram.n_hubs;
+}
+
+/* RRPRAM: r_coeff (signal weight) */
+float leo_bridge_rrpram_r_coeff(void *ptr) {
+    return ((Leo *)ptr)->rrpram.r_coeff;
+}

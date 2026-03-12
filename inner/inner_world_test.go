@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"os"
 	"strings"
 	"testing"
 )
@@ -1318,5 +1319,110 @@ func TestVocabGrowsWithIngest(t *testing.T) {
 	if vocabAfter <= vocabInit {
 		t.Error("vocab should grow after ingesting new words")
 	}
+}
+
+// ---- RRPRAM D.N.A. Scanner tests ----
+
+func TestRrpramScanFindsPatterns(t *testing.T) {
+	dbPath := "/tmp/test_go_rrpram_scan.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	clusters := leo.RrpramClusters()
+	chains := leo.RrpramChains()
+	hubs := leo.RrpramHubs()
+	rCoeff := leo.RrpramRCoeff()
+
+	t.Logf("RRPRAM: %d clusters, %d chains, %d hubs, r_coeff=%.2f",
+		clusters, chains, hubs, rCoeff)
+
+	// after bootstrap with D.N.A., scanner should find at least some patterns
+	if clusters+chains+hubs == 0 {
+		t.Error("RRPRAM scanner found zero patterns in D.N.A. — expected at least some")
+	}
+	if rCoeff <= 0.0 {
+		t.Error("r_coeff should be > 0 after D.N.A. scan")
+	}
+}
+
+func TestRrpramSurvivesSaveLoad(t *testing.T) {
+	dbPath := "/tmp/test_go_rrpram_persist.db"
+	cleanupDB(t, dbPath)
+
+	var clusters, chains, hubs int
+
+	// bootstrap, save
+	{
+		leo := NewLeo(dbPath)
+		leo.Bootstrap()
+		clusters = leo.RrpramClusters()
+		chains = leo.RrpramChains()
+		hubs = leo.RrpramHubs()
+		leo.Save()
+		leo.Close()
+	}
+
+	// reload
+	{
+		leo := NewLeo(dbPath)
+		defer leo.Close()
+		leo.Load()
+
+		c2 := leo.RrpramClusters()
+		ch2 := leo.RrpramChains()
+		h2 := leo.RrpramHubs()
+
+		t.Logf("before save: %d/%d/%d, after load: %d/%d/%d",
+			clusters, chains, hubs, c2, ch2, h2)
+
+		if c2 != clusters || ch2 != chains || h2 != hubs {
+			t.Errorf("RRPRAM mismatch after save/load: %d/%d/%d vs %d/%d/%d",
+				clusters, chains, hubs, c2, ch2, h2)
+		}
+	}
+}
+
+func TestRrpramGGUFRoundtrip(t *testing.T) {
+	dbPath := "/tmp/test_go_rrpram_gguf.db"
+	cleanupDB(t, dbPath)
+	ggufPath := "/tmp/test_rrpram.gguf"
+
+	var clusters, chains, hubs int
+
+	// bootstrap + export
+	{
+		leo := NewLeo(dbPath)
+		leo.Bootstrap()
+		clusters = leo.RrpramClusters()
+		chains = leo.RrpramChains()
+		hubs = leo.RrpramHubs()
+		leo.ExportGGUF(ggufPath)
+		leo.Close()
+	}
+
+	// import into fresh instance
+	{
+		dbPath2 := "/tmp/test_go_rrpram_gguf2.db"
+		cleanupDB(t, dbPath2)
+		leo := NewLeo(dbPath2)
+		defer leo.Close()
+		leo.ImportGGUF(ggufPath)
+
+		c2 := leo.RrpramClusters()
+		ch2 := leo.RrpramChains()
+		h2 := leo.RrpramHubs()
+
+		t.Logf("GGUF roundtrip: %d/%d/%d → %d/%d/%d",
+			clusters, chains, hubs, c2, ch2, h2)
+
+		if c2 != clusters || ch2 != chains || h2 != hubs {
+			t.Errorf("RRPRAM GGUF roundtrip mismatch: %d/%d/%d vs %d/%d/%d",
+				clusters, chains, hubs, c2, ch2, h2)
+		}
+	}
+	os.Remove(ggufPath)
 }
 
