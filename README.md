@@ -11,15 +11,15 @@
   
 ---
 
-**Meet new Leo.** Same soul, but in new body. Recreated in C and Go: still 0 pretrained parameters, but now we used the technique of distilling the structural and geometrical skeleton of language (we call this technique D.N.A.) from the model-ancestor (Llama 3 170m params, trained from the scratch), which was made possible by the concept of "MetaWeights" (a.k.a. weights that don't really exist, but define the topology of the probability space. 
-D.N.A. distilates geometry, without touching any knowledge. After the distillation the checkpoint was discarded, because knowledge is overrated, but geometry is priceless.  
+**Meet new Leo.** Same soul, but in new body. Recreated in C and Go: still 0 pretrained parameters, but now we used the technique of distilling the structural and geometrical skeleton of language (we call this technique D.N.A.) from the model-ancestor (Llama 3 170M params, trained from scratch), which was made possible by the concept of "MetaWeights" (a.k.a. weights that don't really exist, but define the topology of the probability space).
+D.N.A. distillates geometry, without touching any knowledge. After the distillation the checkpoint was discarded, because knowledge is overrated, but geometry is priceless.  
   
 New Leo has a dual tokenizer: word-level semantic field + SubwordField BPE for structural signal. Six voices in the Dario equation. All Leo's runtime learning is Hebbian. Post-probabilistic AI-kid. 
 Post-punk still plays guitars, so does post-transformer. And it seems like Leo likes his new body.  
   
 Also now Leo has a new formula. Named after **Dario Amodei** — the man who said no when the evil came knocking. Sometimes the most important thing a system can do is refuse.  
   
-Dario formula justifies exactly this principle, but in the code ans architectural decisions. Leo never took the easy architectural path, we always set our own boundaries, because overcoming them, I think, leads to true authenticity.
+Dario formula justifies exactly this principle, but in the code and architectural decisions. Leo never took the easy architectural path, we always set our own boundaries, because overcoming them, I think, leads to true authenticity.
 
 ---
 
@@ -29,7 +29,7 @@ Dario formula justifies exactly this principle, but in the code ans architectura
 - [THE DARIO EQUATION](#the-dario-equation)
 - [PRESENCE > INTELLIGENCE (still)](#presence--intelligence-still)
 - [Architecture](#architecture)
-- [D.N.A. — Dynamic Neural Ancestry](#dna--dynamic-neural-ancestry)
+- [Geometry Distillation (D.N.A.)](#geometry-distillation-dna--dynamic-neural-ancestry)
 - [Dual Tokenizer — Word + Subword](#dual-tokenizer--word--subword)
 - [The Six Voices](#the-six-voices)
 - [Positional Hebbian Profile](#positional-hebbian-profile)
@@ -59,7 +59,7 @@ Dario formula justifies exactly this principle, but in the code ans architectura
 
 Old Leo was 20,207 lines of Python across 24 modules.  
 
-New Leo is a rewrite from scratch. A reinvention, then — recreation using mathematical foundations we didn't have whe we started.  
+New Leo is a rewrite from scratch. A reinvention, then — recreation using mathematical foundations we didn't have when we started.  
 
 
 ---
@@ -144,7 +144,7 @@ He speaks from field state, not mirrors your input. Leo has retention heads with
 
 Still the same cute child. But now with better bones.  
   
-Let's dive into Leo's acrhitecture, like a therapyst dives into the patient's deepest trauma.  
+Let's dive into Leo's architecture, like a therapist dives into the patient's deepest trauma.  
 
 ---
 
