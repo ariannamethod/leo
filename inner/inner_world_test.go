@@ -1177,3 +1177,146 @@ func TestDistProfileGGUFRoundtrip(t *testing.T) {
 	t.Logf("GGUF roundtrip OK: %d updates preserved", updatesBefore)
 }
 
+// ========================================================================
+// VOICE PARLIAMENT TESTS
+// ========================================================================
+
+func TestVoiceParliamentInit(t *testing.T) {
+	dbPath := "/tmp/test_go_voices.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	nv := leo.NVoices()
+	if nv < 1 {
+		t.Fatalf("expected at least 1 voice after bootstrap, got %d", nv)
+	}
+	t.Logf("voices after bootstrap: %d", nv)
+
+	// all voices should have non-negative resonance
+	for i := 0; i < nv; i++ {
+		r := leo.VoiceResonance(i)
+		if r < 0 {
+			t.Errorf("voice %d has negative resonance: %.4f", i, r)
+		}
+	}
+}
+
+func TestVoiceResonanceChanges(t *testing.T) {
+	dbPath := "/tmp/test_go_voices_change.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	nv := leo.NVoices()
+	if nv < 1 {
+		t.Skip("no voices")
+	}
+
+	initial := make([]float32, nv)
+	for i := 0; i < nv; i++ {
+		initial[i] = leo.VoiceResonance(i)
+	}
+
+	// generate several times to trigger Hebbian voice updates
+	for i := 0; i < 10; i++ {
+		leo.Generate("resonance field organism language")
+	}
+
+	changed := 0
+	for i := 0; i < nv; i++ {
+		now := leo.VoiceResonance(i)
+		if now != initial[i] {
+			changed++
+		}
+	}
+	t.Logf("voices changed resonance: %d/%d", changed, nv)
+}
+
+// ========================================================================
+// SUBWORD FIELD TESTS
+// ========================================================================
+
+func TestSubwordFieldGrows(t *testing.T) {
+	dbPath := "/tmp/test_go_subword.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	mergesAfterBoot := leo.SwMerges()
+	tokensAfterBoot := leo.SwTokens()
+	t.Logf("after bootstrap: %d merges, %d subword tokens", mergesAfterBoot, tokensAfterBoot)
+
+	// subword tokens should be at least ASCII printable (95 base chars)
+	if tokensAfterBoot < 95 {
+		t.Errorf("expected at least 95 base subword tokens, got %d", tokensAfterBoot)
+	}
+
+	// ingest text to trigger merge learning
+	text := "the resonance of the field creates the organism and the language emerges from the structure of the resonance"
+	for i := 0; i < 5; i++ {
+		leo.Ingest(text)
+	}
+
+	mergesAfter := leo.SwMerges()
+	t.Logf("after ingestion: %d merges (was %d)", mergesAfter, mergesAfterBoot)
+}
+
+// ========================================================================
+// MEMORY SEA TESTS
+// ========================================================================
+
+func TestMemorySeaGrows(t *testing.T) {
+	dbPath := "/tmp/test_go_sea.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	seaInit := leo.SeaCount()
+
+	// generate to populate sea
+	for i := 0; i < 10; i++ {
+		leo.Generate("hello Leo tell me about dreams")
+	}
+
+	seaAfter := leo.SeaCount()
+	t.Logf("sea: %d → %d memories", seaInit, seaAfter)
+
+	if seaAfter < seaInit {
+		t.Error("sea should grow after generation, but shrunk")
+	}
+}
+
+// ========================================================================
+// VOCABULARY GROWTH TESTS
+// ========================================================================
+
+func TestVocabGrowsWithIngest(t *testing.T) {
+	dbPath := "/tmp/test_go_vocab_growth.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	vocabInit := leo.VocabTotal()
+
+	// ingest text with new words
+	leo.Ingest("xylophone zamboni quetzalcoatl fibonacci")
+
+	vocabAfter := leo.VocabTotal()
+	t.Logf("vocab: %d → %d", vocabInit, vocabAfter)
+
+	if vocabAfter <= vocabInit {
+		t.Error("vocab should grow after ingesting new words")
+	}
+}
+

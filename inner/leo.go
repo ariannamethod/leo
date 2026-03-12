@@ -77,6 +77,14 @@ extern int   leo_bridge_token_id(void *leo, const char *word);
 extern float leo_bridge_get_dist_profile(void *leo, int d);
 extern float leo_bridge_get_class_mod(void *leo, int c);
 extern int   leo_bridge_dist_profile_updates(void *leo);
+
+// Voice, subword, sea, vocab bridge
+extern int   leo_bridge_n_voices(void *leo);
+extern float leo_bridge_voice_resonance(void *leo, int i);
+extern int   leo_bridge_sw_merges(void *leo);
+extern int   leo_bridge_sw_tokens(void *leo);
+extern int   leo_bridge_sea_count(void *leo);
+extern int   leo_bridge_super_token_count(void *leo);
 */
 import "C"
 
@@ -400,6 +408,48 @@ func (l *Leo) DistProfileUpdates() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return int(C.leo_bridge_dist_profile_updates(l.ptr))
+}
+
+// NVoices returns the number of active voices in the parliament.
+func (l *Leo) NVoices() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_n_voices(l.ptr))
+}
+
+// VoiceResonance returns the resonance of voice i.
+func (l *Leo) VoiceResonance(i int) float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_voice_resonance(l.ptr, C.int(i)))
+}
+
+// SwMerges returns the number of BPE merges learned.
+func (l *Leo) SwMerges() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_sw_merges(l.ptr))
+}
+
+// SwTokens returns the subword vocabulary size.
+func (l *Leo) SwTokens() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_sw_tokens(l.ptr))
+}
+
+// SeaCount returns the number of memories in the Memory Sea.
+func (l *Leo) SeaCount() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_sea_count(l.ptr))
+}
+
+// VocabTotal returns the total word-level vocabulary size.
+func (l *Leo) VocabTotal() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_super_token_count(l.ptr))
 }
 
 // Inner world goroutines (startInnerVoice, startAutosave, startDreamDialog,

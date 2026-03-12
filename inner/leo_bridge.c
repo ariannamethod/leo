@@ -198,3 +198,34 @@ float leo_bridge_get_class_mod(void *ptr, int c) {
 int leo_bridge_dist_profile_updates(void *ptr) {
     return ((Leo *)ptr)->dist_profile_updates;
 }
+
+/* Voice parliament — number of active voices */
+int leo_bridge_n_voices(void *ptr) {
+    return ((Leo *)ptr)->voices.n_voices;
+}
+
+/* Voice resonance for voice i */
+float leo_bridge_voice_resonance(void *ptr, int i) {
+    if (i < 0 || i >= ((Leo *)ptr)->voices.n_voices) return 0.0f;
+    return ((Leo *)ptr)->voices.voices[i].resonance;
+}
+
+/* Subword merge count */
+int leo_bridge_sw_merges(void *ptr) {
+    return ((Leo *)ptr)->subword.n_merges;
+}
+
+/* Subword token count */
+int leo_bridge_sw_tokens(void *ptr) {
+    return ((Leo *)ptr)->subword.n_tokens;
+}
+
+/* Memory Sea count */
+int leo_bridge_sea_count(void *ptr) {
+    return ((Leo *)ptr)->sea.n_memories;
+}
+
+/* Super-token count (tokens with PMI fusions) */
+int leo_bridge_super_token_count(void *ptr) {
+    return ((Leo *)ptr)->tok.n_words;
+}
