@@ -59,6 +59,17 @@
 #define LEO_BOOTSTRAP_WINDOW 128      /* bootstrap context window */
 #define LEO_MAX_LINE      4096        /* max input line length */
 
+/* Positional Hebbian Profile (RRPRAM-inspired)
+ * Instead of fixed 0.9^d decay, learnable distance weights.
+ * class_mod[c] scales the profile per token class.
+ * 36 parameters total (32 + 4). Updated by Hebbian learning. */
+#define LEO_DIST_PROFILE_LEN 32       /* max distance for positional profile */
+#define LEO_TOKEN_CLASSES     4       /* function / content / punctuation / rare */
+#define LEO_TC_FUNCTION  0            /* the, a, is, to, of ... */
+#define LEO_TC_CONTENT   1            /* words with high IDF */
+#define LEO_TC_PUNCT     2            /* punctuation tokens */
+#define LEO_TC_RARE      3            /* very rare / unseen */
+
 /* retention timescales: semantic, topic, syntax, bigram */
 static const float LEO_GAMMA[LEO_RET_HEADS] = {0.99f, 0.95f, 0.85f, 0.50f};
 
@@ -939,6 +950,32 @@ static void ret_forward(RetentionLayer *r, const float *embed,
 }
 
 /* ========================================================================
+ * TOKEN CLASS — coarse classification for positional profile
+ *
+ * 4 classes: function words (low IDF), content words (high IDF),
+ * punctuation, rare/unknown. Used by dist_profile to weight
+ * different distances differently per word type.
+ * ======================================================================== */
+
+static int token_class(CoocField *cooc, LeoTokenizer *tok, int token_id) {
+    /* punctuation check */
+    if (token_id >= 0 && token_id < tok->n_words) {
+        const char *w = tok->words[token_id];
+        if (w && (w[0] == '.' || w[0] == ',' || w[0] == '!' ||
+                  w[0] == '?' || w[0] == ';' || w[0] == ':'))
+            return LEO_TC_PUNCT;
+    }
+    /* IDF-based: function vs content vs rare */
+    float freq = (token_id < cooc->freq_size) ? cooc->freq[token_id] : 0;
+    float total = (float)cooc->total_tokens + 1.0f;
+    if (freq < 2.0f) return LEO_TC_RARE;
+    float idf = logf(total / (freq + 1.0f));
+    float max_idf = logf(total);
+    float norm_idf = idf / (max_idf + 1e-6f);
+    return (norm_idf < 0.3f) ? LEO_TC_FUNCTION : LEO_TC_CONTENT;
+}
+
+/* ========================================================================
  * GLA — Gated Linear Attention (content-aware gating)
  *
  * g = sigmoid(importance(token))
@@ -1714,6 +1751,11 @@ typedef struct {
     float          *trauma_weights;     /* [MAX_VOCAB] per-token trauma weight (scars) */
     int             trauma_weights_n;   /* how many slots allocated */
 
+    /* positional Hebbian profile (RRPRAM-inspired) */
+    float           dist_profile[LEO_DIST_PROFILE_LEN]; /* learnable decay per distance */
+    float           class_mod[LEO_TOKEN_CLASSES];        /* per-class multiplier on profile */
+    int             dist_profile_updates;                /* Hebbian update counter */
+
     /* database */
     sqlite3        *db;
     char            db_path[512];
@@ -1791,6 +1833,13 @@ void leo_init(Leo *leo, const char *db_path) {
     leo->trauma_level = 0.0f;
     leo->trauma_weights = calloc(LEO_MAX_VOCAB, sizeof(float));
     leo->trauma_weights_n = LEO_MAX_VOCAB;
+
+    /* positional Hebbian profile: init to 0.9^d (reproducing current behavior) */
+    for (int d = 0; d < LEO_DIST_PROFILE_LEN; d++)
+        leo->dist_profile[d] = powf(0.9f, (float)d);
+    for (int c = 0; c < LEO_TOKEN_CLASSES; c++)
+        leo->class_mod[c] = 1.0f;
+    leo->dist_profile_updates = 0;
 
     srand((unsigned)time(NULL));
 
@@ -2265,11 +2314,19 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
     }
 
     /* ---- H: Hebbian Resonance (semantic field) ---- */
-    /* Wider context co-occurrence — thematic coherence */
+    /* Wider context co-occurrence — thematic coherence.
+     * Distance weighting uses learnable dist_profile[] instead of fixed 0.9^d.
+     * Token class_mod[] scales the profile per word type (function/content/punct).
+     * This is the RRPRAM insight: positional-content interaction. 36 params. */
     int ctx_start = (leo->context_len > 8) ? leo->context_len - 8 : 0;
     for (int c = ctx_start; c < leo->context_len; c++) {
         int ctx_id = leo->context_ids[c];
-        float decay = powf(0.9f, (float)(leo->context_len - 1 - c));
+        int dist = leo->context_len - 1 - c;
+        float decay = (dist < LEO_DIST_PROFILE_LEN)
+                    ? leo->dist_profile[dist]
+                    : leo->dist_profile[LEO_DIST_PROFILE_LEN - 1] * 0.5f;
+        int tc = token_class(&leo->cooc, &leo->tok, ctx_id);
+        decay *= leo->class_mod[tc];
         for (int i = 0; i < leo->cooc.n_entries; i++) {
             CoocEntry *e = &leo->cooc.entries[i];
             if (e->src == ctx_id && e->dst < vocab_size)
@@ -2684,6 +2741,34 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         leo->step++;
         leo->conv_steps++;
 
+        /* Hebbian update of positional distance profile.
+         * Reinforce distances that contributed to the chosen token.
+         * eta scales with maturity — less learning when profile is stable. */
+        {
+            float eta = 0.01f / (1.0f + (float)leo->dist_profile_updates * 0.001f);
+            int ctx_s = (leo->context_len > 8) ? leo->context_len - 8 : 0;
+            for (int ci = ctx_s; ci < leo->context_len; ci++) {
+                int cid = leo->context_ids[ci];
+                int dist = leo->context_len - 1 - ci;
+                if (dist >= LEO_DIST_PROFILE_LEN) continue;
+                /* did this context token have a co-occurrence with chosen token? */
+                float cooc_val = cooc_get(&leo->cooc, cid, next_id);
+                if (cooc_val > 0.0f) {
+                    /* reinforce this distance — it contributed */
+                    leo->dist_profile[dist] += eta * clampf(cooc_val * 0.1f, 0, 0.05f);
+                    /* reinforce this token class */
+                    int tc = token_class(&leo->cooc, &leo->tok, cid);
+                    leo->class_mod[tc] += eta * 0.5f * clampf(cooc_val * 0.1f, 0, 0.05f);
+                }
+            }
+            leo->dist_profile_updates++;
+            /* clamp profile values to [0.01, 2.0] */
+            for (int d = 0; d < LEO_DIST_PROFILE_LEN; d++)
+                leo->dist_profile[d] = clampf(leo->dist_profile[d], 0.01f, 2.0f);
+            for (int c = 0; c < LEO_TOKEN_CLASSES; c++)
+                leo->class_mod[c] = clampf(leo->class_mod[c], 0.5f, 2.0f);
+        }
+
         /* add prophecy: predict what might come next based on co-occurrence */
         if (t < target_len - 1) {
             float best_cooc = -1;
@@ -3060,6 +3145,11 @@ void leo_save(Leo *leo) {
     fwrite(&leo->subword.total_tokens, sizeof(int), 1, f);
     fwrite(leo->subword.tok_freq, sizeof(int), leo->subword.n_tokens, f);
 
+    /* positional Hebbian profile */
+    fwrite(leo->dist_profile, sizeof(float), LEO_DIST_PROFILE_LEN, f);
+    fwrite(leo->class_mod, sizeof(float), LEO_TOKEN_CLASSES, f);
+    fwrite(&leo->dist_profile_updates, sizeof(int), 1, f);
+
     fclose(f);
     printf("[leo] state saved: %s (step %d, vocab %d, sw %d merges)\n",
            path, leo->step, leo->tok.n_words, leo->subword.n_merges);
@@ -3227,6 +3317,21 @@ void leo_load(Leo *leo) {
             FREAD(leo->subword.tok_freq, sizeof(int), sw_n_tokens, f);
             printf("[leo]   subword loaded: %d tokens, %d merges, %d bigrams\n",
                    sw_n_tokens, sw_n_merges, sw_bg_n);
+        }
+    }
+
+    /* positional Hebbian profile (graceful — keep defaults if absent) */
+    {
+        float tmp_dist[LEO_DIST_PROFILE_LEN];
+        float tmp_cm[LEO_TOKEN_CLASSES];
+        int tmp_dpu = 0;
+        if (fread(tmp_dist, sizeof(float), LEO_DIST_PROFILE_LEN, f) == LEO_DIST_PROFILE_LEN &&
+            fread(tmp_cm, sizeof(float), LEO_TOKEN_CLASSES, f) == LEO_TOKEN_CLASSES &&
+            fread(&tmp_dpu, sizeof(int), 1, f) == 1) {
+            memcpy(leo->dist_profile, tmp_dist, sizeof(tmp_dist));
+            memcpy(leo->class_mod, tmp_cm, sizeof(tmp_cm));
+            leo->dist_profile_updates = tmp_dpu;
+            printf("[leo]   dist_profile loaded: %d updates\n", tmp_dpu);
         }
     }
 
@@ -3533,8 +3638,9 @@ void leo_export_gguf(Leo *leo, const char *path) {
     uint64_t n_tensors = 4 + (n_voices * 2) + n_ret_heads + (n_mem > 0 ? 1 : 0);
 
     /* Count KV pairs */
-    uint64_t n_kv = 13; /* version, dim, step, conv_steps, vocab_size, alpha, beta,
-                           gamma, tau, fingerprint, n_voices, n_sea_memories, architecture */
+    uint64_t n_kv = 14; /* version, dim, step, conv_steps, vocab_size, alpha, beta,
+                           gamma, tau, fingerprint, n_voices, n_sea_memories, architecture,
+                           dist_profile_updates */
 
     /* ---- GGUF Header ---- */
     uint32_t magic = 0x46475547; /* "GGUF" */
@@ -3557,6 +3663,9 @@ void leo_export_gguf(Leo *leo, const char *path) {
     gguf_write_kv_float32(f, "leo.dario.tau", leo->tau_base);
     gguf_write_kv_uint32(f, "leo.n_voices", (uint32_t)n_voices);
     gguf_write_kv_uint32(f, "leo.n_sea_memories", (uint32_t)n_mem);
+
+    gguf_write_kv_uint32(f, "leo.dist_profile_updates",
+                         (uint32_t)leo->dist_profile_updates);
 
     /* fingerprint (as string hex to avoid uint64 complexity in GGUF) */
     {
@@ -3626,6 +3735,8 @@ void leo_export_gguf(Leo *leo, const char *path) {
         gguf_write_tensor_info(f, "leo.sea_embeds", 2, dims, offset);
         offset += (uint64_t)n_mem * dim * sizeof(float);
     }
+
+    /* dist_profile and class_mod are saved in the appendix section (below) */
 
     /* ---- Alignment padding to 32 bytes ---- */
     long pos = ftell(f);
@@ -3740,6 +3851,11 @@ void leo_export_gguf(Leo *leo, const char *path) {
     fwrite(leo->subword.bg_count, sizeof(float), leo->subword.bg_n, f);
     fwrite(&leo->subword.total_tokens, sizeof(int), 1, f);
 
+    /* A12. Positional Hebbian profile (RRPRAM-inspired, 36 params) */
+    fwrite(leo->dist_profile, sizeof(float), LEO_DIST_PROFILE_LEN, f);
+    fwrite(leo->class_mod, sizeof(float), LEO_TOKEN_CLASSES, f);
+    fwrite(&leo->dist_profile_updates, sizeof(int), 1, f);
+
     long file_size = ftell(f);
     fclose(f);
 
@@ -3787,7 +3903,7 @@ int leo_import_gguf(Leo *leo, const char *path) {
            path, (unsigned long long)n_tensors, (unsigned long long)n_kv);
 
     /* Skip KV pairs to find tensor info section */
-    int spore_dim = 0, spore_vocab = 0, spore_step = 0, spore_sea = 0;
+    int spore_dim = 0, spore_vocab = 0, spore_step = 0, spore_sea = 0, spore_dpu = 0;
     for (uint64_t i = 0; i < n_kv; i++) {
         uint64_t klen;
         FREAD(&klen, 8, 1, f);
@@ -3812,6 +3928,7 @@ int leo_import_gguf(Leo *leo, const char *path) {
             else if (strcmp(key, "leo.vocab_size") == 0) spore_vocab = (int)val;
             else if (strcmp(key, "leo.step") == 0) spore_step = (int)val;
             else if (strcmp(key, "leo.n_sea_memories") == 0) spore_sea = (int)val;
+            else if (strcmp(key, "leo.dist_profile_updates") == 0) spore_dpu = (int)val;
             printf("[leo]   KV: %s = %u\n", key, val);
         } else if (vtype == GGUF_TYPE_FLOAT32) {
             float val;
@@ -3874,7 +3991,7 @@ int leo_import_gguf(Leo *leo, const char *path) {
     int file_n_voices = 0;
     /* voices come in pairs (A, B), then ret_heads, then optionally sea */
     if (remaining_tensors > LEO_RET_HEADS) {
-        file_n_voices = (remaining_tensors - LEO_RET_HEADS - 1) / 2; /* -1 for sea maybe */
+        file_n_voices = (remaining_tensors - LEO_RET_HEADS - (spore_sea > 0 ? 1 : 0)) / 2;
         if (file_n_voices < 0) file_n_voices = 0;
         if (file_n_voices > LEO_MAX_VOICES) file_n_voices = LEO_MAX_VOICES;
     }
@@ -4034,31 +4151,37 @@ int leo_import_gguf(Leo *leo, const char *path) {
         /* A11. Subword field */
         {
             int sw_n = 0;
-            if (fread(&sw_n, sizeof(int), 1, f) == 1 && sw_n > 0) {
-                leo->subword.n_tokens = sw_n;
-                for (int i = 0; i < sw_n && i < SW_MAX_VOCAB; i++)
-                    FREAD(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+            if (fread(&sw_n, sizeof(int), 1, f) == 1) {
+                if (sw_n > 0) {
+                    leo->subword.n_tokens = sw_n;
+                    for (int i = 0; i < sw_n && i < SW_MAX_VOCAB; i++)
+                        FREAD(leo->subword.tokens[i], SW_MAX_TOK, 1, f);
+                }
                 int n_merges = 0;
                 FREAD(&n_merges, sizeof(int), 1, f);
-                leo->subword.n_merges = n_merges;
-                FREAD(leo->subword.merges, sizeof(BPEMerge), n_merges, f);
+                if (n_merges > 0) {
+                    leo->subword.n_merges = n_merges;
+                    FREAD(leo->subword.merges, sizeof(BPEMerge), n_merges, f);
+                }
                 int bg_n = 0;
                 FREAD(&bg_n, sizeof(int), 1, f);
-                leo->subword.bg_n = bg_n;
-                FREAD(leo->subword.bg_src, sizeof(int), bg_n, f);
-                FREAD(leo->subword.bg_dst, sizeof(int), bg_n, f);
-                FREAD(leo->subword.bg_count, sizeof(float), bg_n, f);
-                /* rebuild hash */
-                for (int i = 0; i < leo->subword.bg_hash_size; i++)
-                    leo->subword.bg_hash[i] = -1;
-                for (int i = 0; i < bg_n; i++) {
-                    uint32_t hv = (uint32_t)(leo->subword.bg_src[i] * 65537 +
-                                  leo->subword.bg_dst[i] * 31) % leo->subword.bg_hash_size;
-                    for (int p = 0; p < 64; p++) {
-                        int idx = (hv + p) % leo->subword.bg_hash_size;
-                        if (leo->subword.bg_hash[idx] == -1) {
-                            leo->subword.bg_hash[idx] = i;
-                            break;
+                if (bg_n > 0) {
+                    leo->subword.bg_n = bg_n;
+                    FREAD(leo->subword.bg_src, sizeof(int), bg_n, f);
+                    FREAD(leo->subword.bg_dst, sizeof(int), bg_n, f);
+                    FREAD(leo->subword.bg_count, sizeof(float), bg_n, f);
+                    /* rebuild hash */
+                    for (int i = 0; i < leo->subword.bg_hash_size; i++)
+                        leo->subword.bg_hash[i] = -1;
+                    for (int i = 0; i < bg_n; i++) {
+                        uint32_t hv = (uint32_t)(leo->subword.bg_src[i] * 65537 +
+                                      leo->subword.bg_dst[i] * 31) % leo->subword.bg_hash_size;
+                        for (int p = 0; p < 64; p++) {
+                            int idx = (hv + p) % leo->subword.bg_hash_size;
+                            if (leo->subword.bg_hash[idx] == -1) {
+                                leo->subword.bg_hash[idx] = i;
+                                break;
+                            }
                         }
                     }
                 }
@@ -4068,12 +4191,36 @@ int leo_import_gguf(Leo *leo, const char *path) {
             }
         }
 
+        /* A12. Positional Hebbian profile — read from known offset at file tail.
+         * Size: 32 floats + 4 floats + 1 int = 148 bytes, always last in file. */
+        {
+            const long a12_size = (long)(LEO_DIST_PROFILE_LEN * sizeof(float) +
+                                         LEO_TOKEN_CLASSES * sizeof(float) +
+                                         sizeof(int));
+            fseek(f, -a12_size, SEEK_END);
+            float tmp_dist[LEO_DIST_PROFILE_LEN];
+            float tmp_cm[LEO_TOKEN_CLASSES];
+            int tmp_dpu = 0;
+            size_t r1 = fread(tmp_dist, sizeof(float), LEO_DIST_PROFILE_LEN, f);
+            size_t r2 = fread(tmp_cm, sizeof(float), LEO_TOKEN_CLASSES, f);
+            size_t r3 = fread(&tmp_dpu, sizeof(int), 1, f);
+            if (r1 == LEO_DIST_PROFILE_LEN && r2 == LEO_TOKEN_CLASSES && r3 == 1 &&
+                tmp_dist[0] > 0.0f && tmp_dist[0] < 10.0f) {
+                memcpy(leo->dist_profile, tmp_dist, sizeof(tmp_dist));
+                memcpy(leo->class_mod, tmp_cm, sizeof(tmp_cm));
+                leo->dist_profile_updates = tmp_dpu;
+                printf("[leo]   dist_profile: %d distances, %d classes, %d updates\n",
+                       LEO_DIST_PROFILE_LEN, LEO_TOKEN_CLASSES, tmp_dpu);
+            }
+        }
+
         printf("[leo]   appendix loaded successfully\n");
     }
 
     fclose(f);
 
     if (spore_step > 0) leo->step = spore_step;
+    if (spore_dpu > 0) leo->dist_profile_updates = spore_dpu;
     leo->bootstrapped = 1;
 
     printf("[leo] GGUF spore imported successfully (step %d, vocab %d)\n",

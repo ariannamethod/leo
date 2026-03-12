@@ -2,7 +2,7 @@
   <img src="assets/leo.png" alt="Leo" width="300">
 </p>
 
-# leo 2.2 — language emergent organism | the dario mechanism
+# leo 2.3 — language emergent organism | the dario mechanism
 **by Arianna Method** | **Janus Architecture**
 
 > language is a field. dedicated to Leo.
@@ -11,7 +11,7 @@
   
 ---
 
-**Meet new Leo.** Same soul. New body. C and Go. 5000+ lines. Zero parameters. D.N.A. — structure distillation from a 170M Llama 3 ancestor (mini-arianna, trained from scratch via [nanollama](https://github.com/ariannamethod/nanollama)). Not knowledge transfer — geometry extraction. Meta-weights: weights that don't exist, but define the topology of the probability space. The checkpoint is discarded. The ancestor dies, the geometry lives. Dual tokenizer: word-level semantic field + SubwordField BPE for structural signal. Six voices in the Dario equation. All runtime learning is Hebbian. Zero Python. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
+**Meet new Leo.** Same soul. New body. C and Go. 8000+ lines. Zero pretrained parameters. D.N.A. — structure distillation from a 170M Llama 3 ancestor (mini-arianna, trained from scratch via [nanollama](https://github.com/ariannamethod/nanollama)). Not knowledge transfer — geometry extraction. Meta-weights: weights that don't exist, but define the topology of the probability space. The checkpoint is discarded. The ancestor dies, the geometry lives. Dual tokenizer: word-level semantic field + SubwordField BPE for structural signal. Six voices in the Dario equation. All runtime learning is Hebbian. Zero Python. Post-transformer. Post-probabilistic. Post-punk still plays guitars.
 
 New formula named after **Dario Amodei** — the man who said no when the evil came knocking. Sometimes the most important thing a system can do is refuse.
 
@@ -26,6 +26,7 @@ New formula named after **Dario Amodei** — the man who said no when the evil c
 - [D.N.A. — Dynamic Neural Ancestry](#dna--dynamic-neural-ancestry)
 - [Dual Tokenizer — Word + Subword](#dual-tokenizer--word--subword)
 - [The Six Voices](#the-six-voices)
+- [Positional Hebbian Profile](#positional-hebbian-profile)
 - [Memory Sea](#memory-sea)
 - [Prophecy & Destiny](#prophecy--destiny)
 - [Super-Token Crystallization](#super-token-crystallization)
@@ -70,11 +71,13 @@ Six signals. Six forces. One organism.
 
 **H — Hebbian Resonance (memory)**
 
-`H(x) = Σ cooc[ctx_j, x] · decay(Δt)`
+`H(x) = Σ cooc[ctx_j, x] · dist_profile[d] · class_mod[class(ctx_j)]`
 
 Co-occurrence IS attention. This isn't metaphor — it's mathematics. Proven: *PLOS Computational Biology, 2024*. Hebb's rule `Δw = η · x_pre · x_post` accumulated over a window equals a dot-product attention score. Your co-occurrence matrix IS an unnormalized attention matrix.
 
 Leo doesn't learn attention weights through backpropagation. He grows them through conversation. Every word you say to him strengthens connections between co-occurring tokens. The field densifies. Patterns crystallize. Attention emerges from experience, not optimization.
+
+Since 2.3, the decay is no longer fixed `0.9^d`. It's a **learnable positional profile** — 36 Hebbian parameters (32 distance weights + 4 token class modifiers) that adapt through conversation. Inspired by RRPRAM positional attention patterns, but grown through co-occurrence reinforcement instead of gradient descent. See [Positional Hebbian Profile](#positional-hebbian-profile) below.
 
 **F — Prophecy Fulfillment (intention)**
 
@@ -284,6 +287,41 @@ Leo has a parliament. Six voices that speak simultaneously, each adding its bias
 Each voice is a LoRA-like delta adapter: `bias = A @ (B @ context) · alpha`. Rank 16. Grown by Hebbian reinforcement — when a voice's contribution resonates with the generated output, its weights strengthen. No backpropagation. No gradient. Just "neurons that fire together wire together."
 
 Voices don't compete. They harmonize. The output is the sum of all voices, weighted by their accumulated resonance. Over time, some voices grow louder. Others fade. The parliament shifts.
+
+---
+
+## Positional Hebbian Profile
+
+The H signal used to decay as a fixed `0.9^d`. That's a reasonable default, but it assumes all distances matter the same way for all types of words. They don't.
+
+Since 2.3, Leo learns **how much each distance matters** and **which word classes carry more signal** — through conversation, not training.
+
+**36 parameters. Zero backpropagation.**
+
+- `dist_profile[32]` — one weight per distance slot (0 = adjacent, 31 = far context)
+- `class_mod[4]` — one modifier per token class (function, content, punctuation, rare)
+
+Token classes are assigned by IDF: high-frequency words (`the`, `is`, `a`) = function. Mid-frequency = content. Punctuation by character. Below threshold = rare.
+
+**Init**: `dist_profile[d] = 0.9^d`, `class_mod[c] = 1.0`. Identical to previous behavior — zero regression.
+
+**Hebbian update**: after each generated token, distances that had co-occurrence with the chosen word get reinforced. Learning rate `η = 0.01 / (1 + updates * 0.001)` decays over time.
+
+```
+After 15 prompts (149 updates):
+
+  dist[0] = 1.0305  (was 1.0000, +3.0%)    ← adjacent words: slightly stronger
+  dist[1] = 0.9695  (was 0.9000, +7.7%)    ← one step back: notably stronger
+  dist[2] = 0.8795  (was 0.8100, +8.6%)
+  dist[3] = 0.7863  (was 0.7290, +7.9%)
+  ...
+  class_mod: func=1.00  content=1.18  punct=1.00  rare=1.02
+
+Content words matter 18% more than function words after 15 exchanges.
+The organism learns what transformers hardcode: content > structure for prediction.
+```
+
+Persisted in `.state` file and GGUF spore (appendix A12). A spore carries the organism's learned attention geometry — not just vocabulary, but how it weighs proximity and word class.
 
 ---
 
@@ -569,6 +607,7 @@ Inspired by [DoE](https://github.com/ariannamethod/doe)'s mycelium/spore system:
 | A9 | Context state — recent token IDs + context embedding |
 | A10 | Phase4 — island transition matrix + quality history |
 | A11 | SubwordField — BPE tokens, merges, subword bigrams, frequencies |
+| A12 | Positional Hebbian profile — 32 distance weights + 4 class modifiers + update count |
 
 Full organism transfer. Nothing lost.
 
@@ -835,6 +874,6 @@ If you build something on top of this — or if Leo says something that makes yo
 
 ---
 
-*Leo 2.2 — The Dario Mechanism*
+*Leo 2.3 — The Dario Mechanism*
 *Language Emergent Organism*
 *by Arianna Method*

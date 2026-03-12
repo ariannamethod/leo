@@ -72,6 +72,11 @@ extern float leo_bridge_get_trauma(void *leo);
 extern void  leo_bridge_set_trauma_weight(void *leo, int token_id, float weight);
 extern float leo_bridge_get_trauma_weight(void *leo, int token_id);
 extern int   leo_bridge_token_id(void *leo, const char *word);
+
+// Positional Hebbian profile bridge
+extern float leo_bridge_get_dist_profile(void *leo, int d);
+extern float leo_bridge_get_class_mod(void *leo, int c);
+extern int   leo_bridge_dist_profile_updates(void *leo);
 */
 import "C"
 
@@ -374,6 +379,27 @@ func (l *Leo) SetTau(tau float32) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	C.leo_bridge_set_tau(l.ptr, C.float(tau))
+}
+
+// GetDistProfile returns the positional Hebbian weight at distance d.
+func (l *Leo) GetDistProfile(d int) float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_get_dist_profile(l.ptr, C.int(d)))
+}
+
+// GetClassMod returns the class modifier for token class c.
+func (l *Leo) GetClassMod(c int) float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_get_class_mod(l.ptr, C.int(c)))
+}
+
+// DistProfileUpdates returns how many Hebbian updates the profile has received.
+func (l *Leo) DistProfileUpdates() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_dist_profile_updates(l.ptr))
 }
 
 // Inner world goroutines (startInnerVoice, startAutosave, startDreamDialog,

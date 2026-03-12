@@ -181,3 +181,20 @@ float leo_bridge_get_tau(void *ptr) {
 void leo_bridge_set_tau(void *ptr, float tau) {
     ((Leo *)ptr)->tau_base = tau;
 }
+
+/* Get distance profile value at distance d */
+float leo_bridge_get_dist_profile(void *ptr, int d) {
+    if (d < 0 || d >= LEO_DIST_PROFILE_LEN) return 0.0f;
+    return ((Leo *)ptr)->dist_profile[d];
+}
+
+/* Get class modifier for token class c */
+float leo_bridge_get_class_mod(void *ptr, int c) {
+    if (c < 0 || c >= LEO_TOKEN_CLASSES) return 0.0f;
+    return ((Leo *)ptr)->class_mod[c];
+}
+
+/* Get dist_profile_updates count */
+int leo_bridge_dist_profile_updates(void *ptr) {
+    return ((Leo *)ptr)->dist_profile_updates;
+}

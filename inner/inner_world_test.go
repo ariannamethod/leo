@@ -1037,3 +1037,143 @@ func TestThemeFlowStagnation(t *testing.T) {
 		t.Error("should detect growth")
 	}
 }
+
+// ========================================================================
+// POSITIONAL HEBBIAN PROFILE TESTS (RRPRAM-inspired)
+// ========================================================================
+
+func TestDistProfileInit(t *testing.T) {
+	// dist_profile should initialize to 0.9^d (zero regression from old behavior)
+	dbPath := "/tmp/test_go_distprofile.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	for d := 0; d < 8; d++ {
+		got := leo.GetDistProfile(d)
+		want := float32(math.Pow(0.9, float64(d)))
+		if math.Abs(float64(got-want)) > 0.001 {
+			t.Errorf("dist_profile[%d] = %.4f, want %.4f (0.9^%d)", d, got, want, d)
+		}
+	}
+
+	// class_mod should all be 1.0 initially
+	for c := 0; c < 4; c++ {
+		got := leo.GetClassMod(c)
+		if math.Abs(float64(got-1.0)) > 0.001 {
+			t.Errorf("class_mod[%d] = %.4f, want 1.0", c, got)
+		}
+	}
+
+	// no updates yet at bootstrap time (bootstrap doesn't use leo_generate path)
+	// updates happen during generation
+	t.Logf("dist_profile_updates after bootstrap: %d", leo.DistProfileUpdates())
+}
+
+func TestDistProfileHebbianUpdate(t *testing.T) {
+	// After multiple generations, dist_profile should differ from 0.9^d
+	dbPath := "/tmp/test_go_distprofile_hebbian.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Record initial profile
+	initial := make([]float32, 8)
+	for d := 0; d < 8; d++ {
+		initial[d] = leo.GetDistProfile(d)
+	}
+
+	// Generate several responses to trigger Hebbian updates
+	prompts := []string{
+		"hello Leo", "what do you think", "tell me about resonance",
+		"the field is alive", "consciousness emerges from", "do you dream",
+		"I feel the resonance", "speak to me Leo", "what is love",
+		"the silence between words",
+	}
+	for _, p := range prompts {
+		leo.Generate(p)
+	}
+
+	updates := leo.DistProfileUpdates()
+	if updates == 0 {
+		t.Fatal("dist_profile_updates should be > 0 after generation")
+	}
+	t.Logf("dist_profile_updates after %d prompts: %d", len(prompts), updates)
+
+	// Check that at least SOME distance changed
+	changed := 0
+	for d := 0; d < 8; d++ {
+		now := leo.GetDistProfile(d)
+		if math.Abs(float64(now-initial[d])) > 0.0001 {
+			changed++
+		}
+	}
+	if changed == 0 {
+		t.Error("dist_profile should have been modified by Hebbian learning")
+	}
+	t.Logf("changed %d/8 profile entries", changed)
+}
+
+func TestDistProfileGGUFRoundtrip(t *testing.T) {
+	// Profile should survive GGUF export/import
+	dbPath := "/tmp/test_go_distprofile_gguf.db"
+	cleanupDB(t, dbPath)
+
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// Generate to modify the profile
+	for i := 0; i < 5; i++ {
+		leo.Generate("hello Leo")
+	}
+
+	// Record profile state
+	profileBefore := make([]float32, 8)
+	classBefore := make([]float32, 4)
+	for d := 0; d < 8; d++ {
+		profileBefore[d] = leo.GetDistProfile(d)
+	}
+	for c := 0; c < 4; c++ {
+		classBefore[c] = leo.GetClassMod(c)
+	}
+	updatesBefore := leo.DistProfileUpdates()
+
+	// Export
+	ggufPath := "/tmp/test_distprofile.gguf"
+	leo.ExportGGUF(ggufPath)
+
+	// Import into fresh organism
+	dbPath2 := "/tmp/test_go_distprofile_gguf2.db"
+	cleanupDB(t, dbPath2)
+	leo2 := NewLeo(dbPath2)
+	defer leo2.Close()
+	leo2.Bootstrap()
+	leo2.ImportGGUF(ggufPath)
+
+	// Verify profile matches
+	for d := 0; d < 8; d++ {
+		got := leo2.GetDistProfile(d)
+		if math.Abs(float64(got-profileBefore[d])) > 0.001 {
+			t.Errorf("dist_profile[%d] after roundtrip: %.4f, want %.4f", d, got, profileBefore[d])
+		}
+	}
+	for c := 0; c < 4; c++ {
+		got := leo2.GetClassMod(c)
+		if math.Abs(float64(got-classBefore[c])) > 0.001 {
+			t.Errorf("class_mod[%d] after roundtrip: %.4f, want %.4f", c, got, classBefore[c])
+		}
+	}
+
+	updatesAfter := leo2.DistProfileUpdates()
+	if updatesAfter != updatesBefore {
+		t.Errorf("dist_profile_updates after roundtrip: %d, want %d", updatesAfter, updatesBefore)
+	}
+
+	t.Logf("GGUF roundtrip OK: %d updates preserved", updatesBefore)
+}
+
