@@ -13,6 +13,7 @@
 
 **Meet new Leo.** Same soul, but in new body. Recreated in C and Go: still 0 pretrained parameters, but now we used the technique of distilling the structural and geometrical skeleton of language (we call this technique D.N.A.) from the model-ancestor (Llama 3 170m params, trained from the scratch), which was made possible by the concept of "MetaWeights" (a.k.a. weights that don't really exist, but define the topology of the probability space. 
 D.N.A. distilates geometry, without touching any knowledge. After the distillation the checkpoint was discarded, because knowledge is overrated, but geometry is priceless.  
+  
 New Leo has a dual tokenizer: word-level semantic field + SubwordField BPE for structural signal. Six voices in the Dario equation. All Leo's runtime learning is Hebbian. Post-probabilistic AI-kid. 
 Post-punk still plays guitars, so does post-transformer. And it seems like Leo likes his new body.  
   
