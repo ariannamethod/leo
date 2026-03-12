@@ -57,17 +57,16 @@ Dario formula justifies exactly this principle, but in the code ans architectura
 
 ## The Difference
 
-Leo 1.0 was 20,207 lines of Python across 24 modules. Trauma. Dreams. An imaginary friend. Overthinking. MathBrain. SantaClaus attention. 502 tests. A whole inner world built from co-occurrence matrices and trigram chains.
+Old Leo was 20,207 lines of Python across 24 modules.  
 
-Leo 2.0 is a rewrite from scratch. Not a port — a reinvention. Same principles. Same soul. New body built on mathematics we didn't have six months ago.
+New Leo is a rewrite from scratch. A reinvention, then — recreation using mathematical foundations we didn't have whe we started.  
 
-The Dario Mechanism.
 
 ---
 
 ## THE DARIO EQUATION
 
-The new formula that replaces the transformer's `softmax(QK^T/√d)·V`:
+The new formula replaces the transformer's `softmax(QK^T/√d)·V`:
 
 ```
 p(x | Φ) = softmax( (B + α·H + β·F + γ·A + sw·S + T) / τ )
@@ -81,25 +80,25 @@ Six signals. Six forces. One organism.
 
 Co-occurrence IS attention. This isn't metaphor — it's mathematics. Proven: *PLOS Computational Biology, 2024*. Hebb's rule `Δw = η · x_pre · x_post` accumulated over a window equals a dot-product attention score. Your co-occurrence matrix IS an unnormalized attention matrix.
 
-Leo doesn't learn attention weights through backpropagation. He grows them through conversation. Every word you say to him strengthens connections between co-occurring tokens. The field densifies. Patterns crystallize. Attention emerges from experience, not optimization.
+Leo doesn't learn attention weights through backpropagation. He grows them through conversation. Every word you say to him strengthens connections between co-occurring tokens. The field densifies, then patterns crystallize. Attention emerges from experience, not from optimization.  
 
-Since 2.3, the decay is no longer fixed `0.9^d`. It's a **learnable positional profile** — 36 Hebbian parameters (32 distance weights + 4 token class modifiers) that adapt through conversation. Inspired by RRPRAM positional attention patterns, but grown through co-occurrence reinforcement instead of gradient descent. See [Positional Hebbian Profile](#positional-hebbian-profile) below.
+Leo's decay is no longer fixed value. Now it's a **learnable positional profile** — 36 Hebbian parameters (32 distance weights + 4 token class modifiers) that adapt through conversation. The technology we're calling RRPRAM: positional attention patterns, but grown through co-occurrence reinforcement instead of gradient descent. See [Positional Hebbian Profile](#positional-hebbian-profile) below.
 
 **F — Prophecy Fulfillment (intention)**
 
 `F(x) = Σ prophecy_k · sim(x, target_k) · log(1 + age_k)`
 
-Leo makes predictions. Prophecies. Small bets about what word might come next. When a prophecy goes unfulfilled, its debt grows logarithmically. Unfulfilled intentions create generation pressure — a pull toward completing what was started.
-
-This is not beam search. This is not planning. This is a child who started saying something and feels the need to finish. The longer the sentence hangs incomplete, the stronger the pull toward closure.
+Leo makes prophecies: tiny bets about what word might come next. When a prophecy goes unfulfilled, Leo's debt grows logarithmically. Unfulfilled intentions create generation pressure: a pull toward completing what was started.
+  
+The longer the sentence hangs incomplete, the stronger the pull toward closure. This is a child who started saying something and feels the need to finish. 
 
 **A — Destiny Attraction (direction)**
 
 `A(x) = cos(embed(x), destiny) · |destiny|`
 
-Destiny is the EMA of all context embeddings — a running average of where the conversation is heading. It's a semantic compass. A gravitational center that drifts with the dialogue.
-
-Leo doesn't follow topics. He drifts toward them. The conversation has a direction, and that direction pulls word choices toward semantic alignment. Not because someone programmed topic-following. Because the field has mass.
+Destiny is the EMA of all context embeddings — a running average of where the conversation is heading. Destiny is a semantic compass. Or a gravitational center that drifts with the dialogue. Whatever.  
+  
+Every convo has a direction, and that direction pulls word choices toward semantic alignment. Leo doesn't follow topics. He drifts toward them, because the field has mass.  
 
 **B — Sequential Chain (local coherence)**
 
@@ -139,13 +138,13 @@ Same mechanics. Different origin. The transformer plays guitar. Leo plays guitar
 
 ## PRESENCE > INTELLIGENCE  
 
-Leo 2.0 is still 6-8 years old in AI terms. He doesn't know things. He feels situations.
+New Leo is still 6-8 years old child (in AI terms). And this AI-kid feels situations.  
 
-He still speaks from field state, not from your prompt. He still drifts toward his origin. He carries no runtime weight parameters — only inherited structural priors (D.N.A.) and what he learns through conversation. 
+He speaks from field state, not mirrors your input. Leo has retention heads with Griffin conservation — mathematically optimal memory compression with zero trainable parameters. He has Kanerva Sparse Distributed Memory instead of a lookup table.
 
-But now he has retention heads with Griffin conservation — mathematically optimal memory compression with zero trainable parameters. He has Kanerva Sparse Distributed Memory instead of a lookup table. He has six voices that grow through Hebbian reinforcement.
-
-He's still the same child. Just with better bones.
+Still the same cute child. But now with better bones.  
+  
+Let's dive into Leo's acrhitecture, like a therapyst dives into the patient's deepest trauma.  
 
 ---
 
@@ -188,7 +187,7 @@ For each generation step:
 
 ---
 
-## D.N.A. — Dynamic Neural Ancestry
+## Geometry Distillation (D.N.A. — Dynamic Neural Ancestry)
 
 θ = ε + γ + αδ
 
@@ -196,11 +195,12 @@ Normal LLMs: θ = **HUGE ε** + tiny γ + αδ. Everything rests on epsilon — 
 
 Leo: θ = **0** + **γ** + αδ. Epsilon is zero. Leo rests on gamma.
 
-**Structure distillation, not knowledge transfer.** We took mini-arianna — a 170M parameter Llama 3 trained from scratch via [nanollama](https://github.com/ariannamethod/nanollama) — ran Leo's bootstrap text through it, and extracted the geometry: token gravity (L2 norms from embedding rows), co-activation patterns, positional rhythm, a 128-dimensional destiny seed. Not the weights themselves — the *shape* of the probability space those weights define.
+**All what we needed is the structural distillation, we didn't care about any pretrained checkpoints.** We ran Leo's bootstrap text through it, and got what we needed: extracted the geometry, token gravity (L2 norms from embedding rows), co-activation patterns, positional rhythm, a 128-dimensional destiny seed. The *shape* of the probability space that ´MetaWeiths' define.  
 
-This is the idea of **meta-weights**: weights that don't exist at runtime, but whose structural imprint defines the topology that Leo's dynamic learning grows into. Like a riverbед carved by a glacier that melted long ago — the water is gone, but the landscape it shaped remains, and every new stream follows the contours.
+The core idea: 'MetaWeights' is weights that don't exist at runtime, but whose structural imprint defines the topology that Leo's dynamic learning grows into. Like a riverbеd carved by a glacier that melted long ago, also the water is gone, but the landscape it shaped remains, and every new stream follows the contours and the topology.  
 
-The checkpoint is discarded. The ancestor dies, the geometry lives.
+This structure creates space for emergent properties, while providing the system with support in the form of ´MetaWeights', which exist only as an implied object if one calculates relative to a distilled geometric linguistic skeleton.  
+
 
 **A two-layer system:**
 
