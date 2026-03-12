@@ -1779,6 +1779,10 @@ typedef struct {
     int             step;          /* global step counter */
     int             conv_steps;    /* conversation steps (excludes bootstrap) */
 
+    /* recent sentence starters — prevents repetitive openings across generations */
+    int             recent_starters[16]; /* last 16 first-tokens */
+    int             n_recent_starters;
+
     /* Dario coefficients */
     float           alpha, beta, gamma_d;
     float           tau_base;
@@ -2721,66 +2725,40 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
     float r_coeff = rr->r_coeff;
 
     if (r_coeff > 0.0f) {
-        /* cluster boost: if any cluster member is in context, boost all.
-         * Checks both word-level IDs and subword string matches. */
+        /* cluster boost: if any resolved cluster member is in context, boost
+         * all resolved members. Only uses word-level IDs (fast path).
+         * Unresolved BPE subwords contribute structurally via the S signal. */
         for (int cl = 0; cl < rr->n_clusters; cl++) {
             DnaCluster *c = &rr->clusters[cl];
             int active = 0;
             for (int j = 0; j < c->size && !active; j++) {
                 int tid = c->tokens[j];
-                if (tid >= 0) {
-                    for (int k = 0; k < leo->context_len; k++)
-                        if (leo->context_ids[k] == tid) { active = 1; break; }
-                } else {
-                    /* subword match: check if any recent word contains this subword */
-                    for (int k = 0; k < leo->context_len && !active; k++) {
-                        int wid = leo->context_ids[k];
-                        if (wid >= 0 && wid < leo->tok.n_words && leo->tok.words[wid]) {
-                            if (strstr(leo->tok.words[wid], c->words[j]))
-                                active = 1;
-                        }
-                    }
-                }
+                if (tid < 0) continue;
+                for (int k = 0; k < leo->context_len; k++)
+                    if (leo->context_ids[k] == tid) { active = 1; break; }
             }
             if (active) {
                 float boost = c->strength * 0.1f / (float)c->size;
                 for (int j = 0; j < c->size; j++) {
                     int tid = c->tokens[j];
-                    if (tid >= 0 && tid < vocab_size) {
+                    if (tid >= 0 && tid < vocab_size)
                         R[tid] += boost;
-                    } else {
-                        /* boost all words containing this subword */
-                        for (int w = 0; w < vocab_size && w < leo->tok.n_words; w++) {
-                            if (leo->tok.words[w] && strstr(leo->tok.words[w], c->words[j]))
-                                R[w] += boost * 0.5f; /* weaker for substring match */
-                        }
-                    }
                 }
             }
         }
 
-        /* chain boost: if context tail matches chain prefix, boost next.
-         * Uses subword substring matching for unresolved tokens. */
+        /* chain boost: if context tail matches resolved chain prefix, boost next.
+         * Only word-level IDs — no runtime strstr. */
         for (int ch = 0; ch < rr->n_chains; ch++) {
             DnaChain *chain = &rr->chains[ch];
-            if (chain->len < 3) continue;
+            if (chain->len < 3 || chain->tokens[0] < 0) continue;
             if (leo->context_len < 1) continue;
 
-            /* check if last context word matches chain[0] */
             int match_len = 0;
             for (int p = 0; p < chain->len - 1 && p < leo->context_len; p++) {
                 int ctx_pos = leo->context_len - 1 - p;
-                int ctx_wid = leo->context_ids[ctx_pos];
                 int chain_tid = chain->tokens[p];
-                int matched = 0;
-                if (chain_tid >= 0 && ctx_wid == chain_tid) {
-                    matched = 1;
-                } else if (ctx_wid >= 0 && ctx_wid < leo->tok.n_words &&
-                           leo->tok.words[ctx_wid] &&
-                           strstr(leo->tok.words[ctx_wid], chain->words[p])) {
-                    matched = 1;
-                }
-                if (matched) {
+                if (chain_tid >= 0 && leo->context_ids[ctx_pos] == chain_tid) {
                     match_len = p + 1;
                 } else {
                     break;
@@ -2788,32 +2766,16 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
             }
             if (match_len > 0 && match_len < chain->len) {
                 int next_tid = chain->tokens[match_len];
-                if (next_tid >= 0 && next_tid < vocab_size) {
+                if (next_tid >= 0 && next_tid < vocab_size)
                     R[next_tid] += chain->strength * 0.05f * (float)match_len;
-                } else {
-                    /* boost words containing next subword */
-                    for (int w = 0; w < vocab_size && w < leo->tok.n_words; w++) {
-                        if (leo->tok.words[w] &&
-                            strstr(leo->tok.words[w], chain->words[match_len]))
-                            R[w] += chain->strength * 0.03f * (float)match_len;
-                    }
-                }
             }
         }
 
-        /* hub gravity: always-on baseline for resonance centers.
-         * For unresolved hubs, boost words containing the hub subword. */
+        /* hub gravity: resolved hubs only, small baseline boost */
         for (int h = 0; h < rr->n_hubs; h++) {
             int tid = rr->hub_tokens[h];
-            if (tid >= 0 && tid < vocab_size) {
+            if (tid >= 0 && tid < vocab_size)
                 R[tid] += rr->hub_strength[h] * 0.02f;
-            } else {
-                for (int w = 0; w < vocab_size && w < leo->tok.n_words; w++) {
-                    if (leo->tok.words[w] &&
-                        strstr(leo->tok.words[w], rr->hub_words[h]))
-                        R[w] += rr->hub_strength[h] * 0.01f;
-                }
-            }
         }
 
         /* normalize R */
@@ -2973,17 +2935,35 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
 
         /* 2b. Sentence boundary shaping */
         if (t == 0) {
-            /* FIRST TOKEN: strongly prefer sentence starters */
-            float max_ss = 0;
-            for (int i = 0; i < vocab_size; i++)
-                if (leo->sent_start[i] > max_ss) max_ss = leo->sent_start[i];
-            if (max_ss > 0) {
+            /* FIRST TOKEN: prefer sentence starters, normalized by word frequency.
+             * Raw sent_start counts favor common words ("it", "the").
+             * Normalize: starter_ratio = sent_start[i] / (freq[i] + 1).
+             * This promotes words that PREDOMINANTLY start sentences,
+             * not just words that are frequent everywhere. */
+            float max_sr = 0;
+            for (int i = 0; i < vocab_size; i++) {
+                if (leo->sent_start[i] < 1.0f) continue;
+                float freq = (i < leo->cooc.freq_size) ? leo->cooc.freq[i] : 1.0f;
+                float sr = leo->sent_start[i] / (freq + 1.0f);
+                if (sr > max_sr) max_sr = sr;
+            }
+            if (max_sr > 0) {
                 for (int i = 0; i < vocab_size; i++) {
-                    float ss = leo->sent_start[i] / max_ss;
-                    if (ss > 0.01f)
-                        logits[i] += 3.0f * ss; /* boost starters */
-                    else
+                    float freq = (i < leo->cooc.freq_size) ? leo->cooc.freq[i] : 1.0f;
+                    float sr = leo->sent_start[i] / (freq + 1.0f) / max_sr;
+                    if (sr > 0.01f)
+                        logits[i] += 3.0f * sr; /* boost proportional starters */
+                    else if (leo->sent_start[i] < 0.5f)
                         logits[i] -= 2.0f;      /* penalize non-starters */
+                }
+                /* penalize recently used starters — diversity across generations.
+                 * Not a hard ban, but increasingly harsh decay (most recent = 0.1x). */
+                for (int r = 0; r < leo->n_recent_starters; r++) {
+                    int sid = leo->recent_starters[r];
+                    if (sid >= 0 && sid < vocab_size) {
+                        float recency = (float)(r + 1) / (float)leo->n_recent_starters;
+                        logits[sid] *= 0.1f + 0.7f * recency; /* most recent = 0.1, oldest = 0.8 */
+                    }
                 }
             }
         }
@@ -3027,6 +3007,21 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         /* 3. Sample */
         softmax(logits, vocab_size, tau);
         int next_id = sample_token(logits, vocab_size);
+
+        /* track sentence starters across generations */
+        if (t == 0 && next_id >= 0) {
+            /* shift ring buffer */
+            if (leo->n_recent_starters >= 16) {
+                memmove(leo->recent_starters + 1, leo->recent_starters,
+                        15 * sizeof(int));
+                leo->recent_starters[0] = next_id;
+            } else {
+                memmove(leo->recent_starters + 1, leo->recent_starters,
+                        leo->n_recent_starters * sizeof(int));
+                leo->recent_starters[0] = next_id;
+                leo->n_recent_starters++;
+            }
+        }
 
         /* 7. Append to output */
         const char *word = leo->tok.words[next_id];
