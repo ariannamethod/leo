@@ -89,6 +89,10 @@ extern int   leo_bridge_rrpram_clusters(void *leo);
 extern int   leo_bridge_rrpram_chains(void *leo);
 extern int   leo_bridge_rrpram_hubs(void *leo);
 extern float leo_bridge_rrpram_r_coeff(void *leo);
+extern float leo_bridge_resonance_lambda(void *leo);
+extern float leo_bridge_coherence(void *leo, int a, int b);
+extern int   leo_bridge_coa_built(void *leo);
+extern float leo_bridge_coa_coeff(void *leo);
 */
 import "C"
 
@@ -101,6 +105,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -130,18 +135,30 @@ func NewLeo(dbPath string) *Leo {
 	}
 }
 
+// guardAlive checks if organism is still alive (must hold l.mu).
+func (l *Leo) guardAlive() bool {
+	return l.alive && l.ptr != nil
+}
+
 // Close saves and destroys
 func (l *Leo) Close() {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	if !l.alive {
+		l.mu.Unlock()
 		return
 	}
 	l.alive = false
 	close(l.stopCh)
 	C.leo_bridge_save(l.ptr)
+	l.mu.Unlock()
+
+	// Let goroutines see stopCh/alive and drain
+	time.Sleep(200 * time.Millisecond)
+
+	l.mu.Lock()
 	C.leo_bridge_destroy(l.ptr)
 	l.ptr = nil
+	l.mu.Unlock()
 }
 
 // Bootstrap initializes from embedded seed + leo.txt
@@ -163,6 +180,9 @@ func (l *Leo) Load() bool {
 func (l *Leo) Save() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return
+	}
 	C.leo_bridge_save(l.ptr)
 }
 
@@ -170,6 +190,9 @@ func (l *Leo) Save() {
 func (l *Leo) Ingest(text string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return
+	}
 	cText := C.CString(text)
 	defer C.free(unsafe.Pointer(cText))
 	C.leo_bridge_ingest(l.ptr, cText)
@@ -179,6 +202,9 @@ func (l *Leo) Ingest(text string) {
 func (l *Leo) Generate(prompt string) string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return ""
+	}
 
 	cPrompt := C.CString(prompt)
 	defer C.free(unsafe.Pointer(cPrompt))
@@ -195,6 +221,9 @@ func (l *Leo) Generate(prompt string) string {
 func (l *Leo) Dream() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return
+	}
 	C.leo_bridge_dream(l.ptr)
 }
 
@@ -216,6 +245,9 @@ func (l *Leo) Step() int {
 func (l *Leo) Vocab() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return 0
+	}
 	return int(C.leo_bridge_vocab(l.ptr))
 }
 
@@ -241,6 +273,9 @@ func (l *Leo) ImportGGUF(path string) bool {
 func (l *Leo) LogConversation(prompt, response string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return
+	}
 	cPrompt := C.CString(prompt)
 	cResp := C.CString(response)
 	defer C.free(unsafe.Pointer(cPrompt))
@@ -252,6 +287,9 @@ func (l *Leo) LogConversation(prompt, response string) {
 func (l *Leo) LogEpisode(eventType, content, metadata string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return
+	}
 	cType := C.CString(eventType)
 	cContent := C.CString(content)
 	cMeta := C.CString(metadata)
@@ -285,6 +323,9 @@ func (l *Leo) EpisodeCount(eventType string) int {
 func (l *Leo) MathBrainObserve(prompt, response string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return
+	}
 	cPrompt := C.CString(prompt)
 	cResp := C.CString(response)
 	defer C.free(unsafe.Pointer(cPrompt))
@@ -296,6 +337,9 @@ func (l *Leo) MathBrainObserve(prompt, response string) {
 func (l *Leo) MathBrainLoss() float32 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return 0
+	}
 	return float32(C.leo_bridge_mathbrain_loss(l.ptr))
 }
 
@@ -303,6 +347,9 @@ func (l *Leo) MathBrainLoss() float32 {
 func (l *Leo) MathBrainObservations() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return 0
+	}
 	return int(C.leo_bridge_mathbrain_observations(l.ptr))
 }
 
@@ -310,6 +357,9 @@ func (l *Leo) MathBrainObservations() int {
 func (l *Leo) MathBrainTauNudge() float32 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return 0
+	}
 	return float32(C.leo_bridge_mathbrain_tau_nudge(l.ptr))
 }
 
@@ -318,6 +368,9 @@ func (l *Leo) MathBrainTauNudge() float32 {
 func (l *Leo) SetTrauma(level float32) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return
+	}
 	C.leo_bridge_set_trauma(l.ptr, C.float(level))
 }
 
@@ -325,6 +378,9 @@ func (l *Leo) SetTrauma(level float32) {
 func (l *Leo) GetTrauma() float32 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return 0
+	}
 	return float32(C.leo_bridge_get_trauma(l.ptr))
 }
 
@@ -332,6 +388,9 @@ func (l *Leo) GetTrauma() float32 {
 func (l *Leo) SetTraumaWeight(tokenID int, weight float32) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return
+	}
 	C.leo_bridge_set_trauma_weight(l.ptr, C.int(tokenID), C.float(weight))
 }
 
@@ -339,6 +398,9 @@ func (l *Leo) SetTraumaWeight(tokenID int, weight float32) {
 func (l *Leo) GetTraumaWeight(tokenID int) float32 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return 0
+	}
 	return float32(C.leo_bridge_get_trauma_weight(l.ptr, C.int(tokenID)))
 }
 
@@ -374,6 +436,9 @@ func (l *Leo) Phase4IslandQuality(island int) float32 {
 func (l *Leo) TokenID(word string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return -1
+	}
 	cWord := C.CString(word)
 	defer C.free(unsafe.Pointer(cWord))
 	return int(C.leo_bridge_token_id(l.ptr, cWord))
@@ -383,6 +448,9 @@ func (l *Leo) TokenID(word string) int {
 func (l *Leo) GetTau() float32 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return 1.0
+	}
 	return float32(C.leo_bridge_get_tau(l.ptr))
 }
 
@@ -390,6 +458,9 @@ func (l *Leo) GetTau() float32 {
 func (l *Leo) SetTau(tau float32) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if !l.guardAlive() {
+		return
+	}
 	C.leo_bridge_set_tau(l.ptr, C.float(tau))
 }
 
@@ -482,6 +553,30 @@ func (l *Leo) RrpramRCoeff() float32 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return float32(C.leo_bridge_rrpram_r_coeff(l.ptr))
+}
+
+func (l *Leo) ResonanceLambda() float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_resonance_lambda(l.ptr))
+}
+
+func (l *Leo) Coherence(a, b int) float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_coherence(l.ptr, C.int(a), C.int(b)))
+}
+
+func (l *Leo) CoaBuilt() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return int(C.leo_bridge_coa_built(l.ptr)) != 0
+}
+
+func (l *Leo) CoaCoeff() float32 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return float32(C.leo_bridge_coa_coeff(l.ptr))
 }
 
 // Inner world goroutines (startInnerVoice, startAutosave, startDreamDialog,

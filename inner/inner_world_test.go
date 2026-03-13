@@ -1426,3 +1426,188 @@ func TestRrpramGGUFRoundtrip(t *testing.T) {
 	os.Remove(ggufPath)
 }
 
+// ========================================================================
+// RESONANCE TENSOR TESTS
+// ========================================================================
+
+func TestResonanceTensorInit(t *testing.T) {
+	dbPath := "/tmp/test_go_res_tensor_init.db"
+	cleanupDB(t, dbPath)
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// lambda should be initialized to 1.0
+	lambda := leo.ResonanceLambda()
+	if lambda < 0.9 || lambda > 1.1 {
+		t.Errorf("expected lambda_res ~1.0, got %f", lambda)
+	}
+
+	// initial coherence[0][1] (B×H) should be 0.5
+	bh := leo.Coherence(0, 1)
+	if bh < 0.4 || bh > 0.6 {
+		t.Errorf("expected coherence[B×H] ~0.5, got %f", bh)
+	}
+
+	// coherence[1][5] (H×R) should be 0.4
+	hr := leo.Coherence(1, 5)
+	if hr < 0.3 || hr > 0.5 {
+		t.Errorf("expected coherence[H×R] ~0.4, got %f", hr)
+	}
+
+	t.Logf("Resonance Tensor: λ=%.3f, C[B×H]=%.3f, C[H×R]=%.3f", lambda, bh, hr)
+}
+
+func TestResonanceTensorLearnsDuringGeneration(t *testing.T) {
+	dbPath := "/tmp/test_go_res_tensor_learn.db"
+	cleanupDB(t, dbPath)
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// record initial coherence
+	bh_before := leo.Coherence(0, 1)
+
+	// generate several times to trigger Hebbian learning
+	for i := 0; i < 20; i++ {
+		leo.Generate("ocean deep water resonance")
+	}
+
+	bh_after := leo.Coherence(0, 1)
+	t.Logf("Coherence[B×H] before=%f after=%f", bh_before, bh_after)
+
+	// should have changed (either direction, but not identical)
+	if math.Abs(float64(bh_after-bh_before)) < 1e-6 {
+		t.Error("coherence[B×H] did not change after generation — Hebbian learning not working")
+	}
+}
+
+func TestResonanceTensorSurvivesSaveLoad(t *testing.T) {
+	dbPath := "/tmp/test_go_res_tensor_save.db"
+	cleanupDB(t, dbPath)
+
+	var lambda float32
+	var bh, hr float32
+
+	// bootstrap + generate + save
+	{
+		leo := NewLeo(dbPath)
+		leo.Bootstrap()
+		for i := 0; i < 10; i++ {
+			leo.Generate("resonance field emergence")
+		}
+		lambda = leo.ResonanceLambda()
+		bh = leo.Coherence(0, 1)
+		hr = leo.Coherence(1, 5)
+		leo.Save()
+		leo.Close()
+	}
+
+	// reload
+	{
+		leo := NewLeo(dbPath)
+		defer leo.Close()
+		leo.Load()
+
+		l2 := leo.ResonanceLambda()
+		bh2 := leo.Coherence(0, 1)
+		hr2 := leo.Coherence(1, 5)
+
+		t.Logf("Save/load: λ=%.3f→%.3f, B×H=%.4f→%.4f, H×R=%.4f→%.4f",
+			lambda, l2, bh, bh2, hr, hr2)
+
+		if math.Abs(float64(l2-lambda)) > 1e-5 {
+			t.Errorf("lambda mismatch: %f vs %f", lambda, l2)
+		}
+		if math.Abs(float64(bh2-bh)) > 1e-5 {
+			t.Errorf("coherence[B×H] mismatch: %f vs %f", bh, bh2)
+		}
+		if math.Abs(float64(hr2-hr)) > 1e-5 {
+			t.Errorf("coherence[H×R] mismatch: %f vs %f", hr, hr2)
+		}
+	}
+}
+
+func TestResonanceTensorGGUFRoundtrip(t *testing.T) {
+	dbPath := "/tmp/test_go_res_tensor_gguf.db"
+	cleanupDB(t, dbPath)
+	ggufPath := "/tmp/test_res_tensor.gguf"
+
+	var lambda float32
+	var bh float32
+
+	// bootstrap + export
+	{
+		leo := NewLeo(dbPath)
+		leo.Bootstrap()
+		for i := 0; i < 5; i++ {
+			leo.Generate("structure distillation")
+		}
+		lambda = leo.ResonanceLambda()
+		bh = leo.Coherence(0, 1)
+		leo.ExportGGUF(ggufPath)
+		leo.Close()
+	}
+
+	// import
+	{
+		dbPath2 := "/tmp/test_go_res_tensor_gguf2.db"
+		cleanupDB(t, dbPath2)
+		leo := NewLeo(dbPath2)
+		defer leo.Close()
+		leo.ImportGGUF(ggufPath)
+
+		l2 := leo.ResonanceLambda()
+		bh2 := leo.Coherence(0, 1)
+
+		t.Logf("GGUF roundtrip: λ=%.3f→%.3f, B×H=%.4f→%.4f", lambda, l2, bh, bh2)
+
+		if math.Abs(float64(l2-lambda)) > 1e-4 {
+			t.Errorf("lambda GGUF mismatch: %f vs %f", lambda, l2)
+		}
+		if math.Abs(float64(bh2-bh)) > 1e-4 {
+			t.Errorf("coherence[B×H] GGUF mismatch: %f vs %f", bh, bh2)
+		}
+	}
+	os.Remove(ggufPath)
+}
+
+// ========================================================================
+// COACTIVATION ATTENTION (CoA) TESTS
+// ========================================================================
+
+func TestCoaBuiltAfterBootstrap(t *testing.T) {
+	dbPath := "/tmp/test_go_coa_built.db"
+	cleanupDB(t, dbPath)
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	if !leo.CoaBuilt() {
+		t.Fatal("CoA should be built after bootstrap")
+	}
+
+	coeff := leo.CoaCoeff()
+	if coeff < 1.0 || coeff > 2.0 {
+		t.Errorf("expected CoA coeff ~1.5, got %f", coeff)
+	}
+	t.Logf("CoA built: coeff=%.2f", coeff)
+}
+
+func TestCoaDoesNotCrashDuringGeneration(t *testing.T) {
+	dbPath := "/tmp/test_go_coa_gen.db"
+	cleanupDB(t, dbPath)
+	leo := NewLeo(dbPath)
+	defer leo.Close()
+	leo.Bootstrap()
+
+	// generate with CoA active — should not crash or hang
+	for i := 0; i < 10; i++ {
+		resp := leo.Generate("ocean deep resonance miracle")
+		if len(resp) == 0 {
+			t.Error("empty response from generation with CoA")
+		}
+	}
+	t.Log("10 generations with CoA completed without crash")
+}
+

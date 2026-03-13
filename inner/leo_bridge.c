@@ -249,3 +249,26 @@ int leo_bridge_rrpram_hubs(void *ptr) {
 float leo_bridge_rrpram_r_coeff(void *ptr) {
     return ((Leo *)ptr)->rrpram.r_coeff;
 }
+
+/* Resonance Tensor: lambda (resonance coefficient) */
+float leo_bridge_resonance_lambda(void *ptr) {
+    return ((Leo *)ptr)->lambda_res;
+}
+
+/* Resonance Tensor: coherence value between signals a and b */
+float leo_bridge_coherence(void *ptr, int a, int b) {
+    if (a < 0 || a >= 7 || b < 0 || b >= 7) return 0.0f;
+    return ((Leo *)ptr)->coherence[a][b];
+}
+
+/* CoA: check if built */
+int leo_bridge_coa_built(void *ptr) {
+    Leo *leo = (Leo *)ptr;
+    return (leo->coa && leo->coa->built) ? 1 : 0;
+}
+
+/* CoA: get coefficient */
+float leo_bridge_coa_coeff(void *ptr) {
+    Leo *leo = (Leo *)ptr;
+    return (leo->coa) ? leo->coa->coa_coeff : 0.0f;
+}

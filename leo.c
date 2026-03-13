@@ -8,7 +8,7 @@
  * Uses transformer MECHANICS (RoPE, SwiGLU, retention) but NOT pretrained weights.
  * Weights are born from conversation via Hebbian learning.
  *
- * p(x|Φ) = softmax((B + α·H + β·F + γ·A + sw·S + r·R + T) / τ)
+ * p(x|Φ) = softmax((B + α·H + β·F + γ·A + sw·S + r·R + T + λ·Ψ + c·C) / τ)
  *   B = Bigram Chain (sequential coherence, dominant when young)
  *   H = Hebbian Resonance (positional profile, learnable 36 params)
  *   F = Prophecy Fulfillment (unfulfilled predictions → generation pressure)
@@ -16,6 +16,8 @@
  *   S = Subword Structural Coherence (BPE morphological signal)
  *   R = Recursive D.N.A. Resonance (RRPRAM clusters/chains/hubs)
  *   T = Trauma gravity (wounded → origin pull)
+ *   Ψ = Resonance Tensor (cross-signal agreement, 21 learnable params)
+ *   C = Coactivation Attention (D.N.A. geometry as direct attention)
  *
  * Single C file. Zero deps (libc + math + sqlite3).
  * Works autonomously without leo.go.
@@ -46,7 +48,7 @@
  * CONFIGURATION
  * ======================================================================== */
 
-#define LEO_VERSION       "2.4.0"
+#define LEO_VERSION       "2.5.0"
 #define LEO_DIM           128         /* embedding dimension */
 #define LEO_MAX_VOCAB     16384       /* max vocabulary size */
 #define LEO_MAX_TOKENS    256         /* max generation length */
@@ -85,6 +87,16 @@
 #define LEO_RRPRAM_MAX_HUBS       32
 #define LEO_RRPRAM_STRENGTH_THRESH 3.0f  /* minimum edge strength for cluster/chain */
 
+/* CoA — Coactivation Attention (D.N.A. geometry as direct attention mechanism)
+ * Uses D.N.A. coactivation pairs as attention: "when A in context, attend to B".
+ * Cross-tokenizer bridge maps BPE subwords to word-level tokens.
+ * Inverted index gives O(context × avg_targets) instead of O(context × vocab). */
+#define COA_HASH_SIZE     16384    /* hash table for coactivation lookup */
+#define COA_MAX_ENTRIES   8192     /* max coactivation entries with resolved subword IDs */
+#define COA_MAX_TARGETS   32       /* max coactivation targets per source subword */
+#define COA_MAX_SW_PER_WORD 8      /* max BPE subwords per word-level token */
+#define COA_MAX_WORDS_PER_SW 32    /* max word-level tokens containing a subword */
+
 typedef struct {
     int   tokens[LEO_RRPRAM_MAX_CLUSTER_SZ]; /* token IDs (word-level or -1) */
     char  words[LEO_RRPRAM_MAX_CLUSTER_SZ][64]; /* token strings for matching */
@@ -110,6 +122,10 @@ typedef struct {
     int        n_hubs;
     float      r_coeff;  /* coefficient for R signal (auto-tuned) */
 } DnaRrpram;
+
+/* CoA struct is defined after SubwordField (needs SW_MAX_VOCAB).
+ * Forward declaration here, full definition below. */
+typedef struct CoaTable CoaTable;
 
 /* retention timescales: semantic, topic, syntax, bigram */
 static const float LEO_GAMMA[LEO_RET_HEADS] = {0.99f, 0.95f, 0.85f, 0.50f};
@@ -633,6 +649,31 @@ typedef struct {
     int      tok_freq[SW_MAX_VOCAB];
     int      total_tokens;
 } SubwordField;
+
+/* CoA — Coactivation Attention: D.N.A. geometry as direct attention mechanism.
+ * Built once at bootstrap from D.N.A. coactivation pairs.
+ * Inverted index enables O(context × avg_targets) generation. */
+typedef struct {
+    int   dst_sw;
+    float strength;
+} CoaTarget;
+
+struct CoaTable {
+    /* inverted index: for each src subword, list of (dst_sw, strength) */
+    CoaTarget inv_targets[SW_MAX_VOCAB][COA_MAX_TARGETS];
+    int       inv_n[SW_MAX_VOCAB];
+
+    /* reverse map: subword → word-level token IDs containing it */
+    int   sw_to_words[SW_MAX_VOCAB][COA_MAX_WORDS_PER_SW];
+    int   sw_to_words_n[SW_MAX_VOCAB];
+
+    /* word-to-BPE cache: for each word-level token, its subword IDs */
+    int   word_sw[LEO_MAX_VOCAB][COA_MAX_SW_PER_WORD];
+    int   word_sw_len[LEO_MAX_VOCAB];
+
+    int   built;  /* 1 if indices are ready */
+    float coa_coeff; /* signal coefficient */
+};
 
 static void sw_init(SubwordField *sw) {
     memset(sw, 0, sizeof(SubwordField));
@@ -1804,6 +1845,18 @@ typedef struct {
     /* RRPRAM D.N.A. scanner — recursive patterns from ancestral geometry */
     DnaRrpram       rrpram;
 
+    /* CoA — Coactivation Attention (D.N.A. geometry as attention mechanism) */
+    CoaTable       *coa;  /* heap-allocated (large struct), built at bootstrap */
+
+    /* Resonance Tensor — cross-signal coherence (7×7 symmetric, 21 params)
+     * Ψ(x) = Σᵢ<ⱼ √(Sᵢ(x)·Sⱼ(x)) · Cᵢⱼ
+     * Geometric mean detects cross-signal AGREEMENT — nonzero only when
+     * both signals vote for the same token. This turns linear signal
+     * superposition into a resonance field. */
+    float           coherence[7][7];   /* C[i][j] = resonance between signals i,j */
+    float           lambda_res;        /* resonance coefficient (grows with maturity) */
+    float           last_signals[7];   /* signals for last sampled token (for Hebbian) */
+
     /* database */
     sqlite3        *db;
     char            db_path[512];
@@ -2087,6 +2140,91 @@ static void dna_rrpram_scan(Leo *leo) {
     #undef RRP_FIND_NODE
 }
 
+/* ========================================================================
+ * CoA — Build Coactivation Attention indices from D.N.A.
+ *
+ * Phase 1: For each word-level token, compute BPE decomposition (word_sw cache)
+ * Phase 2: Build reverse map: subword → word-level tokens containing it
+ * Phase 3: Build inverted index: src_sw → list of (dst_sw, strength) from D.N.A.
+ *
+ * After building, signal C in dario_compute can do:
+ *   for each context word → get its subwords →
+ *     for each subword → inverted index → target subwords →
+ *       for each target sw → reverse map → candidate word IDs → accumulate C
+ * ======================================================================== */
+
+static void coa_build(Leo *leo) {
+    if (!leo->coa) {
+        leo->coa = calloc(1, sizeof(CoaTable));
+        if (!leo->coa) return;
+    }
+    CoaTable *coa = leo->coa;
+    memset(coa, 0, sizeof(CoaTable));
+
+    int vocab = leo->tok.n_words;
+
+    /* Phase 1: word → BPE decomposition cache */
+    for (int w = 0; w < vocab && w < LEO_MAX_VOCAB; w++) {
+        const char *word = leo->tok.words[w];
+        if (!word) continue;
+        int sw_ids[64];
+        int n = sw_encode(&leo->subword, word, sw_ids, 64);
+        if (n > COA_MAX_SW_PER_WORD) n = COA_MAX_SW_PER_WORD;
+        for (int j = 0; j < n; j++)
+            coa->word_sw[w][j] = sw_ids[j];
+        coa->word_sw_len[w] = n;
+    }
+
+    /* Phase 2: reverse map — subword → word-level tokens containing it */
+    for (int w = 0; w < vocab && w < LEO_MAX_VOCAB; w++) {
+        for (int j = 0; j < coa->word_sw_len[w]; j++) {
+            int sw_id = coa->word_sw[w][j];
+            if (sw_id < 0 || sw_id >= SW_MAX_VOCAB) continue;
+            int *n = &coa->sw_to_words_n[sw_id];
+            if (*n < COA_MAX_WORDS_PER_SW) {
+                coa->sw_to_words[sw_id][*n] = w;
+                (*n)++;
+            }
+        }
+    }
+
+    /* Phase 3: inverted index from D.N.A. coactivation pairs */
+    int added = 0;
+    for (int i = 0; i < DNA_COACTIVATION_SIZE; i++) {
+        const char *s = DNA_COACT_SRC[i];
+        const char *d = DNA_COACT_DST[i];
+        float str = DNA_COACT_STRENGTH[i];
+
+        /* resolve to subword IDs */
+        int src_sw = sw_find(&leo->subword, s, strlen(s));
+        int dst_sw = sw_find(&leo->subword, d, strlen(d));
+        if (src_sw < 0 || dst_sw < 0) continue;
+
+        /* add to inverted index */
+        int *n = &coa->inv_n[src_sw];
+        if (*n < COA_MAX_TARGETS) {
+            coa->inv_targets[src_sw][*n].dst_sw = dst_sw;
+            coa->inv_targets[src_sw][*n].strength = str;
+            (*n)++;
+            added++;
+        }
+    }
+
+    coa->coa_coeff = 1.5f; /* starting coefficient */
+    coa->built = 1;
+
+    /* count effective connections */
+    int total_targets = 0;
+    for (int i = 0; i < SW_MAX_VOCAB; i++)
+        total_targets += coa->inv_n[i];
+    int words_with_sw = 0;
+    for (int w = 0; w < vocab; w++)
+        if (coa->word_sw_len[w] > 0) words_with_sw++;
+
+    printf("[leo] CoA built: %d coact pairs indexed, %d/%d words have BPE decomposition\n",
+           added, words_with_sw, vocab);
+}
+
 #endif /* LEO_HAS_DNA */
 
 /* ========================================================================
@@ -2143,6 +2281,15 @@ void leo_init(Leo *leo, const char *db_path) {
         leo->dist_profile[d] = powf(0.9f, (float)d);
     for (int c = 0; c < LEO_TOKEN_CLASSES; c++)
         leo->class_mod[c] = 1.0f;
+
+    /* Resonance Tensor init — slight positive bias for key signal pairs */
+    memset(leo->coherence, 0, sizeof(leo->coherence));
+    leo->coherence[0][1] = 0.5f;  /* B×H: bigram-semantic agreement */
+    leo->coherence[0][3] = 0.3f;  /* B×A: bigram-destiny agreement */
+    leo->coherence[1][5] = 0.4f;  /* H×R: semantic-RRPRAM agreement */
+    leo->coherence[2][3] = 0.3f;  /* F×A: prophecy-destiny agreement */
+    leo->lambda_res = 1.0f;
+    memset(leo->last_signals, 0, sizeof(leo->last_signals));
     leo->dist_profile_updates = 0;
 
     /* RRPRAM: zeroed by memset, r_coeff defaults to 0 until scan */
@@ -2170,6 +2317,7 @@ void leo_free(Leo *leo) {
     free(leo->context_embed);
     free(leo->context_ids);
     free(leo->trauma_weights);
+    free(leo->coa);
     if (leo->db) sqlite3_close(leo->db);
 }
 
@@ -2574,7 +2722,10 @@ void leo_ingest(Leo *leo, const char *text) {
  * A = cos(embed(token), destiny) · |destiny|  (destiny attraction)
  * ======================================================================== */
 
-static void dario_compute(Leo *leo, float *logits, int vocab_size) {
+/* signal_buf: if non-NULL, [7 * vocab_size] buffer to store per-signal values
+ * for Hebbian learning of coherence matrix after sampling. */
+static void dario_compute(Leo *leo, float *logits, int vocab_size,
+                          float *signal_buf) {
     float *H = calloc(vocab_size, sizeof(float));
     float *F = calloc(vocab_size, sizeof(float));
     float *A = calloc(vocab_size, sizeof(float));
@@ -2786,24 +2937,136 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
             for (int i = 0; i < vocab_size; i++) R[i] /= r_max;
     }
 
-    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + sw·S + r·R + T ---- */
+    /* ---- C: Coactivation Attention (D.N.A. geometry as attention) ---- */
+    /* For each context word, look up its BPE subwords → inverted index →
+     * target subwords → reverse map → candidate word IDs → accumulate.
+     * Modulated by GLA gate (content words attend stronger) and
+     * dist_profile (closer context = stronger attention).
+     * Destiny gate: boost candidates aligned with current semantic direction. */
+    float *C = calloc(vocab_size, sizeof(float));
+    float coa_coeff = 0.0f;
+
+    if (leo->coa && leo->coa->built && leo->context_len > 0) {
+        CoaTable *coa = leo->coa;
+        coa_coeff = coa->coa_coeff;
+
+        for (int ci = ctx_start; ci < leo->context_len; ci++) {
+            int ctx_id = leo->context_ids[ci];
+            if (ctx_id < 0 || ctx_id >= LEO_MAX_VOCAB) continue;
+            int dist = leo->context_len - 1 - ci;
+
+            /* positional weight (learnable, from dist_profile) */
+            float pos_w = (dist < LEO_DIST_PROFILE_LEN)
+                        ? leo->dist_profile[dist]
+                        : leo->dist_profile[LEO_DIST_PROFILE_LEN - 1] * 0.5f;
+
+            /* content gate (GLA — content words attend stronger) */
+            float gate = compute_gate(&leo->cooc, ctx_id);
+
+            /* for each BPE subword of this context word... */
+            for (int si = 0; si < coa->word_sw_len[ctx_id]; si++) {
+                int src_sw = coa->word_sw[ctx_id][si];
+                if (src_sw < 0 || src_sw >= SW_MAX_VOCAB) continue;
+
+                /* ...look up all coactivation targets */
+                for (int ti = 0; ti < coa->inv_n[src_sw]; ti++) {
+                    int dst_sw = coa->inv_targets[src_sw][ti].dst_sw;
+                    float str = coa->inv_targets[src_sw][ti].strength;
+                    if (dst_sw < 0 || dst_sw >= SW_MAX_VOCAB) continue;
+
+                    /* ...map target subword → word-level tokens */
+                    for (int wi = 0; wi < coa->sw_to_words_n[dst_sw]; wi++) {
+                        int word_id = coa->sw_to_words[dst_sw][wi];
+                        if (word_id >= 0 && word_id < vocab_size) {
+                            /* normalize by BPE lengths to prevent long words from dominating */
+                            int n_src_sw = coa->word_sw_len[ctx_id];
+                            int n_dst_sw = coa->word_sw_len[word_id];
+                            float norm = sqrtf((float)(n_src_sw > 0 ? n_src_sw : 1) *
+                                               (float)(n_dst_sw > 0 ? n_dst_sw : 1));
+                            C[word_id] += str * gate * pos_w / norm;
+                        }
+                    }
+                }
+            }
+        }
+
+        /* destiny modulation: boost candidates aligned with destiny direction */
+        for (int i = 0; i < vocab_size; i++) {
+            if (C[i] > 0.0f) {
+                float *te = leo_embed(leo, i);
+                if (te) {
+                    float d_gate = vec_cosine(te, leo->destiny.direction, leo->dim);
+                    if (d_gate > 0.0f)
+                        C[i] *= (1.0f + d_gate); /* boost aligned, don't penalize misaligned */
+                }
+            }
+        }
+
+        /* normalize C */
+        float c_max = 0;
+        for (int i = 0; i < vocab_size; i++)
+            if (C[i] > c_max) c_max = C[i];
+        if (c_max > 1e-6f)
+            for (int i = 0; i < vocab_size; i++) C[i] /= c_max;
+    }
+
+    /* save normalized signals for Hebbian learning of coherence matrix */
+    if (signal_buf) {
+        for (int i = 0; i < vocab_size; i++) {
+            signal_buf[0 * vocab_size + i] = B[i];
+            signal_buf[1 * vocab_size + i] = H[i];
+            signal_buf[2 * vocab_size + i] = F[i];
+            signal_buf[3 * vocab_size + i] = A[i];
+            signal_buf[4 * vocab_size + i] = S[i];
+            signal_buf[5 * vocab_size + i] = R[i];
+            /* T is per-token, computed inline below */
+            signal_buf[6 * vocab_size + i] =
+                (trauma_boost > 0.0f && i < leo->trauma_weights_n)
+                ? leo->trauma_weights[i] * trauma_boost / 3.0f : 0.0f;
+        }
+    }
+
+    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + sw·S + r·R + T + λ·Ψ ---- */
     /* B (bigram chain) is DOMINANT — this is what makes speech coherent.
      * H (field) adds semantic context.
      * F (prophecy) adds intentionality.
      * A (destiny) adds direction.
      * S (subword) adds structural/morphological coherence.
      * R (RRPRAM) adds recursive D.N.A. resonance.
-     * T (trauma) pulls toward origin when wounded. */
+     * T (trauma) pulls toward origin when wounded.
+     * Ψ (resonance tensor) amplifies cross-signal AGREEMENT. */
     float gamma_eff = leo->gamma_d;
     if (leo->trauma_level > 0.3f) {
         /* wounded expert: boost destiny (origin pull) */
         gamma_eff += leo->trauma_level * 2.0f;
     }
 
+    /* Resonance Tensor: λ scales with maturity (young = weak resonance) */
+    float lambda = leo->lambda_res * clampf(maturity * 3.0f, 0.1f, 2.0f);
+
     for (int i = 0; i < vocab_size; i++) {
         float t_weight = 0.0f;
         if (trauma_boost > 0.0f && i < leo->trauma_weights_n)
             t_weight = trauma_boost * leo->trauma_weights[i];
+
+        /* ---- Ψ: Resonance Tensor (cross-signal agreement) ----
+         * Ψ(x) = Σᵢ<ⱼ √(Sᵢ(x)·Sⱼ(x)) · Cᵢⱼ
+         * Geometric mean = 0 when EITHER signal is 0.
+         * Nonzero only when BOTH agree → detects consensus. */
+        float sigs[7];
+        sigs[0] = B[i]; sigs[1] = H[i]; sigs[2] = F[i];
+        sigs[3] = A[i]; sigs[4] = S[i]; sigs[5] = R[i];
+        sigs[6] = (trauma_boost > 0.0f && i < leo->trauma_weights_n)
+                  ? leo->trauma_weights[i] * trauma_boost / 3.0f : 0.0f;
+
+        float psi = 0.0f;
+        for (int a = 0; a < 7; a++) {
+            if (sigs[a] < 1e-6f) continue; /* skip zero — fast path */
+            for (int b = a + 1; b < 7; b++) {
+                if (sigs[b] < 1e-6f) continue;
+                psi += sqrtf(sigs[a] * sigs[b]) * leo->coherence[a][b];
+            }
+        }
 
         logits[i] = bigram_coeff * B[i]   /* sequential coherence */
                   + leo->alpha * H[i]      /* semantic field */
@@ -2811,7 +3074,9 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
                   + gamma_eff * A[i]        /* destiny (boosted under trauma) */
                   + sw_coeff * S[i]         /* subword structural */
                   + r_coeff * R[i]          /* recursive D.N.A. resonance */
-                  + t_weight;               /* trauma scar gravity */
+                  + t_weight                /* trauma scar gravity */
+                  + lambda * psi            /* resonance tensor */
+                  + coa_coeff * C[i];       /* coactivation attention */
     }
 
     free(H);
@@ -2820,6 +3085,7 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size) {
     free(B);
     free(S);
     free(R);
+    free(C);
 }
 
 /* ========================================================================
@@ -2886,6 +3152,7 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
     float *logits = calloc(vocab_size, sizeof(float));
     float *retention_bias = calloc(vocab_size, sizeof(float));
     float *voice_bias = calloc(vocab_size, sizeof(float));
+    float *signal_buf = calloc(7 * vocab_size, sizeof(float)); /* for resonance tensor learning */
 
     int pos = 0;
     out[0] = '\0';
@@ -2906,8 +3173,8 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         if (t >= LEO_MAX_TOKENS) break;
         if (t >= target_len + 8) break; /* gave up finding sentence end */
 
-        /* 1. Dario equation: B + H + F + A */
-        dario_compute(leo, logits, vocab_size);
+        /* 1. Dario equation: B + H + F + A + S + R + T + Ψ */
+        dario_compute(leo, logits, vocab_size, signal_buf);
 
         /* 2. Repetition penalty: penalize recently generated tokens */
         for (int c = 0; c < leo->context_len; c++) {
@@ -3121,6 +3388,25 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         if (next_embed)
             destiny_update(&leo->destiny, next_embed, leo->dim);
 
+        /* Resonance Tensor Hebbian: reinforce signal pairs that agreed on chosen token.
+         * Novel tokens strengthen coherence — repetitive tokens don't learn.
+         * 21 params, no overfitting risk. Slow decay prevents unbounded growth. */
+        if (signal_buf && next_id < vocab_size) {
+            float nov = compute_novelty(leo);
+            float lr = 0.01f * nov;
+            for (int a = 0; a < 7; a++) {
+                float sa = signal_buf[a * vocab_size + next_id];
+                if (sa < 1e-6f) continue;
+                for (int b = a + 1; b < 7; b++) {
+                    float sb = signal_buf[b * vocab_size + next_id];
+                    if (sb < 1e-6f) continue;
+                    float agreement = sqrtf(sa * sb);
+                    leo->coherence[a][b] += lr * agreement;
+                    leo->coherence[a][b] *= 0.9999f; /* slow decay */
+                }
+            }
+        }
+
         /* update context */
         vec_copy(leo->context_embed, next_embed ? next_embed : leo->context_embed,
                  leo->dim);
@@ -3208,6 +3494,7 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
     free(logits);
     free(retention_bias);
     free(voice_bias);
+    free(signal_buf);
 
     /* post-processing: capitalize first letter, fix "Leo", add period */
     if (pos > 0 && out[0] >= 'a' && out[0] <= 'z')
@@ -3567,6 +3854,10 @@ void leo_save(Leo *leo) {
     /* RRPRAM D.N.A. scanner results */
     fwrite(&leo->rrpram, sizeof(DnaRrpram), 1, f);
 
+    /* Resonance Tensor coherence matrix */
+    fwrite(leo->coherence, sizeof(float), 7 * 7, f);
+    fwrite(&leo->lambda_res, sizeof(float), 1, f);
+
     fclose(f);
     printf("[leo] state saved: %s (step %d, vocab %d, sw %d merges)\n",
            path, leo->step, leo->tok.n_words, leo->subword.n_merges);
@@ -3762,6 +4053,18 @@ void leo_load(Leo *leo) {
         }
     }
 
+    /* Resonance Tensor coherence matrix (optional — old saves won't have it) */
+    {
+        float tmp_coh[7][7];
+        float tmp_lambda;
+        if (fread(tmp_coh, sizeof(float), 7 * 7, f) == 7 * 7 &&
+            fread(&tmp_lambda, sizeof(float), 1, f) == 1) {
+            memcpy(leo->coherence, tmp_coh, sizeof(tmp_coh));
+            leo->lambda_res = tmp_lambda;
+            printf("[leo]   resonance tensor loaded: λ=%.3f\n", leo->lambda_res);
+        }
+    }
+
     fclose(f);
     leo->bootstrapped = 1;
     printf("[leo] state loaded: %s (step %d, vocab %d)\n",
@@ -3853,8 +4156,93 @@ void leo_bootstrap(Leo *leo) {
            "coact %d word + %d subword\n",
            dna_word_hits, dna_sw_hits, dna_word_coact, dna_sw_coact);
 
-    /* 4. RRPRAM scanner: discover recursive patterns in D.N.A. */
+    /* 4. Subword Bridge: lift BPE coactivation to word-level bigrams.
+     * D.N.A. coactivation pairs are BPE subwords ("th" → "▁le").
+     * Most don't match word-level tokens. Bridge finds word-level tokens
+     * CONTAINING these substrings and creates word-level connections.
+     * coverage_factor = len(bpe)/len(word) — longer coverage = stronger link.
+     *
+     * Algorithm: for each coactivation pair, single-pass over vocab to
+     * find matches for src AND dst, then cross-join only the matches.
+     * O(coact_size × vocab) instead of O(coact_size × vocab²). */
+    {
+        int bridge_hits = 0;
+        /* temp buffers for matched word IDs and coverage factors */
+        int *src_matches = calloc(leo->tok.n_words, sizeof(int));
+        float *src_cov = calloc(leo->tok.n_words, sizeof(float));
+        int *dst_matches = calloc(leo->tok.n_words, sizeof(int));
+        float *dst_cov = calloc(leo->tok.n_words, sizeof(float));
+
+        for (int i = 0; i < DNA_COACTIVATION_SIZE; i++) {
+            const char *s = DNA_COACT_SRC[i];
+            const char *d = DNA_COACT_DST[i];
+            float str = DNA_COACT_STRENGTH[i];
+
+            /* skip raw byte tokens <0xNN> */
+            if (s[0] == '<' && s[1] == '0') continue;
+            if (d[0] == '<' && d[1] == '0') continue;
+
+            /* strip leading ▁ (sentencepiece word boundary, UTF-8: E2 96 81) */
+            const char *s_clean = s;
+            const char *d_clean = d;
+            if ((unsigned char)s[0] == 0xE2 && (unsigned char)s[1] == 0x96
+                && (unsigned char)s[2] == 0x81)
+                s_clean = s + 3;
+            if ((unsigned char)d[0] == 0xE2 && (unsigned char)d[1] == 0x96
+                && (unsigned char)d[2] == 0x81)
+                d_clean = d + 3;
+
+            int slen = (int)strlen(s_clean);
+            int dlen = (int)strlen(d_clean);
+            if (slen < 2 || dlen < 2) continue; /* skip single chars */
+
+            /* single pass: find all words matching src and dst */
+            int n_src = 0, n_dst = 0;
+            for (int w = 0; w < leo->tok.n_words; w++) {
+                const char *word = leo->tok.words[w];
+                if (!word) continue;
+                int wlen = (int)strlen(word);
+
+                if (strstr(word, s_clean)) {
+                    float cov = (float)slen / (float)wlen;
+                    if (cov >= 0.3f) {
+                        src_matches[n_src] = w;
+                        src_cov[n_src] = cov;
+                        n_src++;
+                    }
+                }
+                if (strstr(word, d_clean)) {
+                    float cov = (float)dlen / (float)wlen;
+                    if (cov >= 0.3f) {
+                        dst_matches[n_dst] = w;
+                        dst_cov[n_dst] = cov;
+                        n_dst++;
+                    }
+                }
+            }
+
+            /* cross-join matches (typically few per substring) */
+            for (int si = 0; si < n_src; si++) {
+                for (int di = 0; di < n_dst; di++) {
+                    if (src_matches[si] == dst_matches[di]) continue;
+                    float bridge_str = str * src_cov[si] * dst_cov[di] * 0.5f;
+                    bigram_update(&leo->bigrams, src_matches[si], dst_matches[di], bridge_str);
+                    cooc_update(&leo->cooc, src_matches[si], dst_matches[di], bridge_str * 0.3f);
+                    bridge_hits++;
+                }
+            }
+        }
+        free(src_matches); free(src_cov);
+        free(dst_matches); free(dst_cov);
+        printf("[leo] subword bridge: %d word-level connections from BPE D.N.A.\n",
+               bridge_hits);
+    }
+
+    /* 5. RRPRAM scanner: discover recursive patterns in D.N.A. */
     dna_rrpram_scan(leo);
+
+    /* 6. CoA: build coactivation attention indices */
+    coa_build(leo);
 #else
     /* no D.N.A. — pure weightless bootstrap */
 #endif
@@ -3877,7 +4265,7 @@ void leo_bootstrap(Leo *leo) {
  * ======================================================================== */
 
 void leo_stats(Leo *leo) {
-    printf("\n=== LEO v%s ===\n", LEO_VERSION);
+    printf("\n=== LEO ===\n");
     printf("step:        %d\n", leo->step);
     printf("vocab:       %d words\n", leo->tok.n_words);
     printf("cooc:        %d entries\n", leo->cooc.n_entries);
@@ -4320,6 +4708,10 @@ void leo_export_gguf(Leo *leo, const char *path) {
     /* A13. RRPRAM D.N.A. scanner results */
     fwrite(&leo->rrpram, sizeof(DnaRrpram), 1, f);
 
+    /* A14. Resonance Tensor coherence matrix */
+    fwrite(leo->coherence, sizeof(float), 7 * 7, f);
+    fwrite(&leo->lambda_res, sizeof(float), 1, f);
+
     long file_size = ftell(f);
     fclose(f);
 
@@ -4655,14 +5047,15 @@ int leo_import_gguf(Leo *leo, const char *path) {
             }
         }
 
-        /* A12 + A13: Positional Hebbian profile + RRPRAM — read from known offset at file tail.
-         * A13 (DnaRrpram) is last, A12 (dist_profile) is right before it. */
+        /* A12 + A13 + A14: dist_profile + RRPRAM + Resonance Tensor
+         * Read from known offset at file tail (A14 is last). */
         {
+            const long a14_size = (long)(7 * 7 * sizeof(float) + sizeof(float));
             const long a13_size = (long)sizeof(DnaRrpram);
             const long a12_size = (long)(LEO_DIST_PROFILE_LEN * sizeof(float) +
                                          LEO_TOKEN_CLASSES * sizeof(float) +
                                          sizeof(int));
-            fseek(f, -(a12_size + a13_size), SEEK_END);
+            fseek(f, -(a12_size + a13_size + a14_size), SEEK_END);
             float tmp_dist[LEO_DIST_PROFILE_LEN];
             float tmp_cm[LEO_TOKEN_CLASSES];
             int tmp_dpu = 0;
@@ -4684,6 +5077,16 @@ int leo_import_gguf(Leo *leo, const char *path) {
                 memcpy(&leo->rrpram, &tmp_rr, sizeof(DnaRrpram));
                 printf("[leo]   rrpram: %d clusters, %d chains, %d hubs\n",
                        leo->rrpram.n_clusters, leo->rrpram.n_chains, leo->rrpram.n_hubs);
+            }
+
+            /* A14. Resonance Tensor */
+            float tmp_coh[7][7];
+            float tmp_lambda;
+            if (fread(tmp_coh, sizeof(float), 7 * 7, f) == 7 * 7 &&
+                fread(&tmp_lambda, sizeof(float), 1, f) == 1) {
+                memcpy(leo->coherence, tmp_coh, sizeof(tmp_coh));
+                leo->lambda_res = tmp_lambda;
+                printf("[leo]   resonance tensor: λ=%.3f\n", leo->lambda_res);
             }
         }
 
@@ -4710,7 +5113,7 @@ int leo_import_gguf(Leo *leo, const char *path) {
  * ======================================================================== */
 
 static void print_usage(const char *prog) {
-    printf("Leo v%s — Language Emergent Organism\n", LEO_VERSION);
+    printf("Leo — Language Emergent Organism\n");
     printf("The Dario Mechanism: p(x|Phi) = softmax((a*H + b*F + g*A) / tau)\n\n");
     printf("Usage: %s [options]\n", prog);
     printf("  --db <path>       State database path (default: leo_state.db)\n");
@@ -4757,7 +5160,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("[leo] Language Emergent Organism v%s\n", LEO_VERSION);
+    setbuf(stdout, NULL); /* unbuffered output for diagnostics */
+    printf("[leo] Language Emergent Organism\n");
     printf("[leo] The Dario Mechanism: p(x|Phi) = softmax((a*H + b*F + g*A) / tau)\n");
 
     Leo leo;
