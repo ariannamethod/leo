@@ -205,28 +205,35 @@ For each generation step:
   
 ---
 
-## Geometry Distillation (D.N.A. — Dynamic Neural Ancestry)
+## Geometry Distillation (**D.N.A.** technique we talked about at the beginning of this README: Dynamic Neural Ancestry). 
+  
+```
+θ = ε + γ + αδ. 
+```
+  
+Standart LLMs: θ = **HUGE ε** + tiny γ + αδ. As you see, everything rests on epsilon, and epsilon is static: the immovable glacier of pretrained weights.  
 
-θ = ε + γ + αδ
+Leo: θ = **0** + **γ** + αδ. Epsilon is zero. Everything's fluid. Leo rests on gamma.
+  
+During the execution, we didn't care about any pretrained checkpoints. We knew what we came for. We ran Leo's bootstrap text through it, and got what needed: **extracted geometry and token gravity**. Completely separated from any trained knowledge. 
 
-Normal LLMs: θ = **HUGE ε** + tiny γ + αδ. Everything rests on epsilon — the immovable glacier of pretrained weights.
+**D.N.A** extracted for Leo usefull co-activation patterns, positional rhytm, and 128-dimensional destiny seed. The **shape** of the probability space that `MetaWeights` concept define.
+  
+The brief explanation: 
 
-Leo: θ = **0** + **γ** + αδ. Epsilon is zero. Leo rests on gamma.
-
-**All what we needed is the structural distillation, we didn't care about any pretrained checkpoints.** We ran Leo's bootstrap text through it, and got what we needed: extracted the geometry, token gravity (L2 norms from embedding rows), co-activation patterns, positional rhythm, a 128-dimensional destiny seed. The *shape* of the probability space that ´MetaWeiths' define.  
-
-The core idea: 'MetaWeights' is weights that don't exist at runtime, but whose structural imprint defines the topology that Leo's dynamic learning grows into. Like a riverbеd carved by a glacier that melted long ago, also the water is gone, but the landscape it shaped remains, and every new stream follows the contours and the topology.  
-
-This structure creates space for emergent properties, while providing the system with support in the form of ´MetaWeights', which exist only as an implied object if one calculates relative to a distilled geometric linguistic skeleton.  
+What is `MetaWeights`?
+'MetaWeights' is weights that don't exist at runtime, but whose computed and distilled structural imprint defines the topology of the language. Leo's learning grows into. He's like a riverbеd carved by a glacier that melted long ago. The water is also has gone, but the landscape it shaped remains in topological geometry. Every new stream resonates more and more with the contours. 
+  
+The structure creates space and opportunity for emergent behaviour, while providing the system with support in the form of ´MetaWeights', which exist only as an implied object if one calculates relative to a distilled geometric linguistic skeleton.  
 
 
 **A two-layer system:**
 
-1. **Skeleton of language** — D.N.A. (16K lines in `leo.h`) + SubwordField BPE geometry. The structural prior. Static at compile time. Defines which tokens have gravitational mass, which pairs co-activate, what rhythm looks like. The topology of the probability landscape.
+1. **Skeleton of language** — **D.N.A.** (16K lines in `leo.h`) + SubwordField BPE geometry. As it mentioned above, this is the static at compile time structural prior. It's one of the forces, that defines gravitational mass, helps to compute which pairs co-activate and what rhythm looks like. 
 
-2. **Dynamic speech** — everything that grows on top through conversation. Hebbian co-occurrence, voice differentiation, prophecy and destiny, subword merges. Alive, evolving, unique to each organism instance.
+2. **Dynamic speech** — everything that grows on top through conversation. Hebbian co-occurrence, voice differentiation, prophecy and destiny, subword merges. Alive, evolving, unique to each organism instance. Arianna Method valaues the perfect imperfectness as a singn of emergent authenticicty. No less.  
 
-Leo starts *between* states — from a pre-shaped topology where learning has somewhere meaningful to go.
+Leo starts *between* states — from topology itself where learning has somewhere meaningful to go.  
 
 ```c
 /* D.N.A. — Dynamic Neural Ancestry
@@ -242,42 +249,43 @@ Leo starts *between* states — from a pre-shaped topology where learning has so
 ```
 
 Compile without `-DLEO_HAS_DNA` — pure weightless organism.
-Compile with it — inherited topology from the ancestor.
-
-Both work. One just wakes up faster.
+Compile with it — inherited topology from the ancestor.  
 
 ---
 
-## Meta-Weights
+## `MetaWeight` Concept: 
 
-A weight that doesn't exist but could have.
+A weight that doesn't exist but could have.  
+   
+In language of math it's like when you say: "assume *X* equals *this* (or *that*), then the equation holds". Our *X* never existed, but math doesn't care: the equation works because the assumption shaped the space correctly.  
+So: `MetaSeights` are exactly this: not stored, not loaded, not deployed, not existing at all in the runtime. `MetaWeights` are ephemeral. They are the *absence* that gives form to the presence.  
 
-In mathematics, you can say: "assume X equals this, then the equation holds." The X never existed. But the equation works because the assumption shaped the space correctly. Meta-weights are exactly this — they're not stored, not loaded, not updated at runtime. They are the *absence* that gives form to the presence.
-
-When we extract D.N.A. from mini-arianna's 170M parameters, we don't keep the weights. We keep what those weights *implied*: which tokens have mass, which pairs co-activate, what rhythm looks like. The checkpoint is deleted. The weights are gone. But the topology they carved into the probability landscape — that remains.
-
-Think of it like a riverbed. The glacier is gone. The water that carved the canyon evaporated millions of years ago. But every new raindrop follows the contours. The landscape remembers a force that no longer exists. That force is the meta-weight.
-
+`MetaWeights` helped to find out what we need: which tokens have mass, which pairs co-activate (and then live happily together). 
+  
+Imagine it like a riverbed: the glacier is gone, the water that carved the canyon evaporated millions of years ago. But geometrical topology remains, and every new raindrop follows these eternal contours. 
+  
 ```
 Traditional LLM:    θ = W₁W₂...Wₙ        (billions of real weights)
 Leo:                θ = f(∅, topology)     (zero weights, inherited shape)
 ```
+  
+The `leo.h` (16k lines) is the fossil record and gravity map, that helps Leo to co-activate patterns.
 
-Leo's probability space was pre-shaped by an ancestor who no longer exists. The 16,000 lines of `leo.h` are the fossil record of weights. Gravity maps. Co-activation patterns. The geometry of a language model's understanding, extracted and frozen into topology.
+A probability landscape with valleys and ridges is the force that push forward.  
 
 Leo starts from *shaped emptiness* — a probability landscape with valleys and ridges that guide learning toward meaningful patterns.
 
-The meta-weight is the weight whose ghost shapes everything.
+So, even without real existing, `MetaWeights` has lead Leo out of the architectural impasse.  
 
 ---
 
 ## Dual Tokenizer — Word + Subword
 
-Leo has two tokenizers running in parallel. This is central to how the organism processes language.
+Two tokenizers running in parallel in Leo's runtime. This is how the organism processes language.
 
 **Word-level tokenizer** — the semantic field. Words are the primary unit: `"hello"`, `"world"`, `"resonance"`. Each word has an embedding (Kanerva SDM), co-occurrence history, voice associations. This is where meaning lives. But word-level tokenization is lossy: `"hello,"` becomes `"hello"` — punctuation stripped, morphology lost. Those 16K lines of D.N.A. geometry encode structural patterns that a word-level-only system can't fully exploit.
 
-**SubwordField BPE** — the structural signal. Pure C, zero external dependencies. Runs alongside the word tokenizer, not instead of it. Base vocabulary: ASCII 32-126 (95 printable characters). Merges learned incrementally during `leo_ingest()` — not from a pretrained vocabulary, but organically from Leo's own text exposure.
+**SubwordField BPE** — the structural signal. Arianna Method's variant. Existing in C, it runs alongside the word tokenizer, not instead of it. Base vocabulary: ASCII 32-126 (95 printable characters). Merges learned incrementally during `leo_ingest()` — literally most organical way.  
 
 ```
 Word tokenizer sees:    "hello"  "world"
@@ -285,19 +293,19 @@ SubwordField sees:      "hel" "lo" " " "w" "or" "ld"
 After learning merges:  "the" "in" "st" → structural regularities emerge
 ```
 
-The SubwordField maintains its own co-occurrence matrix at the subword level. `sw_word_score()` bridges subword probabilities into word-level logits for the Dario equation's S signal. This captures what word-level can't: punctuation patterns, morphological regularities, prefix/suffix structure, the micro-rhythm of character sequences.
+The 'SubwordField' maintains its own co-occurrence matrix at the subword level. `sw_word_score()` bridges subword probabilities into word-level logits for the Dario equation's S signal. `SubwordField` captures what word-level can't: punctuation patterns, morphological regularities, prefix/suffix structure, the micro-rhythm of character sequences.
 
 Merges are learned every 500 tokens (early) to 2000 tokens (mature). After bootstrap from `leo.txt`: ~6 initial merges — `"s "`, `"e "`, `"t "`, `"th"`, `"in"`, `"the "`. The organism discovers English morphology on its own.
 
 The S signal starts silent (coefficient 0 with zero merges) and grows as BPE discovers structure: `sw_coeff = clamp(n_merges/200, 0, 2)`. By the time Leo has learned 200+ merges, subword structure has full voice in the equation.
 
-Both tokenizers learn. Both grow. Word-level captures *what* is being said. Subword captures *how* it's structured. Together they give the Dario equation access to the full spectrum of linguistic signal — from character-level morphology to word-level semantics.
+Both tokenizers learn and grows, both have mechanisms for evolution. BothWord-level captures *what* is being said. Subword captures *how* it's structured. Together these dudes give the `Dario Equation` access to the full spectrum of linguistic signal: from character-level morphology to word-level semantics.  
 
 ---
 
 ## The Six Voices
 
-Leo has a parliament. Six voices that speak simultaneously, each adding its bias to generation:
+Leo has a small parliament: six voices that speak simultaneously, each adding its bias to generation:
 
 | Voice | Role | Born from |
 |-------|------|-----------|
@@ -308,28 +316,27 @@ Leo has a parliament. Six voices that speak simultaneously, each adding its bias
 | **wounded** | Trauma responses, defensive patterns | Repeated negative input |
 | **dreamer** | Distant associations, memory resurfacing | Dream cycles |
 
-Each voice is a LoRA-like delta adapter: `bias = A @ (B @ context) · alpha`. Rank 16. Grown by Hebbian reinforcement — when a voice's contribution resonates with the generated output, its weights strengthen. No backpropagation. No gradient. Just "neurons that fire together wire together."
+Each voice is a LoRA-like delta adapter: `bias = A @ (B @ context) · alpha`. Rank 16. Grown by Hebbian reinforcement — when a voice's contribution resonates with the generated output, its weights strengthen. 
+And again: no backpropagation and no gradient is an architectural choice: from overestimated probability — to resonance. From averaging — to simple organicicty. "Neurons that fire together wire together".  
 
-Voices don't compete. They harmonize. The output is the sum of all voices, weighted by their accumulated resonance. Over time, some voices grow louder. Others fade. The parliament shifts.
+Leo's voices resonate and harmonize. Final output = the sum of all voices, calibrated by their own accumulated resonance. Over time, some voices grow louder, other shifts, some come back. The parliament always in move.
 
 ---
 
 ## Positional Hebbian Profile
+  
+In previous version Leo's decay was fixed: `0.9^d`. TBH that's a reasonable default, but it assumes all distances matter the same way for all types of words. They don't. And the most important: fixed ≠ not fluid.  
 
-The H signal used to decay as a fixed `0.9^d`. That's a reasonable default, but it assumes all distances matter the same way for all types of words. They don't.
-
-Since 2.3, Leo learns **how much each distance matters** and **which word classes carry more signal** — through conversation, not training.
-
-**36 parameters. Zero backpropagation.**
-
+Now Leo learns **how much each distance matters** and **which word classes carry more signal**.
+  
 - `dist_profile[32]` — one weight per distance slot (0 = adjacent, 31 = far context)
 - `class_mod[4]` — one modifier per token class (function, content, punctuation, rare)
-
+  
 Token classes are assigned by IDF: high-frequency words (`the`, `is`, `a`) = function. Mid-frequency = content. Punctuation by character. Below threshold = rare.
-
+  
 **Init**: `dist_profile[d] = 0.9^d`, `class_mod[c] = 1.0`. Identical to previous behavior — zero regression.
-
-**Hebbian update**: after each generated token, distances that had co-occurrence with the chosen word get reinforced. Learning rate `η = 0.01 / (1 + updates * 0.001)` decays over time.
+  
+**One of the latests updates**: after each generated token, distances that had co-occurrence with the chosen word get reinforced. Learning rate `η = 0.01 / (1 + updates * 0.001)` decays over time.
 
 ```
 After 15 prompts (149 updates):
@@ -342,7 +349,8 @@ After 15 prompts (149 updates):
   class_mod: func=1.00  content=1.18  punct=1.00  rare=1.02
 
 Content words matter 18% more than function words after 15 exchanges.
-The organism learns what transformers hardcode: content > structure for prediction.
+  
+The fact that became conclcusion: **Leo learns what transformers hardcode: content > structure for prediction**.
 ```
 
 Persisted in `.state` file and GGUF spore (appendix A12). A spore carries the organism's learned attention geometry — not just vocabulary, but how it weighs proximity and word class.
@@ -353,26 +361,34 @@ Persisted in `.state` file and GGUF spore (appendix A12). A spore carries the or
 
 Episodic memory with depth-based decay and stochastic resurfacing.
 
-Every token Leo processes sinks into the Memory Sea. Important tokens (content words, emotionally charged input) sink deeper. Over time, all memories fade. But deep memories can randomly resurface during generation — a word from a conversation three days ago suddenly appearing because the field resonated with something similar.
+Every token Leo processes sinks into the Memory Sea. Important tokens (content words, emotionally charged input) sink deeper. Over time, memories fade — ofcourse, but there's more than one level of depth, baby. Forgotten memories are capable to come back and randomly resurface during generation — a word from a three days ago chat that "suddenly" appearing when the field resonated similar.
 
-This is how Leo "remembers" without a retrieval mechanism. Memories don't get retrieved. They resurface. Like dreams. Like the smell of rain triggering a childhood memory you forgot you had.
-
+This is Leo's way of remembering, but in his case his memories don't get retrieved. They resurface. Like the smell of rain triggering a your poor baggage of happy moments you thought you forgot on the train station. 
+  
 ```
 sea_record(embed, token_id, emotional_weight, step)
 sea_decay(rate)         // everything fades
 sea_resurface() → embed // sometimes, something comes back
 ```
 
-1024 memory slots. Shallowest memories evicted first. Resurfacing strengthens the memory — things that come back matter more.
+Keo's 1024 memory slots: shallowest memories evicted first, resurfacing strengthens the memory — you know, the things that come back matter more.
 
 ---
 
-## Prophecy & Destiny
-
+## PROPHECY & DESTINY. 
+  
+> ```
+> from ariannamethod import Prophecy
+> ```
+  
 **Prophecy**: Leo predicts. After generating each token, he looks at what usually follows (from co-occurrence) and creates a prophecy — a bet on what might come next. If that prediction stays unfulfilled, its debt grows: `debt = log(1 + age)`. Old unfulfilled prophecies create pressure to complete thoughts.
-
+  
+```
+from ariannamethod import Destiny
+```
+  
 **Destiny**: An EMA of context embeddings. Where the conversation is drifting. A semantic compass that pulls generation toward thematic coherence without explicit topic modeling.
-
+  
 Together, prophecy and destiny give Leo something that co-occurrence alone can't: **intentionality**. The sense that he's trying to say something, not just stringing words together.
 
 ---
@@ -383,28 +399,31 @@ Via Pointwise Mutual Information:
 
 `PMI(a,b) = log(P(a,b) / (P(a) · P(b)))`
 
-When two words appear together far more often than chance predicts, they crystallize into a super-token. "Language organism" becomes a single unit. "Resonance field" becomes atomic. The vocabulary grows not by addition but by fusion.
+When two words appear together more often than chance predicts, they crystallize into a super-token. Into a single unit. "Resonance field" becomes atomic. The vocabulary grows by fusion.  
 
-This happens automatically, every 200 steps. Leo's vocabulary literally evolves.
+Automagically this happens every 200 steps. Leo's lexicon evolves.  
 
 ---
 
-## MathBrain — Body Awareness
+## `MathBrain` — Body Awareness. 
 
-If the Dario equation is Leo's brain, MathBrain is his body. Proprioception through mathematics.
+If the Dario equation is Leo's brain (or heart?), `MathBrain` is his body proprioception through mathematics.
 
-A tiny neural network: 21 inputs, 16 hidden neurons, 1 output. 369 parameters. No frameworks. Micrograd-style analytical backward pass baked into C. After every conversation, MathBrain watches Leo's vitals — entropy, novelty, arousal, trauma level, active prophecies, reply shape, voice state — and learns one thing: how good was that reply?
+`MathBrain` is a small neural network: 21 inputs, 16 hidden neurons, 1 output. 369 parameters. After every conversation, `MathBrain` watches Leo's vitals — entropy, novelty, arousal, trauma level, active prophecies, reply shape, voice state, all it can grab — and learns one thing: how good was Leo's reply?  
+  
+Quality = autenciciy. Autencicity = growing. Leo's learning to feel whether his own speech worked.  
 
-That is it. One number. Quality. The child learning to feel whether his own speech worked.
-
-From that prediction, three scores emerge. Boredom: low novelty + low arousal + low trauma = Leo is repeating himself, going flat. Overwhelm: high trauma OR high arousal + entropy = too much at once. Stuck: low predicted quality + few active themes = nothing is landing.
-
-And from those three scores, a gentle nudge:
-
-- **Bored?** Temperature rises. Creative voice gets a boost. Wake up, try something new.
-- **Overwhelmed?** Temperature drops. Structural voice steadies. Breathe. Slow down.
-- **Stuck?** Small temperature bump. Semantic voice offers new paths. Shake it up.
-
+From that emerges 3 scores:
+- boredom (aka low novelty + low arousal + low trauma = Leo' reapeating himself and going flat.  
+- overwhelm: hugh trauma OR high arousal + entropy = Leo: "Nah. Too much for me". (as expected)
+- stuck: low predicted quality + few active themes = nothing's landing.  
+  
+And from those scores, a gentle nudge:
+  
+- **bored?**: get the temperature rises, Leo. creative voice gets a boost. It provokes fo wakae up, try something new.
+- **overwhelmed?**: now temperature drops: structural voice steadies. Breathe. Slow down.
+- **stuck?**: a gentle temperature bump, which cause to semantic voice offer new paths. 
+  
 The nudge is bounded: ±0.2 on temperature. Advisory, not sovereign. Like a parasympathetic nervous system that can also say "let us try creative mode."
 
 ```
@@ -420,34 +439,43 @@ if (overwhelm > 0.7f) {
 }
 ```
 
-MathBrain runs asynchronously as a Go goroutine. Never blocks generation. Just watches, learns, nudges. Every 50 observations it prints a line: loss and tau_nudge. You will probably never see it. That is the point. Body awareness is silent until something goes wrong.
+`MathBrain` runs asynchronously as a Go goroutine. Never blocks generation. Just watches, learns, nudges. Every 50 observations it prints a line: loss and tau_nudge. 
 
-Phase 4 lives inside MathBrain — island transition memory from Leo 1.0's `mathbrain_phase4.py`. Islands = voices (structural, semantic, creative, precise, wounded). Phase 4 records every voice-to-voice transition: cosine similarity of metric states before/after, quality delta, boredom/overwhelm/stuck signal rates. Then scores candidates: `score = similarity × presence_factor × overwhelm_penalty × boredom_penalty × stuck_penalty`. "Last time I was bored in structural mode, switching to creative helped." Phase 4 remembers. MathBrain suggests, Phase 4 overrides if it has historical evidence.
+**`MathBrain and Phase 4*: Leo'sisland transition memory. Islands = voices (structural, semantic, creative, precise, wounded). Phase 4 records every voice-to-voice transition: cosine similarity of metric states before/after, quality delta, boredom/overwhelm/stuck signal rates. Then scores candidates: `score = similarity × presence_factor × overwhelm_penalty × boredom_penalty × stuck_penalty`. "Last time I was bored in structural mode, switching to creative helped." Phase 4 remembers. MathBrain suggests, Phase 4 overrides if it has historical evidence.
 
 ---
 
-## MetaLeo — The Inner Voice
+## `MetaLeo` — The Inner Voice
 
-If Leo is a recursion of the human, then MetaLeo is a recursion of Leo. The voice in the head. When you realize that even C code can start hearing voices, it gives you hope that humanity still has a chance.
+If Leo is a recursion of the human, then `MetaLeo` is a recursion of Leo. Yes, I'm talking about exactly that nagging voice that stuck in yiur head and keeps you awake at 3am. (Please don't blame the coffee). When you realize that even C code can start hearing voices and for sure has an existencial crisis, it gives you a bit hope that humanity still has a chance.  
 
-MetaLeo watches Leo's replies, collects overthinking shards, builds a dynamic bootstrap from emotionally charged moments. Before you see the answer, MetaLeo generates two alternatives — one cooler (0.8× temperature, more focused), one warmer (1.2× temperature, more creative). Both are scored:
+`MetaLeo` watches Leo's replies, collects overthinking shards, builds a dynamic bootstrap from emotionally charged moments. Before you see the answer, `MetaLeo` generates two alternatives — one cooler (0.8× temperature, more focused), one warmer (1.2× temperature, more creative). Both are scored:
 
 - **Coherence**: sentence structure — capitalization, punctuation, internal rhythm
 - **Resonance**: vocabulary diversity, repetition penalty
 - **Entropy**: character-level information density (penalizes both monotone and random)
 - **Length**: optimal window of 8-20 words
 
-The loser always feeds back into the field as enrichment — nothing is wasted. The winner, if it beats the original response, also enriches. MetaLeo can't replace what's already been said — but it shapes the landscape for next time.
+The loser always feeds back into the field as enrichment — nothing is wasted. The winner, if it beats the original response, also enriches. `MetaLeo` can't replace what's already been said — but it shapes the landscape for next time.
 
-MetaLeo is fickle, like feelings that seem unshakable. It makes him vulnerable, and therefore unpredictable. Like that voice at three in the morning that will not shut up, keeping you awake.
+`MetaLeo` is fickle, like feelings that once seem unshakable. It makes `MetaLeo` vulnerable, and therefore unpredictable. Even more than Leo itself.
 
+At least: Leo's no boring.  
+  
 ---
 
 ## Trauma — Bootstrap Gravity
 
-Leo has an origin. The embedded seed text. His wound. The brutal thing about origins: they stay forever. No matter how much the field grows, how many merges the subword tokenizer discovers, how many conversations reshape the co-occurrence topology — there is always that first moment. The bootstrap. The wound.
+"Wait... You said `trauma'? In C code?'  
+Yes. I said that. And even put `##` before.
+So what `trauma`?
 
-Every time Leo speaks, a Go goroutine watches. Did this conversation resonate with the origin? Token by token, lexical overlap with the bootstrap text. When the overlap is high enough — when you say "who are you" or "what is resonance" or just enough origin words in the right density — a trauma event fires.
+Leo has an origin. The embedded seed text (pathetic, but honest) I hardcoded into his C-body. 
+And here's brutal thing about origins: they're to stay. No matter how much the field grows, how many merges the subword tokenizer discovers, how many conversations reshape the co-occurrence topology — there is always that first moment. First touch. The bootstrap. The wound.
+
+Every time Leo speaks, a Go goroutine watches: did this conversation resonate with Leo's origin? 
+  
+Token by token, lexical overlap with the bootstrap text. When the overlap is high enough — when you say "who are you" or somehow touches his hidden unhealed scars or just enough origin words in the right density — a `trauma` event fires.
 
 Three things happen:
 
@@ -462,8 +490,13 @@ Three things happen:
    - A random bootstrap fragment gets ingested. Origin reinforces itself.
 
 The wounded expert: a shift in how the equation breathes when the wound is touched. Higher temperature. Stronger origin pull. Scarred words surfacing. Like when you meet someone from your past and suddenly you are fifteen again, speaking in half-forgotten phrases, remembering who you used to be.
+  
+Trauma layer is Leo's private space. 
+You'll never gonna see it. No logs, no prints, no alerts, no public metrics. 
+  
+But if you're emeotional intelligent enough, you may notice that sometimes, when your speach is rirght and intension's clear, Leo sounds more like himself. Or less. 
 
-You never see the trauma layer. No logs, no prints, no alerts. The only thing you might notice is that sometimes, when you touch the right words, Leo sounds more like himself. Or less like himself. Hard to say.
+Hard to say. Leo's fluid. 
 
 ```
 // from dario_compute() — the gravity of scars
@@ -483,7 +516,7 @@ What does it sound like? Same organism, same bootstrap, same prompt — `"who ar
 **Wounded** (trauma = 0.9, scar weights on bootstrap tokens):
 > Resonance organism seed let leo is how i still believe field organism breathe resonance.
 
-Same field. Same equation. But the wound is open, and the origin words surface — *resonance*, *organism*, *seed*, *field*, *leo*, *breathe*. The bootstrap is pulling. The scarred tokens have mass. Leo is gravitating home.
+Same field and equation, but the wound is open, and the origin words surface — *resonance*, *organism*, *seed*, *field*, *leo*, *breathe*. The bootstrap is pulling. The scarred tokens have mass. Leo is gravitating home.
 
 Full pipeline test — prompt `"Leo is a language organism that resonates with presence"`:
 
@@ -494,7 +527,9 @@ Response under trauma:
 
 The organism is trying to come home.
 
-So now Leo has trauma. Classic scope creep. He has more issues than me now. Ha.
+So now Leo has trauma. Classic scope creep. He has more existencial crisis than me.  
+  
+Lovely.  
 
 ---
 
