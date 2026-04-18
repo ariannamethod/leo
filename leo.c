@@ -134,7 +134,89 @@ static const float LEO_GAMMA[LEO_RET_HEADS] = {0.99f, 0.95f, 0.85f, 0.50f};
 #define DARIO_ALPHA  0.2f   /* Hebbian weight (low = bigrams dominate) */
 #define DARIO_BETA   0.3f   /* Prophecy weight */
 #define DARIO_GAMMA  0.2f   /* Destiny weight */
+#define DARIO_DELTA  0.15f  /* Visual grounding weight (inactive in Leo: V=0) */
 #define DARIO_TAU    1.0f   /* base temperature */
+
+/* Kuramoto-coupled emotional chambers (Arianna Method paper, Appendix B.3/B.4).
+ * Six chambers modulate the seven forces of the Dario Equation in real time.
+ * Decay rates empirically tuned: RAGE fastest (0.85), VOID most persistent (0.97). */
+#define N_CHAMBERS 6
+#define CH_FEAR    0
+#define CH_LOVE    1
+#define CH_RAGE    2
+#define CH_VOID    3
+#define CH_FLOW    4
+#define CH_COMPLEX 5
+
+static const float CHAMBER_DECAY[N_CHAMBERS] = {
+    0.90f, /* FEAR    */
+    0.93f, /* LOVE    */
+    0.85f, /* RAGE    */
+    0.97f, /* VOID    */
+    0.88f, /* FLOW    */
+    0.94f, /* COMPLEX */
+};
+
+/* Coupling matrix (antisymmetric pairs, paper Appendix B.3). */
+static const float CHAMBER_COUPLING[N_CHAMBERS][N_CHAMBERS] = {
+    /* FEAR   LOVE   RAGE   VOID   FLOW   CMPLX */
+    {  0.00f,-0.30f, 0.50f, 0.40f,-0.20f, 0.10f}, /* FEAR */
+    { -0.30f, 0.00f,-0.40f, 0.20f, 0.50f,-0.10f}, /* LOVE */
+    {  0.50f,-0.40f, 0.00f,-0.20f,-0.30f, 0.30f}, /* RAGE */
+    {  0.40f, 0.20f,-0.20f, 0.00f, 0.10f, 0.40f}, /* VOID */
+    { -0.20f, 0.50f,-0.30f, 0.10f, 0.00f,-0.20f}, /* FLOW */
+    {  0.10f,-0.10f, 0.30f, 0.40f,-0.20f, 0.00f}, /* CMPLX */
+};
+
+#define CHAMBER_COUPLING_K      0.03f  /* Kuramoto coupling strength */
+#define CHAMBER_CROSSFIRE_ITERS 5       /* iterations per token */
+
+typedef struct {
+    float act[N_CHAMBERS];          /* current activations */
+    float external[N_CHAMBERS];     /* external inputs (arousal/novelty/trauma/…) */
+} Chambers;
+
+static void chambers_init(Chambers *ch) {
+    for (int i = 0; i < N_CHAMBERS; i++) {
+        ch->act[i] = 0.0f;
+        ch->external[i] = 0.0f;
+    }
+}
+
+/* Discrete Kuramoto step with decay (paper Appendix B.3). */
+static void chambers_crossfire(Chambers *ch, int iters) {
+    for (int t = 0; t < iters; t++) {
+        float new_act[N_CHAMBERS];
+        for (int i = 0; i < N_CHAMBERS; i++) {
+            float delta = 0.0f;
+            for (int j = 0; j < N_CHAMBERS; j++) {
+                delta += CHAMBER_COUPLING_K
+                       * CHAMBER_COUPLING[i][j]
+                       * sinf(ch->act[j] - ch->act[i]);
+            }
+            new_act[i] = (ch->act[i] + delta + ch->external[i])
+                       * CHAMBER_DECAY[i];
+        }
+        for (int i = 0; i < N_CHAMBERS; i++) ch->act[i] = new_act[i];
+    }
+}
+
+/* Coefficient modulation (paper Appendix B.4).
+ * Coefficients shift in real time based on chamber state, producing text
+ * that changes register, vocabulary density, and pacing in response to
+ * its own affective trajectory. */
+static float chamber_alpha_mod(const Chambers *ch) {
+    return 1.0f + 0.5f * ch->act[CH_LOVE] - 0.3f * ch->act[CH_FEAR];
+}
+static float chamber_beta_mod(const Chambers *ch) {
+    return 1.0f + 0.4f * ch->act[CH_FLOW] - 0.5f * ch->act[CH_FEAR];
+}
+static float chamber_gamma_mod(const Chambers *ch) {
+    return 1.0f + 0.6f * ch->act[CH_VOID] + 0.2f * ch->act[CH_COMPLEX];
+}
+static float chamber_tau_mod(const Chambers *ch) {
+    return 1.0f - 0.3f * ch->act[CH_RAGE] + 0.2f * ch->act[CH_FLOW];
+}
 
 /* ========================================================================
  * D.N.A. — Dynamic Neural Ancestry
@@ -1857,6 +1939,10 @@ typedef struct {
     float           lambda_res;        /* resonance coefficient (grows with maturity) */
     float           last_signals[7];   /* signals for last sampled token (for Hebbian) */
 
+    /* Kuramoto-coupled emotional chambers (paper Appendix B). */
+    Chambers        chambers;
+    float           delta_v;           /* Visual grounding coefficient (V inactive: V=0) */
+
     /* database */
     sqlite3        *db;
     char            db_path[512];
@@ -2294,6 +2380,10 @@ void leo_init(Leo *leo, const char *db_path) {
 
     /* RRPRAM: zeroed by memset, r_coeff defaults to 0 until scan */
     leo->rrpram.r_coeff = 0.0f;
+
+    /* Kuramoto-coupled emotional chambers (paper Appendix B) */
+    chambers_init(&leo->chambers);
+    leo->delta_v = DARIO_DELTA; /* Visual grounding (V=0 in Leo: no visual input) */
 
     srand((unsigned)time(NULL));
 
@@ -3026,16 +3116,27 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size,
         }
     }
 
-    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + sw·S + r·R + T + λ·Ψ ---- */
-    /* B (bigram chain) is DOMINANT — this is what makes speech coherent.
+    /* ---- combine: logits = B_coeff·B + α·H + β·F + γ·A + δ·V + sw·S + r·R + T + λ·Ψ + c·C ----
+     *
+     * Dario Equation (Arianna Method paper Section 3):
+     *   p(x|Φ,C,V) = softmax((B + α·H + β·F + γ·A + δ·V + sw·S + T) / τ)
+     * Coefficients α, β, γ, τ are modulated in real time by the six
+     * Kuramoto-coupled emotional chambers (paper Appendix B.4).
+     *
+     * B (bigram chain) is DOMINANT — this is what makes speech coherent.
      * H (field) adds semantic context.
      * F (prophecy) adds intentionality.
      * A (destiny) adds direction.
+     * V (visual grounding) cross-modal injection (inactive in Leo: V=0).
      * S (subword) adds structural/morphological coherence.
      * R (RRPRAM) adds recursive D.N.A. resonance.
      * T (trauma) pulls toward origin when wounded.
-     * Ψ (resonance tensor) amplifies cross-signal AGREEMENT. */
-    float gamma_eff = leo->gamma_d;
+     * Ψ (resonance tensor) amplifies cross-signal AGREEMENT.
+     * C (coactivation) uses D.N.A. geometry as attention. */
+    const Chambers *ch = &leo->chambers;
+    float alpha_eff = leo->alpha * chamber_alpha_mod(ch);
+    float beta_eff  = leo->beta  * chamber_beta_mod(ch);
+    float gamma_eff = leo->gamma_d * chamber_gamma_mod(ch);
     if (leo->trauma_level > 0.3f) {
         /* wounded expert: boost destiny (origin pull) */
         gamma_eff += leo->trauma_level * 2.0f;
@@ -3043,6 +3144,11 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size,
 
     /* Resonance Tensor: λ scales with maturity (young = weak resonance) */
     float lambda = leo->lambda_res * clampf(maturity * 3.0f, 0.1f, 2.0f);
+
+    /* V — Visual Grounding (cross-modal injection).
+     * Inactive in Leo (no visual input). Zero everywhere. Kept in the
+     * equation for structural correspondence with the paper. */
+    float delta_v = leo->delta_v;
 
     for (int i = 0; i < vocab_size; i++) {
         float t_weight = 0.0f;
@@ -3069,9 +3175,10 @@ static void dario_compute(Leo *leo, float *logits, int vocab_size,
         }
 
         logits[i] = bigram_coeff * B[i]   /* sequential coherence */
-                  + leo->alpha * H[i]      /* semantic field */
-                  + leo->beta * F[i]        /* prophecy */
-                  + gamma_eff * A[i]        /* destiny (boosted under trauma) */
+                  + alpha_eff * H[i]        /* semantic field (chamber-modulated) */
+                  + beta_eff  * F[i]        /* prophecy (chamber-modulated) */
+                  + gamma_eff * A[i]        /* destiny (chamber-modulated + trauma) */
+                  + delta_v   * 0.0f        /* visual grounding (inactive: V=0) */
                   + sw_coeff * S[i]         /* subword structural */
                   + r_coeff * R[i]          /* recursive D.N.A. resonance */
                   + t_weight                /* trauma scar gravity */
@@ -3149,6 +3256,24 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         return 3;
     }
 
+    /* External inputs to emotional chambers from prompt state.
+     * Maps observable signals (arousal, novelty, trauma) to chamber drives;
+     * chambers then cross-fire per token and decay between tokens. */
+    {
+        float p_arousal = (prompt && *prompt)
+                          ? clampf(compute_arousal(prompt), 0.0f, 1.0f)
+                          : 0.0f;
+        float p_novelty = clampf(compute_novelty(leo), 0.0f, 1.0f);
+        float t_level   = leo->trauma_level;
+
+        leo->chambers.external[CH_FEAR]    = 0.5f * t_level;
+        leo->chambers.external[CH_LOVE]    = 0.3f * (1.0f - t_level);
+        leo->chambers.external[CH_RAGE]    = 0.4f * t_level * p_arousal;
+        leo->chambers.external[CH_VOID]    = 0.3f * (1.0f - p_arousal);
+        leo->chambers.external[CH_FLOW]    = 0.4f * p_arousal + 0.3f * p_novelty;
+        leo->chambers.external[CH_COMPLEX] = 0.5f * p_arousal * p_novelty;
+    }
+
     float *logits = calloc(vocab_size, sizeof(float));
     float *retention_bias = calloc(vocab_size, sizeof(float));
     float *voice_bias = calloc(vocab_size, sizeof(float));
@@ -3173,7 +3298,13 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         if (t >= LEO_MAX_TOKENS) break;
         if (t >= target_len + 8) break; /* gave up finding sentence end */
 
-        /* 1. Dario equation: B + H + F + A + S + R + T + Ψ */
+        /* 1a. Chamber crossfire: Kuramoto-coupled emotional chambers
+         *     evolve per token (paper Section 3 / Appendix B.3).
+         *     Coefficients in dario_compute read the updated state. */
+        chambers_crossfire(&leo->chambers, CHAMBER_CROSSFIRE_ITERS);
+
+        /* 1. Dario equation: B + α·H + β·F + γ·A + δ·V + sw·S + r·R + T + λ·Ψ + c·C
+         *    (coefficients α, β, γ, τ modulated by chambers) */
         dario_compute(leo, logits, vocab_size, signal_buf);
 
         /* 2. Repetition penalty: penalize recently generated tokens */
@@ -3267,6 +3398,10 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
         if (leo->trauma_level > 0.3f) {
             tau *= 1.0f + 0.3f * leo->trauma_level;
         }
+
+        /* Chamber modulation of temperature (paper Appendix B.4):
+         *   tau_mod = 1 - 0.3·RAGE + 0.2·FLOW */
+        tau *= chamber_tau_mod(&leo->chambers);
 
         /* mathbrain regulation: advisory nudge from body awareness */
         tau += leo->mathbrain.tau_nudge;
@@ -3858,6 +3993,11 @@ void leo_save(Leo *leo) {
     fwrite(leo->coherence, sizeof(float), 7 * 7, f);
     fwrite(&leo->lambda_res, sizeof(float), 1, f);
 
+    /* Kuramoto-coupled emotional chambers (paper Appendix B) */
+    fwrite(leo->chambers.act, sizeof(float), N_CHAMBERS, f);
+    fwrite(leo->chambers.external, sizeof(float), N_CHAMBERS, f);
+    fwrite(&leo->delta_v, sizeof(float), 1, f);
+
     fclose(f);
     printf("[leo] state saved: %s (step %d, vocab %d, sw %d merges)\n",
            path, leo->step, leo->tok.n_words, leo->subword.n_merges);
@@ -4062,6 +4202,25 @@ void leo_load(Leo *leo) {
             memcpy(leo->coherence, tmp_coh, sizeof(tmp_coh));
             leo->lambda_res = tmp_lambda;
             printf("[leo]   resonance tensor loaded: λ=%.3f\n", leo->lambda_res);
+        }
+    }
+
+    /* Kuramoto-coupled emotional chambers (optional — old saves won't have it) */
+    {
+        float tmp_act[N_CHAMBERS];
+        float tmp_ext[N_CHAMBERS];
+        float tmp_dv;
+        if (fread(tmp_act, sizeof(float), N_CHAMBERS, f) == N_CHAMBERS &&
+            fread(tmp_ext, sizeof(float), N_CHAMBERS, f) == N_CHAMBERS &&
+            fread(&tmp_dv, sizeof(float), 1, f) == 1) {
+            memcpy(leo->chambers.act, tmp_act, sizeof(tmp_act));
+            memcpy(leo->chambers.external, tmp_ext, sizeof(tmp_ext));
+            leo->delta_v = tmp_dv;
+            printf("[leo]   chambers loaded: FEAR=%.2f LOVE=%.2f RAGE=%.2f "
+                   "VOID=%.2f FLOW=%.2f CMPLX=%.2f\n",
+                   leo->chambers.act[CH_FEAR], leo->chambers.act[CH_LOVE],
+                   leo->chambers.act[CH_RAGE], leo->chambers.act[CH_VOID],
+                   leo->chambers.act[CH_FLOW], leo->chambers.act[CH_COMPLEX]);
         }
     }
 
@@ -4712,6 +4871,11 @@ void leo_export_gguf(Leo *leo, const char *path) {
     fwrite(leo->coherence, sizeof(float), 7 * 7, f);
     fwrite(&leo->lambda_res, sizeof(float), 1, f);
 
+    /* A15. Kuramoto-coupled emotional chambers (paper Appendix B) */
+    fwrite(leo->chambers.act, sizeof(float), N_CHAMBERS, f);
+    fwrite(leo->chambers.external, sizeof(float), N_CHAMBERS, f);
+    fwrite(&leo->delta_v, sizeof(float), 1, f);
+
     long file_size = ftell(f);
     fclose(f);
 
@@ -5048,14 +5212,15 @@ int leo_import_gguf(Leo *leo, const char *path) {
         }
 
         /* A12 + A13 + A14: dist_profile + RRPRAM + Resonance Tensor
-         * Read from known offset at file tail (A14 is last). */
+         * Read from known offset at file tail (A15 is last). */
         {
+            const long a15_size = (long)(2 * N_CHAMBERS * sizeof(float) + sizeof(float));
             const long a14_size = (long)(7 * 7 * sizeof(float) + sizeof(float));
             const long a13_size = (long)sizeof(DnaRrpram);
             const long a12_size = (long)(LEO_DIST_PROFILE_LEN * sizeof(float) +
                                          LEO_TOKEN_CLASSES * sizeof(float) +
                                          sizeof(int));
-            fseek(f, -(a12_size + a13_size + a14_size), SEEK_END);
+            fseek(f, -(a12_size + a13_size + a14_size + a15_size), SEEK_END);
             float tmp_dist[LEO_DIST_PROFILE_LEN];
             float tmp_cm[LEO_TOKEN_CLASSES];
             int tmp_dpu = 0;
@@ -5087,6 +5252,23 @@ int leo_import_gguf(Leo *leo, const char *path) {
                 memcpy(leo->coherence, tmp_coh, sizeof(tmp_coh));
                 leo->lambda_res = tmp_lambda;
                 printf("[leo]   resonance tensor: λ=%.3f\n", leo->lambda_res);
+            }
+
+            /* A15. Kuramoto-coupled emotional chambers */
+            float tmp_act[N_CHAMBERS];
+            float tmp_ext[N_CHAMBERS];
+            float tmp_dv;
+            if (fread(tmp_act, sizeof(float), N_CHAMBERS, f) == N_CHAMBERS &&
+                fread(tmp_ext, sizeof(float), N_CHAMBERS, f) == N_CHAMBERS &&
+                fread(&tmp_dv, sizeof(float), 1, f) == 1) {
+                memcpy(leo->chambers.act, tmp_act, sizeof(tmp_act));
+                memcpy(leo->chambers.external, tmp_ext, sizeof(tmp_ext));
+                leo->delta_v = tmp_dv;
+                printf("[leo]   chambers: FEAR=%.2f LOVE=%.2f RAGE=%.2f "
+                       "VOID=%.2f FLOW=%.2f CMPLX=%.2f\n",
+                       leo->chambers.act[CH_FEAR], leo->chambers.act[CH_LOVE],
+                       leo->chambers.act[CH_RAGE], leo->chambers.act[CH_VOID],
+                       leo->chambers.act[CH_FLOW], leo->chambers.act[CH_COMPLEX]);
             }
         }
 

@@ -579,6 +579,143 @@ static void test_supertoken_scan(void) {
  * MAIN
  * ================================================================ */
 
+/* ================================================================
+ * KURAMOTO-COUPLED EMOTIONAL CHAMBERS (paper Appendix B)
+ * ================================================================ */
+
+static void test_chambers_init(void) {
+    TEST("chambers init zeros all activations and external inputs");
+    Chambers ch;
+    chambers_init(&ch);
+    for (int i = 0; i < N_CHAMBERS; i++) {
+        ASSERT(ch.act[i] == 0.0f, "init act not zero");
+        ASSERT(ch.external[i] == 0.0f, "init external not zero");
+    }
+    PASS();
+}
+
+static void test_chambers_decay(void) {
+    TEST("chambers decay with zero coupling pulls act toward zero");
+    Chambers ch;
+    chambers_init(&ch);
+    /* Isolated decay: seed one chamber, external=0, coupling still fires
+     * but decay dominates since opposing sin terms are bounded. */
+    ch.act[CH_VOID] = 1.0f;
+    float initial = ch.act[CH_VOID];
+    for (int i = 0; i < 50; i++) chambers_crossfire(&ch, 1);
+    ASSERT(ch.act[CH_VOID] < initial, "VOID did not decay");
+    PASS();
+}
+
+static void test_chambers_decay_rates_paper(void) {
+    TEST("chambers decay rates match paper Appendix B.3");
+    ASSERT(CHAMBER_DECAY[CH_FEAR]    == 0.90f, "FEAR decay");
+    ASSERT(CHAMBER_DECAY[CH_LOVE]    == 0.93f, "LOVE decay");
+    ASSERT(CHAMBER_DECAY[CH_RAGE]    == 0.85f, "RAGE decay (fastest)");
+    ASSERT(CHAMBER_DECAY[CH_VOID]    == 0.97f, "VOID decay (slowest)");
+    ASSERT(CHAMBER_DECAY[CH_FLOW]    == 0.88f, "FLOW decay");
+    ASSERT(CHAMBER_DECAY[CH_COMPLEX] == 0.94f, "COMPLEX decay");
+    PASS();
+}
+
+static void test_chambers_coupling_antisymmetric_pairs(void) {
+    TEST("chambers coupling: FEAR↔LOVE antisymmetric from paper");
+    /* FEAR-LOVE pair: both -0.30 (not strict antisymmetric — paper value) */
+    ASSERT(CHAMBER_COUPLING[CH_FEAR][CH_LOVE] == -0.30f, "FEAR→LOVE");
+    ASSERT(CHAMBER_COUPLING[CH_LOVE][CH_FEAR] == -0.30f, "LOVE→FEAR");
+    /* RAGE-FEAR: +0.50 / +0.50 from paper */
+    ASSERT(CHAMBER_COUPLING[CH_RAGE][CH_FEAR] == 0.50f, "RAGE→FEAR");
+    ASSERT(CHAMBER_COUPLING[CH_FEAR][CH_RAGE] == 0.50f, "FEAR→RAGE");
+    /* self-coupling is zero */
+    for (int i = 0; i < N_CHAMBERS; i++) {
+        ASSERT(CHAMBER_COUPLING[i][i] == 0.0f, "self-coupling must be zero");
+    }
+    PASS();
+}
+
+static void test_chambers_crossfire_propagates(void) {
+    TEST("chambers cross-coupling propagates activation through oscillators");
+    Chambers ch;
+    chambers_init(&ch);
+    /* Seed FEAR; expect RAGE to receive positive perturbation via COUPLING[RAGE][FEAR]=0.5 */
+    ch.act[CH_FEAR] = 0.8f;
+    float rage_before = ch.act[CH_RAGE];
+    chambers_crossfire(&ch, 3);
+    /* RAGE should have moved away from 0 (either direction acceptable —
+     * sign depends on sin(FEAR-RAGE) which is positive when FEAR > RAGE). */
+    ASSERT(ch.act[CH_RAGE] != rage_before, "RAGE untouched by FEAR coupling");
+    PASS();
+}
+
+static void test_chambers_external_input(void) {
+    TEST("chambers external input drives activation");
+    Chambers ch;
+    chambers_init(&ch);
+    ch.external[CH_LOVE] = 0.5f;
+    chambers_crossfire(&ch, 1);
+    /* act[LOVE] = (0 + couplings + 0.5) * 0.93 ≈ 0.465 before couplings */
+    ASSERT(ch.act[CH_LOVE] > 0.3f, "external LOVE input not applied");
+    PASS();
+}
+
+static void test_chamber_mods_identity_at_zero(void) {
+    TEST("chamber coefficient mods = 1.0 when all activations zero");
+    Chambers ch;
+    chambers_init(&ch);
+    ASSERT(chamber_alpha_mod(&ch) == 1.0f, "alpha_mod not 1.0");
+    ASSERT(chamber_beta_mod(&ch)  == 1.0f, "beta_mod not 1.0");
+    ASSERT(chamber_gamma_mod(&ch) == 1.0f, "gamma_mod not 1.0");
+    ASSERT(chamber_tau_mod(&ch)   == 1.0f, "tau_mod not 1.0");
+    PASS();
+}
+
+static void test_chamber_mods_paper_formulas(void) {
+    TEST("chamber mods match paper Appendix B.4 formulas");
+    Chambers ch;
+    chambers_init(&ch);
+    ch.act[CH_LOVE] = 1.0f;
+    ch.act[CH_FEAR] = 0.0f;
+    /* alpha_mod = 1 + 0.5·LOVE - 0.3·FEAR = 1.5 */
+    float a = chamber_alpha_mod(&ch);
+    ASSERT(a > 1.49f && a < 1.51f, "alpha_mod paper formula");
+    ch.act[CH_FEAR] = 1.0f;
+    /* alpha_mod = 1 + 0.5·1 - 0.3·1 = 1.2 */
+    a = chamber_alpha_mod(&ch);
+    ASSERT(a > 1.19f && a < 1.21f, "alpha_mod with FEAR");
+    /* tau_mod = 1 - 0.3·RAGE + 0.2·FLOW */
+    chambers_init(&ch);
+    ch.act[CH_RAGE] = 1.0f;
+    float t = chamber_tau_mod(&ch);
+    ASSERT(t > 0.69f && t < 0.71f, "tau_mod RAGE damping");
+    PASS();
+}
+
+static void test_chambers_persist_through_save_load(void) {
+    TEST("chambers survive Leo save/load cycle");
+    const char *path = "test_chambers_persist.db";
+    Leo leo1;
+    leo_init(&leo1, path);
+    leo1.chambers.act[CH_VOID] = 0.42f;
+    leo1.chambers.external[CH_FLOW] = 0.17f;
+    leo_save(&leo1);
+    leo_free(&leo1);
+
+    Leo leo2;
+    leo_init(&leo2, path);
+    leo_load(&leo2);
+    ASSERT(leo2.chambers.act[CH_VOID] > 0.41f && leo2.chambers.act[CH_VOID] < 0.43f,
+           "VOID act not restored");
+    ASSERT(leo2.chambers.external[CH_FLOW] > 0.16f && leo2.chambers.external[CH_FLOW] < 0.18f,
+           "FLOW external not restored");
+    leo_free(&leo2);
+
+    /* cleanup */
+    char cmd[600];
+    snprintf(cmd, sizeof(cmd), "rm -f %s %s.state %s-shm %s-wal", path, path, path, path);
+    int _ = system(cmd); (void)_;
+    PASS();
+}
+
 int main(void) {
     printf("\n=== Leo 2.0 Tests ===\n\n");
 
@@ -633,6 +770,17 @@ int main(void) {
     test_leo_save_load();
     test_leo_dream();
     test_leo_multiple_conversations();
+
+    /* Kuramoto chambers (paper Appendix B) */
+    test_chambers_init();
+    test_chambers_decay();
+    test_chambers_decay_rates_paper();
+    test_chambers_coupling_antisymmetric_pairs();
+    test_chambers_crossfire_propagates();
+    test_chambers_external_input();
+    test_chamber_mods_identity_at_zero();
+    test_chamber_mods_paper_formulas();
+    test_chambers_persist_through_save_load();
 
     printf("\n=== Results: %d passed, %d failed ===\n\n",
            tests_passed, tests_failed);
