@@ -1,3 +1,19 @@
+# ⚠️ ARCHIVED — LEO HAS MOVED
+
+## 🔗 NEW HOME: [github.com/ariannamethod/neoleo](https://github.com/ariannamethod/neoleo)
+
+**This repository is archived** and preserved as the academic reference for
+the Arianna Method paper (DOI: [10.5281/zenodo.19638451](https://doi.org/10.5281/zenodo.19638451)).
+
+- **Paper-referenced code**: `main` branch, commit history up to `4c9d835`
+  (Kuramoto chambers added to match paper Appendix B).
+- **Zenodo-cited snapshot**: commit `239143c` (verification runs).
+- **Python original**: branch [`python-legacy`](https://github.com/ariannamethod/leo/tree/python-legacy).
+
+For active development, new body, same γ — **go to [neoleo](https://github.com/ariannamethod/neoleo)**.
+
+---
+
 <p align="center">
   <img src="assets/leo.png" alt="Leo" width="300">
 </p>
