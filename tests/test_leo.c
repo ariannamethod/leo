@@ -647,6 +647,19 @@ static void test_chambers_crossfire_propagates(void) {
     PASS();
 }
 
+static void test_chambers_clamped_to_unit_interval(void) {
+    TEST("chambers activations clamped to [0,1] even under heavy drive");
+    Chambers ch;
+    chambers_init(&ch);
+    ch.external[CH_VOID] = 5.0f; /* extreme drive — would overflow without clamp */
+    for (int i = 0; i < 50; i++) chambers_crossfire(&ch, 1);
+    for (int i = 0; i < N_CHAMBERS; i++) {
+        ASSERT(ch.act[i] >= 0.0f && ch.act[i] <= 1.0f,
+               "activation escaped [0,1]");
+    }
+    PASS();
+}
+
 static void test_chambers_external_input(void) {
     TEST("chambers external input drives activation");
     Chambers ch;
@@ -716,6 +729,336 @@ static void test_chambers_persist_through_save_load(void) {
     PASS();
 }
 
+/* ================================================================
+ * VEC UTILITIES (coverage: vec_add, vec_axpy, vec_scale, vec_zero, vec_copy)
+ * ================================================================ */
+
+static void test_vec_axpy(void) {
+    TEST("vec: axpy (y = y + a*x)");
+    float y[4] = {1, 2, 3, 4};
+    float x[4] = {1, 1, 1, 1};
+    vec_axpy(y, 2.0f, x, 4);
+    ASSERT(y[0] == 3 && y[1] == 4 && y[2] == 5 && y[3] == 6, "axpy incorrect");
+    PASS();
+}
+
+static void test_vec_add(void) {
+    TEST("vec: element-wise add");
+    float dst[3] = {0}, a[3] = {1, 2, 3}, b[3] = {4, 5, 6};
+    vec_add(dst, a, b, 3);
+    ASSERT(dst[0] == 5 && dst[1] == 7 && dst[2] == 9, "vec_add wrong");
+    PASS();
+}
+
+static void test_vec_scale(void) {
+    TEST("vec: scale");
+    float v[3] = {1, 2, 3};
+    vec_scale(v, 3.0f, 3);
+    ASSERT(v[0] == 3 && v[1] == 6 && v[2] == 9, "vec_scale wrong");
+    PASS();
+}
+
+static void test_vec_zero_copy(void) {
+    TEST("vec: zero and copy");
+    float a[4] = {1, 2, 3, 4};
+    float b[4];
+    vec_copy(b, a, 4);
+    ASSERT(b[0] == 1 && b[3] == 4, "vec_copy wrong");
+    vec_zero(a, 4);
+    ASSERT(a[0] == 0 && a[3] == 0, "vec_zero wrong");
+    PASS();
+}
+
+static void test_randf_range(void) {
+    TEST("randf: in [0, 1)");
+    for (int i = 0; i < 100; i++) {
+        float r = randf();
+        ASSERT(r >= 0.0f && r < 1.0f, "randf out of range");
+    }
+    PASS();
+}
+
+static void test_clampf(void) {
+    TEST("clampf: clamps to range");
+    ASSERT(clampf(-1.0f, 0.0f, 1.0f) == 0.0f, "low clamp");
+    ASSERT(clampf(2.0f, 0.0f, 1.0f) == 1.0f, "high clamp");
+    ASSERT(clampf(0.5f, 0.0f, 1.0f) == 0.5f, "in-range passthrough");
+    PASS();
+}
+
+/* ================================================================
+ * SUBWORD TESTS (sw_init, sw_encode, sw_ingest, sw_word_score)
+ * ================================================================ */
+
+static void test_subword_init_encode(void) {
+    TEST("subword: init + encode");
+    SubwordField sw;
+    sw_init(&sw);
+    ASSERT(sw.n_tokens > 0, "subword init should seed tokens");
+    int ids[64];
+    int n = sw_encode(&sw, "hello world", ids, 64);
+    ASSERT(n > 0, "sw_encode should produce tokens");
+    sw_free(&sw);
+    PASS();
+}
+
+static void test_subword_ingest_grows(void) {
+    TEST("subword: ingest updates total_tokens");
+    SubwordField sw;
+    sw_init(&sw);
+    int total_before = sw.total_tokens;
+    sw_ingest(&sw, "the quick brown fox jumps over the lazy dog");
+    ASSERT(sw.total_tokens > total_before, "total_tokens should grow");
+    sw_free(&sw);
+    PASS();
+}
+
+static void test_subword_word_score_nonneg(void) {
+    TEST("subword: sw_word_score is non-negative");
+    SubwordField sw;
+    sw_init(&sw);
+    sw_ingest(&sw, "leo the lion loves the light");
+    int ctx_ids[8];
+    int ctx_n = sw_encode(&sw, "leo", ctx_ids, 8);
+    float score = sw_word_score(&sw, "lion", ctx_ids, ctx_n);
+    ASSERT(score >= 0.0f, "score must be non-negative");
+    sw_free(&sw);
+    PASS();
+}
+
+/* ================================================================
+ * TOKEN CLASS + GATE (coverage for compute_gate, token_class)
+ * ================================================================ */
+
+static void test_token_class_punct(void) {
+    TEST("token_class: punctuation detected");
+    LeoTokenizer tok; tok_init(&tok);
+    CoocField c; cooc_init(&c, 512);
+    int id = tok_add(&tok, ".");
+    int tc = token_class(&c, &tok, id);
+    ASSERT(tc == LEO_TC_PUNCT, "'.' should be punct class");
+    cooc_free(&c); tok_free(&tok);
+    PASS();
+}
+
+static void test_compute_gate_range(void) {
+    TEST("compute_gate: returns finite value in [0,1]");
+    CoocField c; cooc_init(&c, 512);
+    c.freq = calloc(16, sizeof(float));
+    c.freq_size = 16;
+    c.freq[5] = 10.0f;
+    c.total_tokens = 100;
+    float g = compute_gate(&c, 5);
+    ASSERT(g >= 0.0f && g <= 1.0f, "gate out of range");
+    free(c.freq); c.freq = NULL;
+    cooc_free(&c);
+    PASS();
+}
+
+/* ================================================================
+ * SOFTMAX + SAMPLE_TOKEN
+ * ================================================================ */
+
+static void test_softmax_sums_to_one(void) {
+    TEST("softmax: probabilities sum to 1.0");
+    float logits[5] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
+    softmax(logits, 5, 1.0f);
+    float sum = 0;
+    for (int i = 0; i < 5; i++) sum += logits[i];
+    ASSERT(fabsf(sum - 1.0f) < 1e-5f, "softmax must sum to 1");
+    PASS();
+}
+
+static void test_softmax_monotonic(void) {
+    TEST("softmax: higher logit = higher prob");
+    float logits[3] = {0.1f, 1.0f, 5.0f};
+    softmax(logits, 3, 1.0f);
+    ASSERT(logits[2] > logits[1] && logits[1] > logits[0], "monotonicity broken");
+    PASS();
+}
+
+static void test_sample_token_deterministic_peak(void) {
+    TEST("sample_token: peaked distribution usually picks peak");
+    float probs[4] = {0.01f, 0.01f, 0.97f, 0.01f};
+    int hits = 0;
+    for (int i = 0; i < 100; i++) {
+        if (sample_token(probs, 4) == 2) hits++;
+    }
+    ASSERT(hits > 80, "peaked sample should hit peak most of the time");
+    PASS();
+}
+
+/* ================================================================
+ * COMPUTE FUNCTIONS (compute_novelty, compute_arousal, compute_quality)
+ * ================================================================ */
+
+static void test_compute_arousal_punctuation(void) {
+    TEST("compute_arousal: exclamations raise arousal");
+    float calm = compute_arousal("the cat sits");
+    float excited = compute_arousal("THE CAT!!! WHAT??");
+    ASSERT(excited > calm, "caps + !? should increase arousal");
+    PASS();
+}
+
+static void test_compute_quality_range(void) {
+    TEST("compute_quality: returns [0,1] for arbitrary text");
+    float q = compute_quality("Leo is here and the world is kind.", 500);
+    ASSERT(q >= 0.0f && q <= 1.0f, "quality out of range");
+    PASS();
+}
+
+static void test_compute_novelty_with_leo(void) {
+    TEST("compute_novelty: returns finite value for short context");
+    Leo leo;
+    leo_init(&leo, "/tmp/test_leo_novelty.db");
+    /* empty context */
+    float n0 = compute_novelty(&leo);
+    ASSERT(n0 >= 0.0f && n0 <= 1.0f, "novelty out of range");
+    leo_free(&leo);
+    remove("/tmp/test_leo_novelty.db.state");
+    remove("/tmp/test_leo_novelty.db");
+    PASS();
+}
+
+/* ================================================================
+ * MATHBRAIN
+ * ================================================================ */
+
+static void test_mathbrain_init_forward(void) {
+    TEST("mathbrain: init + forward produces finite output");
+    MathBrain mb;
+    mathbrain_init(&mb);
+    float feat[MB_INPUT] = {0};
+    float hidden[MB_HIDDEN] = {0};
+    float out = mathbrain_forward(&mb, feat, hidden);
+    ASSERT(out == out /* NaN check */, "output NaN");
+    ASSERT(out >= -100.0f && out <= 100.0f, "output out of sensible range");
+    PASS();
+}
+
+static void test_mathstate_features(void) {
+    TEST("mathstate_to_features: fills MB_INPUT floats");
+    MathState s; memset(&s, 0, sizeof(s));
+    s.entropy = 0.5f; s.novelty = 0.3f; s.arousal = 0.4f;
+    s.overthinking = 1.0f; s.expert_id = 2;
+    float feat[MB_INPUT] = {0};
+    mathstate_to_features(&s, feat);
+    ASSERT(feat[0] == 0.5f, "entropy not set");
+    ASSERT(feat[1] == 0.3f, "novelty not set");
+    ASSERT(feat[14] == 1.0f, "overthinking not set");
+    PASS();
+}
+
+/* ================================================================
+ * PHASE4 (island transitions)
+ * ================================================================ */
+
+static void test_phase4_init(void) {
+    TEST("phase4: init clears state");
+    Phase4 p4;
+    phase4_init(&p4);
+    ASSERT(p4.n_transitions == 0, "transitions not zero");
+    PASS();
+}
+
+static void test_phase4_record_and_suggest(void) {
+    TEST("phase4: record produces suggestion after warmup");
+    Phase4 p4;
+    phase4_init(&p4);
+    float metrics[MB_INPUT] = {0.3f, 0.4f, 0.5f};
+    for (int i = 0; i < 20; i++) {
+        phase4_record(&p4, i % 3, metrics, 0.6f, 0.2f, 0.1f, 0.1f);
+    }
+    /* suggest should not crash even if no good match */
+    int s = phase4_suggest(&p4, 0);
+    ASSERT(s >= -1 && s < 8, "suggest out of range");
+    PASS();
+}
+
+static void test_phase4_cosine(void) {
+    TEST("phase4_cosine: self-similarity = 1");
+    float v[3] = {1, 2, 3};
+    float c = phase4_cosine(v, v, 3);
+    ASSERT(fabsf(c - 1.0f) < 1e-5f, "self cosine != 1");
+    PASS();
+}
+
+/* ================================================================
+ * DARIO COMPUTE (integration check — logits produced, no NaN)
+ * ================================================================ */
+
+static void test_dario_compute_runs(void) {
+    TEST("dario_compute: runs without crash, logits finite");
+    Leo leo;
+    leo_init(&leo, "/tmp/test_leo_dario.db");
+    leo_ingest(&leo, "the quick brown fox jumps over");
+    int V = leo.tok.n_words;
+    if (V < 5) { leo_free(&leo); remove("/tmp/test_leo_dario.db.state");
+                 remove("/tmp/test_leo_dario.db"); FAIL("vocab too small after ingest"); return; }
+    float *logits = calloc(V, sizeof(float));
+    float *buf = calloc(7 * V, sizeof(float));
+    dario_compute(&leo, logits, V, buf);
+    int finite = 1;
+    for (int i = 0; i < V; i++) if (logits[i] != logits[i]) { finite = 0; break; }
+    ASSERT(finite, "logits contain NaN");
+    free(logits); free(buf);
+    leo_free(&leo);
+    remove("/tmp/test_leo_dario.db.state");
+    remove("/tmp/test_leo_dario.db");
+    PASS();
+}
+
+/* ================================================================
+ * PROMPT CAPTURE — verifies the human-only ingestion contract
+ * (Leo must NOT self-capture his output into bi/cooc during generate)
+ * ================================================================ */
+
+static void test_generate_does_not_self_capture(void) {
+    TEST("leo_generate: output tokens not captured into bigram/cooc");
+    Leo leo;
+    leo_init(&leo, "/tmp/test_leo_nocapture.db");
+    leo_bootstrap(&leo);
+    int bi_before = leo.bigrams.n_entries;
+    int cooc_before = leo.cooc.n_entries;
+    float freq_before_sum = 0;
+    for (int i = 0; i < leo.cooc.freq_size; i++) freq_before_sum += leo.cooc.freq[i];
+
+    /* Call generate with NO prompt — any new bi/cooc entries would be self-capture. */
+    char buf[256];
+    leo_generate(&leo, "", buf, sizeof(buf));
+
+    int bi_after = leo.bigrams.n_entries;
+    int cooc_after = leo.cooc.n_entries;
+    float freq_after_sum = 0;
+    for (int i = 0; i < leo.cooc.freq_size; i++) freq_after_sum += leo.cooc.freq[i];
+
+    ASSERT(bi_after == bi_before, "bigram entries grew during empty-prompt generate");
+    ASSERT(cooc_after == cooc_before, "cooc entries grew during empty-prompt generate");
+    ASSERT(fabsf(freq_after_sum - freq_before_sum) < 0.01f,
+           "cooc.freq accumulated from self-output");
+    leo_free(&leo);
+    remove("/tmp/test_leo_nocapture.db.state");
+    remove("/tmp/test_leo_nocapture.db");
+    PASS();
+}
+
+static void test_generate_captures_prompt_tokens(void) {
+    TEST("leo_generate: human words captured via prompt ingestion");
+    Leo leo;
+    leo_init(&leo, "/tmp/test_leo_capture.db");
+    leo_bootstrap(&leo);
+    int vocab_before = leo.tok.n_words;
+    char buf[256];
+    /* Use intentionally novel words the bootstrap does not have. */
+    leo_generate(&leo, "pumpernickel xylophone quokka", buf, sizeof(buf));
+    int vocab_after = leo.tok.n_words;
+    ASSERT(vocab_after > vocab_before, "novel prompt words should grow vocab");
+    leo_free(&leo);
+    remove("/tmp/test_leo_capture.db.state");
+    remove("/tmp/test_leo_capture.db");
+    PASS();
+}
+
 int main(void) {
     printf("\n=== Leo 2.0 Tests ===\n\n");
 
@@ -778,9 +1121,53 @@ int main(void) {
     test_chambers_coupling_antisymmetric_pairs();
     test_chambers_crossfire_propagates();
     test_chambers_external_input();
+    test_chambers_clamped_to_unit_interval();
     test_chamber_mods_identity_at_zero();
     test_chamber_mods_paper_formulas();
     test_chambers_persist_through_save_load();
+
+    /* Vec utilities */
+    test_vec_axpy();
+    test_vec_add();
+    test_vec_scale();
+    test_vec_zero_copy();
+    test_randf_range();
+    test_clampf();
+
+    /* Subword */
+    test_subword_init_encode();
+    test_subword_ingest_grows();
+    test_subword_word_score_nonneg();
+
+    /* Token class + gate */
+    test_token_class_punct();
+    test_compute_gate_range();
+
+    /* Softmax + sample */
+    test_softmax_sums_to_one();
+    test_softmax_monotonic();
+    test_sample_token_deterministic_peak();
+
+    /* Compute helpers */
+    test_compute_arousal_punctuation();
+    test_compute_quality_range();
+    test_compute_novelty_with_leo();
+
+    /* Mathbrain */
+    test_mathbrain_init_forward();
+    test_mathstate_features();
+
+    /* Phase4 */
+    test_phase4_init();
+    test_phase4_record_and_suggest();
+    test_phase4_cosine();
+
+    /* Dario integration */
+    test_dario_compute_runs();
+
+    /* Prompt capture contract (human-only, no self-capture) */
+    test_generate_does_not_self_capture();
+    test_generate_captures_prompt_tokens();
 
     printf("\n=== Results: %d passed, %d failed ===\n\n",
            tests_passed, tests_failed);

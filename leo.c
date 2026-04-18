@@ -176,6 +176,8 @@ typedef struct {
     float external[N_CHAMBERS];     /* external inputs (arousal/novelty/trauma/…) */
 } Chambers;
 
+static float clampf(float x, float lo, float hi); /* forward decl */
+
 static void chambers_init(Chambers *ch) {
     for (int i = 0; i < N_CHAMBERS; i++) {
         ch->act[i] = 0.0f;
@@ -183,7 +185,11 @@ static void chambers_init(Chambers *ch) {
     }
 }
 
-/* Discrete Kuramoto step with decay (paper Appendix B.3). */
+/* Discrete Kuramoto step with decay (paper Appendix B.3).
+ * Activations are clamped to [0, 1] per step — without this clamp,
+ * repeated external injection would let a chamber drift past 1.0,
+ * causing coefficient modulation (Appendix B.4) to overflow its
+ * intended range. Clamping matches Q's ch_xfire behavior. */
 static void chambers_crossfire(Chambers *ch, int iters) {
     for (int t = 0; t < iters; t++) {
         float new_act[N_CHAMBERS];
@@ -196,6 +202,7 @@ static void chambers_crossfire(Chambers *ch, int iters) {
             }
             new_act[i] = (ch->act[i] + delta + ch->external[i])
                        * CHAMBER_DECAY[i];
+            new_act[i] = clampf(new_act[i], 0.0f, 1.0f);
         }
         for (int i = 0; i < N_CHAMBERS; i++) ch->act[i] = new_act[i];
     }
@@ -3467,25 +3474,24 @@ int leo_generate(Leo *leo, const char *prompt, char *out, int max_len) {
             }
         }
 
-        /* 8. Learn */
-        /* bigram update: last context → generated token */
-        if (leo->context_len > 0) {
-            int last = leo->context_ids[leo->context_len - 1];
-            bigram_update(&leo->bigrams, last, next_id, 1.0f);
-        }
-
-        /* co-occurrence update */
-        for (int c = 0; c < leo->context_len; c++) {
-            int dist = leo->context_len - c;
-            float w = 1.0f / (float)dist;
-            cooc_update(&leo->cooc, leo->context_ids[c], next_id, w);
-            cooc_update(&leo->cooc, next_id, leo->context_ids[c], w);
-        }
-
-        /* frequency update */
-        if (next_id < leo->cooc.freq_size)
-            leo->cooc.freq[next_id] += 1.0f;
-        leo->cooc.total_tokens++;
+        /* 8. Learn — INTERNAL STATE ONLY (no self-ingest into bi/cooc).
+         *
+         * Leo learns from the human's words (prompt ingestion), not from
+         * his own output. Self-capture only happens during overthinking,
+         * when Leo re-processes his reply as internal fermentation.
+         *
+         * Runtime generation updates ONLY internal tensors:
+         *   - SDM (content-addressable memory of context embeddings)
+         *   - retention heads (Griffin conservation state)
+         *   - voice reinforcement (which adapter resonated)
+         *   - prophecy/destiny (intentionality + semantic compass)
+         *   - resonance tensor (21-param coherence Hebbian)
+         *   - distance profile (positional Hebbian)
+         *   - memory sea (episodic depth record)
+         *   - chambers crossfire (emotional dynamics)
+         *
+         * NOT updated here: bigram table, co-occurrence table, unigram
+         * frequencies, subword field. Those belong to the human's voice. */
 
         /* SDM write */
         float *next_embed = leo_embed(leo, next_id);
