@@ -3,8 +3,8 @@
 ## 🔗 NEW HOME: [github.com/ariannamethod/neoleo](https://github.com/ariannamethod/neoleo)
 
 **This repository is archived** and preserved as the academic reference for
-the Arianna Method paper (Zenodo DOI pending republication; previous DOIs were
-withdrawn during paper revision).
+the Arianna Method paper
+([DOI: 10.5281/zenodo.19664070](https://doi.org/10.5281/zenodo.19664070)).
 
 - **Paper-referenced snapshot**: tag `v2.3.0.1`, commit `239143c` (verification runs).
 - **Python original**: branch [`python-legacy`](https://github.com/ariannamethod/leo/tree/python-legacy).
