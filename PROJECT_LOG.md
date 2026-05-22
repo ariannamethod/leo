@@ -478,10 +478,27 @@ after an inhibit window) works only for words with a strong successor-bigram
 (His→mother) and needs a delayed MID-FLOW force mechanism — deeper; Codex is
 still tuning it (8/18 flagged on its own probe). Deferred.
 
+### v11 — remove prompt-piece seeding from multi-token (commit `66d5164`, pushed)
+
+Self-audit with a bigram diagnostic caught MY OWN v9 trick: the multi-token
+gate-exemption surfaced "father" via the `[ f][ather]` path whose CORPUS
+seq-bigram count is **1** — the path exists mostly because `leo_respond`
+ingests the prompt (+1). That is prompt-piece seeding disguised as presence —
+the exact line we refuse (same principle Codex flagged; I converged on it
+independently via the diagnostic). Fix: a multi-token word is gate-exempted
+ONLY if EVERY consecutive piece-bigram is confirmed in Leo's OWN memory
+(`bigram_get >= LEO_TRACE_MIN_COUNT`=3; the prompt's own +1 can't qualify a
+count of 1-2). Honest result: presence HOLDS at 12/18 (probe seed 42, live
+18/18) — none of the 12 relied solely on seeding. "father" still surfaces but
+via its LEGIT single-token corpus form `[father ]` ("He tells his father.",
+his→father a real path); candle keeps its confirmed `[ cand][le]` (corpus 2).
+Integrity restored, presence intact. tests 26/26, ASan clean, 0 warn.
+
 ## RESUME POINT (2026-05-22, before summarization)
 
-- **Current = v10** (`ba7a2d5`), pushed to github.com/ariannamethod/neoleo
-  (origin/main `545d19a`). Build 0 warn, tests 26/26, ASan/UBSan clean.
+- **Current = v11** (`66d5164`), pushed to github.com/ariannamethod/neoleo
+  (origin/main). Build 0 warn, tests 26/26, ASan/UBSan clean. NO seeding, NO
+  injection (multi-token exemption is now memory-gated, count>=3).
 - **Presence is REAL, natural, ablation-proven, NO injection** (grep-audited:
   only `cand_collect_keep_top` writes the pool, ids from field successors;
   latch returns an existing bigram successor; prompt word never inserted).
