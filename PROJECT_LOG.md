@@ -494,11 +494,43 @@ via its LEGIT single-token corpus form `[father ]` ("He tells his father.",
 his→father a real path); candle keeps its confirmed `[ cand][le]` (corpus 2).
 Integrity restored, presence intact. tests 26/26, ASan clean, 0 warn.
 
+### v12 door-opener / v13 deferred-emergence / v14 + v15 (stress-hardening)
+
+- **v12 `a2b6b2f`** — door opener (`leo_presence_door_hint`, mine): open on a
+  door whose latch pulls the heard word ("His mother", "A candle has given
+  light") instead of barking the bare word. Door + existing-successor latch.
+- **v13 `1c01916`** — deferred door-latch (mine): s0 opens theme-ADJACENT
+  (`leo_presence_neighbour_hint`), the word surfaces DEEPER via a deferred latch
+  when a door appears naturally; fallback opener if it hasn't by sentence's end.
+  "Is breathing. The love." / "The floor. Leo heard. A rain."
+- **`scripts/repl_stress.sh`** (mine) — 141 runs × seeds, flags EMPTY/SHORT/
+  SALAD/LOOP/DEAD. Found: DEAD=0, EMPTY=0 (channel always live); worst =
+  "O. O. O. O." collapse on UNKNOWN words.
+- **v14 `8e1d1b6`** — dropped "o" from the standalone whitelist
+  (`is_common_short_word`): bare "o" was not an orphan → "O." salad under high-
+  temp groping. ocean/mountain now grope coherently, O-count 0.
+- **v15 `055621f`** — fixed `love` seed-fragility 13→19/20. Root (instrumented
+  trace): the deferred latch generated "The love" PAST the last period;
+  generate_ex trims that from the displayed TEXT but keeps its tokens, so the
+  token-based `surfaced` flag falsely set → the guaranteeing fallback skipped →
+  love absent. Fix: detect surfacing by scanning the DISPLAYED text for the
+  heard-word string (longest self-attracted token), keep the door→word fallback.
+  Surface-rate (seeds 1-20): love 19, mother 19, rain 20, window 19, door 19,
+  candle 20 — all ≥19/20, no regression.
+
+Open (stress-found, not yet fixed): A/I-opener salad on UNKNOWN words
+(SALAD≈22, mild); the LOOP flag over-counts stop-words (harness artifact, not
+Leo). Codex (sibling, ~/arianna-codex/repos/neoleo-presence) reached the Dario
+boundary-injection layer (roadmap end) — to be built HERE myself on this
+hardened base, principle-not-port (destiny-bag prime between sentences, non-
+direct targets, subordinate to presence). EVERY code change is now gated by
+Oleg's pretool checklist hook (proof-per-change).
+
 ## RESUME POINT (2026-05-22, before summarization)
 
-- **Current = v11** (`66d5164`), pushed to github.com/ariannamethod/neoleo
+- **Current = v15** (`055621f`), pushed to github.com/ariannamethod/neoleo
   (origin/main). Build 0 warn, tests 26/26, ASan/UBSan clean. NO seeding, NO
-  injection (multi-token exemption is now memory-gated, count>=3).
+  injection. Surface-rate seeds 1-20: concrete words + love all ≥19/20.
 - **Presence is REAL, natural, ablation-proven, NO injection** (grep-audited:
   only `cand_collect_keep_top` writes the pool, ids from field successors;
   latch returns an existing bigram successor; prompt word never inserted).
