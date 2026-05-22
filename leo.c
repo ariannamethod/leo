@@ -1676,15 +1676,30 @@ static float *compute_prompt_gravity(const Leo *leo, const int *p_ids, int p_n) 
     int V = leo->bpe.vocab_size;
     float *g = calloc((size_t)V, sizeof(float));
     if (!g || p_n <= 0) return g;
+    float N = (float)leo->cooc.total_tokens;
+    if (N <= 0.0f) N = 1.0f;
     for (int i = 0; i < p_n; i++) {
         int pid = p_ids[i];
         if (pid < 0 || pid >= V) continue;
         if (leo_token_is_function(&leo->bpe, pid)) continue;
+        float fp = (pid < leo->cooc.freq_size) ? leo->cooc.freq[pid] : 0.0f;
+        if (fp <= 0.0f) continue;
         for (int e = 0; e < leo->cooc.capacity; e++) {
             const CoocEntry *en = &leo->cooc.entries[e];
             if (en->count <= 0) continue;
             if (en->src != pid) continue;
-            if (en->dst >= 0 && en->dst < V) g[en->dst] += en->count;
+            int dst = en->dst;
+            if (dst < 0 || dst >= V) continue;
+            float fd = (dst < leo->cooc.freq_size) ? leo->cooc.freq[dst] : 0.0f;
+            if (fd <= 0.0f) continue;
+            /* positive PMI, not raw co-occurrence: log(p(a,b)/p(a)p(b)).
+             * Down-weights globally-frequent neighbours (the/He/you, which
+             * co-occur with everything) so gravity points at the prompt's
+             * DISTINCTIVE associations — its semantic theme (candle→light),
+             * not its corpus frame. This is the root fix for "cooc tilts
+             * toward frequent words, not meaning". */
+            float pmi = logf((en->count * N) / (fp * fd));
+            if (pmi > 0.0f) g[dst] += pmi;
         }
     }
     float mx = 0;
@@ -1730,11 +1745,33 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         int p_ids[1024];
         int p_n = bpe_encode(&leo->bpe, (const uint8_t *)prompt,
                              (int)strlen(prompt), p_ids, 1024);
-        g = compute_prompt_gravity(leo, p_ids, p_n);
-        leo->gravity = g;                    /* transient theme tilt */
         float d = leo_prompt_dissonance(leo, p_ids, p_n);
         g_leo_last_dissonance = d;
         leo->temp_mult = LEO_DISS_TEMP_LO + d * (LEO_DISS_TEMP_HI - LEO_DISS_TEMP_LO);
+
+        float *pg = compute_prompt_gravity(leo, p_ids, p_n);
+        /* the wound speaks (haiku max-dissonance → origin). Blend the prompt
+         * theme with Leo's ORIGIN gravity — the dedication's in-field
+         * emotional words (miss 13, missing 13, honest 16, feeling 32,
+         * songs 11 all live in the corpus). The more alien the prompt
+         * (high d), the more Leo reaches for his own deepest field instead
+         * of a theme he doesn't have. Still his own tokens, no insertion. */
+        int b_ids[2048];
+        int b_n = bpe_encode(&leo->bpe, (const uint8_t *)LEO_EMBEDDED_BOOTSTRAP,
+                             (int)strlen(LEO_EMBEDDED_BOOTSTRAP), b_ids, 2048);
+        float *og = compute_prompt_gravity(leo, b_ids, b_n);
+        int V = leo->bpe.vocab_size;
+        g = calloc((size_t)V, sizeof(float));
+        if (g && pg && og) {
+            float mx = 0.0f;
+            for (int c = 0; c < V; c++) {
+                g[c] = (1.0f - d) * pg[c] + d * og[c];
+                if (g[c] > mx) mx = g[c];
+            }
+            if (mx > 0.0f) for (int c = 0; c < V; c++) g[c] /= mx;
+        }
+        free(pg); free(og);
+        leo->gravity = g;                    /* transient: theme + wound */
     }
     int produced = leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
     leo->gravity = NULL;

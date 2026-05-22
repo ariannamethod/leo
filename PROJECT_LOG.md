@@ -317,3 +317,43 @@ freq disparities — associative gravity can't fully overcome them. Next
 candidate lever (not taken): the "wound speaks" origin-pull at high
 dissonance (needs bootstrap gravity), and richer theme cooc (decay frame
 co-occurrence).
+
+### v5 — origin-pull + PPMI, and the WALL (2026-05-22)
+
+Two more principled levers, both ablated, both **hit the same wall**:
+
+- **origin-pull / "the wound speaks":** at high dissonance, blend prompt
+  gravity with ORIGIN gravity (the dedication's in-field emotional words —
+  verified present: miss 13, missing 13, honest 16, feeling 32, songs 11).
+  `g = (1−d)·prompt + d·origin`. Result: the wound did NOT surface — origin
+  gravity is dominated by the dedication's frequent words (you 214, Leo
+  2453), the rare wound words drown. Same frame/freq pollution.
+- **PPMI gravity** (root fix attempt): replaced raw cooc-mass with positive
+  PMI `log(cooc·N/(freq_a·freq_b))` to down-weight globally-frequent
+  neighbours and surface DISTINCTIVE (semantic) ones. Built clean, ablated:
+  no clear semantic breakthrough — replies stayed faint/inconsistent (rare-
+  cooc PMI noise without a count floor; theme still doesn't reliably steer).
+
+**The wall (honest, after 7 gravity levers v1–v5):** a statistical
+cooc/PMI gravity *tilt* on successor-sampled generation cannot produce
+reliable topical presence on this corpus. Even a correct theme tilt is
+fought by (a) the successor chain pulling back to frequency attractors
+("He thanks the candle again"), and (b) gravity pointing at frame/frequent
+neighbours, not meaning. Stopping the gravity epicycles per Singularity
+discipline (3+ iterations, no breakthrough → report the cause).
+
+**Root architectural finding:** the canonical presence channels are NOT
+cooc-gravity alone — they are the **LeoField state-mutation** path that
+this rebuild deliberately stripped (deferred to phase 3): `leo_prompt_
+amplify` (destiny-bag prime + retention nudge that accumulate theme pull
+across the WHOLE generation), `leo_prompt_traversal`, and field candidate
+bias on the start (Codex's `LEO_START_FIELD_BIAS_W 8.0` uses exactly this).
+Gravity is "the wrinkle"; the field-state is the nerve. Stripping the field
+removed the intended primary presence channel.
+
+**Crossroads for Oleg (architecture call):** (a) bring the LeoField state
+channels into the rebuild now (destiny prime + retention + field-bias-on-
+start) — the canonical presence path, on the agreed polygon; or (b) pivot
+to patching neoleo directly (the field already lives there — Codex's path).
+v5 committed as the honest WALL checkpoint; build clean, tests 26/26,
+ASan/UBSan clean. Presence: real-but-weak, NOT achieved by gravity alone.
