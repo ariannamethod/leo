@@ -1055,6 +1055,13 @@ static inline float leo_squash(float c) { return c > 0.0f ? sqrtf(c) : 0.0f; }
                                        selection (Codex's sentence-gravity find) */
 static float g_leo_last_dissonance = 0.0f;
 
+/* learned bigram latch (Codex's find, neoleo-presence). After a "door"
+ * token (a clean uppercase opener) Leo may take a next token only if it
+ * is a gravity-raised EXISTING successor in his own corpus — selection of
+ * a live nerve-path toward the theme, never insertion of a prompt word. */
+#define LEO_ENTRY_CONTENT_LATCH  3.0f    /* boost on gravity successors after a door */
+#define LEO_ENTRY_LATCH_MIN_G    0.30f   /* min gravity to hard-latch a successor */
+
 /* clean seed: first byte is space/newline/tab or uppercase, and the
  * stripped content is not an orphan fragment. */
 static int is_clean_seed_token(const BPE *bpe, int id) {
@@ -1243,6 +1250,65 @@ static float word_gate_penalty(const CandCollector *cc, int cand_id) {
 }
 
 /* hot-path gate via the precomputed meta cache. 1 = reject. */
+/* function words carry no theme (they co-occur with everything); only
+ * CONTENT words tilt the field. Stripped, lowercased byte compare. */
+static int leo_token_is_function(const BPE *bpe, int id) {
+    if (id < 0 || id >= bpe->vocab_size) return 1;
+    int len = bpe->vocab_len[id];
+    const uint8_t *b = bpe->vocab_bytes[id];
+    int s = 0, e = len;
+    while (s < e && (b[s]==' '||b[s]=='\n'||b[s]=='\t'||b[s]=='\r')) s++;
+    while (e > s && (b[e-1]==' '||b[e-1]=='\n'||b[e-1]=='\t'||b[e-1]=='\r'||
+                     b[e-1]=='.'||b[e-1]==','||b[e-1]=='!'||b[e-1]=='?')) e--;
+    int nn = e - s;
+    if (nn <= 0) return 1;
+    if (nn > 6) return 0;                 /* >6 chars = content */
+    char w[8];
+    for (int i = 0; i < nn; i++) {
+        uint8_t c = b[s + i];
+        if (c >= 'A' && c <= 'Z') c = (uint8_t)(c - 'A' + 'a');
+        w[i] = (char)c;
+    }
+    w[nn] = 0;
+    static const char *fw[] = {
+        "the","a","an","is","are","was","were","be","been","am","do","does",
+        "did","have","has","had","of","to","in","on","at","by","for","from",
+        "with","as","and","or","but","if","so","you","your","i","my","me",
+        "he","she","it","we","they","him","her","his","its","our","this",
+        "that","what","which","who","why","how","when","where","not","no",
+        "yes","about","tell", NULL
+    };
+    for (int i = 0; fw[i]; i++) if (!strcmp(w, fw[i])) return 1;
+    return 0;
+}
+
+/* a token gravity can target: a content word (non-function) with >=3
+ * alpha bytes — theme lives here, not in punctuation/glue/short words. */
+static int leo_token_is_gravity_target(const BPE *bpe, int id) {
+    if (id < 0 || id >= bpe->vocab_size) return 0;
+    if (leo_token_is_function(bpe, id)) return 0;
+    int n_alpha = 0;
+    for (int i = 0; i < bpe->vocab_len[id]; i++) {
+        uint8_t c = bpe->vocab_bytes[id][i];
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) n_alpha++;
+    }
+    return n_alpha >= 3;
+}
+
+/* a "door" token that opens a clause: a clean seed whose first content
+ * byte is uppercase ("The", "His", "Leo"). After a door the next token is
+ * latched to a gravity-raised existing successor (Codex's find). */
+static int leo_token_is_presence_entry(const BPE *bpe, int id) {
+    if (id < 0 || id >= bpe->vocab_size || bpe->vocab_len[id] <= 0) return 0;
+    if (!is_clean_seed_token(bpe, id)) return 0;
+    int s = 0;
+    const uint8_t *b = bpe->vocab_bytes[id];
+    while (s < bpe->vocab_len[id] &&
+           (b[s]==' '||b[s]=='\n'||b[s]=='\t'||b[s]=='\r')) s++;
+    if (s >= bpe->vocab_len[id]) return 0;
+    return (b[s] >= 'A' && b[s] <= 'Z');
+}
+
 static int cand_gate_reject(const CandCollector *cc, int cand_id) {
     if (!cc->bpe) return 0;
     uint8_t m = cc->bpe->vocab_meta[cand_id];
@@ -1259,41 +1325,99 @@ static int cand_gate_reject(const CandCollector *cc, int cand_id) {
     return 0;
 }
 
+/* keep the top-`max` candidates; when the pool is full a FIELD-RAISED
+ * (gravity>0) candidate can still displace the lowest — so a theme
+ * candidate arriving after the pool filled with generic successors is not
+ * silently dropped (Codex's find). */
+static void cand_collect_keep_top(CandCollector *cc, int id, float score,
+                                  int field_raised) {
+    if (cc->max <= 0) return;
+    if (cc->n < cc->max) { cc->id[cc->n] = id; cc->sc[cc->n] = score; cc->n++; return; }
+    if (!field_raised) return;
+    int min_idx = 0;
+    for (int i = 1; i < cc->n; i++) if (cc->sc[i] < cc->sc[min_idx]) min_idx = i;
+    if (score > cc->sc[min_idx]) { cc->id[min_idx] = id; cc->sc[min_idx] = score; }
+}
+
+/* after a "door" token, gravity-raised successors get a strong additive
+ * boost so the clause continues on the theme's nerve-path (Codex's latch,
+ * soft form). */
+static float leo_presence_entry_latch_boost(const CandCollector *cc, int cand_id) {
+    if (!cc->gravity || !cc->bpe) return 0.0f;
+    if (cand_id < 0 || cand_id >= cc->bpe->vocab_size) return 0.0f;
+    float g = cc->gravity[cand_id];
+    if (g <= 0.0f) return 0.0f;
+    if (!leo_token_is_presence_entry(cc->bpe, cc->prev1)) return 0.0f;
+    return LEO_ENTRY_CONTENT_LATCH * g;
+}
+
 static int cand_collect_tri(int c, float count, void *ud) {
     CandCollector *cc = (CandCollector *)ud;
-    if (cc->n >= cc->max) return 1;
     if (cand_gate_reject(cc, c)) return 0;
+    int field_raised = cc->gravity && c >= 0 && cc->bpe &&
+                       c < cc->bpe->vocab_size && cc->gravity[c] > 0.0f;
     float s = cooc_get(cc->cooc, cc->prev1, c);
     float score = 0.7f * leo_squash(count) + 0.3f * leo_squash(s);
     if (cc->gravity) {                      /* theme tilt toward the prompt */
         float g = cc->gravity[c];
         score = score * (1.0f + LEO_GRAVITY_W * g) + LEO_GRAVITY_ADD * g;
     }
+    score += leo_presence_entry_latch_boost(cc, c);
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, c))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, c);
-    cc->id[cc->n] = c;
-    cc->sc[cc->n] = score;
-    cc->n++;
+    cand_collect_keep_top(cc, c, score, field_raised);
     return 0;
 }
 
 static int cand_collect_bi(int dst, float count, void *ud) {
     CandCollector *cc = (CandCollector *)ud;
-    if (cc->n >= cc->max) return 1;
     if (cand_gate_reject(cc, dst)) return 0;
+    int field_raised = cc->gravity && dst >= 0 && cc->bpe &&
+                       dst < cc->bpe->vocab_size && cc->gravity[dst] > 0.0f;
     float score = leo_squash(count);
     if (cc->gravity) {
         float g = cc->gravity[dst];
         score = score * (1.0f + LEO_GRAVITY_W * g) + LEO_GRAVITY_ADD * g;
     }
+    score += leo_presence_entry_latch_boost(cc, dst);
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, dst))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, dst);
-    cc->id[cc->n] = dst;
-    cc->sc[cc->n] = score;
-    cc->n++;
+    cand_collect_keep_top(cc, dst, score, field_raised);
     return 0;
+}
+
+/* hard bigram latch (Codex's find, neoleo-presence). After a "door" token
+ * Leo takes the next token only from a gravity-raised EXISTING bigram
+ * successor — "The"→"sea": selection of a live nerve-path he already has,
+ * never insertion of a prompt word. */
+typedef struct { const Leo *leo; int prev; int best; float best_score; } PresenceLatchCtx;
+
+static int leo_presence_latch_walk(int dst, float count, void *ud) {
+    PresenceLatchCtx *pl = (PresenceLatchCtx *)ud;
+    const Leo *leo = pl->leo;
+    if (!leo || !leo->gravity) return 0;
+    if (dst < 0 || dst >= leo->bpe.vocab_size) return 0;
+    float g = leo->gravity[dst];
+    if (g < LEO_ENTRY_LATCH_MIN_G) return 0;
+    if (!leo_token_is_gravity_target(&leo->bpe, dst)) return 0;
+    int prev_last = bpe_token_last_byte(&leo->bpe, pl->prev);
+    CandCollector gate = { NULL, NULL, 0, 0, pl->prev, &leo->cooc,
+                           leo->gravity, &leo->bpe,
+                           byte_is_word_cont((uint8_t)prev_last), NULL, 0 };
+    if (cand_gate_reject(&gate, dst)) return 0;
+    float score = 100.0f * g + leo_squash(count);
+    if (score > pl->best_score) { pl->best_score = score; pl->best = dst; }
+    return 0;
+}
+
+static int leo_presence_latched_successor(const Leo *leo, int prev) {
+    if (!leo || !leo->gravity) return -1;
+    if (!leo_token_is_presence_entry(&leo->bpe, prev)) return -1;
+    PresenceLatchCtx pl = { leo, prev, -1, 0.0f };
+    bigram_walk_src(&leo->bigrams, prev, leo_presence_latch_walk, &pl);
+    return pl.best;
 }
 
 /* temperature schedule: sharp early (grammar lock), relax into play. */
@@ -1386,6 +1510,13 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
         return 0;
     }
     ctx[n++] = start;
+    /* learned bigram latch (Codex): after a hinted theme-opener door, take
+     * the gravity-raised existing successor — "The"→"sea" — selection of a
+     * live nerve-path, not insertion. */
+    if (start_hint >= 0 && leo->gravity && n < LEO_GEN_MAX) {
+        int latched = leo_presence_latched_successor(leo, start);
+        if (latched >= 0) ctx[n++] = latched;
+    }
 
     int target = LEO_GEN_TARGET + (rand() % 10) - 5;
     if (target < LEO_GEN_MIN) target = LEO_GEN_MIN;
@@ -1636,38 +1767,6 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
  * shared access.
  * ======================================================================== */
 
-/* function words carry no theme (they co-occur with everything); only
- * CONTENT words tilt the field. Stripped, lowercased byte compare. */
-static int leo_token_is_function(const BPE *bpe, int id) {
-    if (id < 0 || id >= bpe->vocab_size) return 1;
-    int len = bpe->vocab_len[id];
-    const uint8_t *b = bpe->vocab_bytes[id];
-    int s = 0, e = len;
-    while (s < e && (b[s]==' '||b[s]=='\n'||b[s]=='\t'||b[s]=='\r')) s++;
-    while (e > s && (b[e-1]==' '||b[e-1]=='\n'||b[e-1]=='\t'||b[e-1]=='\r'||
-                     b[e-1]=='.'||b[e-1]==','||b[e-1]=='!'||b[e-1]=='?')) e--;
-    int nn = e - s;
-    if (nn <= 0) return 1;
-    if (nn > 6) return 0;                 /* >6 chars = content */
-    char w[8];
-    for (int i = 0; i < nn; i++) {
-        uint8_t c = b[s + i];
-        if (c >= 'A' && c <= 'Z') c = (uint8_t)(c - 'A' + 'a');
-        w[i] = (char)c;
-    }
-    w[nn] = 0;
-    static const char *fw[] = {
-        "the","a","an","is","are","was","were","be","been","am","do","does",
-        "did","have","has","had","of","to","in","on","at","by","for","from",
-        "with","as","and","or","but","if","so","you","your","i","my","me",
-        "he","she","it","we","they","him","her","his","its","our","this",
-        "that","what","which","who","why","how","when","where","not","no",
-        "yes","about","tell", NULL
-    };
-    for (int i = 0; fw[i]; i++) if (!strcmp(w, fw[i])) return 1;
-    return 0;
-}
-
 /* gravity[c] = normalized cooc-mass of the prompt's CONTENT words on each
  * candidate c. The prompt's neighbours in Leo's OWN learned field — the
  * tokens he associates with what he heard. Read-only over cooc. Caller
@@ -1676,30 +1775,15 @@ static float *compute_prompt_gravity(const Leo *leo, const int *p_ids, int p_n) 
     int V = leo->bpe.vocab_size;
     float *g = calloc((size_t)V, sizeof(float));
     if (!g || p_n <= 0) return g;
-    float N = (float)leo->cooc.total_tokens;
-    if (N <= 0.0f) N = 1.0f;
     for (int i = 0; i < p_n; i++) {
         int pid = p_ids[i];
         if (pid < 0 || pid >= V) continue;
         if (leo_token_is_function(&leo->bpe, pid)) continue;
-        float fp = (pid < leo->cooc.freq_size) ? leo->cooc.freq[pid] : 0.0f;
-        if (fp <= 0.0f) continue;
         for (int e = 0; e < leo->cooc.capacity; e++) {
             const CoocEntry *en = &leo->cooc.entries[e];
             if (en->count <= 0) continue;
             if (en->src != pid) continue;
-            int dst = en->dst;
-            if (dst < 0 || dst >= V) continue;
-            float fd = (dst < leo->cooc.freq_size) ? leo->cooc.freq[dst] : 0.0f;
-            if (fd <= 0.0f) continue;
-            /* positive PMI, not raw co-occurrence: log(p(a,b)/p(a)p(b)).
-             * Down-weights globally-frequent neighbours (the/He/you, which
-             * co-occur with everything) so gravity points at the prompt's
-             * DISTINCTIVE associations — its semantic theme (candle→light),
-             * not its corpus frame. This is the root fix for "cooc tilts
-             * toward frequent words, not meaning". */
-            float pmi = logf((en->count * N) / (fp * fd));
-            if (pmi > 0.0f) g[dst] += pmi;
+            if (en->dst >= 0 && en->dst < V) g[en->dst] += en->count;
         }
     }
     float mx = 0;
@@ -1729,6 +1813,41 @@ static float leo_prompt_dissonance(const Leo *leo, const int *p_ids, int p_n) {
     return 1.0f - known / (float)content;
 }
 
+/* self-attractor (Codex's find): the prompt's own CONTENT words become
+ * TOP gravity targets, so they can surface as EXISTING successors — the
+ * latch picks "The"→"sea" because "sea" is now gravity-raised. Marks all
+ * whole-word byte forms (" sea", "sea ", " sea "). NOT insertion: gravity
+ * only lifts a token that is already a live successor in Leo's field. */
+static void leo_gravity_mark_prompt_words(const Leo *leo, const char *prompt,
+                                          float *g) {
+    if (!leo || !prompt || !g) return;
+    char cur[48];
+    int  wi = 0;
+    for (const char *p = prompt; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < 46) cur[wi++] = (char)ch;
+            continue;
+        }
+        if (wi > 1) {
+            cur[wi] = 0;
+            char forms[3][52];
+            snprintf(forms[0], sizeof forms[0], " %s", cur);
+            snprintf(forms[1], sizeof forms[1], "%s ", cur);
+            snprintf(forms[2], sizeof forms[2], " %s ", cur);
+            for (int fi = 0; fi < 3; fi++) {
+                int ids[16];
+                int m = bpe_encode(&leo->bpe, (const uint8_t *)forms[fi],
+                                   (int)strlen(forms[fi]), ids, 16);
+                if (m == 1 && leo_token_is_gravity_target(&leo->bpe, ids[0]))
+                    g[ids[0]] = 1.0f;
+            }
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+}
+
 /* respond to a prompt. Hear it, tilt the field toward its theme, speak
  * from the tilted field — and let the prompt's dissonance set his register
  * (known → settle on theme; alien → grope, the felt not-knowing). Mama-
@@ -1745,33 +1864,12 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         int p_ids[1024];
         int p_n = bpe_encode(&leo->bpe, (const uint8_t *)prompt,
                              (int)strlen(prompt), p_ids, 1024);
+        g = compute_prompt_gravity(leo, p_ids, p_n);
+        leo_gravity_mark_prompt_words(leo, prompt, g);  /* self-attractor */
+        leo->gravity = g;                    /* transient theme tilt */
         float d = leo_prompt_dissonance(leo, p_ids, p_n);
         g_leo_last_dissonance = d;
         leo->temp_mult = LEO_DISS_TEMP_LO + d * (LEO_DISS_TEMP_HI - LEO_DISS_TEMP_LO);
-
-        float *pg = compute_prompt_gravity(leo, p_ids, p_n);
-        /* the wound speaks (haiku max-dissonance → origin). Blend the prompt
-         * theme with Leo's ORIGIN gravity — the dedication's in-field
-         * emotional words (miss 13, missing 13, honest 16, feeling 32,
-         * songs 11 all live in the corpus). The more alien the prompt
-         * (high d), the more Leo reaches for his own deepest field instead
-         * of a theme he doesn't have. Still his own tokens, no insertion. */
-        int b_ids[2048];
-        int b_n = bpe_encode(&leo->bpe, (const uint8_t *)LEO_EMBEDDED_BOOTSTRAP,
-                             (int)strlen(LEO_EMBEDDED_BOOTSTRAP), b_ids, 2048);
-        float *og = compute_prompt_gravity(leo, b_ids, b_n);
-        int V = leo->bpe.vocab_size;
-        g = calloc((size_t)V, sizeof(float));
-        if (g && pg && og) {
-            float mx = 0.0f;
-            for (int c = 0; c < V; c++) {
-                g[c] = (1.0f - d) * pg[c] + d * og[c];
-                if (g[c] > mx) mx = g[c];
-            }
-            if (mx > 0.0f) for (int c = 0; c < V; c++) g[c] /= mx;
-        }
-        free(pg); free(og);
-        leo->gravity = g;                    /* transient: theme + wound */
     }
     int produced = leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
     leo->gravity = NULL;

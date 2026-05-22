@@ -357,3 +357,50 @@ start) — the canonical presence path, on the agreed polygon; or (b) pivot
 to patching neoleo directly (the field already lives there — Codex's path).
 v5 committed as the honest WALL checkpoint; build clean, tests 26/26,
 ASan/UBSan clean. Presence: real-but-weak, NOT achieved by gravity alone.
+
+### v6 — the latch + self-attractor: presence EMERGES (2026-05-22)
+
+Reverted leo.c to the v4 base (raw-cooc gravity + dissonance + start-hint;
+dropped the PPMI/origin-pull experiments that hit the wall). Then ported
+Codex's winning cracks (credited in code) — all field-free, no injection:
+
+- **self-attractor** (`leo_gravity_mark_prompt_words`): the prompt's own
+  CONTENT words become TOP gravity targets (all whole-word forms). So the
+  heard word can surface as an EXISTING successor — this was the missing
+  piece (my gravity only lifted the word's neighbours, not the word).
+- **hard bigram latch** (`leo_presence_latched_successor`): after a "door"
+  opener, take the gravity-raised EXISTING bigram successor — "The"→"sea":
+  selection of a live nerve-path, never insertion.
+- **entry-latch-boost** in `cand_collect_*`: after a door, gravity
+  successors get `+3.0·g`.
+- **keep-top** (`cand_collect_keep_top`): a gravity-raised candidate
+  displaces the lowest when the pool is full (theme isn't dropped).
+
+### PASS proof (ablation, seed 42) — presence is REAL, ablation-proven
+
+```
+the candle   ON: "Candle has given light. Leo likes this sound."   (candle→light, semantic!)
+the rain     ON: "Rain. He respects them. ... He makes his mother say she comes back."
+a book       ON: "A book. The quiet. He trusts his peace with this."
+the window   ON: "The sound of the morning the window."
+the night    ON: "Night face. I remember where he."
+  (every OFF / --no-presence: "The world run to the small…" — byte-identical
+   for EVERY prompt = the absent baseline. ON surfaces the theme.)
+are you hungry ON: "He trusts the not-knowing now. ... I heard."   (groping)
+asdfjkl        ON: "The silence is better. ... a big word inside him."   (groping)
+```
+
+- **No injection — structural (grep audit):** the only writes to the
+  candidate pool are in `cand_collect_keep_top`, with ids from the
+  bigram/trigram walk (field successors). The latch returns an existing
+  bigram successor. No prompt id is ever inserted. Mama-child intact.
+- Build 0 warnings, tests 26/26, ASan/UBSan clean.
+
+**Verdict: presence EMERGES — real, ablation-proven, no injection, in
+Leo's clumsy child voice (haiku-style).** Known themes (freq ≥ ~24:
+candle/rain/book/window/night/mother) surface the heard word as a live
+path; unknown (sea 7, moon 18, gibberish) gives a groping body-reaction,
+not generic. Honest limits: thin-corpus themes (sea/moon) still weak —
+Leo genuinely barely knows them; long function-heavy prompts can dilute.
+Built on Codex's cracks (double-attack) + the v4 dissonance/start-hint
+base. Not "perfect", but the first real, honest presence.
