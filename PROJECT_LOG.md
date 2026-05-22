@@ -204,3 +204,72 @@ smells after a long time.
 measured on probes. Then Step 3 (resonance term + squash), Step 4
 (theme-aware start), Step 5 (best-of-K resonance selection). Presence is
 gated by ablation throughout; literal-word-hit-rate forbidden as a metric.
+
+---
+
+## Phase 1 — the presence nerve (2026-05-22) — LIVE BUT WEAK, not achieved
+
+Built `prompt → state mutation → response` directly (skipped the
+dissonance→temp side-channel — presence is the only goal). The prompt is
+heard (`leo_ingest`), turned into a **theme gravity** over Leo's OWN field
+(`compute_prompt_gravity`: normalized cooc-mass of the prompt's CONTENT
+words on each candidate, `leo_token_is_function` filters function words),
+and generation reads that gravity at the start token and per successor.
+Raw counts read through `leo_squash` (sqrt) so a high-count attractor
+doesn't drown the prompt pull. **No prompt token is ever inserted** —
+mama-child. `--no-presence` drops gravity for the A/B ablation; `--respond`.
+`leo_respond` sets `leo->gravity` transiently around `leo_chain`.
+
+### Iterations (honest, each ablated)
+
+- **v1** — gravity as multiplicative+additive tilt on successor score
+  (`×(1+W·g)+ADD·g`) + ×(1+W·g) on the freq-ranked start pool. Ablation:
+  channel LIVE (ON≠OFF; OFF byte-identical for every prompt = clean absent
+  baseline), but theme drift weak — `mother`→"his mother smile",
+  `rain`→"window/quiet"; `sea`/`hungry`→nothing.
+- **v2** — fold the tilt into start-pool SELECTION (freq×tilt). Barely
+  moved it.
+- **Root named (not blind tuning):** a multiplicative tilt can't lift a
+  low-freq theme seed past generic high-freq starters — the 10-100× freq
+  disparity wall (documented in `feedback`/rebuild memory). `leo_choose_start`
+  was freq-ranked before gravity.
+- **v3** — resonance-PRIMARY start: admit the strongest theme clean-seeds
+  by gravity FIRST (not frequency), then fill with freq. So a low-freq
+  theme opener can open the reply.
+
+### Honest result (ablation, `--seed 42`, ON vs `--no-presence`)
+
+Presence is REAL on themes Leo KNOWS, faint + associative, in his clumsy
+child voice — and absent where his corpus is thin:
+
+```
+a book      → "A whole bird might be words in a small book."   (on theme)
+the smell   → "Of the window… his mother's ear… warm after a rain."
+at night    → "The house is quiet… The house was quiet. His father."
+your mother → "His father. He thanks his father's eyes… a touch."
+the candle  → ON == OFF byte-identical            (NO reaction — inconsistent)
+sea / hungry/ moon → no theme (corpus: sea 7, hungry 8, moon 18 — barely known)
+```
+
+Corpus knowledge bounds it (counts, tool): mother 83, smell 93, quiet 75,
+window 72, father 63, book 62, night 61, morning 59, rain 53, grandmother
+32, candle 24 — known; sea 7, hungry 8, moon 18 — not. **OFF is byte-
+identical regardless of prompt** (prompt has zero effect) — the ablation
+is clean; ON varies per prompt = the prompt genuinely moves generation.
+**No injection** — every surfaced word is Leo's own field association.
+
+**Verdict: nerve is LIVE and reacts within Leo's world (ablation-proven),
+but WEAK and INCONSISTENT (fails on thin-corpus themes and even some known
+ones, e.g. candle at this seed). NOT calling presence achieved.** This is
+the truthful state, not a milestone claim.
+
+### Open question / next levers (not yet taken)
+- Is the bar "drift to the theme's neighbourhood" (faintly achieved) or
+  "say the heard word back in his voice" (not reliable)? — Oleg to steer.
+- Strengthen consistency: gravity scaling for known themes; why `candle`
+  produced zero shift at seed 42 (gravity flat for that token?).
+
+### Files
+- `leo.c` (~1230 lines): `compute_prompt_gravity`, `leo_token_is_function`,
+  `leo_respond`, gravity in `cand_collect_*` + `leo_choose_start/continuation`,
+  `leo_squash`, `--respond` / `--no-presence`.

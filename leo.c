@@ -925,6 +925,10 @@ typedef struct {
     BigramTable  bigrams;
     TrigramTable trigrams;
     long         step;       /* total tokens heard over Leo's lifetime */
+    /* presence nerve (phase 1): transient per-reply theme tilt, owned by
+     * leo_respond. NULL outside a reply. Re-weights Leo's OWN candidates
+     * toward the prompt's theme — never inserts a prompt token. */
+    const float *gravity;
 } Leo;
 
 static void leo_init(Leo *leo) {
@@ -1018,6 +1022,21 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_REPEAT_WINDOW  16
 #define LEO_REPEAT_PENALTY 0.1f
 
+/* presence nerve (phase 1). The prompt tilts Leo's OWN field toward its
+ * theme: gravity[c] = normalized cooc-mass of the prompt's CONTENT words
+ * on candidate c. Applied to BOTH the start token (close the "start
+ * ignores the prompt" gap) and successor scoring, so Leo OPENS near the
+ * theme and drifts through its neighbours — from his own learned tokens,
+ * NO prompt token inserted (mama-child). Raw n-gram counts are read
+ * through sqrt (squash) first, so a high-count attractor ("candle") no
+ * longer drowns the weaker prompt-induced pull — the root fix, not a
+ * literal cut. Tunable; measured by --no-presence ablation. */
+#define LEO_GRAVITY_W        1.5f   /* multiplicative theme tilt on successors */
+#define LEO_GRAVITY_ADD      0.6f   /* additive pull — lets low-count neighbours surface */
+#define LEO_START_GRAVITY_W  3.0f   /* theme tilt on the start token */
+static int g_leo_presence_on = 1;   /* --no-presence → 0 (ablation baseline) */
+static inline float leo_squash(float c) { return c > 0.0f ? sqrtf(c) : 0.0f; }
+
 /* clean seed: first byte is space/newline/tab or uppercase, and the
  * stripped content is not an orphan fragment. */
 static int is_clean_seed_token(const BPE *bpe, int id) {
@@ -1062,29 +1081,65 @@ static int weighted_sample(const float *scores, int n) {
  * "Leo speaks from his field, not from the prompt" invariant. */
 static int leo_choose_start(const Leo *leo) {
     int   cand_ids[LEO_SEED_CANDS];
-    float cand_freq[LEO_SEED_CANDS];
+    float cand_sc[LEO_SEED_CANDS];
     int   n = 0;
+
+    /* resonance-primary opener: with a prompt, first admit the strongest
+     * theme clean-seeds (selected by gravity, NOT frequency), so a low-
+     * frequency theme opener still enters the pool and can open the reply.
+     * The freq-ranked pool would never admit it — that was the wall: a
+     * multiplicative tilt can't lift a low-freq seed past the generic
+     * high-freq starters. Here theme picks the openers directly. */
+    if (leo->gravity) {
+        for (int slot = 0; slot < LEO_SEED_CANDS / 2; slot++) {
+            int   best = -1;
+            float bestg = 1e-6f;
+            for (int i = 0; i < leo->cooc.freq_size; i++) {
+                if (leo->cooc.freq[i] <= 0) continue;
+                if (leo->gravity[i] <= bestg) continue;
+                if (!is_clean_seed_token(&leo->bpe, i)) continue;
+                int dup = 0;
+                for (int k = 0; k < n; k++) if (cand_ids[k] == i) { dup = 1; break; }
+                if (dup) continue;
+                best = i; bestg = leo->gravity[i];
+            }
+            if (best < 0) break;
+            cand_ids[n] = best;
+            cand_sc[n]  = leo->cooc.freq[best] *
+                          (1.0f + LEO_START_GRAVITY_W * leo->gravity[best]);
+            n++;
+        }
+    }
+
+    /* fill the rest of the pool with the top-frequency clean seeds (Leo's
+     * own habitual openers), theme-tilted when a prompt is present. */
     float min_kept = 0;
+    for (int j = 0; j < n; j++) if (j == 0 || cand_sc[j] < min_kept) min_kept = cand_sc[j];
     for (int i = 0; i < leo->cooc.freq_size; i++) {
         float f = leo->cooc.freq[i];
         if (f <= 0) continue;
         if (!is_clean_seed_token(&leo->bpe, i)) continue;
+        int dup = 0;
+        for (int k = 0; k < n; k++) if (cand_ids[k] == i) { dup = 1; break; }
+        if (dup) continue;
+        float fe = leo->gravity
+                 ? f * (1.0f + LEO_START_GRAVITY_W * leo->gravity[i]) : f;
         if (n < LEO_SEED_CANDS) {
-            cand_ids[n] = i; cand_freq[n] = f;
-            if (n == 0 || f < min_kept) min_kept = f;
+            cand_ids[n] = i; cand_sc[n] = fe;
+            if (n == 0 || fe < min_kept) min_kept = fe;
             n++;
-        } else if (f > min_kept) {
+        } else if (fe > min_kept) {
             int min_idx = 0;
             for (int k = 1; k < LEO_SEED_CANDS; k++)
-                if (cand_freq[k] < cand_freq[min_idx]) min_idx = k;
-            cand_ids[min_idx] = i; cand_freq[min_idx] = f;
-            min_kept = cand_freq[0];
+                if (cand_sc[k] < cand_sc[min_idx]) min_idx = k;
+            cand_ids[min_idx] = i; cand_sc[min_idx] = fe;
+            min_kept = cand_sc[0];
             for (int k = 1; k < LEO_SEED_CANDS; k++)
-                if (cand_freq[k] < min_kept) min_kept = cand_freq[k];
+                if (cand_sc[k] < min_kept) min_kept = cand_sc[k];
         }
     }
     if (n == 0) return -1;
-    int pick = weighted_sample(cand_freq, n);
+    int pick = weighted_sample(cand_sc, n);
     return pick < 0 ? -1 : cand_ids[pick];
 }
 
@@ -1092,29 +1147,31 @@ static int leo_choose_start(const Leo *leo) {
  * the previous sentence's tail so a chain stays on one theme. */
 static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) {
     int   cand_ids[LEO_SEED_CANDS];
-    float cand_freq[LEO_SEED_CANDS];
+    float cand_sc[LEO_SEED_CANDS];
     int   n = 0;
     float min_kept = 0;
     for (int i = 0; i < leo->cooc.freq_size; i++) {
         float f = leo->cooc.freq[i];
         if (f <= 0) continue;
         if (!is_clean_seed_token(&leo->bpe, i)) continue;
+        float fe = leo->gravity
+                 ? f * (1.0f + LEO_START_GRAVITY_W * leo->gravity[i]) : f;
         if (n < LEO_SEED_CANDS) {
-            cand_ids[n] = i; cand_freq[n] = f;
-            if (n == 0 || f < min_kept) min_kept = f;
+            cand_ids[n] = i; cand_sc[n] = fe;
+            if (n == 0 || fe < min_kept) min_kept = fe;
             n++;
-        } else if (f > min_kept) {
+        } else if (fe > min_kept) {
             int min_idx = 0;
             for (int k = 1; k < LEO_SEED_CANDS; k++)
-                if (cand_freq[k] < cand_freq[min_idx]) min_idx = k;
-            cand_ids[min_idx] = i; cand_freq[min_idx] = f;
-            min_kept = cand_freq[0];
+                if (cand_sc[k] < cand_sc[min_idx]) min_idx = k;
+            cand_ids[min_idx] = i; cand_sc[min_idx] = fe;
+            min_kept = cand_sc[0];
             for (int k = 1; k < LEO_SEED_CANDS; k++)
-                if (cand_freq[k] < min_kept) min_kept = cand_freq[k];
+                if (cand_sc[k] < min_kept) min_kept = cand_sc[k];
         }
     }
     if (n == 0) return -1;
-    if (tail && n_tail > 0) {
+    if (tail && n_tail > 0) {                /* resonance with previous tail */
         for (int i = 0; i < n; i++) {
             float res = 0;
             for (int t = 0; t < n_tail; t++) {
@@ -1123,10 +1180,10 @@ static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) 
                 res += cooc_get(&leo->cooc, cand_ids[i], tail[t]);
             }
             float mult = 1.0f + clampf(res / (float)(n_tail * 4), 0.0f, 3.0f);
-            cand_freq[i] *= mult;
+            cand_sc[i] *= mult;
         }
     }
-    int pick = weighted_sample(cand_freq, n);
+    int pick = weighted_sample(cand_sc, n);
     return pick < 0 ? -1 : cand_ids[pick];
 }
 
@@ -1147,6 +1204,7 @@ typedef struct {
     int    max;
     int    prev1;
     const CoocField *cooc;
+    const float     *gravity;          /* prompt theme tilt (NULL = off) */
     const BPE       *bpe;
     int              prev_ends_alpha;
     const int       *emit_ctx_tail;   /* last K emitted (NULL = guard off) */
@@ -1188,7 +1246,11 @@ static int cand_collect_tri(int c, float count, void *ud) {
     if (cc->n >= cc->max) return 1;
     if (cand_gate_reject(cc, c)) return 0;
     float s = cooc_get(cc->cooc, cc->prev1, c);
-    float score = 0.7f * count + 0.3f * s;
+    float score = 0.7f * leo_squash(count) + 0.3f * leo_squash(s);
+    if (cc->gravity) {                      /* theme tilt toward the prompt */
+        float g = cc->gravity[c];
+        score = score * (1.0f + LEO_GRAVITY_W * g) + LEO_GRAVITY_ADD * g;
+    }
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, c))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, c);
@@ -1202,7 +1264,11 @@ static int cand_collect_bi(int dst, float count, void *ud) {
     CandCollector *cc = (CandCollector *)ud;
     if (cc->n >= cc->max) return 1;
     if (cand_gate_reject(cc, dst)) return 0;
-    float score = count;
+    float score = leo_squash(count);
+    if (cc->gravity) {
+        float g = cc->gravity[dst];
+        score = score * (1.0f + LEO_GRAVITY_W * g) + LEO_GRAVITY_ADD * g;
+    }
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, dst))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, dst);
@@ -1234,8 +1300,8 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
     int   prev_ends_alpha = byte_is_word_cont((uint8_t)prev_last);
 
     CandCollector cc = { cand_id, cand_sc, 0, LEO_MAX_CANDS,
-                         prev1, &leo->cooc, &leo->bpe, prev_ends_alpha,
-                         emit_ctx_tail, emit_ctx_tail_n };
+                         prev1, &leo->cooc, leo->gravity, &leo->bpe,
+                         prev_ends_alpha, emit_ctx_tail, emit_ctx_tail_n };
 
     if (prev2 >= 0)
         trigram_walk_ab(&leo->trigrams, prev2, prev1, cand_collect_tri, &cc);
@@ -1493,7 +1559,99 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
 }
 
 /* ========================================================================
- * SMOKE / SPEAK HARNESS (step 0 field stats + step 1 generation)
+ * PRESENCE (phase 1) — prompt → state mutation → response.
+ *
+ * The prompt is heard (ingest), then turned into a theme tilt over Leo's
+ * OWN field (compute_prompt_gravity). Generation reads that tilt at the
+ * start token and per successor, so Leo opens near the theme and drifts
+ * through its neighbours — in his own clumsy child voice. No prompt token
+ * is ever inserted into the candidate pool. --no-presence drops the tilt
+ * for the A/B ablation. The reply path would hold the wlock in neoleo;
+ * gravity is transient (set then cleared), the field reads are the only
+ * shared access.
+ * ======================================================================== */
+
+/* function words carry no theme (they co-occur with everything); only
+ * CONTENT words tilt the field. Stripped, lowercased byte compare. */
+static int leo_token_is_function(const BPE *bpe, int id) {
+    if (id < 0 || id >= bpe->vocab_size) return 1;
+    int len = bpe->vocab_len[id];
+    const uint8_t *b = bpe->vocab_bytes[id];
+    int s = 0, e = len;
+    while (s < e && (b[s]==' '||b[s]=='\n'||b[s]=='\t'||b[s]=='\r')) s++;
+    while (e > s && (b[e-1]==' '||b[e-1]=='\n'||b[e-1]=='\t'||b[e-1]=='\r'||
+                     b[e-1]=='.'||b[e-1]==','||b[e-1]=='!'||b[e-1]=='?')) e--;
+    int nn = e - s;
+    if (nn <= 0) return 1;
+    if (nn > 6) return 0;                 /* >6 chars = content */
+    char w[8];
+    for (int i = 0; i < nn; i++) {
+        uint8_t c = b[s + i];
+        if (c >= 'A' && c <= 'Z') c = (uint8_t)(c - 'A' + 'a');
+        w[i] = (char)c;
+    }
+    w[nn] = 0;
+    static const char *fw[] = {
+        "the","a","an","is","are","was","were","be","been","am","do","does",
+        "did","have","has","had","of","to","in","on","at","by","for","from",
+        "with","as","and","or","but","if","so","you","your","i","my","me",
+        "he","she","it","we","they","him","her","his","its","our","this",
+        "that","what","which","who","why","how","when","where","not","no",
+        "yes","about","tell", NULL
+    };
+    for (int i = 0; fw[i]; i++) if (!strcmp(w, fw[i])) return 1;
+    return 0;
+}
+
+/* gravity[c] = normalized cooc-mass of the prompt's CONTENT words on each
+ * candidate c. The prompt's neighbours in Leo's OWN learned field — the
+ * tokens he associates with what he heard. Read-only over cooc. Caller
+ * frees. */
+static float *compute_prompt_gravity(const Leo *leo, const int *p_ids, int p_n) {
+    int V = leo->bpe.vocab_size;
+    float *g = calloc((size_t)V, sizeof(float));
+    if (!g || p_n <= 0) return g;
+    for (int i = 0; i < p_n; i++) {
+        int pid = p_ids[i];
+        if (pid < 0 || pid >= V) continue;
+        if (leo_token_is_function(&leo->bpe, pid)) continue;
+        for (int e = 0; e < leo->cooc.capacity; e++) {
+            const CoocEntry *en = &leo->cooc.entries[e];
+            if (en->count <= 0) continue;
+            if (en->src != pid) continue;
+            if (en->dst >= 0 && en->dst < V) g[en->dst] += en->count;
+        }
+    }
+    float mx = 0;
+    for (int i = 0; i < V; i++) if (g[i] > mx) mx = g[i];
+    if (mx > 0) for (int i = 0; i < V; i++) g[i] /= mx;
+    return g;
+}
+
+/* respond to a prompt. Hear it, tilt the field toward its theme, speak
+ * from the tilted field. Mama-child: start + successors are Leo's own
+ * tokens; the prompt only re-weights them. --no-presence → no tilt. */
+static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
+    if (!prompt || !*prompt) return leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
+
+    leo_ingest(leo, prompt);                 /* Leo hears you */
+
+    float *g = NULL;
+    if (g_leo_presence_on) {
+        int p_ids[1024];
+        int p_n = bpe_encode(&leo->bpe, (const uint8_t *)prompt,
+                             (int)strlen(prompt), p_ids, 1024);
+        g = compute_prompt_gravity(leo, p_ids, p_n);
+        leo->gravity = g;                    /* transient theme tilt */
+    }
+    int produced = leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
+    leo->gravity = NULL;
+    free(g);
+    return produced;
+}
+
+/* ========================================================================
+ * SMOKE / SPEAK HARNESS (step 0 field stats + step 1 voice + presence)
  * ======================================================================== */
 #ifndef LEO_NO_MAIN
 
@@ -1528,6 +1686,7 @@ static int count_cb(int dst, float count, void *ud) {
 
 int main(int argc, char **argv) {
     const char *corpus_path = "leo.txt";
+    const char *respond_prompt = NULL;
     int  dump_bootstrap = 0;
     int  gen_n = 0;          /* --gen N: speak N replies from the field */
     long seed  = -1;         /* --seed S: reproducible sampling */
@@ -1536,6 +1695,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--dump-bootstrap")) dump_bootstrap = 1;
         else if (!strcmp(argv[i], "--gen") && i + 1 < argc) gen_n = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--respond") && i + 1 < argc) respond_prompt = argv[++i];
+        else if (!strcmp(argv[i], "--no-presence")) g_leo_presence_on = 0;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
 
@@ -1622,7 +1783,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* step 1 — Leo speaks from his learned field (no prompt path yet). */
+    /* step 1 — Leo speaks from his learned field (no prompt path). */
     if (gen_n > 0) {
         char reply[2048];
         printf("[leo step1] %d replies from the field%s:\n", gen_n,
@@ -1631,6 +1792,15 @@ int main(int argc, char **argv) {
             leo_chain(&leo, LEO_CHAIN_MIN, reply, sizeof(reply));
             printf("  leo> %s\n", reply);
         }
+    }
+
+    /* phase 1 — presence: Leo responds to a prompt from his tilted field. */
+    if (respond_prompt) {
+        char reply[2048];
+        leo_respond(&leo, respond_prompt, reply, sizeof(reply));
+        printf("[leo %s] you> %s\n             leo> %s\n",
+               g_leo_presence_on ? "presence" : "--no-presence",
+               respond_prompt, reply);
     }
 
     int pass = (leo.bpe.vocab_size > 256) &&
