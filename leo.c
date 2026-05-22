@@ -766,7 +766,8 @@ static int is_common_short_word(const uint8_t *bytes, int start, int end) {
     }
     low[len] = 0;
     static const char *wl[] = {
-        "a","i","o",
+        "a","i",            /* real one-letter words only; bare "o" was salad
+                               ("O. O. O. O.") under high-temp unknown groping */
         "ah","oh","hi","no","so","is","it","an","at","be","by","do","go",
         "he","if","in","me","my","of","on","or","to","up","us","we","am",
         "as","ok","yo",
