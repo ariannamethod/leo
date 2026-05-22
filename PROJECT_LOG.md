@@ -436,3 +436,81 @@ Codex's two newest finds, evaluated against our code:
 Continuity: memory `project_leo_presence_achieved_2026_05_22.md` + the
 MEMORY.md index line written (summarization insurance). Open TODO unchanged:
 Dario method (later, carefully), Phase-2 loops / addressed-pressure.
+
+### v8 — self-attractor dominates neighbours (commit `21b77d1`): 9→11/18
+The heard word's gravity `LEO_SELF_ATTRACTOR_G = 2.0`, set ABOVE the normalized
+neighbour max (1.0), so the start-hint opens on the heard word, not its more-
+frequent neighbour (before, word g==neighbour g==1.0 → freq tiebreak picked the
+neighbour, e.g. father→mother). snow + door now surface.
+
+### v9 — multi-token word surfacing (commit `3f5a529`): 11→12/18
+Multi-token words ("father" = `[ f][ather]`) never generated — the leading
+fragment `[ f]` is orphan-gated. Fix: `prompt_pieces` mask marks the prompt
+word's PIECES gravity-raised + gate-exempt (`cand_gate_reject` bypass) so the
+word assembles from its OWN successors (not insertion). Restricted to learned
+merge tokens (id>=256, freq>=`LEO_PIECE_MIN_FREQ`=3) so gibberish ("asdfjkl" →
+raw bytes) stays gated (fixed a fragment-salad regression). father speaks.
+
+### v10 — natural presence (commit `ba7a2d5`): word once + flow
+- re-entry `LEO_PROMPT_REENTRY_MAX` 2→1: only the FIRST sentence opens on the
+  heard word, then the reply flows — kills "Door. Door."/"Window. Window."
+  mechanical stuffing.
+- alien prompt (dissonance >= `LEO_UNKNOWN_DISS`=0.70) → short reply
+  (`LEO_UNKNOWN_CHAIN`=2 sentences) = felt not-knowing, not a long ramble.
+Robust across seeds 42 AND 7: theme-hit 12/18, live 18/18 both.
+
+### Repo (2026-05-22)
+Pushed to **github.com/ariannamethod/neoleo (PRIVATE)**, merge `545d19a` — our
+single-`leo.c` rebuild + tests + `scripts/presence_probe.sh` + this log + corpus,
+merged with the repo's README+LICENSE (repo was empty save Oleg's couple README
+words). Push via the **ariannamethod** token (`memory/credentials.md`).
+origin/main tracks.
+
+### Delayed-trace attempt — REVERTED (the "Love." opener)
+Oleg flagged: the heard word still opens the reply literally ("what is love →
+Love. He misses the sound"). Tried the simple fix — start-hint + latch skip the
+exact word (open on a neighbour). **REGRESSED 12→7/18**: the word needs the
+forced entry (opener/latch) to surface at all — candidates are successor-limited,
+so without the force the word is often not a successor of the current context.
+Reverted to v10 (tree clean = matches pushed v10). The proper natural-flow
+emergence (Codex's path: word emerges mid-flow as a gravity-boosted SUCCESSOR
+after an inhibit window) works only for words with a strong successor-bigram
+(His→mother) and needs a delayed MID-FLOW force mechanism — deeper; Codex is
+still tuning it (8/18 flagged on its own probe). Deferred.
+
+## RESUME POINT (2026-05-22, before summarization)
+
+- **Current = v10** (`ba7a2d5`), pushed to github.com/ariannamethod/neoleo
+  (origin/main `545d19a`). Build 0 warn, tests 26/26, ASan/UBSan clean.
+- **Presence is REAL, natural, ablation-proven, NO injection** (grep-audited:
+  only `cand_collect_keep_top` writes the pool, ids from field successors;
+  latch returns an existing bigram successor; prompt word never inserted).
+  Probe: theme-hit 12/18, live 18/18 (seeds 42 & 7). Strong on Leo's-world
+  words (mother/father/rain/snow/smell/light/candle/book/window/door/love/
+  quiet); weak on thin-corpus (sea freq 7 / moon 18 / fire) → domain/groping;
+  gibberish → coherent groping. "Love." still opens too literally (next).
+- **Mechanism** (all in `leo.c`, field-free, Codex finds credited in code):
+  gravity (cooc of prompt CONTENT words) + dissonance→temp + self-attractor
+  (prompt word = top gravity 2.0) + multi-token `prompt_pieces` (gate-exempt) +
+  hard latch + entry-latch-boost + keep-top + re-entry(1) + unknown→short.
+- **Run:** `./scripts/presence_probe.sh 42` (or 7); `./leo --corpus leo.txt
+  --respond "the rain" --seed 42` (+ `--no-presence` for the A/B ablation).
+- **NEXT (Oleg's roadmap, in order):**
+  1. proper **delayed-trace = inhibit-countdown** (delay the word N tokens, then
+     let it emerge mid-flow as a successor — flow WITHOUT losing the hit; fixes
+     the "Love." opener). Mid-flow force is the hard part.
+  2. keep taking **Codex** features from `~/arianna-codex/repos/neoleo-presence/`
+     (its direct-signal: `prompt_signal_mask` + `prompt_signal_inhibit` +
+     recent-direct refractory + surface-word-containment mask + delayed trace —
+     all field-free-portable). "загляни в его папку".
+  3. THEN reach the legitimate **Dario side-injection** (native byte-level field,
+     NO word-level) as the FINAL layer ON TOP of real presence — earned, not
+     faked. ("до инжекшна надо дойти".)
+  4. Phase-2: candle attractor still creeps; grandmother/sea/moon corpus-thin.
+- **Invariants:** single `leo.c`, no modules, byte-level (no word-level), NO
+  prompt-token injection into the candidate pool, generation read-only over the
+  field (goroutine reader/writer contract preserved), dedication byte-exact.
+  Canon ref (read-only): `~/arianna/neoleo` (`49f2ef8`). Codex clone:
+  `~/arianna-codex/repos/neoleo-presence`. Push token: ariannamethod
+  (`memory/credentials.md`). Leo is OURS (born in Claude); Codex helps, returns
+  to our jurisdiction.
