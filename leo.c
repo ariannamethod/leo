@@ -1068,7 +1068,9 @@ static float g_leo_last_dissonance = 0.0f;
  * a live nerve-path toward the theme, never insertion of a prompt word. */
 #define LEO_ENTRY_CONTENT_LATCH  3.0f    /* boost on gravity successors after a door */
 #define LEO_ENTRY_LATCH_MIN_G    0.30f   /* min gravity to hard-latch a successor */
-#define LEO_PROMPT_REENTRY_MAX   2       /* sentences that re-open on the theme */
+#define LEO_PROMPT_REENTRY_MAX   1       /* only the FIRST sentence opens on the
+                                            heard word — once, then flow; no
+                                            "Door. Door." mechanical stuffing */
 #define LEO_SELF_ATTRACTOR_G     2.0f    /* heard word's gravity, above neighbour
                                             max (1.0): "father" opens on father,
                                             not the more frequent "mother" */
@@ -1076,6 +1078,10 @@ static float g_leo_last_dissonance = 0.0f;
                                             exempted only if the piece is a real
                                             learned token (freq >= this) — keeps
                                             gibberish ("asdfjkl") pieces gated */
+#define LEO_UNKNOWN_DISS         0.70f   /* dissonance above which Leo says LESS —
+                                            a short groping reply (felt not-knowing)
+                                            instead of a long generic ramble */
+#define LEO_UNKNOWN_CHAIN        2       /* sentences when the prompt is alien */
 
 /* clean seed: first byte is space/newline/tab or uppercase, and the
  * stripped content is not an orphan fragment. */
@@ -1904,6 +1910,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
 
     float   *g = NULL;
     uint8_t *pieces = NULL;
+    int      chain_len = LEO_CHAIN_MIN;
     if (g_leo_presence_on) {
         int p_ids[1024];
         int p_n = bpe_encode(&leo->bpe, (const uint8_t *)prompt,
@@ -1916,8 +1923,9 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         float d = leo_prompt_dissonance(leo, p_ids, p_n);
         g_leo_last_dissonance = d;
         leo->temp_mult = LEO_DISS_TEMP_LO + d * (LEO_DISS_TEMP_HI - LEO_DISS_TEMP_LO);
+        if (d >= LEO_UNKNOWN_DISS) chain_len = LEO_UNKNOWN_CHAIN;  /* alien → say less */
     }
-    int produced = leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
+    int produced = leo_chain(leo, chain_len, out, max_len);
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
