@@ -929,6 +929,12 @@ typedef struct {
      * leo_respond. NULL outside a reply. Re-weights Leo's OWN candidates
      * toward the prompt's theme — never inserts a prompt token. */
     const float *gravity;
+    /* multi-token surfacing: pieces of the prompt's CONTENT words (e.g.
+     * "father" = [ f][ather]). Exempt from the orphan/glue gates so a
+     * multi-token heard word assembles from its OWN successors — the
+     * leading fragment [ f] is otherwise orphan-gated and the word never
+     * generates. Transient (NULL outside a reply). Not insertion. */
+    const uint8_t *prompt_pieces;
     /* dissonance reaction (haiku): how far the prompt is from Leo's world
      * → a temperature multiplier. Known theme → cool, settle on theme;
      * unknown → hot, groping (the felt not-knowing). 1.0 outside a reply. */
@@ -944,6 +950,7 @@ static void leo_init(Leo *leo) {
     bpe_populate_all_meta(&leo->bpe);
     leo->step = 0;
     leo->gravity = NULL;
+    leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
 }
 
@@ -1065,6 +1072,10 @@ static float g_leo_last_dissonance = 0.0f;
 #define LEO_SELF_ATTRACTOR_G     2.0f    /* heard word's gravity, above neighbour
                                             max (1.0): "father" opens on father,
                                             not the more frequent "mother" */
+#define LEO_PIECE_MIN_FREQ       3.0f    /* a multi-token word's pieces are gate-
+                                            exempted only if the piece is a real
+                                            learned token (freq >= this) — keeps
+                                            gibberish ("asdfjkl") pieces gated */
 
 /* clean seed: first byte is space/newline/tab or uppercase, and the
  * stripped content is not an orphan fragment. */
@@ -1238,6 +1249,7 @@ typedef struct {
     int              prev_ends_alpha;
     const int       *emit_ctx_tail;   /* last K emitted (NULL = guard off) */
     int              emit_ctx_tail_n;
+    const uint8_t   *prompt_pieces;   /* prompt word pieces, gate-exempt (NULL=off) */
 } CandCollector;
 
 /* word-completion penalty: after an alpha-ended prev token, crush glue
@@ -1315,6 +1327,10 @@ static int leo_token_is_presence_entry(const BPE *bpe, int id) {
 
 static int cand_gate_reject(const CandCollector *cc, int cand_id) {
     if (!cc->bpe) return 0;
+    /* the prompt's own word pieces bypass the gates — the only way a multi-
+     * token heard word ("father" = [ f][ather]) assembles from its own
+     * successors past the orphan gate. Targeted to this reply's words. */
+    if (cc->prompt_pieces && cand_id >= 0 && cc->prompt_pieces[cand_id]) return 0;
     uint8_t m = cc->bpe->vocab_meta[cand_id];
     if (m & LEO_META_ORPHAN) return 1;
     if (cc->prev_ends_alpha) {
@@ -1409,7 +1425,8 @@ static int leo_presence_latch_walk(int dst, float count, void *ud) {
     int prev_last = bpe_token_last_byte(&leo->bpe, pl->prev);
     CandCollector gate = { NULL, NULL, 0, 0, pl->prev, &leo->cooc,
                            leo->gravity, &leo->bpe,
-                           byte_is_word_cont((uint8_t)prev_last), NULL, 0 };
+                           byte_is_word_cont((uint8_t)prev_last), NULL, 0,
+                           NULL };
     if (cand_gate_reject(&gate, dst)) return 0;
     float score = 100.0f * g + leo_squash(count);
     if (score > pl->best_score) { pl->best_score = score; pl->best = dst; }
@@ -1447,7 +1464,8 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
 
     CandCollector cc = { cand_id, cand_sc, 0, LEO_MAX_CANDS,
                          prev1, &leo->cooc, leo->gravity, &leo->bpe,
-                         prev_ends_alpha, emit_ctx_tail, emit_ctx_tail_n };
+                         prev_ends_alpha, emit_ctx_tail, emit_ctx_tail_n,
+                         leo->prompt_pieces };
 
     if (prev2 >= 0)
         trigram_walk_ab(&leo->trigrams, prev2, prev1, cand_collect_tri, &cc);
@@ -1829,7 +1847,7 @@ static float leo_prompt_dissonance(const Leo *leo, const int *p_ids, int p_n) {
  * whole-word byte forms (" sea", "sea ", " sea "). NOT insertion: gravity
  * only lifts a token that is already a live successor in Leo's field. */
 static void leo_gravity_mark_prompt_words(const Leo *leo, const char *prompt,
-                                          float *g) {
+                                          float *g, uint8_t *pieces) {
     if (!leo || !prompt || !g) return;
     char cur[48];
     int  wi = 0;
@@ -1849,8 +1867,23 @@ static void leo_gravity_mark_prompt_words(const Leo *leo, const char *prompt,
                 int ids[16];
                 int m = bpe_encode(&leo->bpe, (const uint8_t *)forms[fi],
                                    (int)strlen(forms[fi]), ids, 16);
-                if (m == 1 && leo_token_is_gravity_target(&leo->bpe, ids[0]))
-                    g[ids[0]] = LEO_SELF_ATTRACTOR_G;
+                if (m == 1 && leo_token_is_gravity_target(&leo->bpe, ids[0])) {
+                    g[ids[0]] = LEO_SELF_ATTRACTOR_G;       /* single-token word */
+                } else if (m > 1 && pieces && fi == 0) {
+                    /* multi-token word ("father" = [ f][ather]): mark every
+                     * piece a top gravity target AND gate-exempt, so the word
+                     * assembles from its OWN successors past the orphan gate. */
+                    for (int k = 0; k < m; k++) {
+                        int id = ids[k];
+                        if (id < 0 || id >= leo->bpe.vocab_size) continue;
+                        if (id < 256) continue;             /* raw byte, not a learned
+                            word-piece — keeps gibberish ("asdfjkl" → bytes) gated */
+                        if (id >= leo->cooc.freq_size ||
+                            leo->cooc.freq[id] < LEO_PIECE_MIN_FREQ) continue;
+                        g[id] = LEO_SELF_ATTRACTOR_G;
+                        pieces[id] = 1;
+                    }
+                }
             }
         }
         wi = 0;
@@ -1869,22 +1902,27 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
 
     leo_ingest(leo, prompt);                 /* Leo hears you */
 
-    float *g = NULL;
+    float   *g = NULL;
+    uint8_t *pieces = NULL;
     if (g_leo_presence_on) {
         int p_ids[1024];
         int p_n = bpe_encode(&leo->bpe, (const uint8_t *)prompt,
                              (int)strlen(prompt), p_ids, 1024);
         g = compute_prompt_gravity(leo, p_ids, p_n);
-        leo_gravity_mark_prompt_words(leo, prompt, g);  /* self-attractor */
+        pieces = calloc((size_t)leo->bpe.vocab_size, sizeof(uint8_t));
+        leo_gravity_mark_prompt_words(leo, prompt, g, pieces);  /* self-attractor + multi-token pieces */
         leo->gravity = g;                    /* transient theme tilt */
+        leo->prompt_pieces = pieces;
         float d = leo_prompt_dissonance(leo, p_ids, p_n);
         g_leo_last_dissonance = d;
         leo->temp_mult = LEO_DISS_TEMP_LO + d * (LEO_DISS_TEMP_HI - LEO_DISS_TEMP_LO);
     }
     int produced = leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
     leo->gravity = NULL;
+    leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
     free(g);
+    free(pieces);
     return produced;
 }
 
