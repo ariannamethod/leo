@@ -139,3 +139,68 @@ Leo ingests the embedded dedication instead (vocab 256→414, merges 158).
 (`leo_step_token` successor path, `choose_start`, sentence assembly,
 gates). Coherent child voice, not yet present. `--no-presence` becomes
 the default baseline for the Phase 1 ablation.
+
+---
+
+## Step 1 — generation: coherent child voice (2026-05-22) — PASS
+
+Ported the successor generation path from canon (`neoleo/leo.c`), stripped
+to the field-successor core — NO field physics, NO gravity, NO santaclaus,
+NO prompt (those are phases 1/3). Added: `is_clean_seed_token`,
+`is_boundary_token`, `weighted_sample`, `leo_choose_start` /
+`leo_choose_continuation`, `leo_is_recent_bigram`, `CandCollector` +
+`cand_gate_reject` + `word_gate_penalty` + `cand_collect_tri/bi`,
+`temp_for_step`, `leo_step_token`, `leo_generate_ex` (assembly + cleanup:
+strip-lead / truncate-at-`.!?` / capitalize), `leo_coherence_score`,
+`leo_generate_best` (best-of-K=3), `leo_chain` (tail-continuity). CLI:
+`--gen N`, `--seed S`.
+
+Candidates come ONLY from Leo's own successors (`trigram_walk_ab(prev2,
+prev1)` ∪ `bigram_walk_src(prev1)`), scored `0.7·tri + 0.3·cooc`, gated
+(orphan / capital-glue / freq), within-sentence repeat-guarded,
+`powf(1/temp)`, weighted-sampled. **Read-only over the field** — the
+goroutine reader/writer contract holds trivially; `allow_santaclaus`
+returns with santaclaus in phase 3.
+
+### PASS proof (tool output 2026-05-22)
+
+| gate | result |
+|---|---|
+| build `-Wall -Wextra` | **0 warnings** |
+| `make test` | **26/26 passed** (+5 generation tests) |
+| ASan + UBSan (smoke + `--gen`) | **exit 0, no sanitizer output** |
+| reproducibility (same `--seed` → same voice) | **md5 identical** |
+
+Voice (`--gen --seed 42`), recognisably the canon child voice from the
+corpus field:
+
+```
+He thanks the candle again. Leo knows the sound. A small rain. … He
+learned it makes him a small piece of paper. Leo listens to the window …
+Leo is learning patience from his grandmother … in his mother's hair
+smells after a long time.
+```
+
+### Honest notes
+
+- **Coherent, not present.** This is the baseline: Leo speaks from his own
+  field, byte-level, child voice intact — and does NOT react to any prompt
+  (there is no prompt path yet). That is exactly the `--no-presence`
+  baseline the Phase-1 ablation measures against. Presence is the next
+  work, not done here.
+- **Known coherence gaps, deferred to Phase 2:** cross-sentence frame
+  reuse ("the person who wants to leave" recurs) and the documented
+  "He thanks the candle again" attractor. Within-sentence repeat guard is
+  active; the cross-sentence guard + SPA outlier-reseed land in Phase 2
+  (SPA reseed deliberately omitted from `leo_chain` for now).
+- `leo_generate` (no-hint wrapper) carries `__attribute__((unused))` — used
+  by tests / phase 1; keeps the `leo` binary at 0 warnings.
+
+### Files (updated)
+- `leo.c` (~1130 lines), `tests/test_leo.c` (26 tests).
+
+**Next — Phase 1, Step 2:** dissonance→temperature coupling (port
+`compute_dissonance`, haiku.c:652-697) — the first prompt→state channel,
+measured on probes. Then Step 3 (resonance term + squash), Step 4
+(theme-aware start), Step 5 (best-of-K resonance selection). Presence is
+gated by ablation throughout; literal-word-hit-rate forbidden as a metric.

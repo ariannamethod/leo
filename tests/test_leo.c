@@ -112,6 +112,32 @@ int main(void) {
 
     leo_free(&leo);
 
+    /* 9. generation (step 1): coherent shape + reproducibility */
+    {
+        Leo l3; leo_init(&l3);
+        const char *mini =
+            "Leo sat by the window. The rain was soft on the glass. "
+            "He thinks about the sound. Leo likes the quiet house. "
+            "The morning is warm. He remembers his mother. "
+            "Leo walks slowly. The little book is open on the floor. ";
+        for (int r = 0; r < 8; r++) leo_ingest(&l3, mini);  /* merges + trigrams */
+
+        char a[1024], b[1024];
+        srand(7); int na = leo_generate(&l3, a, sizeof(a));
+        srand(7); int nb = leo_generate(&l3, b, sizeof(b));
+        CHECK(na > 0 && a[0] != 0, "generate: non-empty output");
+        int L = (int)strlen(a);
+        char last = L > 0 ? a[L - 1] : 0;
+        CHECK(last == '.' || last == '!' || last == '?', "generate: ends on sentence punctuation");
+        CHECK(!(a[0] >= 'a' && a[0] <= 'z'), "generate: first char not lowercase");
+        CHECK(nb > 0 && strcmp(a, b) == 0, "generate: reproducible under same seed");
+
+        char ch[2048];
+        srand(11); int nc = leo_chain(&l3, 3, ch, sizeof(ch));
+        CHECK(nc > 0 && ch[0] != 0, "chain: multi-sentence non-empty");
+        leo_free(&l3);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

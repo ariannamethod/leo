@@ -25,12 +25,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <ctype.h>
 #include <stdint.h>
 #include <time.h>
-/* <math.h> + -lm return in step 1 (squash/sqrtf, field physics). */
 
-#define LEO_VERSION  "0.0.1-step0"
+#define LEO_VERSION  "0.1.0-step1"
 
 /* EMBEDDED_BOOTSTRAP — verbatim from python-legacy Leo
  * (ariannamethod/leo, leo.py:448-481). Oleg's dedication to Leo-the-man.
@@ -995,7 +995,505 @@ static void leo_ingest(Leo *leo, const char *text) {
 }
 
 /* ========================================================================
- * STEP-0 SMOKE HARNESS
+ * GENERATION (step 1) — coherent child voice from the learned field.
+ *
+ * Candidates come ONLY from Leo's own successors: trigram_walk_ab(prev2,
+ * prev1), bigram fallback. NO prompt, NO field physics, NO gravity, NO
+ * santaclaus yet (LeoField → phase 3; presence → phase 1). Generation
+ * only READS the field tables, so the neoleo reader/writer goroutine
+ * contract (reply=wlock writer, ring=rlock reader) is held trivially;
+ * the allow_santaclaus gate returns with santaclaus (a field writer) in
+ * phase 3. Ported from neoleo/leo.c, stripped to the successor path.
+ * ======================================================================== */
+
+#define LEO_MAX_CANDS      256
+#define LEO_SEED_CANDS     64
+#define LEO_GEN_MAX        256
+#define LEO_GEN_TARGET     20
+#define LEO_GEN_MIN        6
+#define LEO_CHAIN_MIN      5
+#define LEO_CHAIN_MAX      12
+#define LEO_TAIL_WIN       8
+#define LEO_BEST_OF_K      3
+#define LEO_REPEAT_WINDOW  16
+#define LEO_REPEAT_PENALTY 0.1f
+
+/* clean seed: first byte is space/newline/tab or uppercase, and the
+ * stripped content is not an orphan fragment. */
+static int is_clean_seed_token(const BPE *bpe, int id) {
+    if (id < 0 || id >= bpe->vocab_size || bpe->vocab_len[id] == 0) return 0;
+    uint8_t c = bpe->vocab_bytes[id][0];
+    if (!(c == ' ' || c == '\n' || c == '\t' || (c >= 'A' && c <= 'Z')))
+        return 0;
+    if (is_orphan_fragment(bpe, id)) return 0;
+    return 1;
+}
+
+/* sentence boundary: token contains .!? followed by space/newline/EOS. */
+static int is_boundary_token(const BPE *bpe, int id) {
+    if (id < 0 || id >= bpe->vocab_size) return 0;
+    int len = bpe->vocab_len[id];
+    for (int i = 0; i < len; i++) {
+        uint8_t c = bpe->vocab_bytes[id][i];
+        if (c == '.' || c == '!' || c == '?') {
+            if (i == len - 1) return 1;
+            uint8_t nx = bpe->vocab_bytes[id][i + 1];
+            if (nx == ' ' || nx == '\n' || nx == '\r') return 1;
+        }
+    }
+    return 0;
+}
+
+/* weighted sample from an array of non-negative scores. */
+static int weighted_sample(const float *scores, int n) {
+    float total = 0;
+    for (int i = 0; i < n; i++) total += scores[i];
+    if (total <= 0) return n > 0 ? rand() % n : -1;
+    float r = ((float)rand() / (float)RAND_MAX) * total;
+    float acc = 0;
+    for (int i = 0; i < n; i++) {
+        acc += scores[i];
+        if (r <= acc) return i;
+    }
+    return n - 1;
+}
+
+/* start token: freq-weighted clean seed from the top LEO_SEED_CANDS.
+ * "Leo speaks from his field, not from the prompt" invariant. */
+static int leo_choose_start(const Leo *leo) {
+    int   cand_ids[LEO_SEED_CANDS];
+    float cand_freq[LEO_SEED_CANDS];
+    int   n = 0;
+    float min_kept = 0;
+    for (int i = 0; i < leo->cooc.freq_size; i++) {
+        float f = leo->cooc.freq[i];
+        if (f <= 0) continue;
+        if (!is_clean_seed_token(&leo->bpe, i)) continue;
+        if (n < LEO_SEED_CANDS) {
+            cand_ids[n] = i; cand_freq[n] = f;
+            if (n == 0 || f < min_kept) min_kept = f;
+            n++;
+        } else if (f > min_kept) {
+            int min_idx = 0;
+            for (int k = 1; k < LEO_SEED_CANDS; k++)
+                if (cand_freq[k] < cand_freq[min_idx]) min_idx = k;
+            cand_ids[min_idx] = i; cand_freq[min_idx] = f;
+            min_kept = cand_freq[0];
+            for (int k = 1; k < LEO_SEED_CANDS; k++)
+                if (cand_freq[k] < min_kept) min_kept = cand_freq[k];
+        }
+    }
+    if (n == 0) return -1;
+    int pick = weighted_sample(cand_freq, n);
+    return pick < 0 ? -1 : cand_ids[pick];
+}
+
+/* continuation start: like choose_start, biased by cooc resonance with
+ * the previous sentence's tail so a chain stays on one theme. */
+static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) {
+    int   cand_ids[LEO_SEED_CANDS];
+    float cand_freq[LEO_SEED_CANDS];
+    int   n = 0;
+    float min_kept = 0;
+    for (int i = 0; i < leo->cooc.freq_size; i++) {
+        float f = leo->cooc.freq[i];
+        if (f <= 0) continue;
+        if (!is_clean_seed_token(&leo->bpe, i)) continue;
+        if (n < LEO_SEED_CANDS) {
+            cand_ids[n] = i; cand_freq[n] = f;
+            if (n == 0 || f < min_kept) min_kept = f;
+            n++;
+        } else if (f > min_kept) {
+            int min_idx = 0;
+            for (int k = 1; k < LEO_SEED_CANDS; k++)
+                if (cand_freq[k] < cand_freq[min_idx]) min_idx = k;
+            cand_ids[min_idx] = i; cand_freq[min_idx] = f;
+            min_kept = cand_freq[0];
+            for (int k = 1; k < LEO_SEED_CANDS; k++)
+                if (cand_freq[k] < min_kept) min_kept = cand_freq[k];
+        }
+    }
+    if (n == 0) return -1;
+    if (tail && n_tail > 0) {
+        for (int i = 0; i < n; i++) {
+            float res = 0;
+            for (int t = 0; t < n_tail; t++) {
+                if (tail[t] < 0) continue;
+                res += cooc_get(&leo->cooc, tail[t], cand_ids[i]);
+                res += cooc_get(&leo->cooc, cand_ids[i], tail[t]);
+            }
+            float mult = 1.0f + clampf(res / (float)(n_tail * 4), 0.0f, 3.0f);
+            cand_freq[i] *= mult;
+        }
+    }
+    int pick = weighted_sample(cand_freq, n);
+    return pick < 0 ? -1 : cand_ids[pick];
+}
+
+/* within-reply bigram repeat guard: was (prev1, c) emitted in ctx_tail? */
+static int leo_is_recent_bigram(const int *ctx_tail, int n, int prev1, int c) {
+    if (!ctx_tail || n < 2 || prev1 < 0 || c < 0) return 0;
+    for (int i = 0; i + 1 < n; i++)
+        if (ctx_tail[i] == prev1 && ctx_tail[i + 1] == c) return 1;
+    return 0;
+}
+
+/* candidate collector (step 1: field-successors only — gravity / field
+ * bias / santaclaus are added in their phases). */
+typedef struct {
+    int   *id;
+    float *sc;
+    int    n;
+    int    max;
+    int    prev1;
+    const CoocField *cooc;
+    const BPE       *bpe;
+    int              prev_ends_alpha;
+    const int       *emit_ctx_tail;   /* last K emitted (NULL = guard off) */
+    int              emit_ctx_tail_n;
+} CandCollector;
+
+/* word-completion penalty: after an alpha-ended prev token, crush glue
+ * (uppercase-after-alpha = cross-sentence slam) and orphan starts. */
+static float word_gate_penalty(const CandCollector *cc, int cand_id) {
+    if (!cc->bpe || !cc->prev_ends_alpha) return 1.0f;
+    int first = bpe_token_first_byte(cc->bpe, cand_id);
+    if (byte_is_word_cont_lower((uint8_t)first)) return 1.0f;
+    if (first == ' ' || first == '\n' || first == '\r' || first == '\t') return 1.0f;
+    if (first == '.' || first == ',' || first == '!' || first == '?' ||
+        first == ';' || first == ':') return 1.0f;
+    if (first >= 'A' && first <= 'Z') return 0.0f;
+    return 0.02f;
+}
+
+/* hot-path gate via the precomputed meta cache. 1 = reject. */
+static int cand_gate_reject(const CandCollector *cc, int cand_id) {
+    if (!cc->bpe) return 0;
+    uint8_t m = cc->bpe->vocab_meta[cand_id];
+    if (m & LEO_META_ORPHAN) return 1;
+    if (cc->prev_ends_alpha) {
+        if (m & LEO_META_FIRST_UPPER) return 1;
+        if ((m & LEO_META_FIRST_LOWER) && (m & LEO_META_STANDALONE)) return 1;
+    }
+    if ((m & LEO_META_FREQ_CAND) && cc->cooc && cand_id < cc->cooc->freq_size) {
+        float t = (float)cc->cooc->total_tokens / LEO_FREQ_GATE_DIVISOR;
+        if (t < LEO_FREQ_GATE_MIN_T) t = LEO_FREQ_GATE_MIN_T;
+        if (cc->cooc->freq[cand_id] < t) return 1;
+    }
+    return 0;
+}
+
+static int cand_collect_tri(int c, float count, void *ud) {
+    CandCollector *cc = (CandCollector *)ud;
+    if (cc->n >= cc->max) return 1;
+    if (cand_gate_reject(cc, c)) return 0;
+    float s = cooc_get(cc->cooc, cc->prev1, c);
+    float score = 0.7f * count + 0.3f * s;
+    if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, c))
+        score *= LEO_REPEAT_PENALTY;
+    score *= word_gate_penalty(cc, c);
+    cc->id[cc->n] = c;
+    cc->sc[cc->n] = score;
+    cc->n++;
+    return 0;
+}
+
+static int cand_collect_bi(int dst, float count, void *ud) {
+    CandCollector *cc = (CandCollector *)ud;
+    if (cc->n >= cc->max) return 1;
+    if (cand_gate_reject(cc, dst)) return 0;
+    float score = count;
+    if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, dst))
+        score *= LEO_REPEAT_PENALTY;
+    score *= word_gate_penalty(cc, dst);
+    cc->id[cc->n] = dst;
+    cc->sc[cc->n] = score;
+    cc->n++;
+    return 0;
+}
+
+/* temperature schedule: sharp early (grammar lock), relax into play. */
+static float temp_for_step(int step) {
+    if (step < 2) return 0.40f;
+    if (step < 6) return 0.55f;
+    return 0.75f;
+}
+
+/* one next-token step. Read-only over the field. prev1<0 → choose_start.
+ * Candidates: trigram (prev2,prev1) successors, bigram (prev1) fallback,
+ * gated, anti-chain-guarded, powf(1/temp), weighted-sampled. */
+static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
+                          const int *emit_ctx_tail, int emit_ctx_tail_n) {
+    if (prev1 < 0) return leo_choose_start(leo);
+    temp = clampf(temp, 0.05f, 10.0f);
+    float inv_temp = 1.0f / temp;
+
+    int   cand_id[LEO_MAX_CANDS];
+    float cand_sc[LEO_MAX_CANDS];
+    int   prev_last = bpe_token_last_byte(&leo->bpe, prev1);
+    int   prev_ends_alpha = byte_is_word_cont((uint8_t)prev_last);
+
+    CandCollector cc = { cand_id, cand_sc, 0, LEO_MAX_CANDS,
+                         prev1, &leo->cooc, &leo->bpe, prev_ends_alpha,
+                         emit_ctx_tail, emit_ctx_tail_n };
+
+    if (prev2 >= 0)
+        trigram_walk_ab(&leo->trigrams, prev2, prev1, cand_collect_tri, &cc);
+    if (cc.n == 0)
+        bigram_walk_src(&leo->bigrams, prev1, cand_collect_bi, &cc);
+    if (cc.n == 0) {
+        if (prev_ends_alpha) return 32;          /* close the word with a space */
+        return leo_choose_start(leo);
+    }
+
+    /* anti-chain guard: after a space fallback, block re-emitting prev2
+     * or another short standalone word that would form "a o i a" chains. */
+    int chain_guard_short = -1;
+    if (prev1 == 32 && prev2 >= 0 &&
+        is_standalone_whitelist_word(&leo->bpe, prev2)) {
+        chain_guard_short = prev2;
+    } else if (prev1 >= 0) {
+        int plast = bpe_token_last_byte(&leo->bpe, prev1);
+        int prev_ends_space = (plast == ' ' || plast == '\n' ||
+                               plast == '\r' || plast == '\t');
+        if (prev_ends_space && is_standalone_whitelist_word(&leo->bpe, prev1))
+            chain_guard_short = prev1;
+    }
+    if (chain_guard_short >= 0 || (prev1 == 32 && prev2 >= 0)) {
+        int any_nonzero = 0;
+        for (int i = 0; i < cc.n; i++) {
+            if (prev1 == 32 && cand_id[i] == prev2) { cand_sc[i] = 0.0f; continue; }
+            if (chain_guard_short >= 0 &&
+                is_standalone_whitelist_word(&leo->bpe, cand_id[i])) {
+                cand_sc[i] = 0.0f; continue;
+            }
+            if (cand_sc[i] > 0) any_nonzero = 1;
+        }
+        if (!any_nonzero) return -1;
+    }
+
+    for (int i = 0; i < cc.n; i++)
+        cand_sc[i] = powf(cand_sc[i], inv_temp);
+
+    int pick = weighted_sample(cand_sc, cc.n);
+    return pick < 0 ? -1 : cand_id[pick];
+}
+
+/* sentence generator: assemble tokens, then clean the shape (capital
+ * start, period end, strip leading ws). emitted_tail returns the last
+ * *n_emit tokens for chain continuity. */
+static int leo_generate_ex(Leo *leo, char *out, int max_len,
+                           int start_hint,
+                           const int *tail, int n_tail,
+                           int *emitted_tail, int *n_emit) {
+    if (!out || max_len < 2) { if (emitted_tail && n_emit) *n_emit = 0; return 0; }
+    out[0] = 0;
+
+    int ctx[LEO_GEN_MAX];
+    int n = 0;
+
+    int start;
+    if (start_hint >= 0) start = start_hint;
+    else if (tail && n_tail > 0) start = leo_choose_continuation(leo, tail, n_tail);
+    else start = leo_choose_start(leo);
+    if (start < 0) {
+        snprintf(out, (size_t)max_len, "...");
+        if (emitted_tail && n_emit) *n_emit = 0;
+        return 0;
+    }
+    ctx[n++] = start;
+
+    int target = LEO_GEN_TARGET + (rand() % 10) - 5;
+    if (target < LEO_GEN_MIN) target = LEO_GEN_MIN;
+
+    for (int t = 1; t < LEO_GEN_MAX; t++) {
+        int prev1 = ctx[n - 1];
+        int prev2 = n >= 2 ? ctx[n - 2] : -1;
+        float tau = temp_for_step(t);
+        int tail_n = n < LEO_REPEAT_WINDOW ? n : LEO_REPEAT_WINDOW;
+        const int *tl = ctx + (n - tail_n);
+        int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n);
+        if (nxt < 0) break;
+
+        if (nxt == prev1) continue;                          /* immediate repeat */
+        if (n >= 2 && nxt == prev2 && prev1 == ctx[n - 2]) continue; /* doublet */
+
+        ctx[n++] = nxt;
+
+        if (n >= target && is_boundary_token(&leo->bpe, nxt)) break;
+        if (n >= LEO_GEN_MAX) break;
+    }
+
+    /* decode */
+    int pos = 0;
+    for (int i = 0; i < n; i++) {
+        char buf[LEO_MAX_TOKEN_LEN + 1];
+        int len = bpe_decode_token(&leo->bpe, ctx[i], buf, sizeof(buf));
+        if (pos + len >= max_len - 1) break;
+        memcpy(out + pos, buf, (size_t)len);
+        pos += len;
+    }
+    out[pos] = 0;
+
+    /* 1. strip leading whitespace */
+    int lead = 0;
+    while (out[lead] && (out[lead] == ' ' || out[lead] == '\n' ||
+                         out[lead] == '\r' || out[lead] == '\t'))
+        lead++;
+    if (lead > 0) {
+        int rem = (int)strlen(out + lead);
+        memmove(out, out + lead, (size_t)rem + 1);
+        pos = rem;
+    }
+
+    /* 2. truncate at last sentence-end, else append a period */
+    int last_end = -1;
+    for (int i = pos - 1; i >= 0; i--) {
+        if (out[i] == '.' || out[i] == '!' || out[i] == '?') { last_end = i; break; }
+    }
+    if (last_end >= 0) {
+        out[last_end + 1] = 0;
+        pos = last_end + 1;
+    } else {
+        while (pos > 0 && (out[pos - 1] == ' ' || out[pos - 1] == '\n' ||
+                           out[pos - 1] == '\r' || out[pos - 1] == '\t'))
+            pos--;
+        out[pos] = 0;
+        if (pos > 0 && pos < max_len - 1) { out[pos++] = '.'; out[pos] = 0; }
+    }
+
+    /* 3. capitalize first alpha */
+    for (int i = 0; out[i]; i++) {
+        if (out[i] >= 'a' && out[i] <= 'z') { out[i] = out[i] - ('a' - 'A'); break; }
+        if (out[i] >= 'A' && out[i] <= 'Z') break;
+    }
+
+    /* tail tokens for chain continuity */
+    if (emitted_tail && n_emit && *n_emit > 0) {
+        int want = *n_emit;
+        int src_start = n - want; if (src_start < 0) src_start = 0;
+        int take = n - src_start;
+        for (int i = 0; i < take; i++) emitted_tail[i] = ctx[src_start + i];
+        *n_emit = take;
+    } else if (n_emit) {
+        *n_emit = 0;
+    }
+
+    leo->step += n;
+    return n;
+}
+
+/* coherence score: avg bigram + 0.8 trigram + 0.5 cooc density + length. */
+static float leo_coherence_score(const Leo *leo, const int *ids, int n) {
+    if (n < 2) return 0.0f;
+    float bi = 0, tri = 0, hb = 0;
+    for (int i = 0; i < n - 1; i++)
+        bi += bigram_get(&leo->bigrams, ids[i], ids[i + 1]);
+    for (int i = 0; i < n - 2; i++)
+        tri += trigram_get(&leo->trigrams, ids[i], ids[i + 1], ids[i + 2]);
+    int cap_h = n - 1 < 20 ? n - 1 : 20;
+    for (int i = 0; i < cap_h; i++)
+        hb += cooc_get(&leo->cooc, ids[i], ids[i + 1]);
+    float len_bonus = n > 15 ? 1.5f : (n > 10 ? 0.8f : (n > 6 ? 0.2f : -0.5f));
+    return bi / (float)(n - 1)
+         + 0.8f * (n > 2 ? tri / (float)(n - 2) : 0.0f)
+         + 0.5f * hb / (float)(n - 1)
+         + len_bonus;
+}
+
+/* best-of-K by coherence. (In phase 1 the score also weighs prompt
+ * resonance — the honest selection nerve. Here: coherence only.) */
+static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
+                             int start_hint, const int *tail, int n_tail,
+                             int *emitted_tail, int *n_emit) {
+    if (k < 1) k = 1;
+    if (k > LEO_BEST_OF_K) k = LEO_BEST_OF_K;
+
+    char  best_text[1024]; best_text[0] = 0;
+    int   best_ids[LEO_GEN_MAX];
+    int   best_n = 0;
+    float best_score = -1e30f;
+    int   best_tokens = 0;
+
+    for (int trial = 0; trial < k; trial++) {
+        char buf[1024];
+        int  ids[LEO_GEN_MAX];
+        int  cap = LEO_GEN_MAX;
+        int  produced = leo_generate_ex(leo, buf, sizeof(buf),
+                                        start_hint, tail, n_tail, ids, &cap);
+        float sc = leo_coherence_score(leo, ids, cap);
+        if (sc > best_score) {
+            best_score = sc;
+            strncpy(best_text, buf, sizeof(best_text) - 1);
+            best_text[sizeof(best_text) - 1] = 0;
+            memcpy(best_ids, ids, (size_t)cap * sizeof(int));
+            best_n = cap;
+            best_tokens = produced;
+        }
+        if (sc > 1.0f && cap > 12) break;          /* strong first try */
+    }
+
+    int blen = (int)strlen(best_text);
+    if (blen >= max_len) blen = max_len - 1;
+    memcpy(out, best_text, (size_t)blen);
+    out[blen] = 0;
+    if (emitted_tail && n_emit) {
+        int want = *n_emit;
+        if (want > best_n) want = best_n;
+        memcpy(emitted_tail, best_ids + (best_n - want), (size_t)want * sizeof(int));
+        *n_emit = want;
+    }
+    return best_tokens;
+}
+
+/* one sentence, no hints. */
+__attribute__((unused))  /* convenience wrapper; used by tests / phase 1 */
+static int leo_generate(Leo *leo, char *out, int max_len) {
+    return leo_generate_ex(leo, out, max_len, -1, NULL, 0, NULL, NULL);
+}
+
+/* a chain of sentences, each continued from the previous tail (theme
+ * carry). SPA outlier-reseed is added in phase 2. */
+static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
+    if (!out || max_len < 2) return 0;
+    if (n_sentences < 1) n_sentences = 1;
+    if (n_sentences > LEO_CHAIN_MAX) n_sentences = LEO_CHAIN_MAX;
+
+    char sent_text[LEO_CHAIN_MAX][1024];
+    int  total = 0;
+    int  tail[LEO_TAIL_WIN];
+    int  tail_len = 0;
+
+    for (int s = 0; s < n_sentences; s++) {
+        int sent_ids[LEO_GEN_MAX];
+        int tok_cap = LEO_GEN_MAX;
+        int produced = leo_generate_best(
+            leo, LEO_BEST_OF_K, sent_text[s], sizeof(sent_text[s]),
+            -1, s == 0 ? NULL : tail, s == 0 ? 0 : tail_len,
+            sent_ids, &tok_cap);
+        total += produced;
+        int take = tok_cap > LEO_TAIL_WIN ? LEO_TAIL_WIN : tok_cap;
+        int src_start = tok_cap - take;
+        for (int i = 0; i < take; i++) tail[i] = sent_ids[src_start + i];
+        tail_len = take;
+    }
+
+    int pos = 0;
+    out[0] = 0;
+    for (int s = 0; s < n_sentences; s++) {
+        int slen = (int)strlen(sent_text[s]);
+        if (slen == 0) continue;
+        if (pos > 0 && pos + 1 < max_len) out[pos++] = ' ';
+        if (pos + slen >= max_len - 1) { out[pos] = 0; break; }
+        memcpy(out + pos, sent_text[s], (size_t)slen);
+        pos += slen;
+        out[pos] = 0;
+    }
+    return total;
+}
+
+/* ========================================================================
+ * SMOKE / SPEAK HARNESS (step 0 field stats + step 1 generation)
  * ======================================================================== */
 #ifndef LEO_NO_MAIN
 
@@ -1030,18 +1528,23 @@ static int count_cb(int dst, float count, void *ud) {
 
 int main(int argc, char **argv) {
     const char *corpus_path = "leo.txt";
-    int dump_bootstrap = 0;
+    int  dump_bootstrap = 0;
+    int  gen_n = 0;          /* --gen N: speak N replies from the field */
+    long seed  = -1;         /* --seed S: reproducible sampling */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--corpus") && i + 1 < argc) corpus_path = argv[++i];
         else if (!strcmp(argv[i], "--dump-bootstrap")) dump_bootstrap = 1;
+        else if (!strcmp(argv[i], "--gen") && i + 1 < argc) gen_n = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = atol(argv[++i]);
     }
+    srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
 
     if (dump_bootstrap) {           /* raw dedication bytes, for sha/diff */
         fputs(LEO_EMBEDDED_BOOTSTRAP, stdout);
         return 0;
     }
 
-    printf("[leo step0] leo %s — corpus + tokenizer + field smoke\n", LEO_VERSION);
+    printf("[leo] leo %s — corpus + tokenizer + field + voice\n", LEO_VERSION);
 
     Leo leo;
     leo_init(&leo);
@@ -1116,6 +1619,17 @@ int main(int argc, char **argv) {
             bigram_walk_src(&leo.bigrams, ids[0], count_cb, &succ);
             printf("[leo step0] probe token id=%d (\"%s\"...): bigram successors=%d\n",
                    ids[0], probe, succ);
+        }
+    }
+
+    /* step 1 — Leo speaks from his learned field (no prompt path yet). */
+    if (gen_n > 0) {
+        char reply[2048];
+        printf("[leo step1] %d replies from the field%s:\n", gen_n,
+               seed >= 0 ? " (seeded)" : "");
+        for (int i = 0; i < gen_n; i++) {
+            leo_chain(&leo, LEO_CHAIN_MIN, reply, sizeof(reply));
+            printf("  leo> %s\n", reply);
         }
     }
 
