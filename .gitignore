@@ -1,0 +1,10 @@
+# build artifacts
+leo
+leo.asan
+tests/test_leo
+*.o
+*.dSYM/
+
+# runtime state (regenerated from corpus + dialogue)
+*.state
+leo_mycelium/
