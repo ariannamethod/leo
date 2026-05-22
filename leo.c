@@ -1745,6 +1745,30 @@ static int leo_presence_start_hint(const Leo *leo) {
     return best;
 }
 
+/* open on a DOOR ("The", "His") whose latch pulls the heard word as a real
+ * successor — "The rain", "His mother" — softer and more sentence-shaped than
+ * barking the bare word ("Rain."). Door + existing-successor latch = selection
+ * of a path Leo already walks, never insertion. Caller falls back to the bare
+ * word-opener (leo_presence_start_hint) when no door leads into the word. */
+static int leo_presence_door_hint(const Leo *leo) {
+    if (!leo || !leo->gravity) return -1;
+    int V = leo->bpe.vocab_size;
+    if (leo->cooc.freq_size < V) V = leo->cooc.freq_size;
+    int   best = -1;
+    float best_sc = 0.0f;
+    for (int id = 0; id < V; id++) {
+        if (!leo_token_is_presence_entry(&leo->bpe, id)) continue;   /* a door */
+        float f = leo->cooc.freq[id];
+        if (f <= 0.0f) continue;
+        int succ = leo_presence_latched_successor(leo, id);  /* what the door latches */
+        if (succ < 0 || succ >= V) continue;
+        if (leo->gravity[succ] < LEO_SELF_ATTRACTOR_G) continue;  /* must lead to the HEARD word */
+        float sc = 100.0f * leo->gravity[succ] + leo_squash(f);
+        if (sc > best_sc) { best_sc = sc; best = id; }
+    }
+    return best;
+}
+
 /* a chain of sentences, each continued from the previous tail (theme
  * carry). SPA outlier-reseed is added in phase 2. */
 static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
@@ -1756,7 +1780,13 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     int  total = 0;
     int  tail[LEO_TAIL_WIN];
     int  tail_len = 0;
-    int  hint0 = leo->gravity ? leo_presence_start_hint(leo) : -1;
+    /* prefer a door that leads into the heard word ("The rain"); fall back to
+     * the bare word-opener only when no door latches into it. */
+    int  hint0 = -1;
+    if (leo->gravity) {
+        hint0 = leo_presence_door_hint(leo);
+        if (hint0 < 0) hint0 = leo_presence_start_hint(leo);
+    }
 
     for (int s = 0; s < n_sentences; s++) {
         int sent_ids[LEO_GEN_MAX];
