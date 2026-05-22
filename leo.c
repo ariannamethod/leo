@@ -1822,14 +1822,40 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     int  tail_len = 0;
     /* prefer a door that leads into the heard word ("The rain"); fall back to
      * the bare word-opener only when no door latches into it. */
-    int  door_hint = -1, nbr_hint = -1;
+    int  nbr_hint = -1, door_hint = -1, word_hint = -1;
     if (leo->gravity) {
-        door_hint = leo_presence_door_hint(leo);              /* door → heard word */
-        nbr_hint  = leo_presence_neighbour_hint(leo);         /* theme neighbour, not the word */
-        if (door_hint < 0) door_hint = leo_presence_start_hint(leo);  /* bare-word fallback */
+        word_hint = leo_presence_start_hint(leo);      /* the BARE word — always carries the heard word (g=2.0) */
+        nbr_hint  = leo_presence_neighbour_hint(leo);  /* theme neighbour, not the word */
+        door_hint = leo_presence_door_hint(leo);       /* a door → the word ("The love") */
+        if (door_hint < 0) door_hint = word_hint;
     }
-    int V = leo->bpe.vocab_size;
-    int surfaced = 0;     /* has the heard word surfaced anywhere in the reply? */
+    /* the heard word as a lowercase string, to detect surfacing in the actual
+     * DISPLAYED text. A token-level scan over-counts: generate_ex trims a
+     * trailing incomplete clause from the text but keeps its tokens, so a
+     * "The love" generated past the last period would flag a token while the
+     * reply shows none of it. Text scan = what the reader actually sees. */
+    char wstr[LEO_MAX_TOKEN_LEN + 1] = {0};
+    if (leo->gravity) {
+        int wid = -1;       /* the heard word = longest self-attracted token */
+        for (int i = 0; i < leo->bpe.vocab_size; i++)
+            if (leo->gravity[i] >= LEO_SELF_ATTRACTOR_G &&
+                (wid < 0 || leo->bpe.vocab_len[i] > leo->bpe.vocab_len[wid]))
+                wid = i;
+        if (wid >= 0) {
+            char raw[LEO_MAX_TOKEN_LEN + 1];
+            int  rl = bpe_decode_token(&leo->bpe, wid, raw, sizeof(raw));
+            int  a = 0, e = rl;
+            while (a < e && (raw[a] == ' ' || raw[a] == '\n')) a++;
+            while (e > a && (raw[e-1] == ' ' || raw[e-1] == '\n')) e--;
+            int j = 0;
+            for (int i = a; i < e && j < LEO_MAX_TOKEN_LEN; i++) {
+                char c = raw[i];
+                wstr[j++] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+            }
+            wstr[j] = 0;
+        }
+    }
+    int surfaced = 0;     /* has the heard word surfaced in the DISPLAYED reply? */
 
     for (int s = 0; s < n_sentences; s++) {
         int sent_ids[LEO_GEN_MAX];
@@ -1840,7 +1866,7 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
          * presence never silently drops). Later sentences continue from tail. */
         int start_h;
         if (s == 0)          start_h = (nbr_hint >= 0 ? nbr_hint : door_hint);
-        else if (!surfaced)  start_h = door_hint;
+        else if (!surfaced)  start_h = door_hint;   /* guarantee: door→word ("His mother"), or bare word */
         else                 start_h = -1;
         const int *tl = (start_h >= 0 || s == 0) ? NULL : tail;
         int tn        = (start_h >= 0 || s == 0) ? 0 : tail_len;
@@ -1848,10 +1874,17 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
             leo, LEO_BEST_OF_K, sent_text[s], sizeof(sent_text[s]),
             start_h, tl, tn, sent_ids, &tok_cap);
         total += produced;
-        if (leo->gravity) for (int i = 0; i < tok_cap; i++)
-            if (sent_ids[i] < V && leo->gravity[sent_ids[i]] >= LEO_SELF_ATTRACTOR_G) {
-                surfaced = 1; break;
+        if (wstr[0] && !surfaced) {        /* scan the DISPLAYED text, not tokens */
+            char low[1024];
+            int  tl = (int)strlen(sent_text[s]);
+            if (tl > 1023) tl = 1023;
+            for (int i = 0; i < tl; i++) {
+                char c = sent_text[s][i];
+                low[i] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
             }
+            low[tl] = 0;
+            if (strstr(low, wstr)) surfaced = 1;
+        }
         int take = tok_cap > LEO_TAIL_WIN ? LEO_TAIL_WIN : tok_cap;
         int src_start = tok_cap - take;
         for (int i = 0; i < take; i++) tail[i] = sent_ids[src_start + i];
