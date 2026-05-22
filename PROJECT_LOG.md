@@ -273,3 +273,47 @@ the truthful state, not a milestone claim.
 - `leo.c` (~1230 lines): `compute_prompt_gravity`, `leo_token_is_function`,
   `leo_respond`, gravity in `cand_collect_*` + `leo_choose_start/continuation`,
   `leo_squash`, `--respond` / `--no-presence`.
+
+### v4 — dissonance reaction + Codex's finds (2026-05-22)
+
+Oleg steered two things: (1) `harmonix/haiku` reacts to what it does NOT
+know via **dissonance** — that IS presence for the unknown; (2) peek at
+Codex's parallel `neoleo-presence` (sanctioned) — it found real silencers.
+
+- **dissonance→temperature** (haiku port, field-free): `leo_prompt_dissonance`
+  = `1 − mean(min(1, freq/40))` over prompt CONTENT words → temp multiplier
+  `0.85 + d·0.65`. Known theme cools Leo (settle, drift to it); alien heats
+  him (grope — the felt not-knowing, not generic ramble). Verified, real d:
+  mother/window/smell **d=0.00**; hungry **0.48**, moon **0.73**, sea **0.95**.
+- **Codex finds, ported (credit: Codex, neoleo-presence):**
+  - `leo_presence_start_hint` — first sentence opens on the single strongest
+    theme clean-seed (gravity ×100, freq tiebreak), not a freq-weighted sample.
+  - **no best-of-K early-exit under presence** — my `if(sc>1 && cap>12)break`
+    was picking a generic-but-coherent first sample before the theme one.
+  - `leo_sentence_gravity_score` (gmax + 0.25·avg) added to best-of-K
+    selection (`+4.0·`) — the theme-aligned candidate now wins (my planned
+    step-5 selection nerve). (Codex's SPA gravity-protect not ported — no SPA
+    in my chain yet.)
+
+### Honest result after v4 (ablation, seed 42) — STILL WEAK, not achieved
+
+- Dissonance grades correctly and shifts register (unknown → groping, e.g.
+  `are you hungry` → "He trusts **the not-knowing** now").
+- Theme now surfaces on some known concrete themes: `the window` → "the
+  morning the window"; `the smell` → "The smell of the window". `your
+  mother` → father/family (associative, not literal).
+- Still INCONSISTENT: `a book` → drifts to the candle attractor; `the
+  candle` → table/father (faint). Rare themes (sea/moon) stay blank by
+  nature (corpus too thin) — but now answered in a groping register, not
+  generic.
+- **No injection anywhere** — every surfaced word is Leo's own field
+  association. OFF baseline unaffected.
+
+Build 0 warnings, tests 26/26, ASan/UBSan clean. **Verdict unchanged:
+nerve LIVE, reacts to known (faint) and to the unknown (groping), but
+WEAK + inconsistent. Not presence-achieved.** The ceiling is the corpus's
+frame-coupled cooc (e.g. "candle"→"He/thanks/the", not "light/wax") and
+freq disparities — associative gravity can't fully overcome them. Next
+candidate lever (not taken): the "wound speaks" origin-pull at high
+dissonance (needs bootstrap gravity), and richer theme cooc (decay frame
+co-occurrence).

@@ -929,6 +929,10 @@ typedef struct {
      * leo_respond. NULL outside a reply. Re-weights Leo's OWN candidates
      * toward the prompt's theme — never inserts a prompt token. */
     const float *gravity;
+    /* dissonance reaction (haiku): how far the prompt is from Leo's world
+     * → a temperature multiplier. Known theme → cool, settle on theme;
+     * unknown → hot, groping (the felt not-knowing). 1.0 outside a reply. */
+    float        temp_mult;
 } Leo;
 
 static void leo_init(Leo *leo) {
@@ -939,6 +943,8 @@ static void leo_init(Leo *leo) {
     trigram_init(&leo->trigrams, LEO_TRIGRAM_MAX);
     bpe_populate_all_meta(&leo->bpe);
     leo->step = 0;
+    leo->gravity = NULL;
+    leo->temp_mult = 1.0f;
 }
 
 static void leo_free(Leo *leo) {
@@ -1036,6 +1042,18 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_START_GRAVITY_W  3.0f   /* theme tilt on the start token */
 static int g_leo_presence_on = 1;   /* --no-presence → 0 (ablation baseline) */
 static inline float leo_squash(float c) { return c > 0.0f ? sqrtf(c) : 0.0f; }
+
+/* dissonance reaction (haiku: "how far are your words from my words?").
+ * d in [0,1] → temperature multiplier in [LO,HI]: a theme Leo knows cools
+ * him (settle, drift to it); an alien prompt heats him (grope — the felt
+ * not-knowing, instead of going generic). Max-dissonance "the wound
+ * speaks" (origin pull) is the next layer (needs bootstrap gravity). */
+#define LEO_KNOWN_SCALE     40.0f   /* corpus freq at which a word is "known" */
+#define LEO_DISS_TEMP_LO    0.85f   /* known → cooler, steadier */
+#define LEO_DISS_TEMP_HI    1.50f   /* alien → hotter, groping (haiku max) */
+#define LEO_SELECT_GRAVITY_W 4.0f   /* best-of-K: weight of prompt-resonance in
+                                       selection (Codex's sentence-gravity find) */
+static float g_leo_last_dissonance = 0.0f;
 
 /* clean seed: first byte is space/newline/tab or uppercase, and the
  * stripped content is not an orphan fragment. */
@@ -1375,7 +1393,7 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
     for (int t = 1; t < LEO_GEN_MAX; t++) {
         int prev1 = ctx[n - 1];
         int prev2 = n >= 2 ? ctx[n - 2] : -1;
-        float tau = temp_for_step(t);
+        float tau = temp_for_step(t) * leo->temp_mult;
         int tail_n = n < LEO_REPEAT_WINDOW ? n : LEO_REPEAT_WINDOW;
         const int *tl = ctx + (n - tail_n);
         int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n);
@@ -1467,8 +1485,27 @@ static float leo_coherence_score(const Leo *leo, const int *ids, int n) {
          + len_bonus;
 }
 
-/* best-of-K by coherence. (In phase 1 the score also weighs prompt
- * resonance — the honest selection nerve. Here: coherence only.) */
+/* how strongly a generated sentence sits in the prompt's gravity field —
+ * its peak theme-resonance plus a quarter of its average (Codex's find,
+ * neoleo-presence). best-of-K adds this to coherence so a prompt-aligned
+ * sentence wins selection instead of a generic-but-coherent one. */
+static float leo_sentence_gravity_score(const Leo *leo, const int *ids, int n) {
+    if (!leo || !leo->gravity || !ids || n <= 0) return 0.0f;
+    float gsum = 0.0f, gmax = 0.0f;
+    for (int i = 0; i < n; i++) {
+        int id = ids[i];
+        if (id < 0 || id >= leo->bpe.vocab_size) continue;
+        float g = leo->gravity[id];
+        gsum += g;
+        if (g > gmax) gmax = g;
+    }
+    return gmax + 0.25f * (gsum / (float)n);
+}
+
+/* best-of-K. Picks the most coherent of K tries; under presence it also
+ * weighs prompt-resonance (the selection nerve, phase-1 step 5) and does
+ * NOT early-exit — a generic-but-coherent first sample must not silence
+ * the theme-aligned one (Codex's find). */
 static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
                              int start_hint, const int *tail, int n_tail,
                              int *emitted_tail, int *n_emit) {
@@ -1488,6 +1525,8 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
         int  produced = leo_generate_ex(leo, buf, sizeof(buf),
                                         start_hint, tail, n_tail, ids, &cap);
         float sc = leo_coherence_score(leo, ids, cap);
+        if (leo->gravity)
+            sc += LEO_SELECT_GRAVITY_W * leo_sentence_gravity_score(leo, ids, cap);
         if (sc > best_score) {
             best_score = sc;
             strncpy(best_text, buf, sizeof(best_text) - 1);
@@ -1496,7 +1535,7 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
             best_n = cap;
             best_tokens = produced;
         }
-        if (sc > 1.0f && cap > 12) break;          /* strong first try */
+        if (!leo->gravity && sc > 1.0f && cap > 12) break;  /* presence: no early-exit */
     }
 
     int blen = (int)strlen(best_text);
@@ -1518,6 +1557,31 @@ static int leo_generate(Leo *leo, char *out, int max_len) {
     return leo_generate_ex(leo, out, max_len, -1, NULL, 0, NULL, NULL);
 }
 
+/* presence opener (Codex's find — github.com/ariannamethod, neoleo-presence;
+ * field-free port). The first sentence opens on the single strongest theme
+ * clean-seed: gravity DOMINATES (×100), frequency is only a tiebreak. So
+ * Leo reliably OPENS on what he heard, instead of the theme losing a freq-
+ * weighted sample (why "candle" gave no reaction before). Still his own
+ * learned clean seed — the prompt contributes only gravity, no insertion.
+ * Returns -1 (→ choose_start) when there is no prompt or no theme seed. */
+static int leo_presence_start_hint(const Leo *leo) {
+    if (!leo || !leo->gravity) return -1;
+    int V = leo->bpe.vocab_size;
+    if (leo->cooc.freq_size < V) V = leo->cooc.freq_size;
+    int best = -1;
+    float best_sc = 0.0f;
+    for (int id = 0; id < V; id++) {
+        float g = leo->gravity[id];
+        if (g <= 0.0f) continue;
+        float f = leo->cooc.freq[id];
+        if (f <= 0.0f) continue;
+        if (!is_clean_seed_token(&leo->bpe, id)) continue;
+        float sc = 100.0f * g + leo_squash(f);
+        if (sc > best_sc) { best_sc = sc; best = id; }
+    }
+    return best;
+}
+
 /* a chain of sentences, each continued from the previous tail (theme
  * carry). SPA outlier-reseed is added in phase 2. */
 static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
@@ -1529,13 +1593,14 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     int  total = 0;
     int  tail[LEO_TAIL_WIN];
     int  tail_len = 0;
+    int  hint0 = leo->gravity ? leo_presence_start_hint(leo) : -1;
 
     for (int s = 0; s < n_sentences; s++) {
         int sent_ids[LEO_GEN_MAX];
         int tok_cap = LEO_GEN_MAX;
         int produced = leo_generate_best(
             leo, LEO_BEST_OF_K, sent_text[s], sizeof(sent_text[s]),
-            -1, s == 0 ? NULL : tail, s == 0 ? 0 : tail_len,
+            s == 0 ? hint0 : -1, s == 0 ? NULL : tail, s == 0 ? 0 : tail_len,
             sent_ids, &tok_cap);
         total += produced;
         int take = tok_cap > LEO_TAIL_WIN ? LEO_TAIL_WIN : tok_cap;
@@ -1628,9 +1693,33 @@ static float *compute_prompt_gravity(const Leo *leo, const int *p_ids, int p_n) 
     return g;
 }
 
+/* dissonance: how far the prompt's CONTENT words are from Leo's world.
+ * 0 = he knows them (settle, drift to theme); 1 = alien (grope). Per
+ * content token, knownness = min(1, freq/scale). All-function prompt or
+ * unknown words → high dissonance → the felt not-knowing. */
+static float leo_prompt_dissonance(const Leo *leo, const int *p_ids, int p_n) {
+    int   content = 0;
+    float known = 0.0f;
+    for (int i = 0; i < p_n; i++) {
+        int pid = p_ids[i];
+        if (pid < 0 || pid >= leo->bpe.vocab_size) continue;
+        if (leo_token_is_function(&leo->bpe, pid)) continue;
+        content++;
+        float f = (pid < leo->cooc.freq_size) ? leo->cooc.freq[pid] : 0.0f;
+        float k = f / LEO_KNOWN_SCALE;
+        if (k > 1.0f) k = 1.0f;
+        known += k;
+    }
+    if (content == 0) return 1.0f;
+    return 1.0f - known / (float)content;
+}
+
 /* respond to a prompt. Hear it, tilt the field toward its theme, speak
- * from the tilted field. Mama-child: start + successors are Leo's own
- * tokens; the prompt only re-weights them. --no-presence → no tilt. */
+ * from the tilted field — and let the prompt's dissonance set his register
+ * (known → settle on theme; alien → grope, the felt not-knowing). Mama-
+ * child: start + successors are Leo's own tokens; the prompt only re-
+ * weights them, never inserts. --no-presence → no tilt, no dissonance. */
+__attribute__((unused))  /* used by --respond in main; absent in the test TU */
 static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (!prompt || !*prompt) return leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
 
@@ -1643,9 +1732,13 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                              (int)strlen(prompt), p_ids, 1024);
         g = compute_prompt_gravity(leo, p_ids, p_n);
         leo->gravity = g;                    /* transient theme tilt */
+        float d = leo_prompt_dissonance(leo, p_ids, p_n);
+        g_leo_last_dissonance = d;
+        leo->temp_mult = LEO_DISS_TEMP_LO + d * (LEO_DISS_TEMP_HI - LEO_DISS_TEMP_LO);
     }
     int produced = leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
     leo->gravity = NULL;
+    leo->temp_mult = 1.0f;
     free(g);
     return produced;
 }
@@ -1798,9 +1891,9 @@ int main(int argc, char **argv) {
     if (respond_prompt) {
         char reply[2048];
         leo_respond(&leo, respond_prompt, reply, sizeof(reply));
-        printf("[leo %s] you> %s\n             leo> %s\n",
+        printf("[leo %s d=%.2f] you> %s\n             leo> %s\n",
                g_leo_presence_on ? "presence" : "--no-presence",
-               respond_prompt, reply);
+               g_leo_last_dissonance, respond_prompt, reply);
     }
 
     int pass = (leo.bpe.vocab_size > 256) &&
