@@ -1078,6 +1078,10 @@ static float g_leo_last_dissonance = 0.0f;
                                             exempted only if the piece is a real
                                             learned token (freq >= this) — keeps
                                             gibberish ("asdfjkl") pieces gated */
+#define LEO_TRACE_MIN_COUNT      3.0f    /* a multi-token word may be assembled only
+                                            if EACH consecutive piece-bigram is in
+                                            Leo's memory >= this (the prompt itself
+                                            adds 1, so 1-2 = seeding, refused) */
 #define LEO_UNKNOWN_DISS         0.70f   /* dissonance above which Leo says LESS —
                                             a short groping reply (felt not-knowing)
                                             instead of a long generic ramble */
@@ -1876,16 +1880,20 @@ static void leo_gravity_mark_prompt_words(const Leo *leo, const char *prompt,
                 if (m == 1 && leo_token_is_gravity_target(&leo->bpe, ids[0])) {
                     g[ids[0]] = LEO_SELF_ATTRACTOR_G;       /* single-token word */
                 } else if (m > 1 && pieces && fi == 0) {
-                    /* multi-token word ("father" = [ f][ather]): mark every
-                     * piece a top gravity target AND gate-exempt, so the word
-                     * assembles from its OWN successors past the orphan gate. */
-                    for (int k = 0; k < m; k++) {
+                    /* multi-token word ("father" = [ f][ather]): surface it ONLY
+                     * if its piece SEQUENCE is a CONFIRMED path in Leo's OWN
+                     * memory — every consecutive bigram >= LEO_TRACE_MIN_COUNT.
+                     * leo_respond ingests the prompt first (+1 to each bigram),
+                     * so a count of 1-2 is essentially the prompt itself: that
+                     * is prompt-piece seeding, which we REFUSE. Only a sequence
+                     * Leo already walks on his own is gate-exempted + raised. */
+                    int confirmed = 1;
+                    for (int k = 0; k + 1 < m; k++)
+                        if (bigram_get(&leo->bigrams, ids[k], ids[k + 1])
+                                < LEO_TRACE_MIN_COUNT) { confirmed = 0; break; }
+                    if (confirmed) for (int k = 0; k < m; k++) {
                         int id = ids[k];
-                        if (id < 0 || id >= leo->bpe.vocab_size) continue;
-                        if (id < 256) continue;             /* raw byte, not a learned
-                            word-piece — keeps gibberish ("asdfjkl" → bytes) gated */
-                        if (id >= leo->cooc.freq_size ||
-                            leo->cooc.freq[id] < LEO_PIECE_MIN_FREQ) continue;
+                        if (id < 256 || id >= leo->bpe.vocab_size) continue;
                         g[id] = LEO_SELF_ATTRACTOR_G;
                         pieces[id] = 1;
                     }
