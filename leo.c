@@ -1062,6 +1062,9 @@ static float g_leo_last_dissonance = 0.0f;
 #define LEO_ENTRY_CONTENT_LATCH  3.0f    /* boost on gravity successors after a door */
 #define LEO_ENTRY_LATCH_MIN_G    0.30f   /* min gravity to hard-latch a successor */
 #define LEO_PROMPT_REENTRY_MAX   2       /* sentences that re-open on the theme */
+#define LEO_SELF_ATTRACTOR_G     2.0f    /* heard word's gravity, above neighbour
+                                            max (1.0): "father" opens on father,
+                                            not the more frequent "mother" */
 
 /* clean seed: first byte is space/newline/tab or uppercase, and the
  * stripped content is not an orphan fragment. */
@@ -1847,7 +1850,7 @@ static void leo_gravity_mark_prompt_words(const Leo *leo, const char *prompt,
                 int m = bpe_encode(&leo->bpe, (const uint8_t *)forms[fi],
                                    (int)strlen(forms[fi]), ids, 16);
                 if (m == 1 && leo_token_is_gravity_target(&leo->bpe, ids[0]))
-                    g[ids[0]] = 1.0f;
+                    g[ids[0]] = LEO_SELF_ATTRACTOR_G;
             }
         }
         wi = 0;
