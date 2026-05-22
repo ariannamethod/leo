@@ -1553,6 +1553,12 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
     int target = LEO_GEN_TARGET + (rand() % 10) - 5;
     if (target < LEO_GEN_MIN) target = LEO_GEN_MIN;
 
+    int V = leo->bpe.vocab_size;
+    int word_seen = 0;          /* has the heard word surfaced in THIS sentence? */
+    for (int i = 0; i < n; i++)
+        if (leo->gravity && ctx[i] < V && leo->gravity[ctx[i]] >= LEO_SELF_ATTRACTOR_G)
+            word_seen = 1;
+
     for (int t = 1; t < LEO_GEN_MAX; t++) {
         int prev1 = ctx[n - 1];
         int prev2 = n >= 2 ? ctx[n - 2] : -1;
@@ -1562,10 +1568,22 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
         int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n);
         if (nxt < 0) break;
 
+        /* deferred door-latch (my design): the heard word surfaces DEEPER in
+         * the flow — when a door token ("His"/"The") appears naturally and the
+         * word is its confirmed gravity-raised successor, latch it there, not
+         * bolted to the opener. Existing-successor selection, not insertion. */
+        if (leo->gravity && !word_seen &&
+            leo_token_is_presence_entry(&leo->bpe, prev1)) {
+            int w = leo_presence_latched_successor(leo, prev1);
+            if (w >= 0 && w < V && leo->gravity[w] >= LEO_SELF_ATTRACTOR_G) nxt = w;
+        }
+
         if (nxt == prev1) continue;                          /* immediate repeat */
         if (n >= 2 && nxt == prev2 && prev1 == ctx[n - 2]) continue; /* doublet */
 
         ctx[n++] = nxt;
+        if (leo->gravity && nxt < V && leo->gravity[nxt] >= LEO_SELF_ATTRACTOR_G)
+            word_seen = 1;
 
         if (n >= target && is_boundary_token(&leo->bpe, nxt)) break;
         if (n >= LEO_GEN_MAX) break;
@@ -1769,6 +1787,27 @@ static int leo_presence_door_hint(const Leo *leo) {
     return best;
 }
 
+/* the best theme NEIGHBOUR clean-seed (gravity-raised but NOT the heard word
+ * itself) — opens a reply theme-adjacent without barking the word, so the word
+ * can surface deeper in the flow (via the deferred door-latch). */
+static int leo_presence_neighbour_hint(const Leo *leo) {
+    if (!leo || !leo->gravity) return -1;
+    int V = leo->bpe.vocab_size;
+    if (leo->cooc.freq_size < V) V = leo->cooc.freq_size;
+    int   best = -1;
+    float best_sc = 0.0f;
+    for (int id = 0; id < V; id++) {
+        float g = leo->gravity[id];
+        if (g <= 0.0f || g >= LEO_SELF_ATTRACTOR_G) continue;  /* a neighbour, not the word */
+        float f = leo->cooc.freq[id];
+        if (f <= 0.0f) continue;
+        if (!is_clean_seed_token(&leo->bpe, id)) continue;
+        float sc = 100.0f * g + leo_squash(f);
+        if (sc > best_sc) { best_sc = sc; best = id; }
+    }
+    return best;
+}
+
 /* a chain of sentences, each continued from the previous tail (theme
  * carry). SPA outlier-reseed is added in phase 2. */
 static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
@@ -1782,26 +1821,36 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     int  tail_len = 0;
     /* prefer a door that leads into the heard word ("The rain"); fall back to
      * the bare word-opener only when no door latches into it. */
-    int  hint0 = -1;
+    int  door_hint = -1, nbr_hint = -1;
     if (leo->gravity) {
-        hint0 = leo_presence_door_hint(leo);
-        if (hint0 < 0) hint0 = leo_presence_start_hint(leo);
+        door_hint = leo_presence_door_hint(leo);              /* door → heard word */
+        nbr_hint  = leo_presence_neighbour_hint(leo);         /* theme neighbour, not the word */
+        if (door_hint < 0) door_hint = leo_presence_start_hint(leo);  /* bare-word fallback */
     }
+    int V = leo->bpe.vocab_size;
+    int surfaced = 0;     /* has the heard word surfaced anywhere in the reply? */
 
     for (int s = 0; s < n_sentences; s++) {
         int sent_ids[LEO_GEN_MAX];
         int tok_cap = LEO_GEN_MAX;
-        /* re-entry (Codex): the first sentences re-open on the theme, so a
-         * long reply does not drift off it after sentence 1; later ones
-         * continue from the tail (gravity-tilted). */
-        int reentry  = (hint0 >= 0 && s < LEO_PROMPT_REENTRY_MAX);
-        int start_h  = reentry ? hint0 : -1;
-        const int *tl = (s == 0 || reentry) ? NULL : tail;
-        int tn       = (s == 0 || reentry) ? 0 : tail_len;
+        /* s0 opens theme-ADJACENT (a neighbour) so the heard word surfaces
+         * DEEPER in the flow via the deferred door-latch. If by then it has
+         * NOT surfaced, the next sentence opens on the door → word (fallback —
+         * presence never silently drops). Later sentences continue from tail. */
+        int start_h;
+        if (s == 0)          start_h = (nbr_hint >= 0 ? nbr_hint : door_hint);
+        else if (!surfaced)  start_h = door_hint;
+        else                 start_h = -1;
+        const int *tl = (start_h >= 0 || s == 0) ? NULL : tail;
+        int tn        = (start_h >= 0 || s == 0) ? 0 : tail_len;
         int produced = leo_generate_best(
             leo, LEO_BEST_OF_K, sent_text[s], sizeof(sent_text[s]),
             start_h, tl, tn, sent_ids, &tok_cap);
         total += produced;
+        if (leo->gravity) for (int i = 0; i < tok_cap; i++)
+            if (sent_ids[i] < V && leo->gravity[sent_ids[i]] >= LEO_SELF_ATTRACTOR_G) {
+                surfaced = 1; break;
+            }
         int take = tok_cap > LEO_TAIL_WIN ? LEO_TAIL_WIN : tok_cap;
         int src_start = tok_cap - take;
         for (int i = 0; i < take; i++) tail[i] = sent_ids[src_start + i];
