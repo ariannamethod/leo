@@ -1061,6 +1061,7 @@ static float g_leo_last_dissonance = 0.0f;
  * a live nerve-path toward the theme, never insertion of a prompt word. */
 #define LEO_ENTRY_CONTENT_LATCH  3.0f    /* boost on gravity successors after a door */
 #define LEO_ENTRY_LATCH_MIN_G    0.30f   /* min gravity to hard-latch a successor */
+#define LEO_PROMPT_REENTRY_MAX   2       /* sentences that re-open on the theme */
 
 /* clean seed: first byte is space/newline/tab or uppercase, and the
  * stripped content is not an orphan fragment. */
@@ -1729,10 +1730,16 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     for (int s = 0; s < n_sentences; s++) {
         int sent_ids[LEO_GEN_MAX];
         int tok_cap = LEO_GEN_MAX;
+        /* re-entry (Codex): the first sentences re-open on the theme, so a
+         * long reply does not drift off it after sentence 1; later ones
+         * continue from the tail (gravity-tilted). */
+        int reentry  = (hint0 >= 0 && s < LEO_PROMPT_REENTRY_MAX);
+        int start_h  = reentry ? hint0 : -1;
+        const int *tl = (s == 0 || reentry) ? NULL : tail;
+        int tn       = (s == 0 || reentry) ? 0 : tail_len;
         int produced = leo_generate_best(
             leo, LEO_BEST_OF_K, sent_text[s], sizeof(sent_text[s]),
-            s == 0 ? hint0 : -1, s == 0 ? NULL : tail, s == 0 ? 0 : tail_len,
-            sent_ids, &tok_cap);
+            start_h, tl, tn, sent_ids, &tok_cap);
         total += produced;
         int take = tok_cap > LEO_TAIL_WIN ? LEO_TAIL_WIN : tok_cap;
         int src_start = tok_cap - take;
