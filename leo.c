@@ -928,8 +928,9 @@ typedef struct {
     long         step;       /* total tokens heard over Leo's lifetime */
     /* presence nerve (phase 1): transient per-reply theme tilt, owned by
      * leo_respond. NULL outside a reply. Re-weights Leo's OWN candidates
-     * toward the prompt's theme — never inserts a prompt token. */
-    const float *gravity;
+     * toward the prompt's theme — never inserts a prompt token. The Dario
+     * boundary-injection mutates this buffer between sentences (non-const). */
+    float *gravity;
     /* multi-token surfacing: pieces of the prompt's CONTENT words (e.g.
      * "father" = [ f][ather]). Exempt from the orphan/glue gates so a
      * multi-token heard word assembles from its OWN successors — the
@@ -1049,6 +1050,15 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_GRAVITY_ADD      0.6f   /* additive pull — lets low-count neighbours surface */
 #define LEO_START_GRAVITY_W  3.0f   /* theme tilt on the start token */
 static int g_leo_presence_on = 1;   /* --no-presence → 0 (ablation baseline) */
+static int g_leo_dario_on    = 1;   /* --no-dario → 0 (Dario boundary-injection off) */
+/* Dario boundary-injection (paper-style, field-free): between sentences,
+ * deepen the theme's NON-DIRECT associations (gravity-raised neighbours, not
+ * the heard word) so the reply weaves the theme rather than drifting. Boosts
+ * existing field tokens only — never inserts a token, subordinate to presence
+ * (small prime, capped below the heard word's self-attractor). */
+#define LEO_DARIO_BOUNDARY_MAX  4
+#define LEO_DARIO_PRIME         0.20f
+#define LEO_DARIO_CAP           1.50f   /* primed assoc stays < LEO_SELF_ATTRACTOR_G (2.0) */
 static inline float leo_squash(float c) { return c > 0.0f ? sqrtf(c) : 0.0f; }
 
 /* dissonance reaction (haiku: "how far are your words from my words?").
@@ -1809,6 +1819,39 @@ static int leo_presence_neighbour_hint(const Leo *leo) {
     return best;
 }
 
+/* Dario boundary-injection (field-free): between sentences, deepen the top-K
+ * NON-DIRECT theme associations (gravity-raised neighbours, NOT the heard word)
+ * by a small prime, capped below the heard word's self-attractor. The theme's
+ * associative field grows as the reply unfolds — it weaves instead of drifting.
+ * Mutates existing gravity only; never inserts a token; subordinate to the
+ * presence path (the heard word still leads). --no-dario disables it. */
+static void leo_presence_boundary_inject(Leo *leo) {
+    if (!leo || !leo->gravity || !g_leo_dario_on) return;
+    int V = leo->bpe.vocab_size;
+    if (leo->cooc.freq_size < V) V = leo->cooc.freq_size;
+    int   top[LEO_DARIO_BOUNDARY_MAX];
+    float topg[LEO_DARIO_BOUNDARY_MAX];
+    int   n = 0;
+    for (int i = 0; i < V; i++) {
+        float gi = leo->gravity[i];
+        if (gi <= 0.0f || gi >= LEO_SELF_ATTRACTOR_G) continue;   /* non-direct assoc */
+        if (!leo_token_is_gravity_target(&leo->bpe, i)) continue;
+        int slot = -1;
+        for (int j = 0; j < LEO_DARIO_BOUNDARY_MAX; j++)
+            if (j >= n || gi > topg[j]) { slot = j; break; }
+        if (slot < 0) continue;
+        for (int j = (n < LEO_DARIO_BOUNDARY_MAX ? n : LEO_DARIO_BOUNDARY_MAX - 1);
+             j > slot; j--) { top[j] = top[j-1]; topg[j] = topg[j-1]; }
+        top[slot] = i; topg[slot] = gi;
+        if (n < LEO_DARIO_BOUNDARY_MAX) n++;
+    }
+    for (int i = 0; i < n; i++) {
+        float ng = leo->gravity[top[i]] + LEO_DARIO_PRIME;
+        if (ng > LEO_DARIO_CAP) ng = LEO_DARIO_CAP;
+        leo->gravity[top[i]] = ng;
+    }
+}
+
 /* a chain of sentences, each continued from the previous tail (theme
  * carry). SPA outlier-reseed is added in phase 2. */
 static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
@@ -1889,6 +1932,7 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
         int src_start = tok_cap - take;
         for (int i = 0; i < take; i++) tail[i] = sent_ids[src_start + i];
         tail_len = take;
+        leo_presence_boundary_inject(leo);   /* Dario: deepen the theme for the next sentence */
     }
 
     int pos = 0;
@@ -2102,6 +2146,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = atol(argv[++i]);
         else if (!strcmp(argv[i], "--respond") && i + 1 < argc) respond_prompt = argv[++i];
         else if (!strcmp(argv[i], "--no-presence")) g_leo_presence_on = 0;
+        else if (!strcmp(argv[i], "--no-dario")) g_leo_dario_on = 0;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
 
