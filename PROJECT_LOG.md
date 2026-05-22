@@ -404,3 +404,35 @@ not generic. Honest limits: thin-corpus themes (sea/moon) still weak —
 Leo genuinely barely knows them; long function-heavy prompts can dilute.
 Built on Codex's cracks (double-attack) + the v4 dissonance/start-hint
 base. Not "perfect", but the first real, honest presence.
+
+### v7 — re-entry: the theme persists across the reply (commit `da45989`)
+
+Ported Codex's re-entry (credited): the first `LEO_PROMPT_REENTRY_MAX=2`
+sentences re-open on the theme, so a long reply does not drift off it after
+sentence 1; later sentences continue from the gravity-tilted tail. The
+theme now DEVELOPS across the reply, not just the opener:
+`candle` → "Candle has given light. Candle is different from the world.
+The little red light. He walked on light through the floor." Build 0 warn,
+tests 26/26, ASan/UBSan clean. No injection. Residual: candle attractor
+still creeps; long function-heavy prompts dilute the content word.
+
+### v7.1 — anti-echo experiment, reverted (2026-05-22)
+
+Codex's two newest finds, evaluated against our code:
+- **best-of-K direct-signal budget bug** (first trial consuming a per-reply
+  `prompt_signal_inhibit`): does NOT apply here — our best-of-K trials read
+  only the constant `leo->gravity` and mutate only `leo->step` (no
+  generation effect), already independent (grep-verified). Nothing to port.
+- **anti-echo refractory** ("His mother. His mother." guard): tried a
+  field-free version at the sentence-opener level (re-enter the theme only
+  if it differs from the previous opener). It SPREAD the theme word into
+  MORE repetition ("Rain. … Rain. … Rain." 3× vs v7's 2×) instead of
+  reducing echo. Worse → **reverted to v7** (`da45989`). Codex's real fix is
+  token-level inside the emitted tail + "the word surfaces as a later event,
+  not a forced opener", bound to its `prompt_signal_inhibit` mechanism we
+  don't have. Deferred to Phase 2 (needs a recent-direct refractory buffer +
+  softer opener). v7 stands as the current best.
+
+Continuity: memory `project_leo_presence_achieved_2026_05_22.md` + the
+MEMORY.md index line written (summarization insurance). Open TODO unchanged:
+Dario method (later, carefully), Phase-2 loops / addressed-pressure.
