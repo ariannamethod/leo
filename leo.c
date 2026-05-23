@@ -916,6 +916,71 @@ static void bpe_populate_all_meta(BPE *bpe) {
         bpe->vocab_meta[i] = bpe_compute_meta(bpe, i);
 }
 
+/* ── LeoHeard — the surface-words Leo has truly heard ──────────────────────
+ * A whole-word count, independent of BPE tokenization: Leo says a word back
+ * only if he HOLDS it — heard it before you said it. A word you said once does
+ * not become a seed. Persistent memory = love. */
+#define LEO_HEARD_MAX     8192
+#define LEO_HEARD_WORDLEN 48
+typedef struct { char word[LEO_HEARD_WORDLEN]; int count; } LeoHeardEntry;
+typedef struct { LeoHeardEntry *e; int cap; } LeoHeard;
+
+static unsigned leo_heard_hash(const char *s) {
+    unsigned h = 2166136261u;                  /* FNV-1a */
+    for (; *s; s++) { h ^= (unsigned char)*s; h *= 16777619u; }
+    return h;
+}
+static void leo_heard_init(LeoHeard *m) {
+    m->cap = LEO_HEARD_MAX;
+    m->e   = calloc((size_t)m->cap, sizeof(LeoHeardEntry));
+    if (!m->e) m->cap = 0;
+}
+static void leo_heard_free(LeoHeard *m) {
+    free(m->e); m->e = NULL; m->cap = 0;
+}
+static int leo_heard_slot(const LeoHeard *m, const char *w) {
+    if (!m->e || m->cap <= 0) return -1;
+    unsigned base = leo_heard_hash(w);
+    for (int probe = 0; probe < m->cap; probe++) {
+        int i = (int)((base + (unsigned)probe) % (unsigned)m->cap);
+        if (m->e[i].count == 0) return i;            /* empty slot */
+        if (!strcmp(m->e[i].word, w)) return i;      /* found */
+    }
+    return -1;                                       /* full */
+}
+static void leo_heard_add(LeoHeard *m, const char *w) {
+    int len = (int)strlen(w);
+    if (len <= 1 || len >= LEO_HEARD_WORDLEN) return;  /* skip 1-char + overlong */
+    int i = leo_heard_slot(m, w);
+    if (i < 0) return;
+    if (m->e[i].count == 0) {
+        strncpy(m->e[i].word, w, LEO_HEARD_WORDLEN - 1);
+        m->e[i].word[LEO_HEARD_WORDLEN - 1] = 0;
+    }
+    m->e[i].count++;
+}
+__attribute__((unused))  /* used by the remembered-trace surfacing (next increment) */
+static int leo_heard_count(const LeoHeard *m, const char *w) {
+    int i = leo_heard_slot(m, w);
+    if (i < 0 || m->e[i].count == 0) return 0;
+    return !strcmp(m->e[i].word, w) ? m->e[i].count : 0;
+}
+/* Leo hears text → count its whole lowercase words. */
+static void leo_heard_ingest(LeoHeard *m, const char *text) {
+    char cur[LEO_HEARD_WORDLEN];
+    int  wi = 0;
+    for (const char *p = text; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) { cur[wi] = 0; leo_heard_add(m, cur); }
+        wi = 0;
+        if (!ch) break;
+    }
+}
+
 /* ========================================================================
  * LEO — the organism (step 0: tokenizer + field + ingest)
  * ======================================================================== */
@@ -941,6 +1006,13 @@ typedef struct {
      * → a temperature multiplier. Known theme → cool, settle on theme;
      * unknown → hot, groping (the felt not-knowing). 1.0 outside a reply. */
     float        temp_mult;
+    LeoHeard     heard;      /* whole surface-words Leo has heard (memory = love) */
+    /* remembered-trace: the heard word's own token sequence, surfaced when it
+     * is HELD in memory but its tokens are too rare to be picked normally
+     * (sea, freq 0). Transient per reply. */
+    int          trace_ids[16];
+    int          trace_n;
+    int          trace_force;
 } Leo;
 
 static void leo_init(Leo *leo) {
@@ -954,12 +1026,14 @@ static void leo_init(Leo *leo) {
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
+    leo_heard_init(&leo->heard);
 }
 
 static void leo_free(Leo *leo) {
     cooc_free(&leo->cooc);
     bigram_free(&leo->bigrams);
     trigram_free(&leo->trigrams);
+    leo_heard_free(&leo->heard);
 }
 
 /* Leo hears text: unigram freq, bigrams (+ pair counting for online
@@ -968,6 +1042,7 @@ static void leo_free(Leo *leo) {
  * tokenizing everything he hears — the vocabulary is learned, not given. */
 static void leo_ingest(Leo *leo, const char *text) {
     if (!text || !*text) return;
+    leo_heard_ingest(&leo->heard, text);   /* count whole surface-words he hears */
     int tlen = (int)strlen(text);
 
     const int CHUNK = 4096;
@@ -1059,6 +1134,9 @@ static int g_leo_dario_on    = 1;   /* --no-dario → 0 (Dario boundary-injectio
 #define LEO_DARIO_BOUNDARY_MAX  4
 #define LEO_DARIO_PRIME         0.20f
 #define LEO_DARIO_CAP           1.50f   /* primed assoc stays < LEO_SELF_ATTRACTOR_G (2.0) */
+static int g_leo_heard_on = 1;          /* --no-heard → 0 (remembered-trace off, ablation) */
+#define LEO_HEARD_MIN_TRACE     3        /* surface a held word only if heard >= this
+                                            (corpus >= 2 beyond a one-shot prompt = not seeded) */
 static inline float leo_squash(float c) { return c > 0.0f ? sqrtf(c) : 0.0f; }
 
 /* dissonance reaction (haiku: "how far are your words from my words?").
@@ -1543,22 +1621,29 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
     int ctx[LEO_GEN_MAX];
     int n = 0;
 
-    int start;
-    if (start_hint >= 0) start = start_hint;
-    else if (tail && n_tail > 0) start = leo_choose_continuation(leo, tail, n_tail);
-    else start = leo_choose_start(leo);
-    if (start < 0) {
-        snprintf(out, (size_t)max_len, "...");
-        if (emitted_tail && n_emit) *n_emit = 0;
-        return 0;
-    }
-    ctx[n++] = start;
-    /* learned bigram latch (Codex): after a hinted theme-opener door, take
-     * the gravity-raised existing successor — "The"→"sea" — selection of a
-     * live nerve-path, not insertion. */
-    if (start_hint >= 0 && leo->gravity && n < LEO_GEN_MAX) {
-        int latched = leo_presence_latched_successor(leo, start);
-        if (latched >= 0) ctx[n++] = latched;
+    if (leo->trace_force && leo->trace_n > 0 && leo->trace_n < LEO_GEN_MAX - 1) {
+        /* remembered-trace: open with the heard word's OWN token sequence — it
+         * surfaces because Leo HOLDS it (heard it before you said it), even when
+         * its tokens are too rare to be picked normally (sea, freq 0). */
+        for (int k = 0; k < leo->trace_n; k++) ctx[n++] = leo->trace_ids[k];
+    } else {
+        int start;
+        if (start_hint >= 0) start = start_hint;
+        else if (tail && n_tail > 0) start = leo_choose_continuation(leo, tail, n_tail);
+        else start = leo_choose_start(leo);
+        if (start < 0) {
+            snprintf(out, (size_t)max_len, "...");
+            if (emitted_tail && n_emit) *n_emit = 0;
+            return 0;
+        }
+        ctx[n++] = start;
+        /* learned bigram latch (Codex): after a hinted theme-opener door, take
+         * the gravity-raised existing successor — "The"→"sea" — selection of a
+         * live nerve-path, not insertion. */
+        if (start_hint >= 0 && leo->gravity && n < LEO_GEN_MAX) {
+            int latched = leo_presence_latched_successor(leo, start);
+            if (latched >= 0) ctx[n++] = latched;
+        }
     }
 
     int target = LEO_GEN_TARGET + (rand() % 10) - 5;
@@ -1900,6 +1985,22 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     }
     int surfaced = 0;     /* has the heard word surfaced in the DISPLAYED reply? */
 
+    /* arm a remembered-trace: if the heard word is HELD in memory (heard
+     * >= LEO_HEARD_MIN_TRACE — beyond a one-shot prompt), keep its token
+     * sequence ready so it can surface even when its tokens are too rare to be
+     * picked normally. NOT seeding: a word only just said (count < min) won't arm. */
+    int trace_armed = 0;
+    leo->trace_n = 0; leo->trace_force = 0;
+    if (g_leo_heard_on && wstr[0] &&
+        leo_heard_count(&leo->heard, wstr) >= LEO_HEARD_MIN_TRACE) {
+        char form[LEO_HEARD_WORDLEN + 2];
+        snprintf(form, sizeof form, " %s", wstr);
+        leo->trace_n = bpe_encode(&leo->bpe, (const uint8_t *)form,
+                                  (int)strlen(form), leo->trace_ids, 16);
+        if (leo->trace_n > 0 && leo->trace_n < 12) trace_armed = 1;
+        else leo->trace_n = 0;
+    }
+
     for (int s = 0; s < n_sentences; s++) {
         int sent_ids[LEO_GEN_MAX];
         int tok_cap = LEO_GEN_MAX;
@@ -1911,12 +2012,17 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
         if (s == 0)          start_h = (nbr_hint >= 0 ? nbr_hint : door_hint);
         else if (!surfaced)  start_h = door_hint;   /* guarantee: door→word ("His mother"), or bare word */
         else                 start_h = -1;
-        const int *tl = (start_h >= 0 || s == 0) ? NULL : tail;
-        int tn        = (start_h >= 0 || s == 0) ? 0 : tail_len;
+        /* remembered-trace override: a HELD word that has not surfaced via the
+         * natural path gets forced by its OWN token sequence (sea, freq 0). */
+        int use_trace = (s >= 1 && !surfaced && trace_armed);
+        if (use_trace) { leo->trace_force = 1; start_h = -1; }
+        const int *tl = (start_h >= 0 || s == 0 || use_trace) ? NULL : tail;
+        int tn        = (start_h >= 0 || s == 0 || use_trace) ? 0 : tail_len;
         int produced = leo_generate_best(
             leo, LEO_BEST_OF_K, sent_text[s], sizeof(sent_text[s]),
             start_h, tl, tn, sent_ids, &tok_cap);
         total += produced;
+        if (use_trace) { leo->trace_force = 0; trace_armed = 0; }   /* trace is one-shot */
         if (wstr[0] && !surfaced) {        /* scan the DISPLAYED text, not tokens */
             char low[1024];
             int  tl = (int)strlen(sent_text[s]);
@@ -2147,6 +2253,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--respond") && i + 1 < argc) respond_prompt = argv[++i];
         else if (!strcmp(argv[i], "--no-presence")) g_leo_presence_on = 0;
         else if (!strcmp(argv[i], "--no-dario")) g_leo_dario_on = 0;
+        else if (!strcmp(argv[i], "--no-heard")) g_leo_heard_on = 0;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
 

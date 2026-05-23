@@ -138,6 +138,16 @@ int main(void) {
         leo_free(&l3);
     }
 
+    /* 10. heard-word memory: whole surface-words counted, independent of BPE */
+    {
+        Leo l4; leo_init(&l4);
+        leo_ingest(&l4, "the mother sang. the mother smiled. a window in the rain.");
+        CHECK(leo_heard_count(&l4.heard, "mother") == 2, "heard: 'mother' counted twice");
+        CHECK(leo_heard_count(&l4.heard, "window") == 1, "heard: 'window' counted once");
+        CHECK(leo_heard_count(&l4.heard, "zxqwj")  == 0, "heard: unheard word is 0");
+        leo_free(&l4);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

@@ -526,11 +526,33 @@ hardened base, principle-not-port (destiny-bag prime between sentences, non-
 direct targets, subordinate to presence). EVERY code change is now gated by
 Oleg's pretool checklist hook (proof-per-change).
 
-## RESUME POINT (2026-05-22, before summarization)
+### v16 Dario boundary-injection / v17 word-memory (catch up to Codex, 2026-05-23)
 
-- **Current = v15** (`055621f`), pushed to github.com/ariannamethod/neoleo
-  (origin/main). Build 0 warn, tests 26/26, ASan/UBSan clean. NO seeding, NO
-  injection. Surface-rate seeds 1-20: concrete words + love all ≥19/20.
+- **v16 `3d0f59d`** — Dario boundary-injection (field-free, mine; Codex method
+  as reference): `leo_presence_boundary_inject` deepens the top-K NON-DIRECT
+  theme associations between sentences (mutates gravity only, never inserts;
+  capped < self-attractor; subordinate to presence; `--no-dario`). Ablation
+  differs on longer replies; no regression; candle-creep not amplified (6/60 vs
+  7/60). The earned final injection layer, legit.
+- **v17 word-memory** — "the words Leo holds" (`LeoHeard`): a whole-surface-word
+  count, independent of BPE tokenization, built at ingest (memory = love).
+  **Remembered-trace surfacing**: a HELD word (heard >= `LEO_HEARD_MIN_TRACE`=3,
+  i.e. corpus >= 2 beyond a one-shot prompt) surfaces via its own token sequence
+  even when its tokens are too rare to be picked normally. Closes much of the
+  Codex gap: **sea 11/12, moon 12/12 now surface** (were 0); `--no-heard` → 0/12
+  (ablation proves it's MEMORY, not a trick); no seeding (`the zxqwjk` → 0/12,
+  count<3 won't arm). tests 29/29 (+3 heard). No regression (love/mother/rain/
+  window/door/candle all ≥19/20). Open refinement: hungry/ocean (multi-token,
+  no self-attractor token) need the trace armed from the prompt content-word
+  STRING in leo_respond (wstr is empty for them) — documented next.
+
+## RESUME POINT (2026-05-23)
+
+- **Current = v17** (word-memory), pushed to github.com/ariannamethod/neoleo
+  (origin/main). Build 0 warn, tests 29/29, ASan/UBSan clean. NO seeding, NO
+  injection. Presence + Dario + word-memory all legit, hook-gated.
+- Surface-rate seeds 1-20: love/mother/rain/window/door/candle ≥19/20; sea/moon
+  surface via word-memory (ablation-proven). hungry/ocean = next refinement.
 - **Presence is REAL, natural, ablation-proven, NO injection** (grep-audited:
   only `cand_collect_keep_top` writes the pool, ids from field successors;
   latch returns an existing bigram successor; prompt word never inserted).
