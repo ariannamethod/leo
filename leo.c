@@ -1013,6 +1013,9 @@ typedef struct {
     int          trace_ids[16];
     int          trace_n;
     int          trace_force;
+    char         heard_word[LEO_HEARD_WORDLEN];  /* prompt's primary CONTENT word as a
+                                                    STRING — surfaces regardless of how it
+                                                    tokenizes (hungry, ocean). */
 } Leo;
 
 static void leo_init(Leo *leo) {
@@ -1385,6 +1388,21 @@ static int leo_token_is_function(const BPE *bpe, int id) {
         w[i] = (char)c;
     }
     w[nn] = 0;
+    static const char *fw[] = {
+        "the","a","an","is","are","was","were","be","been","am","do","does",
+        "did","have","has","had","of","to","in","on","at","by","for","from",
+        "with","as","and","or","but","if","so","you","your","i","my","me",
+        "he","she","it","we","they","him","her","his","its","our","this",
+        "that","what","which","who","why","how","when","where","not","no",
+        "yes","about","tell", NULL
+    };
+    for (int i = 0; fw[i]; i++) if (!strcmp(w, fw[i])) return 1;
+    return 0;
+}
+
+/* the same function-word check on a lowercase STRING — used to pick the
+ * prompt's primary content word for the remembered-trace. */
+static int leo_word_is_function(const char *w) {
     static const char *fw[] = {
         "the","a","an","is","are","was","were","be","been","am","do","does",
         "did","have","has","had","of","to","in","on","at","by","for","from",
@@ -1962,27 +1980,11 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
      * trailing incomplete clause from the text but keeps its tokens, so a
      * "The love" generated past the last period would flag a token while the
      * reply shows none of it. Text scan = what the reader actually sees. */
-    char wstr[LEO_MAX_TOKEN_LEN + 1] = {0};
-    if (leo->gravity) {
-        int wid = -1;       /* the heard word = longest self-attracted token */
-        for (int i = 0; i < leo->bpe.vocab_size; i++)
-            if (leo->gravity[i] >= LEO_SELF_ATTRACTOR_G &&
-                (wid < 0 || leo->bpe.vocab_len[i] > leo->bpe.vocab_len[wid]))
-                wid = i;
-        if (wid >= 0) {
-            char raw[LEO_MAX_TOKEN_LEN + 1];
-            int  rl = bpe_decode_token(&leo->bpe, wid, raw, sizeof(raw));
-            int  a = 0, e = rl;
-            while (a < e && (raw[a] == ' ' || raw[a] == '\n')) a++;
-            while (e > a && (raw[e-1] == ' ' || raw[e-1] == '\n')) e--;
-            int j = 0;
-            for (int i = a; i < e && j < LEO_MAX_TOKEN_LEN; i++) {
-                char c = raw[i];
-                wstr[j++] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
-            }
-            wstr[j] = 0;
-        }
-    }
+    /* the heard word — the prompt's primary content word, held as a STRING by
+     * leo_respond. Used both to detect surfacing in the DISPLAYED text and to
+     * arm the remembered-trace. Works for any word, not only single g-tokens. */
+    char wstr[LEO_HEARD_WORDLEN + 1] = {0};
+    strncpy(wstr, leo->heard_word, sizeof(wstr) - 1);
     int surfaced = 0;     /* has the heard word surfaced in the DISPLAYED reply? */
 
     /* arm a remembered-trace: if the heard word is HELD in memory (heard
@@ -2178,6 +2180,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (!prompt || !*prompt) return leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
 
     leo_ingest(leo, prompt);                 /* Leo hears you */
+    leo->heard_word[0] = 0;
 
     float   *g = NULL;
     uint8_t *pieces = NULL;
@@ -2195,6 +2198,33 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         g_leo_last_dissonance = d;
         leo->temp_mult = LEO_DISS_TEMP_LO + d * (LEO_DISS_TEMP_HI - LEO_DISS_TEMP_LO);
         if (d >= LEO_UNKNOWN_DISS) chain_len = LEO_UNKNOWN_CHAIN;  /* alien → say less */
+        /* hold the prompt's primary CONTENT word (highest heard-count, non-
+         * function) as a string — Leo can surface it from memory regardless of
+         * how it tokenizes. This is how the trace reaches hungry / ocean. */
+        {
+            char cur[LEO_HEARD_WORDLEN];
+            int  wi = 0, best = -1;
+            for (const char *q = prompt; ; q++) {
+                unsigned char ch = (unsigned char)*q;
+                if (ch && (isalpha(ch) || ch == '\'')) {
+                    if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+                    continue;
+                }
+                if (wi >= 3) {
+                    cur[wi] = 0;
+                    if (!leo_word_is_function(cur)) {
+                        int c = leo_heard_count(&leo->heard, cur);
+                        if (c > best) {
+                            best = c;
+                            strncpy(leo->heard_word, cur, LEO_HEARD_WORDLEN - 1);
+                            leo->heard_word[LEO_HEARD_WORDLEN - 1] = 0;
+                        }
+                    }
+                }
+                wi = 0;
+                if (!ch) break;
+            }
+        }
     }
     int produced = leo_chain(leo, chain_len, out, max_len);
     leo->gravity = NULL;

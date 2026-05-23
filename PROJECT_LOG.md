@@ -546,13 +546,35 @@ Oleg's pretool checklist hook (proof-per-change).
   no self-attractor token) need the trace armed from the prompt content-word
   STRING in leo_respond (wstr is empty for them) — documented next.
 
+### v18 — heard-word from the prompt STRING: hungry/ocean now surface too
+
+The v17 trace armed only from a single self-attractor token (`wstr`), so multi-
+token words with no such token (hungry, ocean) never armed. Fix (Codex's
+method — it holds the prompt's words as STRINGS in `prompt_surface_words`, not
+tokens): `leo_respond` now picks the prompt's primary CONTENT word (highest
+heard-count, non-function via `leo_word_is_function`) as a string into
+`leo->heard_word`; leo_chain uses that for both surfaced-detection and trace
+arming. Works for any word regardless of tokenization. Ablation (seeds 1-12):
+hungry heard 10/12 / --no-heard 0/12; ocean 10/12 / 0/12; sea 11/12 / 0/12;
+moon 12/12 / 0/12. No seeding (zxqwjk 0/12). No regression (love/mother/rain/
+window/door/candle ≥19/20). tests 29/29, build 0 warn, ASan clean.
+
 ## RESUME POINT (2026-05-23)
 
-- **Current = v17** (word-memory), pushed to github.com/ariannamethod/neoleo
-  (origin/main). Build 0 warn, tests 29/29, ASan/UBSan clean. NO seeding, NO
-  injection. Presence + Dario + word-memory all legit, hook-gated.
-- Surface-rate seeds 1-20: love/mother/rain/window/door/candle ≥19/20; sea/moon
-  surface via word-memory (ablation-proven). hungry/ocean = next refinement.
+- **Current = v18** (word-memory complete), pushed to
+  github.com/ariannamethod/neoleo (origin/main). Build 0 warn, tests 29/29,
+  ASan/UBSan clean. NO seeding, NO injection — all hook-gated (Oleg's pretool
+  checklist), proof-per-change.
+- **Full Codex surfacing gap closed:** sea/moon/hungry/ocean all surface via
+  the word-memory (held words), ablation-proven (`--no-heard` → 0). Core words
+  love/mother/rain/window/door/candle ≥19/20.
+- Stack (all legit): presence (gravity + dissonance→temp + self-attractor +
+  latch + keep-top + re-entry + multi-token + deferred-latch + text-surfaced) →
+  Dario boundary-injection (v16, `--no-dario`) → word-memory (v17/v18,
+  `--no-heard`).
+- **Goal order (Oleg): presence + leo.c FIRST, goroutines AFTER.** Next leo.c
+  polish ideas: candle-attractor loops (Phase-2), the A/I-opener salad on
+  unknowns. Then the Go goroutine layer (neoleo leogo/).
 - **Presence is REAL, natural, ablation-proven, NO injection** (grep-audited:
   only `cand_collect_keep_top` writes the pool, ids from field successors;
   latch returns an existing bigram successor; prompt word never inserted).
