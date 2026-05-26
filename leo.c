@@ -73,6 +73,10 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_MAX_TOKEN_LEN 64
 #define LEO_COOC_WINDOW   5
 #define LEO_COOC_MAX      (256 * 1024)
+/* Phase 3a — retention (Griffin conservation), ported from canon neoleo. */
+#define LEO_RET_DIM       32       /* retention vector dim (canon LEO_RET_DIM) */
+#define LEO_RET_GAMMA     0.92f    /* retention decay (single-scale) */
+#define LEO_RET_CONSERVE  0.39f    /* sqrt(1 - gamma^2) conservation */
 #define LEO_BIGRAM_MAX    (128 * 1024)
 #define LEO_TRIGRAM_MAX   (256 * 1024)
 #define LEO_PAIR_HASH     (64 * 1024)
@@ -1016,6 +1020,13 @@ typedef struct {
     char         heard_word[LEO_HEARD_WORDLEN];  /* prompt's primary CONTENT word as a
                                                     STRING — surfaces regardless of how it
                                                     tokenizes (hungry, ocean). */
+    /* Phase 3a — retention (Griffin): a compressed summary of recent emitted
+     * tokens. Per-token fingerprints w_embed (deterministic FNV-1a, canon
+     * leo.c:1730); retention_state evolves per emit. Feeds santaclaus resonance
+     * (phase 3b). Passive in 3a — does not touch candidate selection. */
+    float       *w_embed;          /* [w_embed_cap * LEO_RET_DIM] */
+    int          w_embed_cap;
+    float        retention_state[LEO_RET_DIM];
 } Leo;
 
 static void leo_init(Leo *leo) {
@@ -1030,6 +1041,26 @@ static void leo_init(Leo *leo) {
     leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
     leo_heard_init(&leo->heard);
+    /* Phase 3a — retention fingerprints: deterministic FNV-1a per (id,d), same
+     * token → same vector across sessions (canon leo.c:1730-1746). Allocated for
+     * the full vocab cap so growing merges (ids < LEO_MAX_VOCAB) are covered. */
+    leo->w_embed_cap = LEO_MAX_VOCAB;
+    leo->w_embed = calloc((size_t)leo->w_embed_cap * LEO_RET_DIM, sizeof(float));
+    if (leo->w_embed) {
+        const uint64_t fnv_offset = 0xcbf29ce484222325ULL;
+        const uint64_t fnv_prime  = 0x100000001b3ULL;
+        const uint64_t salt       = 0x9E3779B97F4A7C15ULL;
+        for (int i = 0; i < leo->w_embed_cap; i++)
+            for (int d = 0; d < LEO_RET_DIM; d++) {
+                uint64_t h = fnv_offset;
+                h ^= (uint64_t)(uint32_t)i; h *= fnv_prime;
+                h ^= (uint64_t)(uint32_t)d; h *= fnv_prime;
+                h ^= salt;                  h *= fnv_prime;
+                uint32_t bits = (uint32_t)((h >> 24) & 0xFFFFFFu);
+                float r = ((float)bits / (float)0xFFFFFFu) - 0.5f;
+                leo->w_embed[(size_t)i * LEO_RET_DIM + d] = 0.05f * r;
+            }
+    }
 }
 
 static void leo_free(Leo *leo) {
@@ -1037,6 +1068,7 @@ static void leo_free(Leo *leo) {
     bigram_free(&leo->bigrams);
     trigram_free(&leo->trigrams);
     leo_heard_free(&leo->heard);
+    free(leo->w_embed); leo->w_embed = NULL;
 }
 
 /* Leo hears text: unigram freq, bigrams (+ pair counting for online
@@ -1696,6 +1728,14 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
         if (n >= 2 && nxt == prev2 && prev1 == ctx[n - 2]) continue; /* doublet */
 
         ctx[n++] = nxt;
+        /* Phase 3a — retention (Griffin): S = gamma*S + sqrt(1-g^2)*w_embed[nxt].
+         * Passive: evolves the summary, does NOT affect this step's selection. */
+        if (leo->w_embed && nxt >= 0 && nxt < leo->w_embed_cap) {
+            const float *rv = leo->w_embed + (size_t)nxt * LEO_RET_DIM;
+            for (int d = 0; d < LEO_RET_DIM; d++)
+                leo->retention_state[d] = LEO_RET_GAMMA * leo->retention_state[d]
+                                        + LEO_RET_CONSERVE * rv[d];
+        }
         if (leo->gravity && nxt < V && leo->gravity[nxt] >= LEO_SELF_ATTRACTOR_G)
             word_seen = 1;
 
