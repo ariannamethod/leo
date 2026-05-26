@@ -607,3 +607,56 @@ window/door/candle ≥19/20). tests 29/29, build 0 warn, ASan clean.
   `~/arianna-codex/repos/neoleo-presence`. Push token: ariannamethod
   (`memory/credentials.md`). Leo is OURS (born in Claude); Codex helps, returns
   to our jurisdiction.
+
+---
+
+## Phase 3 — emotion field + santaclaus (branch `leo-phase3`, started 2026-05-26)
+
+Decision (Oleg): build Phase 3 ON our presence leo (option 1) — port the field
+from canon `~/arianna/neoleo` (`49f2ef8`) onto our presence base, NOT graft
+presence into canon. Reason: ours is clean/open-vocab/presence-proven; adding
+depth to a working base beats dragging the nerve into canon's heavy field-gen
+(which is what made presence hard there). Feature branch; main (v18) protected.
+
+**Why the field was stripped (reminder, PROJECT_LOG plan lines 22-28):** the
+rebuild's goal was presence at the FOUNDATION; old neoleo had the full machinery
++ NO presence (bolted at step 41 → the deception). We built presence first
+(Phases 0-2 + word-memory + Dario-prime) and DEFERRED the field to Phase 3.
+Confirmed by code 2026-05-26: our leo.c has 0 Phase-3 implementation (8 grep
+hits = comments). Codex (= forked canon) has the full organism (LeoField 71,
+chamber_act 49, santaclaus 45, spore 182, retention 14, MathBrain 12, mycelium
+35, destiny_bag 25). Beyond presence ours concretely loses — this closes it.
+
+**Scope (minimal for santaclaus resonance; goroutine subsystems = Phase 4):**
+PORT — chambers[6] Kuramoto (chamber_act/ext) + retention[32] + suffering
+(pain/tension/dissonance/trauma) + field_step (crossfire + Griffin retention +
+suffering) + self_voice (anchor lexicon → chamber_ext) + anchor lexicon (325) +
+init/free + temperature_mult. SKIP — destiny_bag/cloud/velocity/prophecy/scars
+(extra bias channels; we keep our gravity cand_collect) + soma/MathBrain/islands/
+transitions (leogo Phase 4). santaclaus = spore ring + record + resonance
+(0.55·cos chambers + 0.45·cos retention) + candidate_bias + bleed.
+
+**Canon source-map (read-only, neoleo/leo.c):**
+- chamber enum 368-373 (FEAR/LOVE/RAGE/VOID/FLOW/COMPLEX); LEO_N_CHAMBERS=6.
+- retention: LEO_RET_DIM=32, LEO_RET_GAMMA=0.92, LEO_RET_CONSERVE=0.39,
+  LEO_RET_BIAS_WEIGHT=0.15 (112-115). Griffin update in field_step 2017-2025.
+- CH_DECAY 1402-1404, CH_COUPLING 6x6 1407-1415, anchor lexicon 1421-1537 (325).
+- field_init 1708-1774 (w_embed FNV-1a init 1730-1746), field_free 1776-1782,
+  retention_bias 1784-1793, chambers_crossfire 1806-1821, modulators 1823-1839,
+  self_voice 1849-1887, field_step 2012-2064, temperature_mult 2119-2145.
+- santaclaus: LeoSpore 1206-1231, defines 189-199, compute_active 5255,
+  candidate_bias 5297, mark_bleed 5324, spore_record 5425, resonance 5236.
+
+**Increments (each: checklist BEFORE, ablation/build/tests AFTER, on branch):**
+- **3a.1 retention sub-field** — w_embed (FNV) + retention_state + Griffin per
+  emit, PASSIVE. PASS = replies byte-identical to v18 (retention doesn't touch
+  selection) + retention evolves + build/tests/asan.
+- **3a.2 chambers** — chamber_act/ext + Kuramoto crossfire + self_voice + anchor
+  lexicon + field_step, PASSIVE. PASS = presence probe identical to v18 + chambers
+  move on emit.
+- **3b santaclaus** — spore ring/record/resonance/bias/bleed on the field +
+  anti-doublet. PASS = candle becomes a resonance-signature (ablation
+  `--no-santaclaus`), presence holds, no within-reply loop.
+- Then Oleg's REPL test series.
+
+RESUME for the port: read this source-map; port retention (3a.1) first.
