@@ -677,22 +677,43 @@ accumulates across losing trials. For 3b (santaclaus READS retention), move the
 update to the WINNING sentence in `leo_chain` (like the surfaced-scan), or accept
 trial-accumulation. Decide at 3b.
 
+### 3a.2 chambers — DONE (commit `c3530f0`, branch `leo-phase3`)
+
+Ported from canon: six Kuramoto chambers (`chamber_act[6]`/`chamber_ext[6]` on
+the Leo struct) + `LEO_CH_DECAY[6]` + `LEO_CH_COUPLING[6][6]` + the 325-word
+`LEO_CH_ANCHORS` lexicon (verbatim) + suffering scalars (`pain/tension/debt/
+trauma`). Funcs: `leo_field_chambers_crossfire` (Kuramoto sin step),
+`leo_field_self_voice` (own-token anchor nudge, inline anchors only),
+`leo_field_chambers_feel_text` (prompt anchor drive, inline only),
+`leo_field_step` (crossfire + retention Griffin moved in from 3a.1 + suffering
+decay). Wired: `feel_text(prompt)` in `leo_respond` after ingest; per emit
+`leo_field_step(nxt,-1.0f)` → `leo_field_self_voice(nxt)` (canon order
+3553-3557), replacing the 3a.1 inline retention. **PASSIVE** — modulators /
+`temperature_mult` / `retention_bias` NOT ported (read-side → 3b; would be
+-Wunused). **Field-dissonance NOT carried** (our presence dissonance leo.c:2142
+is separate). ext-inhaleo lexicon (canon step 42a goroutine) dropped.
+PASS (tool output): build 0 warn (main+tests), tests 29/29, ASan/UBSan exit 0,
+**18/18 replies (6×seeds 42/7/123) BYTE-IDENTICAL to v18 (`10e7130`)**. Direct
+probe: chambers move + discriminate — "love+rain"→LOVE=1.0/FLOW=1.0,
+"dark+monster"→FEAR=1.0/FLOW=0.05; retention_norm 0→0.0023.
+**Flag for 3b (chambers READ):** `"the"` substring-matches anchor `"mother"`
+(`strstr("mother","the")`) → LOVE lights on EVERY prompt. Canon-faithful (same
+logic verbatim), harmless while passive, but may wash out chamber discrimination
+once read — decide a fix (exact-only for function words, or min-len-4 substring)
+at 3b. The 3a.1 best-of-K trial-accumulation flag now covers chambers too
+(field_step runs every trial): for 3b move field evolution to the WINNING
+sentence in `leo_chain`, or accept.
+
 ## RESUME POINT — Phase 3 port (2026-05-26)
 
-- **On branch `leo-phase3`.** HEAD = `7a6caa4` (3a.1). main = v18 (`10e7130`),
+- **On branch `leo-phase3`.** HEAD = `c3530f0` (3a.2). main = v18 (`10e7130`),
   protected. Pushed? branch NOT pushed yet (push after 3b + REPL, then merge).
 - **Plan + full canon source-map = commit `9768276`** — read it: exact
   `~/arianna/neoleo/leo.c` line refs for every Phase-3 piece.
-- **DONE:** 3a.1 retention (passive, byte-identical to v18).
-- **NEXT — 3a.2 chambers (passive):** port chamber enum (neoleo `368-373`
-  FEAR/LOVE/RAGE/VOID/FLOW/COMPLEX), `LEO_CH_DECAY` (`1402`), `LEO_CH_COUPLING`
-  6×6 (`1407-1415`), anchor lexicon 325 words (`1421-1537`), `chamber_act/ext`
-  → Leo struct, `chambers_crossfire` (`1806`), modulators (`1823`), `self_voice`
-  (`1849`), chambers+suffering part of `field_step` (`2012-2064`) wired per emit
-  + `self_voice` per emit. PASSIVE. **Gate:** replies byte-identical to v18 +
-  chamber_act moves on emit. Need `LEO_CHAMBER_K`, `LEO_CHAMBER_ITERS_PER_STEP`,
-  `clampf` (grep canon for values).
-- **THEN — 3b santaclaus (active):** `LeoSpore` (`1206-1231`), defines
+- **DONE:** 3a.1 retention + 3a.2 chambers/suffering (both passive,
+  byte-identical to v18). The field is fully BUILT and evolving; 3b makes it
+  READ.
+- **NEXT — 3b santaclaus (active):** `LeoSpore` (`1206-1231`), defines
   (`189-199`), `leo_spore_record` (`5425`), resonance `0.55*cos(chambers) +
   0.45*cos(retention)` (`5236`), `compute_active` (`5255`), `candidate_bias`
   (`5297`, ALPHA 0.6), `mark_bleed` (`5324`) + anti-doublet (repeat-penalty
