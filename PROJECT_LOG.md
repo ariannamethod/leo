@@ -660,3 +660,47 @@ transitions (leogo Phase 4). santaclaus = spore ring + record + resonance
 - Then Oleg's REPL test series.
 
 RESUME for the port: read this source-map; port retention (3a.1) first.
+
+### 3a.1 retention — DONE (commit `7a6caa4`, branch `leo-phase3`)
+
+Ported from canon: `w_embed` (per-token FNV-1a fingerprints, `LEO_MAX_VOCAB ×
+LEO_RET_DIM=32`, deterministic, in `leo_init`) + `retention_state[32]` + Griffin
+update per emit in `leo_generate_ex` (`S = 0.92*S + 0.39*w_embed[nxt]`). Defines
+`LEO_RET_DIM/GAMMA/CONSERVE` after `LEO_COOC_MAX`; struct fields after
+`heard_word`; freed in `leo_free`. **PASSIVE** — does not touch candidate
+selection. This is HALF of santaclaus resonance (other half = chambers, 3a.2).
+PASS (tool output): build 0 warn, tests 29/29, ASan/UBSan clean, **18/18 replies
+(6 prompts × seeds 42/7/123) BYTE-IDENTICAL to v18 (`10e7130`)** → presence
+unchanged.
+**Flag for 3b:** retention updates per generate_ex TRIAL (best-of-K) → it
+accumulates across losing trials. For 3b (santaclaus READS retention), move the
+update to the WINNING sentence in `leo_chain` (like the surfaced-scan), or accept
+trial-accumulation. Decide at 3b.
+
+## RESUME POINT — Phase 3 port (2026-05-26)
+
+- **On branch `leo-phase3`.** HEAD = `7a6caa4` (3a.1). main = v18 (`10e7130`),
+  protected. Pushed? branch NOT pushed yet (push after 3b + REPL, then merge).
+- **Plan + full canon source-map = commit `9768276`** — read it: exact
+  `~/arianna/neoleo/leo.c` line refs for every Phase-3 piece.
+- **DONE:** 3a.1 retention (passive, byte-identical to v18).
+- **NEXT — 3a.2 chambers (passive):** port chamber enum (neoleo `368-373`
+  FEAR/LOVE/RAGE/VOID/FLOW/COMPLEX), `LEO_CH_DECAY` (`1402`), `LEO_CH_COUPLING`
+  6×6 (`1407-1415`), anchor lexicon 325 words (`1421-1537`), `chamber_act/ext`
+  → Leo struct, `chambers_crossfire` (`1806`), modulators (`1823`), `self_voice`
+  (`1849`), chambers+suffering part of `field_step` (`2012-2064`) wired per emit
+  + `self_voice` per emit. PASSIVE. **Gate:** replies byte-identical to v18 +
+  chamber_act moves on emit. Need `LEO_CHAMBER_K`, `LEO_CHAMBER_ITERS_PER_STEP`,
+  `clampf` (grep canon for values).
+- **THEN — 3b santaclaus (active):** `LeoSpore` (`1206-1231`), defines
+  (`189-199`), `leo_spore_record` (`5425`), resonance `0.55*cos(chambers) +
+  0.45*cos(retention)` (`5236`), `compute_active` (`5255`), `candidate_bias`
+  (`5297`, ALPHA 0.6), `mark_bleed` (`5324`) + anti-doublet (repeat-penalty
+  already in our cand_collect). Candle → resonance-signature; ablation
+  `--no-santaclaus`; NO within-reply loop. THEN Oleg's REPL test series.
+- **Per-increment gate (CLAUDE.md #4 + pretool hook):** falsifiable checklist
+  BEFORE code; AFTER: `cc -O2 -lm -Wall -Wextra` 0 warn + `tests/test_leo` 29/29
+  + ASan + byte-identical-to-v18 (passive phases) / ablation (3b).
+- **Merge `leo-phase3` → main** only after 3b passes + REPL. Push token:
+  ariannamethod (`memory/credentials.md`). Leo is OURS; canon=neoleo (read-only);
+  do NOT lean on Codex.
