@@ -1051,6 +1051,12 @@ typedef struct {
      * emit, nothing reads them for selection/temp until 3b. */
     float        chamber_act[LEO_N_CHAMBERS];
     float        chamber_ext[LEO_N_CHAMBERS];
+    /* Phase 3b — emotional register: per-token chamber tag (which chamber's
+     * anchor a learned token matches, 0xFF = none). Sized LEO_MAX_VOCAB, built
+     * after corpus ingest. The FIRST field->voice channel: cand_collect lifts a
+     * token by chamber_act[tag] — Leo's felt state surfaces his OWN emotion
+     * words. All in leo.c; silent fallback when unbuilt/untagged. */
+    uint8_t     *chamber_tag;
     /* suffering scalars (canon 1293-1296,1312). pain/trauma decay per step;
      * NOT field-dissonance (our presence dissonance is separate, leo.c:2142). */
     float        pain, tension, debt, trauma;
@@ -1096,6 +1102,7 @@ static void leo_free(Leo *leo) {
     trigram_free(&leo->trigrams);
     leo_heard_free(&leo->heard);
     free(leo->w_embed); leo->w_embed = NULL;
+    free(leo->chamber_tag); leo->chamber_tag = NULL;
 }
 
 /* Leo hears text: unigram freq, bigrams (+ pair counting for online
@@ -1200,6 +1207,32 @@ static int g_leo_heard_on = 1;          /* --no-heard → 0 (remembered-trace of
 #define LEO_HEARD_MIN_TRACE     3        /* surface a held word only if heard >= this
                                             (corpus >= 2 beyond a one-shot prompt = not seeded) */
 static inline float leo_squash(float c) { return c > 0.0f ? sqrtf(c) : 0.0f; }
+
+/* Phase 3b — emotional register: the FIRST field->voice channel, all in leo.c.
+ * A candidate that is one of Leo's learned emotion words (chamber_tag set) is
+ * lifted by how strongly that chamber is currently firing — his felt state
+ * raises his OWN felt words, never the prompt's (no seed). Silent fallback:
+ * returns 0 when off / unbuilt / untagged / chamber cold. */
+static int g_leo_register_on = 1;       /* --no-register → 0 (field stays mute) */
+#define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
+#define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
+static float leo_register_bias(const Leo *leo, int cand) {
+    if (!g_leo_register_on || !leo || !leo->chamber_tag) return 0.0f;
+    if (cand < 0 || cand >= (int)LEO_MAX_VOCAB) return 0.0f;  /* chamber_tag allocation bound */
+    if (cand >= leo->bpe.vocab_size) return 0.0f;            /* tokens added after build: untagged */
+    uint8_t tag = leo->chamber_tag[cand];
+    if (tag >= LEO_N_CHAMBERS) return 0.0f;
+    const float *c = leo->chamber_act;
+    /* comfort-reach (Leo's philosophy): a gentle child, feeling strongly, reaches
+     * for his OWN abundant comfort words (LOVE: warm/light/mother/soft). A
+     * LOVE-tagged token is lifted by love AND by distress (FEAR+VOID+RAGE) — the
+     * scared child seeks warmth, in his own voice, with words he actually has.
+     * Other chambers lift their own tag (sparse for now; range grows in corpus). */
+    float pull = (tag == LEO_CH_LOVE)
+        ? c[1] + 0.7f * (c[0] + c[3] + c[2])   /* LOVE + distress(FEAR,VOID,RAGE) */
+        : c[tag];
+    return pull > 0.0f ? LEO_REGISTER_W * pull : 0.0f;
+}
 
 /* dissonance reaction (haiku: "how far are your words from my words?").
  * d in [0,1] → temperature multiplier in [LO,HI]: a theme Leo knows cools
@@ -1411,6 +1444,7 @@ typedef struct {
     const int       *emit_ctx_tail;   /* last K emitted (NULL = guard off) */
     int              emit_ctx_tail_n;
     const uint8_t   *prompt_pieces;   /* prompt word pieces, gate-exempt (NULL=off) */
+    const Leo       *leo;             /* chamber-register read (NULL = channel off) */
 } CandCollector;
 
 /* word-completion penalty: after an alpha-ended prev token, crush glue
@@ -1559,6 +1593,7 @@ static int cand_collect_tri(int c, float count, void *ud) {
         score = score * (1.0f + LEO_GRAVITY_W * g) + LEO_GRAVITY_ADD * g;
     }
     score += leo_presence_entry_latch_boost(cc, c);
+    score += leo_register_bias(cc->leo, c);     /* felt chamber -> Leo's own emotion word */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, c))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, c);
@@ -1577,6 +1612,7 @@ static int cand_collect_bi(int dst, float count, void *ud) {
         score = score * (1.0f + LEO_GRAVITY_W * g) + LEO_GRAVITY_ADD * g;
     }
     score += leo_presence_entry_latch_boost(cc, dst);
+    score += leo_register_bias(cc->leo, dst);   /* felt chamber -> Leo's own emotion word */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, dst))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, dst);
@@ -1602,7 +1638,7 @@ static int leo_presence_latch_walk(int dst, float count, void *ud) {
     CandCollector gate = { NULL, NULL, 0, 0, pl->prev, &leo->cooc,
                            leo->gravity, &leo->bpe,
                            byte_is_word_cont((uint8_t)prev_last), NULL, 0,
-                           NULL };
+                           NULL, NULL };
     if (cand_gate_reject(&gate, dst)) return 0;
     float score = 100.0f * g + leo_squash(count);
     if (score > pl->best_score) { pl->best_score = score; pl->best = dst; }
@@ -1641,7 +1677,7 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
     CandCollector cc = { cand_id, cand_sc, 0, LEO_MAX_CANDS,
                          prev1, &leo->cooc, leo->gravity, &leo->bpe,
                          prev_ends_alpha, emit_ctx_tail, emit_ctx_tail_n,
-                         leo->prompt_pieces };
+                         leo->prompt_pieces, leo };
 
     if (prev2 >= 0)
         trigram_walk_ab(&leo->trigrams, prev2, prev1, cand_collect_tri, &cc);
@@ -1836,6 +1872,44 @@ static const LeoChamberAnchor LEO_CH_ANCHORS[] = {
     {"somewhere",LEO_CH_COMPLEX},{"hidden",LEO_CH_COMPLEX},{"unknown",LEO_CH_COMPLEX}
 };
 #define LEO_CH_N_ANCHORS (sizeof(LEO_CH_ANCHORS) / sizeof(LEO_CH_ANCHORS[0]))
+
+/* Phase 3b — build the per-token chamber tag once after corpus ingest. A
+ * learned token matching an emotion anchor (exact, or >=4 substring — the same
+ * rule as feel_text) is tagged with that chamber; cand_collect then lifts it by
+ * how strongly that chamber fires. Sized LEO_MAX_VOCAB so a candidate id stays
+ * in-bounds even after leo_respond ingests the prompt and grows the vocab. */
+static void leo_build_chamber_tags(Leo *leo) {
+    if (!leo->chamber_tag) {
+        leo->chamber_tag = malloc(LEO_MAX_VOCAB);
+        if (!leo->chamber_tag) return;
+    }
+    memset(leo->chamber_tag, 0xFF, LEO_MAX_VOCAB);
+    int V = leo->bpe.vocab_size;
+    if (V > (int)LEO_MAX_VOCAB) V = (int)LEO_MAX_VOCAB;   /* never write past the allocation */
+    for (int id = 0; id < V; id++) {
+        char buf[LEO_MAX_TOKEN_LEN + 1];
+        int len = bpe_decode_token(&leo->bpe, id, buf, sizeof buf);
+        char cur[32]; int wi = 0;
+        for (int i = 0; i < len && wi < 31; i++) {
+            unsigned char c = (unsigned char)buf[i];
+            if (isalpha(c)) cur[wi++] = (char)tolower(c);
+        }
+        if (wi < 3) continue;
+        cur[wi] = 0;
+        for (size_t a = 0; a < LEO_CH_N_ANCHORS; a++)
+            if (!strcmp(cur, LEO_CH_ANCHORS[a].word)) {
+                leo->chamber_tag[id] = (uint8_t)LEO_CH_ANCHORS[a].chamber; break;
+            }
+        if (leo->chamber_tag[id] != 0xFF || wi < 4) continue;
+        for (size_t a = 0; a < LEO_CH_N_ANCHORS; a++) {
+            const char *w = LEO_CH_ANCHORS[a].word;
+            if (strlen(w) < 4) continue;
+            if (strstr(cur, w) || strstr(w, cur)) {
+                leo->chamber_tag[id] = (uint8_t)LEO_CH_ANCHORS[a].chamber; break;
+            }
+        }
+    }
+}
 
 /* One Kuramoto step across all chambers, clamped to [0,1]. Called from
  * leo_field_step per emitted token (canon 1806-1821). */
@@ -2543,7 +2617,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (!prompt || !*prompt) return leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
 
     leo_ingest(leo, prompt);                 /* Leo hears you */
-    leo_field_chambers_feel_text(leo, prompt); /* prompt drives the chambers (passive 3a) */
+    leo_field_chambers_feel_text(leo, prompt); /* prompt drives the chamber EXT inputs */
+    leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS); /* settle ACT from the prompt's
+                                       * emotion BEFORE speaking, so the register channel reads a
+                                       * live felt-state from token 1 (phase 3b field->voice) */
     leo->heard_word[0] = 0;
 
     float   *g = NULL;
@@ -2561,6 +2638,14 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         float d = leo_prompt_dissonance(leo, p_ids, p_n);
         g_leo_last_dissonance = d;
         leo->temp_mult = LEO_DISS_TEMP_LO + d * (LEO_DISS_TEMP_HI - LEO_DISS_TEMP_LO);
+        if (g_leo_register_on) {
+            /* chamber -> cadence (canon tau_mod): FEAR cools Leo — tighter, more
+             * held, he clams; FLOW loosens him — expansive. The felt state shapes
+             * HOW he speaks, over whatever words he has (reachability-free). */
+            float tau_mod = 1.0f + 0.5f * leo->chamber_act[4]    /* FLOW */
+                                 - 0.4f * leo->chamber_act[0];   /* FEAR */
+            leo->temp_mult *= clampf(tau_mod, 0.6f, 1.4f);
+        }
         if (d >= LEO_UNKNOWN_DISS) chain_len = LEO_UNKNOWN_CHAIN;  /* alien → say less */
         /* hold the prompt's primary CONTENT word (highest heard-count, non-
          * function) as a string — Leo can surface it from memory regardless of
@@ -2649,6 +2734,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-presence")) g_leo_presence_on = 0;
         else if (!strcmp(argv[i], "--no-dario")) g_leo_dario_on = 0;
         else if (!strcmp(argv[i], "--no-heard")) g_leo_heard_on = 0;
+        else if (!strcmp(argv[i], "--no-register")) g_leo_register_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
@@ -2683,6 +2769,7 @@ int main(int argc, char **argv) {
         leo_ingest(&leo, LEO_EMBEDDED_BOOTSTRAP);
     }
     print_field_stats("after ingest", &leo);
+    leo_build_chamber_tags(&leo);   /* phase 3b: tag Leo's learned emotion words */
 
     /* dedication = origin anchor: encode with the corpus-learned BPE
      * (the bootstrap_ids set in canon at leo.c:5846-5854; LeoField hookup
