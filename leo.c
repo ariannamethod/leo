@@ -1876,7 +1876,7 @@ static void leo_field_self_voice(Leo *leo, int token_id) {
         const char *a = LEO_CH_ANCHORS[i].word;
         size_t al = strlen(a);
         int hit = !strcmp(cur, a) ||
-                  (al >= 3 && (strstr(cur, a) || strstr(a, cur)));
+                  (al >= 4 && wi >= 4 && (strstr(cur, a) || strstr(a, cur)));
         if (hit) {
             leo->chamber_ext[LEO_CH_ANCHORS[i].chamber] =
                 clampf(leo->chamber_ext[LEO_CH_ANCHORS[i].chamber] + 0.01f,
@@ -1911,11 +1911,11 @@ static void leo_field_chambers_feel_text(Leo *leo, const char *text) {
                     break;
                 }
             }
-            if (!matched && wi >= 3) {
+            if (!matched && wi >= 4) {
                 for (size_t i = 0; i < LEO_CH_N_ANCHORS; i++) {
                     const char *a = LEO_CH_ANCHORS[i].word;
                     size_t al = strlen(a);
-                    if (al < 3) continue;
+                    if (al < 4) continue;
                     if (strstr(cur, a) || strstr(a, cur)) {
                         leo->chamber_ext[LEO_CH_ANCHORS[i].chamber] += 0.07f;
                         break;
@@ -2035,7 +2035,15 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
          * update (3a.1) + chambers crossfire + suffering decay; self_voice
          * nudges chamber_ext from Leo's own token (effective next step).
          * PASSIVE — nothing reads the field for THIS step's selection. */
-        leo_field_step(leo, nxt, -1.0f);
+        /* per-step coherence proxy: transition support of the emitted token,
+         * mirroring the bigram term of leo_coherence_score. An unsupported pick
+         * (bigram count 0 — a forced/groping reach) reads as incoherent -> pain
+         * grows; a walked transition keeps pain low. Canon passes 1.0/0.0; we
+         * thread the real signal the field comment claims ("pain grows from
+         * incoherent candidates"). Field stays PASSIVE — nothing reads it for
+         * THIS step's selection. */
+        float coh_bg = leo_squash((float)bigram_get(&leo->bigrams, prev1, nxt));
+        leo_field_step(leo, nxt, coh_bg / (coh_bg + 3.0f));
         leo_field_self_voice(leo, nxt);
         if (leo->gravity && nxt < V && leo->gravity[nxt] >= LEO_SELF_ATTRACTOR_G)
             word_seen = 1;
@@ -2615,6 +2623,7 @@ int main(int argc, char **argv) {
     const char *corpus_path = "leo.txt";
     const char *respond_prompt = NULL;
     int  dump_bootstrap = 0;
+    int  debug_field = 0;    /* --debug-field: dump chambers/pain/trauma after a reply */
     int  gen_n = 0;          /* --gen N: speak N replies from the field */
     long seed  = -1;         /* --seed S: reproducible sampling */
     for (int i = 1; i < argc; i++) {
@@ -2626,6 +2635,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-presence")) g_leo_presence_on = 0;
         else if (!strcmp(argv[i], "--no-dario")) g_leo_dario_on = 0;
         else if (!strcmp(argv[i], "--no-heard")) g_leo_heard_on = 0;
+        else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
 
@@ -2730,6 +2740,17 @@ int main(int argc, char **argv) {
         printf("[leo %s d=%.2f] you> %s\n             leo> %s\n",
                g_leo_presence_on ? "presence" : "--no-presence",
                g_leo_last_dissonance, respond_prompt, reply);
+        if (debug_field) {
+            float rn = 0.0f;
+            for (int d = 0; d < LEO_RET_DIM; d++)
+                rn += leo.retention_state[d] * leo.retention_state[d];
+            rn = sqrtf(rn);
+            printf("             field> FEAR=%.2f LOVE=%.2f RAGE=%.2f VOID=%.2f "
+                   "FLOW=%.2f CPLX=%.2f | pain=%.3f trauma=%.3f ret_norm=%.4f\n",
+                   leo.chamber_act[0], leo.chamber_act[1], leo.chamber_act[2],
+                   leo.chamber_act[3], leo.chamber_act[4], leo.chamber_act[5],
+                   leo.pain, leo.trauma, rn);
+        }
     }
 
     int pass = (leo.bpe.vocab_size > 256) &&

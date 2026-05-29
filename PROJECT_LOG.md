@@ -704,6 +704,39 @@ at 3b. The 3a.1 best-of-K trial-accumulation flag now covers chambers too
 (field_step runs every trial): for 3b move field evolution to the WINNING
 sentence in `leo_chain`, or accept.
 
+### 3a.3 field honesty — chambers discriminate + pain/trauma live (2026-05-29, branch `leo-phase3`)
+
+Prereqs before 3b READS the field (santaclaus + Dario direction-injection). All
+PASSIVE: 12 prompts × seeds 42/7 **BYTE-IDENTICAL** to `6bcb2d9`; build 0 warn;
+tests **34/34**; ASan/UBSan clean.
+
+- **chamber substring fix** (`leo_field_chambers_feel_text` + `leo_field_self_voice`):
+  the bidirectional `strstr` anchor match required len ≥ 3, so `"the"` substring-matched
+  `"mother"` → LOVE lit on EVERY prompt (the 3a.2 flag). Now len ≥ 4 on BOTH word and
+  anchor; exact match unchanged. Proof (`--debug-field`): `love rain`→LOVE 1.00,
+  `dark monster`→FEAR 1.00/LOVE 0.04, `the candle`→LOVE 0.26. Durable unit test #11:
+  `"the"`→0 LOVE / no chamber; `"mother"`→LOVE; `"dark"`→FEAR; `"mothers"`→LOVE
+  (≥4 morphology preserved).
+- **pain/trauma live** (`leo_generate_ex` field_step call): the sole caller hardcoded
+  `coherence_hint = -1.0f`, so the suffering branch was DEAD CODE (pain ≡ 0, trauma ≡ 0).
+  Now threads a per-step coherence proxy `squash(bigram_get(prev1,nxt))/(·+3)`: an
+  unsupported/groping pick (bigram count 0) reads incoherent → pain grows; a walked
+  transition keeps it low. Proof: `the candle`→pain 0.000, `the sea`→0.012, `your
+  mother`→0.003. trauma=pain² stays ~0 (small pain over short replies — correct; needs
+  sustained incoherence to surface the wound). Canon passes 1.0/0.0 (neoleo 3553); we
+  thread the REAL signal the field comment claims — raising code to the claim, not
+  marking it deferred.
+- **`--debug-field`**: dumps 6 chambers + pain/trauma + retention-norm after a reply.
+  Observability for 3b — cannot claim the field works without seeing it.
+
+Still owed before variants (3b reads `0.55·cos(chambers)+0.45·cos(retention)`):
+(a) **best-of-K field accumulation** — `leo_field_step` runs per trial ×K=3, evolving
+the field from 2 DISCARDED trials; move it to the winning sentence in `leo_chain`.
+(b) stale version/header/README (`LEO_VERSION "0.1.0-step1"` vs phase3a reality).
+Then BOTH between-sentence injectors: **direction** (Dario A/F field-pressure from the
+prompt theme, `kk_modulate_field`→prophecy/destiny) AND **santaclaus** (self-residual
+recall of Leo's own past presence-moments). Both, not one.
+
 ## RESUME POINT — Phase 3 port (2026-05-26)
 
 - **On branch `leo-phase3`.** HEAD = `c3530f0` (3a.2). main = v18 (`10e7130`),

@@ -148,6 +148,29 @@ int main(void) {
         leo_free(&l4);
     }
 
+    /* 11. chamber discrimination: a short function word must NOT spurious-match
+     *     an anchor by substring ('the' is inside 'mother' — it lit LOVE on
+     *     every prompt before the fix). Exact and >=4 morphological matches
+     *     still fire. feel_text memsets chamber_ext, so each call is isolated. */
+    {
+        Leo l5; leo_init(&l5);
+        leo_field_chambers_feel_text(&l5, "the");
+        CHECK(l5.chamber_ext[LEO_CH_LOVE] == 0.0f, "chambers: 'the' does NOT light LOVE (no substring into 'mother')");
+        int any = 0;
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) if (l5.chamber_ext[i] != 0.0f) any = 1;
+        CHECK(!any, "chambers: 'the' lights no chamber (function word, no exact/>=4 match)");
+
+        leo_field_chambers_feel_text(&l5, "mother");
+        CHECK(l5.chamber_ext[LEO_CH_LOVE] > 0.0f, "chambers: 'mother' lights LOVE (exact anchor)");
+
+        leo_field_chambers_feel_text(&l5, "dark");
+        CHECK(l5.chamber_ext[LEO_CH_FEAR] > 0.0f, "chambers: 'dark' lights FEAR (exact anchor)");
+
+        leo_field_chambers_feel_text(&l5, "mothers");
+        CHECK(l5.chamber_ext[LEO_CH_LOVE] > 0.0f, "chambers: 'mothers' still lights LOVE (>=4 morphological substring)");
+        leo_free(&l5);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
