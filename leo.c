@@ -7,16 +7,19 @@
  *
  * This is a from-scratch rebuild whose ONE goal is presence —
  * prompt -> state mutation -> response — built at the foundation, not
- * bolted on. No word-level. No prompt-token injection. The canonical
- * architecture (byte-level BPE, cooc/bigram/trigram field, LeoField,
- * chambers, mama-child, dedication) is ported faithfully from neoleo
- * (49f2ef8); presence is added at the nerve, measured by ablation.
+ * bolted on. No word-level. No FIRST-token injection — Leo never opens a
+ * reply by echoing the prompt, and the candidate pool is never fed a prompt
+ * id (mama-child). Between-sentence field-pressure injection (Dario-style
+ * theme direction + santaclaus recall) is the destination, not a violation.
+ * The canonical architecture (byte-level BPE, cooc/bigram/trigram field,
+ * LeoField, chambers, mama-child, dedication) is ported faithfully from
+ * neoleo (49f2ef8); presence is added at the nerve, measured by ablation.
  *
- * STEP 0 — corpus + tokenizer + speaking field.
- *   byte-level BPE with online merge learning, cooc/bigram/trigram
- *   tables, ingest. Dedication ingested first (byte-exact), then the
- *   full corpus (leo.txt). Generation, presence and the rest land in
- *   later steps on top of this learned field.
+ * STATUS — phase 3a (branch leo-phase3): presence is live (v1-v18, ablation-
+ *   proven) on byte-level BPE + cooc/bigram/trigram field + word-memory. The
+ *   emotional field (6 Kuramoto chambers + 32-d retention/Griffin + suffering)
+ *   is BUILT and evolves per emitted token but is PASSIVE — 3b santaclaus and
+ *   Dario direction-injection read it next. Inspect with --debug-field.
  *
  * Build:   cc leo.c -O2 -lm -Wall -Wextra -o leo
  * Test:    make test     ASan/UBSan: make asan
@@ -30,7 +33,7 @@
 #include <stdint.h>
 #include <time.h>
 
-#define LEO_VERSION  "0.1.0-step1"
+#define LEO_VERSION  "0.3.0-phase3a.4"
 
 /* EMBEDDED_BOOTSTRAP — verbatim from python-legacy Leo
  * (ariannamethod/leo, leo.py:448-481). Oleg's dedication to Leo-the-man.
@@ -2430,7 +2433,13 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
  * frees. */
 static float *compute_prompt_gravity(const Leo *leo, const int *p_ids, int p_n) {
     int V = leo->bpe.vocab_size;
-    float *g = calloc((size_t)V, sizeof(float));
+    /* allocate to freq_size, not vocab_size: leo_choose_start /
+     * leo_choose_continuation scan i < cooc.freq_size and read gravity[i]
+     * (guarded by freq[i]>0, so currently safe-by-accident). Sizing gravity to
+     * freq_size makes those reads in-bounds by construction; entries beyond
+     * vocab_size stay 0 (never filled), so behaviour is byte-identical. */
+    int gcap = leo->cooc.freq_size > V ? leo->cooc.freq_size : V;
+    float *g = calloc((size_t)gcap, sizeof(float));
     if (!g || p_n <= 0) return g;
     for (int i = 0; i < p_n; i++) {
         int pid = p_ids[i];
@@ -2649,7 +2658,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    printf("[leo] leo %s — corpus + tokenizer + field + voice\n", LEO_VERSION);
+    printf("[leo] leo %s — presence + passive emotional field (phase 3a)\n", LEO_VERSION);
 
     Leo leo;
     leo_init(&leo);

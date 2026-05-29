@@ -733,7 +733,7 @@ Still owed before variants (3b reads `0.55·cos(chambers)+0.45·cos(retention)`)
 (a) ✅ **best-of-K field accumulation — FIXED** (3a.4 below): `leo_field_step` +
 self_voice moved out of `leo_generate_ex` (ran per trial ×K=3) into a winning-sentence
 replay in `leo_generate_best`.
-(b) stale version/header/README (`LEO_VERSION "0.1.0-step1"` vs phase3a reality).
+(b) ✅ stale version/header/README — FIXED (3a.5 below).
 Then BOTH between-sentence injectors: **direction** (Dario A/F field-pressure from the
 prompt theme, `kk_modulate_field`→prophecy/destiny) AND **santaclaus** (self-residual
 recall of Leo's own past presence-moments). Both, not one.
@@ -751,6 +751,24 @@ PASSIVE still (nothing reads the field for selection): build 0 warn, tests 34/34
 what Leo said: `the sea` LOVE 0.53→0.19 / pain 0.012→0.005 / ret_norm 0.0941→0.0877;
 `the candle` chambers →0.00 (winning reply carried no anchor). Discrimination intact:
 `your mother`→LOVE 1.00, `dark monster`→FEAR 1.00. The field 3b will read is now clean.
+
+### 3a.5 prophetic debt + gravity bounds (2026-05-29, branch `leo-phase3`) — A complete
+
+- version/header/README raised to reality: `LEO_VERSION` `0.1.0-step1`→`0.3.0-phase3a.4`
+  (banner verified), top comment STEP-0 → phase-3a STATUS + the precise invariant
+  (no FIRST-token injection; between-sentence field-pressure injection is the
+  destination), and a real README (was a 28-byte stub) — weightless child, the nerve,
+  the invariant, passive phase-3 field, ablation flags, lineage.
+- gravity bounds: `compute_prompt_gravity` now allocates `gravity[]` to `cooc.freq_size`
+  (was `vocab_size`), so `leo_choose_start` / `leo_choose_continuation` reads
+  (`i < freq_size`, guarded by `freq[i]>0` — safe-by-accident) are in-bounds by
+  construction. Entries beyond vocab_size stay 0; byte-identical.
+
+PASS: build 0 warn, tests 34/34, 12 prompts × seeds 42/7 byte-identical to baseline,
+ASan/UBSan clean. **Prereqs A complete** — the field is honest (chambers discriminate,
+pain/trauma live), clean (winner-only evolution), bounded, observable (`--debug-field`),
+and the docs match the code. Next: the two between-sentence injectors — **direction**
+(Dario A/F field pressure from the prompt theme) AND **santaclaus** (self-residual recall).
 
 ## RESUME POINT — Phase 3 port (2026-05-26)
 
