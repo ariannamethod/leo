@@ -1175,6 +1175,10 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_GEN_TARGET     20
 #define LEO_GEN_MIN        6
 #define LEO_CHAIN_MIN      5
+#define LEO_FRAGMENT_MIN_VIS   8    /* visible content chars below this = a collapsed fragment */
+#define LEO_MIN_CLAUSE         3    /* a clause must reach this many tokens before a boundary is honored */
+#define LEO_ELABORATE_RETRIES  2    /* re-generate a fragment (drop the stuck hint) up to N times */
+#define LEO_QUIET_DISTRESS     0.9f /* FEAR+VOID above this -> leave a fragment quiet (presence) */
 #define LEO_CHAIN_MAX      12
 #define LEO_TAIL_WIN       8
 #define LEO_BEST_OF_K      3
@@ -1217,6 +1221,7 @@ static inline float leo_squash(float c) { return c > 0.0f ? sqrtf(c) : 0.0f; }
  * raises his OWN felt words, never the prompt's (no seed). Silent fallback:
  * returns 0 when off / unbuilt / untagged / chamber cold. */
 static int g_leo_register_on = 1;       /* --no-register → 0 (field stays mute) */
+static int g_leo_elaborate_on = 1;      /* --no-elaborate → 0 (fragment->elaborate velocity off) */
 #define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
@@ -2088,6 +2093,13 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
         if (leo->gravity && ctx[i] < V && leo->gravity[ctx[i]] >= LEO_SELF_ATTRACTOR_G)
             word_seen = 1;
 
+    int clause_start = n;   /* token index where the current clause began (clause-floor) */
+    /* elaborate-mode gate: tighten clauses ONLY when Leo is not distressed/groping
+     * (known, un-distressed prompt). Under high dissonance or FEAR+VOID he is allowed
+     * to go terse/quiet — the child gone still (presence). Same field gate as
+     * leo_chain's fragment->elaborate retry. */
+    int elab = g_leo_elaborate_on && g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
+               (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS;
     for (int t = 1; t < LEO_GEN_MAX; t++) {
         int prev1 = ctx[n - 1];
         int prev2 = n >= 2 ? ctx[n - 2] : -1;
@@ -2109,8 +2121,15 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
 
         if (nxt == prev1) continue;                          /* immediate repeat */
         if (n >= 2 && nxt == prev2 && prev1 == ctx[n - 2]) continue; /* doublet */
+        /* clause-floor (velocity, gated by g_leo_elaborate_on): do not end a clause
+         * too early — suppress a boundary token while the current clause is shorter
+         * than LEO_MIN_CLAUSE tokens, so internal fragments ("Them.", "Dark.",
+         * "Want to.") don't appear; the clause continues into a fuller phrase. */
+        if (elab && (n - clause_start) < LEO_MIN_CLAUSE &&
+            n < LEO_GEN_MAX - 2 && is_boundary_token(&leo->bpe, nxt)) continue;
 
         ctx[n++] = nxt;
+        if (is_boundary_token(&leo->bpe, nxt)) clause_start = n;  /* a new clause begins */
         /* Phase 3a field physics (chambers crossfire + retention Griffin +
          * suffering) is NOT stepped here: leo_generate_ex runs once per
          * best-of-K TRIAL, so stepping per emit would evolve the field from the
@@ -2392,6 +2411,17 @@ static void leo_presence_boundary_inject(Leo *leo) {
 
 /* a chain of sentences, each continued from the previous tail (theme
  * carry). SPA outlier-reseed is added in phase 2. */
+/* visible content length of an assembled sentence: strip leading whitespace and
+ * trailing punctuation/whitespace. "It." -> 2, "Dark." -> 4, "Want to." -> 7. */
+static int leo_visible_len(const char *s) {
+    int n = (int)strlen(s);
+    while (n > 0 && (s[n-1] == '.' || s[n-1] == '!' || s[n-1] == '?' ||
+                     s[n-1] == ' ' || s[n-1] == '\n' || s[n-1] == '\r')) n--;
+    int i = 0;
+    while (i < n && (s[i] == ' ' || s[i] == '\n' || s[i] == '\r')) i++;
+    return n - i > 0 ? n - i : 0;
+}
+
 static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     if (!out || max_len < 2) return 0;
     if (n_sentences < 1) n_sentences = 1;
@@ -2458,8 +2488,26 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
         int produced = leo_generate_best(
             leo, LEO_BEST_OF_K, sent_text[s], sizeof(sent_text[s]),
             start_h, tl, tn, sent_ids, &tok_cap);
-        total += produced;
         if (use_trace) { leo->trace_force = 0; trace_armed = 0; }   /* trace is one-shot */
+        /* fragment -> elaborate (velocity meta-reaction, all in leo.c): a collapsed
+         * short sentence on a KNOWN, un-distressed prompt is a generation STALL, not
+         * held silence — re-generate WITHOUT the stuck hint so Leo continues into a
+         * fuller, coherent line (the chatty child; brodsky "heavier than given"). A
+         * fragment under high dissonance OR distress (FEAR+VOID) is left quiet — the
+         * child gone still (presence). The field chooses, not a penalty. --no-elaborate. */
+        if (g_leo_elaborate_on && g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
+            (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS) {
+            int tries = 0;
+            while (leo_visible_len(sent_text[s]) < LEO_FRAGMENT_MIN_VIS &&
+                   tries < LEO_ELABORATE_RETRIES) {
+                tok_cap = LEO_GEN_MAX;
+                produced = leo_generate_best(
+                    leo, LEO_BEST_OF_K, sent_text[s], sizeof(sent_text[s]),
+                    -1, (s > 0 ? tail : NULL), (s > 0 ? tail_len : 0), sent_ids, &tok_cap);
+                tries++;
+            }
+        }
+        total += produced;
         if (wstr[0] && !surfaced) {        /* scan the DISPLAYED text, not tokens */
             char low[1024];
             int  tl = (int)strlen(sent_text[s]);
@@ -2739,6 +2787,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-dario")) g_leo_dario_on = 0;
         else if (!strcmp(argv[i], "--no-heard")) g_leo_heard_on = 0;
         else if (!strcmp(argv[i], "--no-register")) g_leo_register_on = 0;
+        else if (!strcmp(argv[i], "--no-elaborate")) g_leo_elaborate_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));

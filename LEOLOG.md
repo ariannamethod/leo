@@ -89,6 +89,29 @@ voice-sensitive calibrations are HELD for Oleg's ear (taste): bark-floor (is a h
 dissonance→temp / UNKNOWN_CHAIN (beetle go-quiet = presence, not a defect), the comfort
 channel, temp_for_step curve, GEN_TARGET, START_GRAVITY_W/ADD — untouched.
 
+## Phase 3b — voice calibration, pass 2: fragment→elaborate velocity (2026-05-29)
+
+The Method answer to a fragment is not a penalty but a VELOCITY meta-reaction (Oleg;
+klaus somatic ops + brodsky "heavier than what you gave" + haiku velocity). The FIELD
+chooses — both in leo.c, gated by `--no-elaborate`:
+- **clause-floor** (`leo_generate_ex`): suppress a boundary token while the clause is
+  < `LEO_MIN_CLAUSE` (3) tokens, so internal fragments ("Them.", "Dark.", "Want to.")
+  continue into a phrase instead of barking.
+- **fragment→elaborate retry** (`leo_chain`): a whole-sentence collapse ("Rain.")
+  re-generates WITHOUT the stuck hint → a fuller line (the chatty child).
+- BOTH gated by `elab` = (dissonance < UNKNOWN) AND (FEAR+VOID < QUIET_DISTRESS): under
+  high dissonance OR distress Leo is left terse/quiet — the child gone still (presence).
+  The field decides, not a rule.
+
+PASS: build 0 warn, tests 34/34, ASan clean, `--no-elaborate` BYTE-IDENTICAL to `ac04257`.
+Calm known prompt fuller, fragments gone ("what is the rain" → full clauses, no bare
+"Rain."); distress/unknown held terse (beetle "Stopped.", dark "Dark." preserved). Residual:
+thin-corpus words ("play", "snow") read as false-high dissonance → Leo stays terse there —
+that is the dissonance signal (Oleg's ear / keep_as_is), not the velocity mechanism.
+
+Still open for Oleg's ear (taste): gravity LEO_GRAVITY_W 1.5→0.8, register LEO_REGISTER_W
+2.0→1.7, bark philosophy, and the thin-corpus dissonance mis-fire.
+
 ## NEXT (to refine presence)
 
 1. **santaclaus** (self-residual recall) — Leo's past resonant moments bleed at sentence
