@@ -730,12 +730,27 @@ tests **34/34**; ASan/UBSan clean.
   Observability for 3b — cannot claim the field works without seeing it.
 
 Still owed before variants (3b reads `0.55·cos(chambers)+0.45·cos(retention)`):
-(a) **best-of-K field accumulation** — `leo_field_step` runs per trial ×K=3, evolving
-the field from 2 DISCARDED trials; move it to the winning sentence in `leo_chain`.
+(a) ✅ **best-of-K field accumulation — FIXED** (3a.4 below): `leo_field_step` +
+self_voice moved out of `leo_generate_ex` (ran per trial ×K=3) into a winning-sentence
+replay in `leo_generate_best`.
 (b) stale version/header/README (`LEO_VERSION "0.1.0-step1"` vs phase3a reality).
 Then BOTH between-sentence injectors: **direction** (Dario A/F field-pressure from the
 prompt theme, `kk_modulate_field`→prophecy/destiny) AND **santaclaus** (self-residual
 recall of Leo's own past presence-moments). Both, not one.
+
+### 3a.4 field evolves over the winning sentence, not discarded trials (2026-05-29, branch `leo-phase3`)
+
+`leo_field_step` + `leo_field_self_voice` ran inside `leo_generate_ex`, which runs once
+per best-of-K TRIAL (K=3) — so chambers/retention/pain accumulated from the 2 DISCARDED
+trials, not just the emitted sentence. Moved both out of `leo_generate_ex` into a
+winning-sentence replay at the end of `leo_generate_best` (over `best_ids`, opener has no
+predecessor — matches the old start-token behaviour). Per-step coherence proxy unchanged.
+
+PASSIVE still (nothing reads the field for selection): build 0 warn, tests 34/34,
+12 prompts × seeds 42/7 **BYTE-IDENTICAL** to the pre-A baseline. Field now reflects only
+what Leo said: `the sea` LOVE 0.53→0.19 / pain 0.012→0.005 / ret_norm 0.0941→0.0877;
+`the candle` chambers →0.00 (winning reply carried no anchor). Discrimination intact:
+`your mother`→LOVE 1.00, `dark monster`→FEAR 1.00. The field 3b will read is now clean.
 
 ## RESUME POINT — Phase 3 port (2026-05-26)
 

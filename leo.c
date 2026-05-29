@@ -2030,21 +2030,12 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
         if (n >= 2 && nxt == prev2 && prev1 == ctx[n - 2]) continue; /* doublet */
 
         ctx[n++] = nxt;
-        /* Phase 3a — field physics per emit (canon order: step then self-voice,
-         * neoleo 3553-3557). leo_field_step folds in the retention Griffin
-         * update (3a.1) + chambers crossfire + suffering decay; self_voice
-         * nudges chamber_ext from Leo's own token (effective next step).
-         * PASSIVE — nothing reads the field for THIS step's selection. */
-        /* per-step coherence proxy: transition support of the emitted token,
-         * mirroring the bigram term of leo_coherence_score. An unsupported pick
-         * (bigram count 0 — a forced/groping reach) reads as incoherent -> pain
-         * grows; a walked transition keeps pain low. Canon passes 1.0/0.0; we
-         * thread the real signal the field comment claims ("pain grows from
-         * incoherent candidates"). Field stays PASSIVE — nothing reads it for
-         * THIS step's selection. */
-        float coh_bg = leo_squash((float)bigram_get(&leo->bigrams, prev1, nxt));
-        leo_field_step(leo, nxt, coh_bg / (coh_bg + 3.0f));
-        leo_field_self_voice(leo, nxt);
+        /* Phase 3a field physics (chambers crossfire + retention Griffin +
+         * suffering) is NOT stepped here: leo_generate_ex runs once per
+         * best-of-K TRIAL, so stepping per emit would evolve the field from the
+         * K-1 DISCARDED trials too. leo_generate_best replays leo_field_step +
+         * self_voice over the WINNING sentence only. Field stays PASSIVE —
+         * nothing reads it for THIS step's selection. */
         if (leo->gravity && nxt < V && leo->gravity[nxt] >= LEO_SELF_ATTRACTOR_G)
             word_seen = 1;
 
@@ -2180,6 +2171,20 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
             best_tokens = produced;
         }
         if (!leo->gravity && sc > 1.0f && cap > 12) break;  /* presence: no early-exit */
+    }
+
+    /* field evolves over the WINNING sentence only (not the K-1 discarded
+     * best-of-K trials): replay leo_field_step + self_voice over best_ids so the
+     * chambers/retention/suffering 3b santaclaus will read reflect what Leo
+     * actually said. Per-step coherence proxy = bigram support of the emitted
+     * transition (canon passes 1.0/0.0; we thread the real signal the field
+     * comment claims). best_ids[0] is the opener (no predecessor), matching
+     * leo_generate_ex which never stepped the start token. */
+    for (int i = 1; i < best_n; i++) {
+        float coh_bg = leo_squash((float)bigram_get(&leo->bigrams,
+                                                    best_ids[i - 1], best_ids[i]));
+        leo_field_step(leo, best_ids[i], coh_bg / (coh_bg + 3.0f));
+        leo_field_self_voice(leo, best_ids[i]);
     }
 
     int blen = (int)strlen(best_text);
