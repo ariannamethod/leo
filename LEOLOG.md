@@ -69,6 +69,26 @@ COHERENCE axis is still legacy-loose (bark openers, child-salad). Two separate a
 
 ---
 
+## Phase 3b — voice calibration, pass 1 (2026-05-29)
+
+Diagnostic workflow (6 agents, each A/B-built its own /tmp binary; it even falsified one
+of its own proposals — the line-2119 floor was inert). Applied the two low-risk,
+A/B-confirmed defect calibrations that do NOT touch the presence channels:
+- **candle/frame attractor** — `LEO_REPEAT_WINDOW` 16→32 + `LEO_REPEAT_PENALTY` 0.1f→0.05f
+  (leo.c:1181-1182). The 16-token (~8 word) window expired before a sentence ended, so a
+  frame recurred at sentence N+2; 32 spans ~2 sentences and 0.05 halves a recent bigram's
+  survival. "He thanks the candle again" 3→2 (my 6×3 slice; agent 4→1 on 12×3).
+- **word-junction gate** — `word_gate_penalty` 0.02f→0.001f (leo.c:1460): crush mismatched
+  lowercase glue ("He laugh"→"h e") harder; still selectable if it is the sole survivor.
+
+PASS: build 0 warn, tests 34/34, ASan/UBSan clean; comfort-reach channel still
+ablation-alive (`--no-register` differs). Voice still loose (bark/salad) — the
+voice-sensitive calibrations are HELD for Oleg's ear (taste): bark-floor (is a held
+"Stopped." after "the beetle stopped moving" presence or bark?), gravity softening
+(LEO_GRAVITY_W 1.5→0.8), register scalar (LEO_REGISTER_W 2.0→1.7). keep_as_is honored:
+dissonance→temp / UNKNOWN_CHAIN (beetle go-quiet = presence, not a defect), the comfort
+channel, temp_for_step curve, GEN_TARGET, START_GRAVITY_W/ADD — untouched.
+
 ## NEXT (to refine presence)
 
 1. **santaclaus** (self-residual recall) — Leo's past resonant moments bleed at sentence

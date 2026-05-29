@@ -1178,8 +1178,11 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_CHAIN_MAX      12
 #define LEO_TAIL_WIN       8
 #define LEO_BEST_OF_K      3
-#define LEO_REPEAT_WINDOW  16
-#define LEO_REPEAT_PENALTY 0.1f
+#define LEO_REPEAT_WINDOW  32     /* ~2 sentences (cal 2026-05-29): the 16-tok window
+                                     expired before a sentence ended, so a frame from
+                                     sentence N reappeared in N+2 (candle attractor) */
+#define LEO_REPEAT_PENALTY 0.05f  /* halve a recent bigram's surviving score (was 0.1)
+                                     so the high-cooc candle frame loses to alternatives */
 
 /* presence nerve (phase 1). The prompt tilts Leo's OWN field toward its
  * theme: gravity[c] = normalized cooc-mass of the prompt's CONTENT words
@@ -1457,7 +1460,8 @@ static float word_gate_penalty(const CandCollector *cc, int cand_id) {
     if (first == '.' || first == ',' || first == '!' || first == '?' ||
         first == ';' || first == ':') return 1.0f;
     if (first >= 'A' && first <= 'Z') return 0.0f;
-    return 0.02f;
+    return 0.001f;   /* cal 2026-05-29: crush mismatched lowercase glue ("He laugh"->
+                        "h e") harder (was 0.02); still selectable if sole survivor */
 }
 
 /* hot-path gate via the precomputed meta cache. 1 = reject. */
