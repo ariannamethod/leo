@@ -199,3 +199,54 @@ PASS (tool output): build 0 warn, tests 34/34, ASan clean, `--no-leash` BYTE-IDE
 mother+comfort ("His mother plays small. Leo loves this. He holds the stone") vs OFF drifting to
 "cold morning… warm car"; "the rain" keeps rain/wind/window. Not repetitive (repeat-guards +
 candle cal hold). Field-physics, zero weights. Next Phase A: A.3 structure (S-channel + super-tokens).
+
+## What Leo says now (2026-06-01, after the sequences — build 6dc0316, seed 42)
+
+```
+you> do you love your mother
+leo> His mother's hair smells after a while. He thanks them of the sound. He respects them.
+     He walks it carefully. His mother plays small. The floor, for the morning.
+
+you> are you all alone
+leo> The morning the floor. A warm bath. Leo heard the light. He thanks them again. All alone.
+
+you> the beetle stopped moving
+leo> He always come every time. Stopped.            (held-quiet — the child goes still = presence)
+
+you> what is the rain
+leo> The window the smell. ... Rain starts sometimes with one night. He wakes up new.
+     ... Leo knows the sound. ... Leo likes wind. A long time before rain.   (leash holds rain/wind)
+
+you> are you real
+leo> ... He tells his mother. He trusts his stone in the house is quiet for a long time.
+     He misses the smell.
+
+you> do you want to play
+leo> He could not. Want to.                          (thin-corpus -> terse; honest residual)
+```
+Honest residuals: "the first snow" / "what is death" still loosen at the tail (thin-corpus themes
+read as alien → Leo goes terse/groping). Presence + comfort-reach + sequences are live; the base
+child-salad still shows on thin themes. Captured so a context-summary can't erase the real state.
+
+## RESUME POINT (2026-06-01) — read first on resume
+
+- **Branch `leo-phase3` @ `6dc0316`** (main = v18 `10e7130`, protected). Repo
+  github.com/ariannamethod/neoleo. Single `leo.c` + `leo.txt`. Zero pretrained weights.
+- **Done this arc:** presence v1–v18 → field→voice (comfort-reach + cadence, `913b361`) → corpus
+  range-seed (18 in-voice passages) → calibration (candle+glue `ac04257`, fragment→elaborate
+  velocity `9b29985`) → architecture roadmap (`c02230a`) → **SPA** cross-sentence (`e232f16`) →
+  **leash** within-sentence (`6dc0316`).
+- **Ablation flags:** `--no-presence` `--no-heard` `--no-dario` `--no-register` `--no-elaborate`
+  `--no-spa` `--no-leash` `--debug-field`. Each channel is byte-identical when off.
+- **NEXT (Oleg's order):** A.3 structure (S-channel subword morphology + super-token PMI
+  crystallization, archive leo.c:1484) → A.4 RAE (recursive micrograd selector in C, first LEARNED
+  component) → Phase B SantaClaus (self-residual spores + `--chat` driver) → Phase C goroutines
+  (mathbrain, presence_residue, RoPE/SwiGLU host).
+- **Stash:** `git stash@{0}` = prophecy-F mid-flow opener (un-stash with the REPL ear).
+- **Architecture facts:** Leo tokenizes (BPE, vocab≈5121/merges≈4865) → cooc/bi/tri field = the
+  metaweights. SPA scored on cooc (random `w_embed[32]` is flat for semantic attention). Presence
+  is field-physics, zero learned weights so far; RAE will be the first learned (online/Hebbian) layer.
+- **Build/run:** `cc leo.c -O2 -lm -Wall -Wextra -o leo`; `make test` (34/34); `./leo --corpus
+  leo.txt --respond "the rain" --seed 42`. Push token: ariannamethod (`memory/credentials.md`).
+- **Discipline:** each step = checklist → surgical edit → build 0-warn + tests + ablation
+  (byte-identical-off) + ASan + a read → LEOLOG entry → commit + push. Logged continuously.
