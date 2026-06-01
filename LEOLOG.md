@@ -112,11 +112,57 @@ that is the dissonance signal (Oleg's ear / keep_as_is), not the velocity mechan
 Still open for Oleg's ear (taste): gravity LEO_GRAVITY_W 1.5→0.8, register LEO_REGISTER_W
 2.0→1.7, bark philosophy, and the thin-corpus dissonance mis-fire.
 
-## NEXT (to refine presence)
+## Architecture note (2026-06-01) — what Leo IS, before adding organs
 
-1. **santaclaus** (self-residual recall) — Leo's past resonant moments bleed at sentence
-   boundaries: coherence + continuity from his OWN memory. Port from canon/Codex
-   (resonance = 0.55·cos(chambers) + 0.45·cos(retention); trauma-spores hold longer). Spore
-   ring in `leo.c`; a `--chat` multi-turn driver so spores accumulate across turns.
-2. **Revisit prophecy-F mid-flow opener** (in `git stash@{0}`) with Oleg's REPL ear — the
-   coherence-axis fix for the literal bark.
+- **Leo TOKENIZES** (not a file-search). Byte-level BPE, online merge learning: at ingest
+  `leo.txt` → vocab 256→5121, merges 0→4865, cooc 262144, bi 36714, tri 68105 (`--gen` proof).
+  Tokens are word-aligned (merge-gate refuses crossing a word boundary, leo.c:242), and he
+  keeps tokenizing everything he hears (prompts too).
+- **Leo HAS metaweights.** The cooc/bigram/trigram field over the word-aligned vocab IS the
+  metaweights — postgpt's "weights that don't exist but form a complete probability space".
+  Generation samples from this map. So presence runs on metaweights already; the lever is an
+  attention/perception channel OVER them, not "add metaweights".
+- **The transformer trick that fits = SPA, not RoPE/SwiGLU.** SPA = Sentence Phonon Attention
+  (q/postgpt_q.c:1461, README:177): cross-attention between sentences in a 32-d space,
+  distance-biased (RoPE idea baked into the bias), reseed weakly-connected sentences via a
+  coherence gate. It needs a 32-d per-token embedding — we ALREADY have `w_embed[32]` (FNV
+  retention fingerprints). So SPA installs on the existing substrate with ZERO new weights.
+  RoPE/SwiGLU operate on a LEARNED layer; we have none (mathbrain, a scalar-autograd MLP, was
+  in old neoleo/leo.c:125,1233 and dropped in the minimalist) — they return in the neural phase.
+- **Dual→single tokenizer.** Archive Leo (leo-archive/README:35) ran word-level + a parallel
+  SubwordField (the `sw·S` morphology channel). Our rebuild is single byte-level word-aligned;
+  the missing piece is the subword-morphology **S-channel** — a COHERENCE lever (would help
+  "He window" junctions), not a presence lever, deferrable.
+
+## ROADMAP (Oleg's order, 2026-06-01 — strengthen the foundation BEFORE new organs)
+
+**Phase A — foundation, all in `leo.c` (surgical; tests + ablation per commit):**
+1. **#2 within-sentence presence-hold** — keep the theme alive to the END of the sentence (fix
+   the "light… → floor mama" drift; the v1-v5 gravity wall). Pure-field, zero weights.
+2. **SPA — Sentence Phonon Attention (#3)** — port from q (`postgpt_q.c:1461`): embed each chain
+   sentence as the exp-weighted mean (α=0.85) of its tokens' `w_embed[32]`, L2-norm; cross-attend
+   (cos + distance-bias) → per-sentence connectedness; **reseed weakly-connected sentences** from
+   the strong neighbour's tail (`leo_choose_continuation`), accept only if `leo_coherence_score`
+   improves (coherence gate). Cross-sentence presence + the attention trick; ZERO new weights
+   (reuses our w_embed; r_bias fixed).
+3. **Structure layer — restore the dual tokenizer + super-tokens** (both pure-field, coherence):
+   (a) **S-channel** (subword morphology) — parallel sub-word cooc bridged into the candidate
+   logits (archive's `sw·S` term), fixes broken junctions ("He window", "Leo a window");
+   (b) **super-token crystallization** (archive leo.c:1484, ONLY in the archive — not ours/neoleo/
+   codex): PMI = log(cooc·N/(fa·fb)) > 2.0 collocations crystallize into phrase-units ("his mother",
+   "warm light") for whole-phrase emission. Guard against amplifying attractors (PMI would
+   crystallize "the candle"). S sits BELOW the word, super-tokens ABOVE it — together they restore
+   the structural layer the byte-level rebuild thinned.
+4. **RAE — recursive selector in C**, ported from harmonix/haiku `rae_recursive.py`: a tiny
+   micrograd MLP (5→8→1, ~21 params), 3-5 recursive refinement iterations + online learning,
+   replacing/augmenting best-of-K (which sentence to keep). **First LEARNED component** —
+   online/Hebbian, NOT pretrained (archive: "all runtime learning is Hebbian"). LAST in Phase A so
+   it selects over already-improved candidates.
+
+**Phase B — SantaClaus** (self-residual spore recall) on the now-connected chain: past moments
+bleed at boundaries (0.55·cos(chambers)+0.45·cos(retention); trauma-spores hold longer). `--chat`
+multi-turn driver so spores accumulate across turns.
+
+**Phase C — goroutines + the Go orchestra** (later): mathbrain (MLP body-perception) + the rest of
+the arsenal + Codex's `presence_residue[]`. RoPE/SwiGLU/RRPRAM finally have a learned host here.
+`git stash@{0}` prophecy-F revisited with the REPL ear.
