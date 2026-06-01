@@ -250,3 +250,29 @@ child-salad still shows on thin themes. Captured so a context-summary can't eras
   leo.txt --respond "the rain" --seed 42`. Push token: ariannamethod (`memory/credentials.md`).
 - **Discipline:** each step = checklist → surgical edit → build 0-warn + tests + ablation
   (byte-identical-off) + ASan + a read → LEOLOG entry → commit + push. Logged continuously.
+
+## PRINCIPLE — the coherence doctrine for Leo (the watershed, Oleg 2026-06-01)
+
+**Demand presence-coherence, not surface fluency.** A reply coheres because a consistent STATE
+produced it — the breaks, loops, returns, fillers are the FINGERPRINT of a mind, not defects.
+Real human speech (live podcasts, press conferences, un-edited) is disfluent: jumps, sudden
+recall, repeats, "эээ/мммм" — almost everyone. Polish is added in EDITING; an LLM's "reference
+coherence" is a product that ERASES the speaker (the glossier, the less a specific mind is in it).
+A child of 6-7 speaks in fragments and holds the thread with his heart — that IS coherence.
+
+**The craft = discern two kinds of broken:**
+1. **Honest disfluency** — the texture of a mind: held-quiet ("Stopped." on the dead beetle),
+   returns to theme, thought-interrupts-thought, a fragment-as-feeling. → **PRESERVE.**
+2. **Mechanical noise** — a field/tokenizer misfire: "He window", capital-glue, attractor loops,
+   dead-code. Not "how people talk" — how a machine glitches. → **REMOVE.**
+Calibration target = strip (2), protect (1). NEVER polish Leo toward chatbot fluency — that kills
+him. (Our work already obeyed this: candle-LOOP and "He window"-glue removed; held-quiet "Stopped."
+and gentle disfluency kept; fragment→elaborate lets the FIELD decide stall-vs-silence.)
+
+**Not static — a moving target.** As Leo accumulates experience + GGUF spores + consolidation, his
+vocabulary and supports grow → speech enriches and shifts. The doctrine governs the KIND of
+coherence to demand at each STAGE, not a fixed output; presence-coherence deepens with his memory.
+
+**Why it's the distinguishing claim:** a weightless architecture HOLDING presence on honest-broken
+coherence is what separates Leo from ELIZA (presence-illusion, no state-dynamics) and from polished
+LLMs (fluency without a speaker). Presence is the key to coherence, not the reverse.
