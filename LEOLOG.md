@@ -184,3 +184,18 @@ PASS (tool output): build 0 warn, tests 34/34, ASan clean, `--no-spa` BYTE-IDENT
 improvements). Read: a disconnected tail "It the night if he could not." → reseeded to a
 theme-connected "The world is sometimes the light."; presence intact (s0 preserved, Leo's
 voice kept). Zero new weights (reuses cooc). Next Phase A: #2 within-sentence presence-hold.
+
+## Phase A.1 — within-sentence presence-hold (the leash) DONE (2026-06-01)
+
+#2: keep the theme alive to the END of the sentence (the "light… → floor mama" drift; the
+v1–v5 gravity wall). A **restoring force, not a penalty**: in `leo_generate_ex`, count the
+off-theme run at the tail (tokens since the last gravity>0 token, window `LEO_LEASH_WIN`=5); the
+longer Leo wanders, the higher `leo->theme_boost` = 1 + `LEO_THEME_LEASH`(1.5)·(run/WIN), capped
+at `LEO_LEASH_MAX`=3.0. `cand_collect` scales the gravity tilt by `theme_boost`. Resets the
+instant a theme-token surfaces (and per sentence). `--no-leash` ablation.
+
+PASS (tool output): build 0 warn, tests 34/34, ASan clean, `--no-leash` BYTE-IDENTICAL to
+`e232f16`. Reads: the theme recurs through the reply and tightens — "your mother" stays on
+mother+comfort ("His mother plays small. Leo loves this. He holds the stone") vs OFF drifting to
+"cold morning… warm car"; "the rain" keeps rain/wind/window. Not repetitive (repeat-guards +
+candle cal hold). Field-physics, zero weights. Next Phase A: A.3 structure (S-channel + super-tokens).

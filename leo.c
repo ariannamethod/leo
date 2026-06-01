@@ -1028,6 +1028,7 @@ typedef struct {
      * → a temperature multiplier. Known theme → cool, settle on theme;
      * unknown → hot, groping (the felt not-knowing). 1.0 outside a reply. */
     float        temp_mult;
+    float        theme_boost;   /* within-sentence leash: gravity tilt ×this, rises with off-theme drift */
     LeoHeard     heard;      /* whole surface-words Leo has heard (memory = love) */
     /* remembered-trace: the heard word's own token sequence, surfaced when it
      * is HELD in memory but its tokens are too rare to be picked normally
@@ -1181,6 +1182,9 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_QUIET_DISTRESS     0.9f /* FEAR+VOID above this -> leave a fragment quiet (presence) */
 #define LEO_SPA_ALPHA          0.85f /* SPA: recency weight in the sentence embedding (q's alpha) */
 #define LEO_SPA_WEAK_FRAC      0.6f  /* SPA: sentence below this fraction of avg connectedness = weak */
+#define LEO_LEASH_WIN          5     /* within-sentence leash: look-back window for the off-theme run */
+#define LEO_THEME_LEASH        1.5f  /* leash strength: extra theme tilt per full off-theme run */
+#define LEO_LEASH_MAX          3.0f  /* cap on the theme_boost multiplier */
 #define LEO_CHAIN_MAX      12
 #define LEO_TAIL_WIN       8
 #define LEO_BEST_OF_K      3
@@ -1225,6 +1229,7 @@ static inline float leo_squash(float c) { return c > 0.0f ? sqrtf(c) : 0.0f; }
 static int g_leo_register_on = 1;       /* --no-register → 0 (field stays mute) */
 static int g_leo_elaborate_on = 1;      /* --no-elaborate → 0 (fragment->elaborate velocity off) */
 static int g_leo_spa_on = 1;            /* --no-spa → 0 (Sentence Phonon Attention reseed off) */
+static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence theme leash off) */
 #define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
@@ -1602,7 +1607,8 @@ static int cand_collect_tri(int c, float count, void *ud) {
     float score = 0.7f * leo_squash(count) + 0.3f * leo_squash(s);
     if (cc->gravity) {                      /* theme tilt toward the prompt */
         float g = cc->gravity[c];
-        score = score * (1.0f + LEO_GRAVITY_W * g) + LEO_GRAVITY_ADD * g;
+        float tb = cc->leo ? cc->leo->theme_boost : 1.0f;   /* within-sentence leash */
+        score = score * (1.0f + LEO_GRAVITY_W * g * tb) + LEO_GRAVITY_ADD * g * tb;
     }
     score += leo_presence_entry_latch_boost(cc, c);
     score += leo_register_bias(cc->leo, c);     /* felt chamber -> Leo's own emotion word */
@@ -1621,7 +1627,8 @@ static int cand_collect_bi(int dst, float count, void *ud) {
     float score = leo_squash(count);
     if (cc->gravity) {
         float g = cc->gravity[dst];
-        score = score * (1.0f + LEO_GRAVITY_W * g) + LEO_GRAVITY_ADD * g;
+        float tb = cc->leo ? cc->leo->theme_boost : 1.0f;   /* within-sentence leash */
+        score = score * (1.0f + LEO_GRAVITY_W * g * tb) + LEO_GRAVITY_ADD * g * tb;
     }
     score += leo_presence_entry_latch_boost(cc, dst);
     score += leo_register_bias(cc->leo, dst);   /* felt chamber -> Leo's own emotion word */
@@ -2103,9 +2110,23 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
      * leo_chain's fragment->elaborate retry. */
     int elab = g_leo_elaborate_on && g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
                (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS;
+    leo->theme_boost = 1.0f;   /* within-sentence leash, reset per sentence */
     for (int t = 1; t < LEO_GEN_MAX; t++) {
         int prev1 = ctx[n - 1];
         int prev2 = n >= 2 ? ctx[n - 2] : -1;
+        /* leash (#2): count the off-theme run at the tail (tokens since the last
+         * theme-token, gravity>0); the longer Leo wanders, the harder the theme
+         * pulls back — a restoring force keeping presence alive to the sentence's
+         * end. Resets the instant a theme-token surfaces. */
+        if (g_leo_leash_on && leo->gravity) {
+            int since = 0;
+            for (int k = n - 1; k >= 0 && k >= n - LEO_LEASH_WIN; k--, since++) {
+                int id = ctx[k];
+                if (id >= 0 && id < V && leo->gravity[id] > 0.0f) break;
+            }
+            leo->theme_boost = 1.0f + LEO_THEME_LEASH * ((float)since / (float)LEO_LEASH_WIN);
+            if (leo->theme_boost > LEO_LEASH_MAX) leo->theme_boost = LEO_LEASH_MAX;
+        }
         float tau = temp_for_step(t) * leo->temp_mult;
         int tail_n = n < LEO_REPEAT_WINDOW ? n : LEO_REPEAT_WINDOW;
         const int *tl = ctx + (n - tail_n);
@@ -2858,6 +2879,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-register")) g_leo_register_on = 0;
         else if (!strcmp(argv[i], "--no-elaborate")) g_leo_elaborate_on = 0;
         else if (!strcmp(argv[i], "--no-spa")) g_leo_spa_on = 0;
+        else if (!strcmp(argv[i], "--no-leash")) g_leo_leash_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
