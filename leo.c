@@ -1179,6 +1179,8 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_MIN_CLAUSE         3    /* a clause must reach this many tokens before a boundary is honored */
 #define LEO_ELABORATE_RETRIES  2    /* re-generate a fragment (drop the stuck hint) up to N times */
 #define LEO_QUIET_DISTRESS     0.9f /* FEAR+VOID above this -> leave a fragment quiet (presence) */
+#define LEO_SPA_ALPHA          0.85f /* SPA: recency weight in the sentence embedding (q's alpha) */
+#define LEO_SPA_WEAK_FRAC      0.6f  /* SPA: sentence below this fraction of avg connectedness = weak */
 #define LEO_CHAIN_MAX      12
 #define LEO_TAIL_WIN       8
 #define LEO_BEST_OF_K      3
@@ -1222,6 +1224,7 @@ static inline float leo_squash(float c) { return c > 0.0f ? sqrtf(c) : 0.0f; }
  * returns 0 when off / unbuilt / untagged / chamber cold. */
 static int g_leo_register_on = 1;       /* --no-register → 0 (field stays mute) */
 static int g_leo_elaborate_on = 1;      /* --no-elaborate → 0 (fragment->elaborate velocity off) */
+static int g_leo_spa_on = 1;            /* --no-spa → 0 (Sentence Phonon Attention reseed off) */
 #define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
@@ -2422,12 +2425,73 @@ static int leo_visible_len(const char *s) {
     return n - i > 0 ? n - i : 0;
 }
 
+/* SPA — Sentence Phonon Attention (port from q, postgpt_q.c:1461). After the chain is
+ * generated, embed each sentence as the exp-weighted mean of its tokens' w_embed[32]
+ * (recency-weighted, L2-normed), cross-attend (cos + distance bias) for a per-sentence
+ * connectedness score, and RESEED weakly-connected sentences from the strongest neighbour's
+ * tail — accepting only if leo_coherence_score improves (the coherence gate). Cross-sentence
+ * presence; reuses w_embed, ZERO new weights. --no-spa ablates. */
+static void leo_spa_pass(Leo *leo, char sent_text[][1024],
+                         int sent_tok[][LEO_GEN_MAX], int *sent_tok_n, int n) {
+    if (n < 3) return;
+    /* connectedness[s] = total cooc-resonance of sentence s with the other sentences
+     * (distance-weighted, content tokens only). A sentence sharing few cooc-links with
+     * the rest is weakly connected (off-theme) -> reseed it. Semantic, from Leo's OWN
+     * cooc field — the random FNV w_embed carries no semantics (a phonon-attention dot
+     * over it is flat), so we score on cooc instead. */
+    float scores[LEO_CHAIN_MAX];
+    float avg = 0.0f;
+    for (int s = 0; s < n; s++) {
+        float tot = 0.0f;
+        for (int j = 0; j < n; j++) {
+            if (j == s) continue;
+            float res = 0.0f; int pairs = 0;
+            for (int a = 0; a < sent_tok_n[s] && pairs < 256; a++) {
+                int ta = sent_tok[s][a];
+                if (ta < 0 || leo_token_is_function(&leo->bpe, ta)) continue;
+                for (int b = 0; b < sent_tok_n[j] && pairs < 256; b++) {
+                    int tb = sent_tok[j][b];
+                    if (tb < 0 || leo_token_is_function(&leo->bpe, tb)) continue;
+                    res += cooc_get(&leo->cooc, ta, tb) + cooc_get(&leo->cooc, tb, ta);
+                    pairs++;
+                }
+            }
+            float dist = (float)(s > j ? s - j : j - s);
+            tot += leo_squash(res) / (1.0f + 0.5f * dist);
+        }
+        scores[s] = tot; avg += tot;
+    }
+    avg /= (float)n;
+    for (int s = 1; s < n; s++) {                 /* s0 sets the theme — leave it */
+        if (scores[s] >= LEO_SPA_WEAK_FRAC * avg) continue;
+        int nb = -1; float nbsc = -1.0f;
+        if (s - 1 >= 0 && scores[s - 1] > nbsc) { nbsc = scores[s - 1]; nb = s - 1; }
+        if (s + 1 <  n && scores[s + 1] > nbsc) { nbsc = scores[s + 1]; nb = s + 1; }
+        if (nb < 0) continue;
+        float old_coh = leo_coherence_score(leo, sent_tok[s], sent_tok_n[s]);
+        int nb_n = sent_tok_n[nb];
+        int take = nb_n > LEO_TAIL_WIN ? LEO_TAIL_WIN : nb_n;
+        const int *nbtail = sent_tok[nb] + (nb_n - take);
+        char buf[1024]; int ids[LEO_GEN_MAX]; int cap = LEO_GEN_MAX;
+        leo_generate_best(leo, LEO_BEST_OF_K, buf, sizeof buf, -1, nbtail, take, ids, &cap);
+        float new_coh = leo_coherence_score(leo, ids, cap);
+        if (buf[0] && new_coh > old_coh) {        /* coherence gate: accept only an improvement */
+            strncpy(sent_text[s], buf, 1023); sent_text[s][1023] = 0;
+            int c = cap > LEO_GEN_MAX ? LEO_GEN_MAX : cap;
+            for (int i = 0; i < c; i++) sent_tok[s][i] = ids[i];
+            sent_tok_n[s] = c;
+        }
+    }
+}
+
 static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     if (!out || max_len < 2) return 0;
     if (n_sentences < 1) n_sentences = 1;
     if (n_sentences > LEO_CHAIN_MAX) n_sentences = LEO_CHAIN_MAX;
 
     char sent_text[LEO_CHAIN_MAX][1024];
+    int  sent_tok[LEO_CHAIN_MAX][LEO_GEN_MAX];   /* per-sentence tokens, for the SPA pass */
+    int  sent_tok_n[LEO_CHAIN_MAX] = {0};
     int  total = 0;
     int  tail[LEO_TAIL_WIN];
     int  tail_len = 0;
@@ -2519,12 +2583,17 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
             low[tl] = 0;
             if (strstr(low, wstr)) surfaced = 1;
         }
+        int sn = tok_cap > LEO_GEN_MAX ? LEO_GEN_MAX : tok_cap;   /* store sentence tokens for SPA */
+        for (int i = 0; i < sn; i++) sent_tok[s][i] = sent_ids[i];
+        sent_tok_n[s] = sn;
         int take = tok_cap > LEO_TAIL_WIN ? LEO_TAIL_WIN : tok_cap;
         int src_start = tok_cap - take;
         for (int i = 0; i < take; i++) tail[i] = sent_ids[src_start + i];
         tail_len = take;
         leo_presence_boundary_inject(leo);   /* Dario: deepen the theme for the next sentence */
     }
+    if (g_leo_spa_on)                        /* SPA: reconnect weakly-linked sentences (#3) */
+        leo_spa_pass(leo, sent_text, sent_tok, sent_tok_n, n_sentences);
 
     int pos = 0;
     out[0] = 0;
@@ -2788,6 +2857,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-heard")) g_leo_heard_on = 0;
         else if (!strcmp(argv[i], "--no-register")) g_leo_register_on = 0;
         else if (!strcmp(argv[i], "--no-elaborate")) g_leo_elaborate_on = 0;
+        else if (!strcmp(argv[i], "--no-spa")) g_leo_spa_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));

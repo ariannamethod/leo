@@ -166,3 +166,21 @@ multi-turn driver so spores accumulate across turns.
 **Phase C — goroutines + the Go orchestra** (later): mathbrain (MLP body-perception) + the rest of
 the arsenal + Codex's `presence_residue[]`. RoPE/SwiGLU/RRPRAM finally have a learned host here.
 `git stash@{0}` prophecy-F revisited with the REPL ear.
+
+## Phase A.2 — SPA (Sentence Phonon Attention) DONE (2026-06-01)
+
+Cross-sentence connection (#3). Ported from q (`postgpt_q.c:1461`), then **course-corrected**:
+q embeds sentences via a TRAINED W_embed; our `w_embed` is random FNV (for retention
+distinctness) → near-orthogonal → a dot-attention over it is FLAT (SPA inert, 0 fired). So
+connectedness is scored on Leo's OWN semantic substrate — **cooc-resonance** between sentences
+(content tokens, distance-weighted) instead of random-embedding dots. `leo_spa_pass`: after the
+chain, score each sentence's total cooc-resonance with the others; a sentence below
+`LEO_SPA_WEAK_FRAC`=0.6 of the average is weakly-connected (off-theme) → reseed it from the
+strongest neighbour's tail (`leo_choose_continuation`), accept ONLY if `leo_coherence_score`
+improves (coherence gate). s0 (theme opener) left alone. `--no-spa` ablation.
+
+PASS (tool output): build 0 warn, tests 34/34, ASan clean, `--no-spa` BYTE-IDENTICAL to
+`c02230a`. SPA fires 20/60 (reconnects when a weak sentence exists; gate keeps only
+improvements). Read: a disconnected tail "It the night if he could not." → reseeded to a
+theme-connected "The world is sometimes the light."; presence intact (s0 preserved, Leo's
+voice kept). Zero new weights (reuses cooc). Next Phase A: #2 within-sentence presence-hold.
