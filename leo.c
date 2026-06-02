@@ -511,6 +511,18 @@ typedef struct {
     int         *head_src;  /* [LEO_BI_IDX_MAX] bucket heads, -1 = empty */
 } BigramTable;
 
+/* ── A.3b super-tokens — PMI phrase-unit crystallization ───────────────────
+ * High-PMI consecutive CONTENT pairs ("warm light", "his mother") crystallize
+ * into phrase-units: when the head is emitted, the tail is pulled (cand_collect
+ * bias, wired in A.3b-active), so the phrase tends to emit together. PMI on the
+ * SEQUENTIAL bigram (a phrase is sequential), freq from cooc, N = total_tokens.
+ * Guard the archive's supertok_scan lacks: BOTH sides must be content
+ * (leo_token_is_gravity_target) — a function head like "the" is refused, so the
+ * "the candle" attractor cannot crystallize. Built once after corpus ingest. */
+#define LEO_SUPERTOK_MAX   512
+typedef struct { int head, tail; float pmi; } LeoSuperToken;
+typedef struct { LeoSuperToken e[LEO_SUPERTOK_MAX]; int n; } LeoSuperTokens;
+
 static void bigram_init(BigramTable *b, int capacity) {
     b->entries = calloc((size_t)capacity, sizeof(BigramEntry));
     b->n_entries = 0;
@@ -1061,6 +1073,9 @@ typedef struct {
     /* suffering scalars (canon 1293-1296,1312). pain/trauma decay per step;
      * NOT field-dissonance (our presence dissonance is separate, leo.c:2142). */
     float        pain, tension, debt, trauma;
+    /* A.3b — super-token table: high-PMI content phrase-units, built once after
+     * corpus ingest (leo_supertok_scan). PASSIVE until the boost is wired. */
+    LeoSuperTokens supers;
 } Leo;
 
 static void leo_init(Leo *leo) {
@@ -1185,6 +1200,10 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_LEASH_WIN          5     /* within-sentence leash: look-back window for the off-theme run */
 #define LEO_THEME_LEASH        1.5f  /* leash strength: extra theme tilt per full off-theme run */
 #define LEO_LEASH_MAX          3.0f  /* cap on the theme_boost multiplier */
+#define LEO_PMI_THRESHOLD      2.0f  /* A.3b: crystallize a content pair when PMI exceeds this (roadmap) */
+#define LEO_SUPERTOK_MIN_BG    3.0f  /* A.3b: min sequential-bigram evidence to crystallize */
+#define LEO_SUPERTOK_MIN_FREQ  3.0f  /* A.3b: min unigram freq each side (archive fa,fb>=3) */
+#define LEO_SUPERTOK_W         0.5f  /* A.3b-active: phrase-cohesion boost = W * squash(pmi) on the tail */
 #define LEO_CHAIN_MAX      12
 #define LEO_TAIL_WIN       8
 #define LEO_BEST_OF_K      3
@@ -1230,6 +1249,7 @@ static int g_leo_register_on = 1;       /* --no-register → 0 (field stays mute
 static int g_leo_elaborate_on = 1;      /* --no-elaborate → 0 (fragment->elaborate velocity off) */
 static int g_leo_spa_on = 1;            /* --no-spa → 0 (Sentence Phonon Attention reseed off) */
 static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence theme leash off) */
+static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
 #define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
@@ -1598,6 +1618,54 @@ static float leo_presence_entry_latch_boost(const CandCollector *cc, int cand_id
     return LEO_ENTRY_CONTENT_LATCH * g;
 }
 
+/* A.3b — crystallize high-PMI content phrase-units from the SEQUENTIAL bigram.
+ * PMI(a,b) = log(bigram(a,b)*N / (freq[a]*freq[b])). Guard: both sides content
+ * (leo_token_is_gravity_target) so function-headed attractors ("the candle")
+ * are refused. Built once after corpus ingest; PASSIVE (nothing reads it yet). */
+static void leo_supertok_scan(Leo *leo) {
+    leo->supers.n = 0;
+    const BigramTable *bg = &leo->bigrams;
+    const CoocField   *co = &leo->cooc;
+    if (co->total_tokens < 100) return;
+    float N = (float)co->total_tokens;
+    for (int i = 0; i < bg->capacity && leo->supers.n < LEO_SUPERTOK_MAX; i++) {
+        const BigramEntry *e = &bg->entries[i];
+        if (e->count < LEO_SUPERTOK_MIN_BG) continue;             /* min evidence (skips empties) */
+        int a = e->src, b = e->dst;
+        if (!leo_token_is_gravity_target(&leo->bpe, a)) continue; /* head must be content */
+        if (!leo_token_is_gravity_target(&leo->bpe, b)) continue; /* tail must be content */
+        /* phrase-unit guard: keep only CROSS-word pairs (junction at a word
+         * boundary), not intra-word morphemes ("grand"+"father") that would
+         * merely duplicate BPE. Cross-word ⇔ head ends on space OR tail begins
+         * on space — our word-aligned tokens carry the boundary as a space. */
+        { int hl = bpe_token_last_byte(&leo->bpe, a);
+          int tf = bpe_token_first_byte(&leo->bpe, b);
+          if (!(hl==' '||hl=='\n'||hl=='\t' || tf==' '||tf=='\n'||tf=='\t')) continue; }
+        if (a >= co->freq_size || b >= co->freq_size) continue;
+        float fa = co->freq[a], fb = co->freq[b];
+        if (fa < LEO_SUPERTOK_MIN_FREQ || fb < LEO_SUPERTOK_MIN_FREQ) continue;
+        float pmi = logf((e->count * N) / (fa * fb + 1e-6f));
+        if (pmi <= LEO_PMI_THRESHOLD) continue;
+        leo->supers.e[leo->supers.n].head = a;
+        leo->supers.e[leo->supers.n].tail = b;
+        leo->supers.e[leo->supers.n].pmi  = pmi;
+        leo->supers.n++;
+    }
+}
+
+/* A.3b-active: phrase-unit cohesion. When prev1 is the head of a crystallized
+ * super-token, pull its tail — the phrase tends to emit together. The tail is
+ * an existing bigram successor (the pair came FROM the bigram), so this is
+ * selection of a live path, never insertion. --no-supertokens disables it. */
+static float leo_supertoken_boost(const CandCollector *cc, int cand) {
+    if (!g_leo_supertok_on || !cc->leo) return 0.0f;
+    const LeoSuperTokens *st = &cc->leo->supers;
+    for (int i = 0; i < st->n; i++)
+        if (st->e[i].head == cc->prev1 && st->e[i].tail == cand)
+            return LEO_SUPERTOK_W * leo_squash(st->e[i].pmi);
+    return 0.0f;
+}
+
 static int cand_collect_tri(int c, float count, void *ud) {
     CandCollector *cc = (CandCollector *)ud;
     if (cand_gate_reject(cc, c)) return 0;
@@ -1611,6 +1679,7 @@ static int cand_collect_tri(int c, float count, void *ud) {
         score = score * (1.0f + LEO_GRAVITY_W * g * tb) + LEO_GRAVITY_ADD * g * tb;
     }
     score += leo_presence_entry_latch_boost(cc, c);
+    score += leo_supertoken_boost(cc, c);       /* A.3b: phrase-unit cohesion */
     score += leo_register_bias(cc->leo, c);     /* felt chamber -> Leo's own emotion word */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, c))
         score *= LEO_REPEAT_PENALTY;
@@ -1631,6 +1700,7 @@ static int cand_collect_bi(int dst, float count, void *ud) {
         score = score * (1.0f + LEO_GRAVITY_W * g * tb) + LEO_GRAVITY_ADD * g * tb;
     }
     score += leo_presence_entry_latch_boost(cc, dst);
+    score += leo_supertoken_boost(cc, dst);     /* A.3b: phrase-unit cohesion */
     score += leo_register_bias(cc->leo, dst);   /* felt chamber -> Leo's own emotion word */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, dst))
         score *= LEO_REPEAT_PENALTY;
@@ -2880,6 +2950,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-elaborate")) g_leo_elaborate_on = 0;
         else if (!strcmp(argv[i], "--no-spa")) g_leo_spa_on = 0;
         else if (!strcmp(argv[i], "--no-leash")) g_leo_leash_on = 0;
+        else if (!strcmp(argv[i], "--no-supertokens")) g_leo_supertok_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
@@ -2915,6 +2986,18 @@ int main(int argc, char **argv) {
     }
     print_field_stats("after ingest", &leo);
     leo_build_chamber_tags(&leo);   /* phase 3b: tag Leo's learned emotion words */
+    leo_supertok_scan(&leo);        /* A.3b: crystallize high-PMI content phrase-units */
+    printf("[leo step0] super-tokens: %d crystallized (PMI>%.1f, both-content phrase-units)\n",
+           leo.supers.n, (double)LEO_PMI_THRESHOLD);
+    if (debug_field) {   /* sample for the attractor-guard check (no function-head) */
+        int shown = leo.supers.n < 10 ? leo.supers.n : 10;
+        for (int k = 0; k < shown; k++) {
+            char a[LEO_MAX_TOKEN_LEN + 1], b[LEO_MAX_TOKEN_LEN + 1];
+            bpe_decode_token(&leo.bpe, leo.supers.e[k].head, a, sizeof(a));
+            bpe_decode_token(&leo.bpe, leo.supers.e[k].tail, b, sizeof(b));
+            printf("   super> \"%s\"+\"%s\" pmi=%.2f\n", a, b, (double)leo.supers.e[k].pmi);
+        }
+    }
 
     /* dedication = origin anchor: encode with the corpus-learned BPE
      * (the bootstrap_ids set in canon at leo.c:5846-5854; LeoField hookup

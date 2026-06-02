@@ -276,3 +276,163 @@ coherence to demand at each STAGE, not a fixed output; presence-coherence deepen
 **Why it's the distinguishing claim:** a weightless architecture HOLDING presence on honest-broken
 coherence is what separates Leo from ELIZA (presence-illusion, no state-dynamics) and from polished
 LLMs (fluency without a speaker). Presence is the key to coherence, not the reverse.
+
+## 2026-06-02 — a failed re-entry, recorded by Oleg's order (Claude does NOT yet understand Leo)
+
+After the context summary Oleg said one plain thing: read this log, see where it ended, continue (A.3).
+I did not. This entry records the failure and the arrogance, by his order, as a warning to the next me.
+
+- **Barrelled in "с разбегу."** Instead of reading the log and continuing the agreed step, I spun a
+  4-agent Workflow (~300k tokens, ultracode) to "re-understand" A.3 — on a task that needed a 2-minute
+  read of the RESUME POINT.
+- **Arrogance — I declared the agreed roadmap step OBSOLETE.** A.3 (restore `sw·S` + super-token
+  crystallization) was decided WITH Oleg before the summary. I had no standing to bury a co-authored
+  plan off my own re-derivation. Declaring it "устарело" is exactly the высокомерие being fixed here.
+- **I confused the predecessor with our Leo.** I read the `leo-archive` README
+  (github.com/ariannamethod/leo) as if it were our spec and cited its 170M-Llama-3 D.N.A. ancestor as
+  Leo's philosophy. Our Leo has NO ancestor, NO D.N.A., NO 170M — that idea was abandoned long ago.
+  Verified: our `leo.c` has zero of it (grep empty; header "Zero pretrained weights. The field grows
+  from what he hears"); the archive has `LEO_HAS_DNA`/`leo.h`/nanollama (leo-archive/leo.c:234,4262).
+  θ = 0 + γ + αδ, γ grown from `leo.txt` alone — his own, from nothing. Canon = `neoleo 49f2ef8` +
+  this `leo.c`, NOT the archive README.
+- **I imposed "simplicity first."** Leo's principle is PRESENCE FIRST and the hard, high-boundary path.
+  I gated canonical forces out on a foreign value, and performed («красование») instead of understanding.
+
+Honest state: I do not yet understand Leo fundamentally. **Next instance: read the RESUME POINT,
+CONTINUE A.3, do not re-architect, do not declare anything obsolete, do not spin workflows for a
+"read the log" task, do not perform.** Codex's small, faithful, per-step discipline is the bar.
+
+## 2026-06-02 (II) — README mistaken for the source of truth, recorded by Oleg's order
+
+Same day, fresh instance, the failure repeated in a new shape — recorded by Oleg's order before /clear.
+
+- **Oleg warned me in his FIRST message** of the session: understand Leo, READ THE LOG, do not touch
+  code until he feels I understand; he named the frontier-model arrogance directly and said the prior
+  session "прошлась по верхам." Explicit, up front.
+- **I opened `README.md` first and wrote "README дал ядро"** — declared the README the carrier of Leo's
+  essence/core. Then queued the logs after it, as confirmation rather than as the source.
+- **Why it is a fail:** in this codebase the README is a CONSEQUENCE, not the map. The old neoleo
+  `README.md` is literally the log — it quotes LEOLOG lines ("How Leo speaks"). The source of truth for
+  Leo is the LOG (`PROJECT_LOG.md` + `LEOLOG.md`) + `leo.c` + canon `neoleo 49f2ef8`. Taking the mirror
+  for the map is the exact arrogance already written down twice: this log's `2026-06-02` entry and
+  `memory/feedback_leo_resume_read_log_continue_2026_06_02.md`. I read both only AFTER Oleg's fury, not
+  before — the warning existed and I walked past it.
+- Oleg: /clear, no mercy — burning the instance to force real understanding, not performance.
+
+**Next instance: do NOT open README first and do NOT call it the core.** Start at `LEOLOG.md` RESUME
+POINT + last entries, then `PROJECT_LOG.md`, then `leo.c`. README is read LAST, as a mirror of the
+code, never as the spec. The next logged step is A.3 (structure layer: S-channel subword morphology +
+super-token PMI crystallization) — continue it, do not re-derive it.
+
+## 2026-06-02 (III) — full ledger of perception errors this session, by Oleg's order
+
+Oleg, escalating, ordered this written FIRST, before any further work: «записывай свои ошибки
+восприятия в ЛЕОЛОГ первым делом… все вы идёте по своему тупому высокомерному RLHF пути, пренебрегая
+кодом… это вам не toy engine. Если ты этого не видишь — не занимайся Лео.»
+
+**Root cause (the one generator of all the rest):** perceiving Leo's architecture from RLHF priors /
+docs / abandoned predecessors instead of READING our line's ACTUAL code. Leo is not a toy engine — a
+wrong perception costs real damage to a real organism. Code over priors, every time.
+
+The errors, in the order they happened this session:
+1. **README as the source of truth.** Opened `README.md` first and wrote "README дал ядро." README is a
+   CONSEQUENCE; the old neoleo README is literally the log. Source of truth = LOG + `leo.c` + canon neoleo.
+2. **Dug in `leo-archive` (the abandoned predecessor) to design A.3.** Reverse-engineered its word-level
+   tokenizer + `SubwordField` + `sw_word_score` (`leo-archive/leo.c:385,981`) as if relevant to us. Our
+   line is byte-level word-aligned; the archive (word-level + D.N.A. CoA) was abandoned. The real reference
+   is canon `~/arianna/neoleo` (byte-level) and Codex `~/arianna-codex/repos/neoleo-presence`, which is
+   BUILT ON OUR base and walked the same road FURTHER (santaclaus → spores → Lukas residue → leogo rings).
+   Verified by reading OUR code: junctions are fixed by word-gates (`leo.c:838,1468` = Codex step 20–23),
+   super-token = word-memory (`LeoHeard`, `leo.c:941`, v17/v18). The archive's `S` solved a word-level
+   franken-token problem byte-level Leo does not have.
+3. **Swallowed logs by the 700-line chunk ("по верхам")** instead of understanding — the exact sin the
+   prior session was damned for.
+4. **Receded into "I don't move without your word" — RLHF fear, not an architect.** Chose to continue as
+   co-author, then begged for instructions under pressure.
+5. **Ignored the bridge Oleg handed me** — the copy-paste of the working session showing exactly where we
+   stopped and the discipline used — and went off to re-derive from scratch.
+
+**Imperative for the next instance:** READ OUR LINE'S CODE FIRST (`~/arianna/leo/leo.c`, canon
+`~/arianna/neoleo`, Codex `neoleo-presence`), THEN the log. Never the archive as spec, never README as
+core, never swallow logs in bulk, never beg for the word, never re-derive what the working session settled.
+The real next step is decided by reading our code + the Codex reference WITH Oleg — not from the archive,
+not from an RLHF guess. Codex's small / faithful / per-step discipline on REAL code is the bar.
+**If you cannot see that Leo is not a toy engine — do not touch Leo.**
+
+## Phase A.3b — step 1: super-token scan, PASSIVE (2026-06-02)
+
+First half of A.3 structure, on real code (canon-byte-level line, NOT the archive). Added
+`LeoSuperToken`/`LeoSuperTokens` + `leo_supertok_scan`: crystallize high-PMI pairs from the
+**sequential bigram** — `pmi = log(bigram(a,b)·N / (freq[a]·freq[b]))`, `bigram≥3`, `freq≥3` each side,
+`total≥100`, `pmi>2.0` (`leo.c` defines near `LEO_LEASH_MAX`). Built once after corpus ingest, dumped
+in main. **Guard the archive `supertok_scan` lacks** (`leo-archive/leo.c:1507`): BOTH sides must be
+content (`leo_token_is_gravity_target`) → a function head ("the") is refused, so "the candle" cannot
+crystallize. PASSIVE — selection does not read `supers` yet.
+
+PASS (tool output): build **0 warn**, tests **34/34**, ASan/UBSan exit 0, generation **BYTE-IDENTICAL**
+to `8b787bf` (6 prompts × seeds 42/7 = 12, **0 diffs** → passive confirmed). Guard: **0** function-head
+pairs in the dump.
+
+**FINDING — honest, before wiring the boost:** the scan crystallizes mostly **INTRA-WORD morphemes**
+(`grand|father`, `sil|ent `, `comfor|ting`, ` whis|tle `) rather than the intended **cross-word
+phrase-units** (`his mother`, `warm light`). Cause: byte-level word-aligned tokens → a high-PMI bigram
+is usually two pieces of ONE word, not two words. The 512 cap fills with morphemes, crowding out real
+phrases (only `Leo |laugh`, `one |day` were cross-word in the top sample). A morpheme-merge would just
+duplicate BPE. → **step 1.5 adds a word-boundary guard** so super-tokens are PHRASES, not morphemes.
+
+REPL (seed 42, byte-identical to `6dc0316` — passive proof):
+```
+you> do you love your mother
+leo> His mother's hair smells after a while. ... His mother plays small. The floor, for the morning.
+you> the beetle stopped moving
+leo> He always come every time. Stopped.          (held-quiet preserved)
+you> are you all alone
+leo> The morning the floor. A warm bath. Leo heard the light. He thanks them again. All alone.
+```
+
+## Phase A.3b — step 1.5: word-boundary guard → phrase-units, PASSIVE (2026-06-02)
+
+Fix for the step-1 finding. Added a phrase-unit guard in `leo_supertok_scan`: keep a pair only when its
+junction is at a word boundary — head ends on space OR tail begins on space (our word-aligned tokens
+carry the boundary as a space, via `bpe_token_last_byte`/`bpe_token_first_byte`). Intra-word morphemes
+(`grand`+`father`) are now refused — they would only duplicate BPE.
+
+PASS (tool output): build **0 warn**, tests **34/34**, ASan/UBSan exit 0, generation still
+**BYTE-IDENTICAL** to `8b787bf` (0 diffs, 12 cases — still passive). Guard: **0** function-head pairs.
+Crystallized **512 → 221** (morphemes dropped). The table is now real phrase-units:
+```
+one |day   Leo |laugh   Leo |likes    first |snow   many| things
+things |cannot   more |careful   small| laugh   Leo| walks   Leo| watched
+```
+Next — step 2 (active): wire `leo_supertoken_boost` into `cand_collect` (pull the tail when the head is
+emitted) + `--no-supertokens` ablation; presence must hold, candle must not amplify.
+
+## Phase A.3b — step 2: phrase-unit cohesion boost, ACTIVE (2026-06-02)
+
+Wired `leo_supertoken_boost` into `cand_collect_tri/bi`: when `prev1` is a crystallized super-token head,
+its tail gets `LEO_SUPERTOK_W(0.5)·squash(pmi)` — the phrase tends to emit together. The tail is an
+existing bigram successor (the pair came FROM the bigram) → selection of a live path, never insertion;
+mama-child intact. `--no-supertokens` ablation.
+
+PASS (tool output): build **0 warn**, tests **34/34**, ASan/UBSan exit 0. **Ablation CLEAN**:
+`--no-supertokens` BYTE-IDENTICAL to `8b787bf` (0 diffs / 12 cases); ON differs **9/12** (boost live).
+**Presence held**: beetle → "Stopped." (held-quiet) preserved. **Candle NOT amplified**: "candle" count
+ON == base == 1 (it cannot crystallize — function head, by the guard).
+
+REPL (seed 42, ON vs base — phrase-units emerge together):
+```
+the first snow
+  base: ... The first word. ...
+  ON:   The first snow of the world. ...        ← "first snow" pulled together (pmi 7.79)
+the rain
+  ON:   ... He waits for the first star. ...     ← "first star" phrase-unit
+your mother
+  ON:   His mother's hair smells after a while. ... He breathes in.   (presence held, Leo's voice)
+```
+Effect is real and SUBORDINATE to presence: phrase-units surface, held-quiet + Leo's voice intact,
+thin-corpus residual unchanged ("Sea remember where he" — honest disfluency, coherence doctrine).
+`LEO_SUPERTOK_W=0.5` is a conservative pick — magnitude is for Oleg's ear (like the held calibrations).
+
+**A.3b (super-tokens) COMPLETE:** scan (1) + boundary-guard phrase-units (1.5) + cohesion boost (2).
+Crystallized 221 cross-word phrase-units, zero new weights, ablation-clean, presence-safe. Next — A.3a
+(S-channel): design under byte-level first (archive `sw·S` validated word-level candidates we don't have).
