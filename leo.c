@@ -1204,6 +1204,7 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_SUPERTOK_MIN_BG    3.0f  /* A.3b: min sequential-bigram evidence to crystallize */
 #define LEO_SUPERTOK_MIN_FREQ  3.0f  /* A.3b: min unigram freq each side (archive fa,fb>=3) */
 #define LEO_SUPERTOK_W         0.5f  /* A.3b-active: phrase-cohesion boost = W * squash(pmi) on the tail */
+#define LEO_SUPERTOK_OFFTHEME  0.25f /* A.3b step3: damp the boost when the tail is off the active theme */
 #define LEO_CHAIN_MAX      12
 #define LEO_TAIL_WIN       8
 #define LEO_BEST_OF_K      3
@@ -1661,8 +1662,17 @@ static float leo_supertoken_boost(const CandCollector *cc, int cand) {
     if (!g_leo_supertok_on || !cc->leo) return 0.0f;
     const LeoSuperTokens *st = &cc->leo->supers;
     for (int i = 0; i < st->n; i++)
-        if (st->e[i].head == cc->prev1 && st->e[i].tail == cand)
-            return LEO_SUPERTOK_W * leo_squash(st->e[i].pmi);
+        if (st->e[i].head == cc->prev1 && st->e[i].tail == cand) {
+            float b = LEO_SUPERTOK_W * leo_squash(st->e[i].pmi);
+            /* presence-subordination: when a prompt theme is active (gravity set)
+             * and this tail is OFF-theme (gravity[cand] <= 0), damp the boost so a
+             * learned phrase cannot override the theme. Theme-aligned tails and
+             * free speech (gravity == NULL) keep the full boost. presence-first. */
+            if (cc->gravity && cc->bpe && cand >= 0 && cand < cc->bpe->vocab_size &&
+                cc->gravity[cand] <= 0.0f)
+                b *= LEO_SUPERTOK_OFFTHEME;
+            return b;
+        }
     return 0.0f;
 }
 

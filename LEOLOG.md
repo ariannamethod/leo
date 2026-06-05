@@ -436,3 +436,26 @@ thin-corpus residual unchanged ("Sea remember where he" — honest disfluency, c
 **A.3b (super-tokens) COMPLETE:** scan (1) + boundary-guard phrase-units (1.5) + cohesion boost (2).
 Crystallized 221 cross-word phrase-units, zero new weights, ablation-clean, presence-safe. Next — A.3a
 (S-channel): design under byte-level first (archive `sw·S` validated word-level candidates we don't have).
+
+## Phase A.3b — step 3: subordinate the boost to gravity (presence-first, 2026-06-02)
+
+Finding from reading ON vs OFF (`--no-supertokens`): the flat boost was blind to the theme and could
+pull AWAY from it — on "the window" (seed 42) ON dropped the window mention OFF kept, drifting to
+"morning/floor/light"; "the rain" ON drifted to the off-theme phrase "first star". Coherence was
+competing with presence, against Leo's "presence first" principle.
+
+Fix: in `leo_supertoken_boost`, when a prompt theme is active (`gravity` set) AND the tail is off-theme
+(`gravity[cand] <= 0`), damp the boost by `LEO_SUPERTOK_OFFTHEME = 0.25`. Theme-aligned tails and free
+speech (`gravity == NULL`, e.g. `--gen`) keep the full boost. The phrase can no longer override the theme.
+
+PASS (tool output): build **0 warn**, tests **34/34**, ASan/UBSan exit 0, `--no-supertokens`
+BYTE-IDENTICAL to `8b787bf` (0 diffs). Read (seed 42):
+```
+the window   OFF == ON now (byte-identical) — window theme held, off-theme phrase damped
+the rain     ON keeps rain ("Rain starts ... before rain"), the off-theme "first star" drift gone
+the first snow  the step-2 "first snow" surfacing is gone — "snow" is thin-corpus, gravity doesn't
+                mark it as theme, so subordination damps it. Honest trade: the step-2 win was a
+                coincidence; super-token is no longer a backdoor around gravity. coherence yields.
+```
+A.3b now genuinely presence-subordinate: it tightens phrases in free speech and on gravity-recognized
+themes, and yields when gravity owns (or fails to recognize) the theme. Next — A.3a (S-channel).
