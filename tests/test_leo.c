@@ -416,6 +416,54 @@ int main(void) {
         }
     }
 
+    /* 18. П-3: field-honest moves field evolution OUT of generate_best (where it
+     *     leaked from best-of-K discards / elaborate retries / SPA-rejected
+     *     reseeds) to a single end-of-chain replay over the spoken reply.
+     *     Default OFF (register de-calibration until santaclaus 3b reads the
+     *     field); opt-in --field-honest. */
+    {
+        const char *corpus =
+            "The warm light. His mother holds him. The rain at night. "
+            "Leo loves the warm light and his mother and the rain. "
+            "The window is quiet. Leo is small and warm and close. "
+            "A bird. A cloud. The river. The stone. The path home.";
+        Leo l; leo_init(&l);
+        for (int r = 0; r < 4; r++) leo_ingest(&l, corpus);
+        leo_build_chamber_tags(&l); leo_supertok_scan(&l);
+        char buf[1024]; int ids[LEO_GEN_MAX];
+
+        /* (a) field-honest ON: generate_best alone must NOT evolve the field */
+        g_leo_field_honest_on = 1;
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) l.chamber_act[i] = 0.5f;
+        float before[LEO_N_CHAMBERS]; memcpy(before, l.chamber_act, sizeof before);
+        int cap = LEO_GEN_MAX; srand(3);
+        leo_generate_best(&l, LEO_BEST_OF_K, buf, sizeof buf, -1, NULL, 0, ids, &cap);
+        CHECK(memcmp(before, l.chamber_act, sizeof before) == 0,
+              "П-3: --field-honest -> generate_best does NOT evolve the field");
+
+        /* (b) default OFF: generate_best DOES evolve the field (the leak path) */
+        g_leo_field_honest_on = 0;
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) l.chamber_act[i] = 0.5f;
+        memcpy(before, l.chamber_act, sizeof before);
+        cap = LEO_GEN_MAX; srand(3);
+        leo_generate_best(&l, LEO_BEST_OF_K, buf, sizeof buf, -1, NULL, 0, ids, &cap);
+        CHECK(memcmp(before, l.chamber_act, sizeof before) != 0,
+              "П-3: default -> generate_best evolves the field (gated off by --field-honest)");
+
+        /* (c) field-honest ON: a full chain STILL evolves the field via the end
+         *     replay (generate_best proven inert in (a), so the change is the
+         *     end-of-chain replay over the spoken sentences). */
+        g_leo_field_honest_on = 1;
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) l.chamber_act[i] = 0.5f;
+        memcpy(before, l.chamber_act, sizeof before);
+        char ch[2048]; srand(5);
+        leo_chain(&l, 3, ch, sizeof ch);
+        CHECK(memcmp(before, l.chamber_act, sizeof before) != 0,
+              "П-3: --field-honest -> the chain evolves the field via the end-of-chain replay");
+        g_leo_field_honest_on = 0;
+        leo_free(&l);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

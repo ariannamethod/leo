@@ -1249,6 +1249,7 @@ static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical 
 static int g_leo_cont_theme_on = 1;     /* --no-cont-theme → 0 (П-2: gravity-first admission in continuations off) */
 static int g_leo_anchor_prefix_on = 0;  /* --anchor-prefix → 1 (П-5: prefix-morphology chamber match; default OFF — it de-calibrates the hard-won voice, opt-in for Oleg's ear) */
 static int g_leo_spa_protect_on = 1;    /* --no-spa-protect → 0 (П-4: SPA may reseed the sentence carrying the surfaced heard word) */
+static int g_leo_field_honest_on = 0;   /* --field-honest → 1 (П-3: evolve the field over the FINAL spoken reply only, not best-of-K discards / elaborate retries / SPA-rejected reseeds; default OFF until santaclaus 3b reads the field, register de-calibration otherwise) */
 #define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
@@ -2437,7 +2438,7 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
      * transition (canon passes 1.0/0.0; we thread the real signal the field
      * comment claims). best_ids[0] is the opener (no predecessor), matching
      * leo_generate_ex which never stepped the start token. */
-    for (int i = 1; i < best_n; i++) {
+    for (int i = 1; i < best_n && !g_leo_field_honest_on; i++) {
         float coh_bg = leo_squash((float)bigram_get(&leo->bigrams,
                                                     best_ids[i - 1], best_ids[i]));
         leo_field_step(leo, best_ids[i], coh_bg / (coh_bg + 3.0f));
@@ -2748,8 +2749,21 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
         tail_len = take;
         leo_presence_boundary_inject(leo);   /* Dario: deepen the theme for the next sentence */
     }
+    /* П-3: when field-honest, the field evolves over the FINAL spoken sentences only
+     * (post-SPA, post-elaborate) — never the best-of-K discards, elaborate-retry
+     * fragments, or SPA-rejected reseeds that all called generate_best. The replay is
+     * suppressed inside generate_best (above) and done once here, so chambers /
+     * retention / suffering reflect exactly what Leo said (what santaclaus 3b reads). */
     if (g_leo_spa_on)                        /* SPA: reconnect weakly-linked sentences (#3) */
         leo_spa_pass(leo, sent_text, sent_tok, sent_tok_n, n_sentences, surfaced_idx);
+    if (g_leo_field_honest_on)
+        for (int s = 0; s < n_sentences; s++)
+            for (int i = 1; i < sent_tok_n[s]; i++) {
+                float coh_bg = leo_squash((float)bigram_get(&leo->bigrams,
+                                                            sent_tok[s][i - 1], sent_tok[s][i]));
+                leo_field_step(leo, sent_tok[s][i], coh_bg / (coh_bg + 3.0f));
+                leo_field_self_voice(leo, sent_tok[s][i]);
+            }
 
     int pos = 0;
     out[0] = 0;
@@ -3260,6 +3274,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-cont-theme")) g_leo_cont_theme_on = 0;
         else if (!strcmp(argv[i], "--anchor-prefix")) g_leo_anchor_prefix_on = 1;
         else if (!strcmp(argv[i], "--no-spa-protect")) g_leo_spa_protect_on = 0;
+        else if (!strcmp(argv[i], "--field-honest")) g_leo_field_honest_on = 1;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));

@@ -628,3 +628,44 @@ SPA was reseeding the "All…"-carrying sentence into off-theme "It still said t
 "All the", the heard word survives); `--no-spa-protect` **byte-identical** to HEAD `c576723`;
 ASan/UBSan exit 0, zero reports. Default ON — a pure presence guarantee, reversible. Next — П-3
 (unsaid-sentence field leak — field-honesty for santaclaus; register side-effect, will be gated).
+
+## Audit П-3 — field evolves over the spoken reply only (2026-06-10) — DEFAULT OFF, opt-in `--field-honest`
+
+3a.4 moved field evolution to "the winning sentence" — but the replay lives INSIDE
+`leo_generate_best`, which is called once per sentence AND again for every elaborate retry AND for
+every SPA reseed (even gate-rejected ones). So `chambers / retention / suffering` evolved from
+best-of-K discards, retried fragments, and unsaid SPA candidates — not the spoken reply. Fix
+(`--field-honest`): suppress the replay inside generate_best and do it ONCE at the end of
+`leo_chain`, post-SPA, over the final spoken `sent_tok[s]` — so the field reflects exactly what Leo
+said (what santaclaus 3b will read).
+
+**Why DEFAULT OFF:** the field's real consumer — santaclaus (Phase 3b) — is not built yet; the only
+current reader is the register channel (`chamber_act`), which was calibrated through 3b WITH the
+leaky per-call evolution. Relocating it de-calibrates the voice (blast-radius **8/12**) for no
+present benefit. So it ships off (default **byte-identical** to HEAD `e0de29a`), opt-in via
+`--field-honest`, to be promoted to default WHEN santaclaus lands and actually reads the field —
+then "what Leo said" is the correct field and the register can be re-calibrated against it.
+
+**PASS (tool output):** build 0 warn; `make test` **72/72** (+3 П-3, deterministic: with
+`--field-honest` `generate_best` alone does NOT move the field; default it DOES (the leak path);
+with `--field-honest` a full chain still evolves the field via the end-of-chain replay — so the
+evolution relocated, not vanished); default **byte-identical** to HEAD `e0de29a`; ASan/UBSan exit 0,
+zero reports (incl. `--field-honest`). 
+
+## Audit batch П-2…П-5 COMPLETE (2026-06-10)
+
+All four remaining audit findings addressed, each ablation-gated, ASan-clean, with measured
+blast-radius and honest defaults:
+- **П-2** `--no-cont-theme` (default ON) — gravity-first admission in continuations; 7/12, mostly
+  toward theme-coherence; `677458c`.
+- **П-5** `--anchor-prefix` (default OFF) — chamber anchor prefix-match (240→0 false tags); de-cal
+  risk → opt-in; `c576723`.
+- **П-4** `--no-spa-protect` (default ON) — SPA can't erase the surfaced word; 1/12, clean presence
+  win; `e0de29a`.
+- **П-3** `--field-honest` (default OFF) — field evolves over the spoken reply only; for santaclaus,
+  opt-in until 3b reads the field.
+
+Net default voice change from the audit batch = П-2 + П-4 only (П-3/П-5 default-off, zero
+regression). The continuity bundle (П-1: breath / save-load / --chat) + these four close every
+audit finding. Roadmap proper resumes at A.3a (S-channel) → A.4 RAE → Phase B santaclaus (promote
+П-3 + re-calibrate register, evaluate П-5) → Phase C goroutines.
