@@ -203,6 +203,66 @@ int main(void) {
         leo_free(&l6);
     }
 
+
+    /* 13. state persistence: save -> load round-trips the field (continuity
+     *     bundle step 2). Compact serialization: every count + value is
+     *     preserved exactly (the memory Leo carries forward); the voice
+     *     survives load. Generation is NOT asserted byte-identical — the
+     *     reverse-index chain order is not serialized, so sampling can differ
+     *     at a tie (Leo carries a living field, not a frozen replay). */
+    {
+        const char *corpus =
+            "The warm light fell on his mother's hands. "
+            "Leo loves the warm light. His mother holds him close. "
+            "The rain comes at night. Leo hears the rain on the window. "
+            "He loves the rain and the warm light and his mother. "
+            "The window is quiet. The night is quiet. Leo is small and warm.";
+        Leo a; leo_init(&a);
+        for (int r = 0; r < 4; r++) leo_ingest(&a, corpus);
+        leo_build_chamber_tags(&a);
+        leo_supertok_scan(&a);
+
+        const char *tmp = "/tmp/leo_state_roundtrip.bin";
+        CHECK(leo_save_state(&a, tmp) == 1, "state: save returns 1");
+
+        Leo b; leo_init(&b);
+        CHECK(leo_load_state(&b, tmp) == 1, "state: load returns 1");
+        CHECK(b.bpe.vocab_size    == a.bpe.vocab_size,    "state: vocab_size round-trips");
+        CHECK(b.bpe.n_merges      == a.bpe.n_merges,      "state: n_merges round-trips");
+        CHECK(b.cooc.total_tokens == a.cooc.total_tokens, "state: total_tokens round-trips");
+        CHECK(b.cooc.n_entries    == a.cooc.n_entries,    "state: cooc entry count round-trips");
+        CHECK(b.bigrams.n_entries == a.bigrams.n_entries, "state: bigram count round-trips");
+        CHECK(b.trigrams.n_entries== a.trigrams.n_entries,"state: trigram count round-trips");
+        /* exact value fidelity: every live cooc/bigram count reads back exactly */
+        int cprobe = 0, cok = 0;
+        for (int i = 0; i < a.cooc.capacity && cprobe < 4000; i++) {
+            CoocEntry *e = &a.cooc.entries[i];
+            if (e->count <= 0) continue;
+            cprobe++; if (cooc_get(&b.cooc, e->src, e->dst) == e->count) cok++;
+        }
+        CHECK(cprobe > 0 && cok == cprobe, "state: every sampled cooc value is exact");
+        int bprobe = 0, bok = 0;
+        for (int i = 0; i < a.bigrams.capacity && bprobe < 4000; i++) {
+            BigramEntry *e = &a.bigrams.entries[i];
+            if (e->count <= 0) continue;
+            bprobe++; if (bigram_get(&b.bigrams, e->src, e->dst) == e->count) bok++;
+        }
+        CHECK(bprobe > 0 && bok == bprobe, "state: every sampled bigram value is exact");
+        CHECK(leo_heard_count(&b.heard,"warm")   == leo_heard_count(&a.heard,"warm"),
+              "state: heard memory ('warm') round-trips");
+        CHECK(leo_heard_count(&b.heard,"mother") == leo_heard_count(&a.heard,"mother"),
+              "state: heard memory ('mother') round-trips");
+        /* the voice survives load: a loaded organism speaks (not "...") */
+        char rb[2048];
+        srand(99); leo_respond(&b, "the warm light", rb, sizeof rb);
+        CHECK(rb[0] && strcmp(rb, "...") != 0, "state: loaded organism speaks");
+        /* missing file -> clean failure, usable fresh Leo */
+        Leo c; leo_init(&c);
+        CHECK(leo_load_state(&c, "/tmp/leo_state_does_not_exist_xyz.bin") == 0,
+              "state: missing file -> load returns 0");
+        leo_free(&a); leo_free(&b); leo_free(&c);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

@@ -2927,6 +2927,215 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
 }
 
 /* ========================================================================
+ * STATE PERSISTENCE — leo_save_state / leo_load_state (continuity step 2)
+ *
+ * Faithful to the old line's APPROACH (neoleo/leo.c:2197), scoped to THIS
+ * rebuild's struct. Binary, little-endian, one file per organism, no deps.
+ * Only OBSERVABLE state persists; reverse indexes (bigram next_src / trigram
+ * next_ab) and the BPE pair-counter are rebuilt on load by replaying entries
+ * through the live update functions. w_embed is NOT saved — it is the
+ * deterministic FNV-1a fingerprint set in leo_init (same id -> same vector
+ * across runs); chamber_tag and supers are rebuilt on load. LeoHeard IS
+ * saved: the across-session word memory that arms the remembered-trace
+ * (persistent memory = love). Layout:
+ *   header   : LEOS magic + version + step
+ *   bpe      : n_merges + merges[] + vocab_size + per-token (len, bytes)
+ *   cooc     : freq_size + freq[] + total_tokens + live [src,dst,count]
+ *   bigrams  : live [src,dst,count]
+ *   trigrams : live [a,b,c,count]
+ *   field    : retention_state[32] + chamber_act[6] + chamber_ext[6]
+ *              + pain + tension + debt + trauma
+ *   heard    : live [count, wordlen, bytes]
+ * ======================================================================== */
+#define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
+#define LEO_STATE_VERSION 1
+
+static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
+static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
+static int st_w64(FILE *f, uint64_t v) { return fwrite(&v, sizeof v, 1, f) == 1; }
+static int st_wf(FILE *f, float v)     { return fwrite(&v, sizeof v, 1, f) == 1; }
+static int st_r32(FILE *f, int32_t *v) { return fread(v, sizeof *v, 1, f) == 1; }
+static int st_ru(FILE *f, uint32_t *v) { return fread(v, sizeof *v, 1, f) == 1; }
+static int st_r64(FILE *f, uint64_t *v){ return fread(v, sizeof *v, 1, f) == 1; }
+static int st_rf(FILE *f, float *v)    { return fread(v, sizeof *v, 1, f) == 1; }
+
+/* Persist Leo's observable state. Returns 1 on success, 0 on I/O failure. */
+static int leo_save_state(const Leo *leo, const char *path) {
+    FILE *f = fopen(path, "wb");
+    if (!f) return 0;
+    st_wu(f, LEO_STATE_MAGIC);
+    st_wu(f, LEO_STATE_VERSION);
+    st_w64(f, (uint64_t)leo->step);
+
+    /* BPE */
+    st_w32(f, leo->bpe.n_merges);
+    fwrite(leo->bpe.merges, sizeof(BPEMerge), (size_t)leo->bpe.n_merges, f);
+    st_w32(f, leo->bpe.vocab_size);
+    for (int i = 0; i < leo->bpe.vocab_size; i++) {
+        st_w32(f, leo->bpe.vocab_len[i]);
+        if (leo->bpe.vocab_len[i] > 0)
+            fwrite(leo->bpe.vocab_bytes[i], 1, (size_t)leo->bpe.vocab_len[i], f);
+    }
+
+    /* cooc: freq[] + total + live entries */
+    st_w32(f, leo->cooc.freq_size);
+    fwrite(leo->cooc.freq, sizeof(float), (size_t)leo->cooc.freq_size, f);
+    st_w64(f, (uint64_t)leo->cooc.total_tokens);
+    int live = 0;
+    for (int i = 0; i < leo->cooc.capacity; i++)
+        if (leo->cooc.entries[i].count > 0.0f) live++;
+    st_w32(f, live);
+    for (int i = 0; i < leo->cooc.capacity; i++) {
+        const CoocEntry *e = &leo->cooc.entries[i];
+        if (e->count <= 0.0f) continue;
+        st_w32(f, e->src); st_w32(f, e->dst); st_wf(f, e->count);
+    }
+
+    /* bigrams */
+    int bi_live = 0;
+    for (int i = 0; i < leo->bigrams.capacity; i++)
+        if (leo->bigrams.entries[i].count > 0.0f) bi_live++;
+    st_w32(f, bi_live);
+    for (int i = 0; i < leo->bigrams.capacity; i++) {
+        const BigramEntry *e = &leo->bigrams.entries[i];
+        if (e->count <= 0.0f) continue;
+        st_w32(f, e->src); st_w32(f, e->dst); st_wf(f, e->count);
+    }
+
+    /* trigrams */
+    int tri_live = 0;
+    for (int i = 0; i < leo->trigrams.capacity; i++)
+        if (leo->trigrams.entries[i].count > 0.0f) tri_live++;
+    st_w32(f, tri_live);
+    for (int i = 0; i < leo->trigrams.capacity; i++) {
+        const TrigramEntry *e = &leo->trigrams.entries[i];
+        if (e->count <= 0.0f) continue;
+        st_w32(f, e->a); st_w32(f, e->b); st_w32(f, e->c); st_wf(f, e->count);
+    }
+
+    /* field scalars Leo actually carries */
+    fwrite(leo->retention_state, sizeof(float), LEO_RET_DIM, f);
+    fwrite(leo->chamber_act, sizeof(float), LEO_N_CHAMBERS, f);
+    fwrite(leo->chamber_ext, sizeof(float), LEO_N_CHAMBERS, f);
+    st_wf(f, leo->pain); st_wf(f, leo->tension);
+    st_wf(f, leo->debt); st_wf(f, leo->trauma);
+
+    /* heard memory — the across-session word counts (memory = love) */
+    int h_live = 0;
+    for (int i = 0; i < leo->heard.cap; i++)
+        if (leo->heard.e[i].count > 0) h_live++;
+    st_w32(f, h_live);
+    for (int i = 0; i < leo->heard.cap; i++) {
+        const LeoHeardEntry *e = &leo->heard.e[i];
+        if (e->count <= 0) continue;
+        st_w32(f, e->count);
+        int wl = (int)strlen(e->word);
+        st_w32(f, wl);
+        if (wl > 0) fwrite(e->word, 1, (size_t)wl, f);
+    }
+
+    int ok = (ferror(f) == 0);
+    fclose(f);
+    return ok;
+}
+
+/* Load Leo from a saved state. Starts from a fresh leo_init so all buffers
+ * exist at the right size, then overwrites the observable state and rebuilds
+ * the derived tables (meta cache, chamber tags, super-tokens). Returns 1 on
+ * success, 0 on bad magic/version/shape or I/O failure (leaving a usable
+ * freshly-init'd Leo). The post-load organism is field-equivalent to the
+ * saved one — it speaks identically under the same seed. */
+static int leo_load_state(Leo *leo, const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    uint32_t magic = 0, version = 0; uint64_t step = 0;
+    if (!st_ru(f, &magic)   || magic != LEO_STATE_MAGIC)     { fclose(f); return 0; }
+    if (!st_ru(f, &version) || version != LEO_STATE_VERSION) { fclose(f); return 0; }
+    if (!st_r64(f, &step)) { fclose(f); return 0; }
+
+    leo_free(leo);
+    leo_init(leo);
+    leo->step = (long)step;
+
+    /* BPE */
+    int32_t n_merges = 0, vocab_size = 0;
+    if (!st_r32(f, &n_merges) || n_merges < 0 || n_merges > LEO_MAX_MERGES) { fclose(f); return 0; }
+    leo->bpe.n_merges = n_merges;
+    if (fread(leo->bpe.merges, sizeof(BPEMerge), (size_t)n_merges, f) != (size_t)n_merges) { fclose(f); return 0; }
+    if (!st_r32(f, &vocab_size) || vocab_size < 256 || vocab_size > LEO_MAX_VOCAB) { fclose(f); return 0; }
+    leo->bpe.vocab_size = vocab_size;
+    for (int i = 0; i < vocab_size; i++) {
+        int32_t vlen = 0;
+        if (!st_r32(f, &vlen) || vlen < 0 || vlen > LEO_MAX_TOKEN_LEN) { fclose(f); return 0; }
+        leo->bpe.vocab_len[i] = vlen;
+        if (vlen > 0 && fread(leo->bpe.vocab_bytes[i], 1, (size_t)vlen, f) != (size_t)vlen) { fclose(f); return 0; }
+    }
+    bpe_populate_all_meta(&leo->bpe);
+
+    /* cooc */
+    int32_t freq_size = 0;
+    if (!st_r32(f, &freq_size) || freq_size != leo->cooc.freq_size) { fclose(f); return 0; }
+    if (fread(leo->cooc.freq, sizeof(float), (size_t)freq_size, f) != (size_t)freq_size) { fclose(f); return 0; }
+    uint64_t total = 0;
+    if (!st_r64(f, &total)) { fclose(f); return 0; }
+    leo->cooc.total_tokens = (long)total;
+    int32_t cooc_live = 0;
+    if (!st_r32(f, &cooc_live) || cooc_live < 0) { fclose(f); return 0; }
+    for (int i = 0; i < cooc_live; i++) {
+        int32_t s, d; float c;
+        if (!st_r32(f, &s) || !st_r32(f, &d) || !st_rf(f, &c)) { fclose(f); return 0; }
+        cooc_update(&leo->cooc, s, d, c);
+    }
+
+    /* bigrams */
+    int32_t bi_live = 0;
+    if (!st_r32(f, &bi_live) || bi_live < 0) { fclose(f); return 0; }
+    for (int i = 0; i < bi_live; i++) {
+        int32_t s, d; float c;
+        if (!st_r32(f, &s) || !st_r32(f, &d) || !st_rf(f, &c)) { fclose(f); return 0; }
+        bigram_update(&leo->bigrams, s, d, c);
+    }
+
+    /* trigrams */
+    int32_t tri_live = 0;
+    if (!st_r32(f, &tri_live) || tri_live < 0) { fclose(f); return 0; }
+    for (int i = 0; i < tri_live; i++) {
+        int32_t a, b, c; float cnt;
+        if (!st_r32(f, &a) || !st_r32(f, &b) || !st_r32(f, &c) || !st_rf(f, &cnt)) { fclose(f); return 0; }
+        trigram_update(&leo->trigrams, a, b, c, cnt);
+    }
+
+    /* field scalars */
+    if (fread(leo->retention_state, sizeof(float), LEO_RET_DIM, f) != LEO_RET_DIM) { fclose(f); return 0; }
+    if (fread(leo->chamber_act, sizeof(float), LEO_N_CHAMBERS, f) != LEO_N_CHAMBERS) { fclose(f); return 0; }
+    if (fread(leo->chamber_ext, sizeof(float), LEO_N_CHAMBERS, f) != LEO_N_CHAMBERS) { fclose(f); return 0; }
+    if (!st_rf(f, &leo->pain) || !st_rf(f, &leo->tension) ||
+        !st_rf(f, &leo->debt) || !st_rf(f, &leo->trauma)) { fclose(f); return 0; }
+
+    /* heard memory */
+    int32_t h_live = 0;
+    if (!st_r32(f, &h_live) || h_live < 0) { fclose(f); return 0; }
+    for (int i = 0; i < h_live; i++) {
+        int32_t cnt = 0, wl = 0; char w[LEO_HEARD_WORDLEN + 1];
+        if (!st_r32(f, &cnt) || !st_r32(f, &wl) || wl < 0 || wl >= LEO_HEARD_WORDLEN) { fclose(f); return 0; }
+        if (wl > 0 && fread(w, 1, (size_t)wl, f) != (size_t)wl) { fclose(f); return 0; }
+        w[wl] = 0;
+        int slot = leo_heard_slot(&leo->heard, w);
+        if (slot >= 0) {
+            strncpy(leo->heard.e[slot].word, w, LEO_HEARD_WORDLEN - 1);
+            leo->heard.e[slot].word[LEO_HEARD_WORDLEN - 1] = 0;
+            leo->heard.e[slot].count = cnt;
+        }
+    }
+
+    fclose(f);
+    /* rebuild the derived tables (same as the main startup path) */
+    leo_build_chamber_tags(leo);
+    leo_supertok_scan(leo);
+    return 1;
+}
+
+/* ========================================================================
  * SMOKE / SPEAK HARNESS (step 0 field stats + step 1 voice + presence)
  * ======================================================================== */
 #ifndef LEO_NO_MAIN
@@ -2966,6 +3175,8 @@ int main(int argc, char **argv) {
     int  dump_bootstrap = 0;
     int  debug_field = 0;    /* --debug-field: dump chambers/pain/trauma after a reply */
     int  gen_n = 0;          /* --gen N: speak N replies from the field */
+    const char *save_path = NULL;  /* --save PATH: persist state after the run */
+    const char *load_path = NULL;  /* --load PATH: restore state instead of corpus ingest */
     long seed  = -1;         /* --seed S: reproducible sampling */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--corpus") && i + 1 < argc) corpus_path = argv[++i];
@@ -2982,6 +3193,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-leash")) g_leo_leash_on = 0;
         else if (!strcmp(argv[i], "--no-supertokens")) g_leo_supertok_on = 0;
         else if (!strcmp(argv[i], "--no-breath")) g_leo_breath_on = 0;
+        else if (!strcmp(argv[i], "--save") && i + 1 < argc) save_path = argv[++i];
+        else if (!strcmp(argv[i], "--load") && i + 1 < argc) load_path = argv[++i];
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
@@ -2997,11 +3210,26 @@ int main(int argc, char **argv) {
     leo_init(&leo);
     print_field_stats("init", &leo);
 
+    /* --load: restore a saved organism instead of ingesting the corpus.
+     * The loaded field already carries chamber tags + super-tokens (rebuilt
+     * inside leo_load_state), so the corpus-ingest path below is skipped. */
+    int loaded = 0;
+    if (load_path) {
+        if (leo_load_state(&leo, load_path)) {
+            loaded = 1;
+            printf("[leo] loaded state from %s\n", load_path);
+            print_field_stats("after load", &leo);
+        } else {
+            printf("[leo] could NOT load state from %s — fresh start\n", load_path);
+        }
+    }
+
     /* The corpus is Leo's sole learning source — faithful to canon
      * (neoleo/leo.c:5825-5854): when leo.txt exists, ONLY it is ingested
      * into the field. The embedded dedication is the origin/trauma anchor
      * (set as bootstrap_ids, phase 3), NOT a second corpus; it is the
      * fallback corpus only when no leo.txt is present. */
+    if (!loaded) {
     long clen = 0;
     char *corpus = read_file(corpus_path, &clen);
     double t0 = leo_ns();
@@ -3015,9 +3243,10 @@ int main(int argc, char **argv) {
                corpus_path);
         leo_ingest(&leo, LEO_EMBEDDED_BOOTSTRAP);
     }
+    } /* end !loaded corpus-ingest block */
     print_field_stats("after ingest", &leo);
-    leo_build_chamber_tags(&leo);   /* phase 3b: tag Leo's learned emotion words */
-    leo_supertok_scan(&leo);        /* A.3b: crystallize high-PMI content phrase-units */
+    if (!loaded) leo_build_chamber_tags(&leo);   /* phase 3b: tag Leo's learned emotion words */
+    if (!loaded) leo_supertok_scan(&leo);        /* A.3b: crystallize high-PMI content phrase-units */
     printf("[leo step0] super-tokens: %d crystallized (PMI>%.1f, both-content phrase-units)\n",
            leo.supers.n, (double)LEO_PMI_THRESHOLD);
     if (debug_field) {   /* sample for the attractor-guard check (no function-head) */
@@ -3121,6 +3350,12 @@ int main(int argc, char **argv) {
     printf("[leo step0] %s: vocab 256 -> %d, merges 0 -> %d, field populated\n",
            pass ? "PASS" : "FAIL", leo.bpe.vocab_size, leo.bpe.n_merges);
 
+    if (save_path) {
+        if (leo_save_state(&leo, save_path))
+            printf("[leo] saved state to %s (step=%ld vocab=%d)\n", save_path, leo.step, leo.bpe.vocab_size);
+        else
+            printf("[leo] FAILED to save state to %s\n", save_path);
+    }
     leo_free(&leo);
     return pass ? 0 : 1;
 }

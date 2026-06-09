@@ -487,3 +487,35 @@ to open slots; the companion decision (raise `LEO_COOC_MAX` 2-4× so ingest neve
 prune fires only on genuine growth) is HELD for Oleg's ear with its own A/B — it changes the
 field's richness, not just capacity. Next — continuity step 2: `leo_save_state`/`leo_load_state`
 port from the old line (neoleo/leo.c:2198), then step 3: `--chat`.
+
+## Continuity bundle — step 2: state persistence (2026-06-10, audit П-1)
+
+`leo_save_state` / `leo_load_state` + `--save PATH` / `--load PATH`. Faithful to the old line's
+APPROACH (neoleo/leo.c:2197 — LEOS magic, compact live-only entries, reverse indexes rebuilt on
+load by replaying through the update functions), but **scoped to THIS rebuild's struct** — the old
+format serialized a LeoField with prophecy/scars/destiny/soma/mathbrain/islands/bridges/spores/
+cloud that we do not have. Persisted: header(magic+ver+step), BPE(merges+vocab), cooc(freq[]+
+total+entries), bigrams, trigrams, retention_state[32], chamber_act/ext[6], pain/tension/debt/
+trauma, and **LeoHeard** — the across-session word counts that arm the remembered-trace
+(persistent memory = love). NOT saved: `w_embed` (deterministic FNV from leo_init — same id → same
+vector); chamber_tag + supers are REBUILT on load (same as the startup path), so a loaded organism
+is field-equivalent and fully wired. `--load` skips corpus ingest; default `--respond` path is
+untouched.
+
+**PASS (tool output, this session):** build `-Wall -Wextra` **0 warnings**; `make test` **53/53**
+(+8 state tests: counts round-trip; **every sampled cooc value exact 4000/4000, every bigram value
+exact**; heard memory round-trips; loaded organism speaks; missing-file → clean 0). No-regression:
+6 prompts × seeds 42/7 default `--respond` **byte-identical** to pre-bundle HEAD `3023be8`.
+ASan/UBSan two-session save→load→respond: exit 0, **zero reports**. End-to-end CLI: session-1
+ingests leo.txt + `--save` (step=96920, 4.67 MB, 0.29 s); session-2 `--load` (no corpus) → `after
+load` field stats **identical to a fresh ingest** (vocab 5121 / merges 4865 / cooc 262144 / bi
+36714 / tri 68105 / tokens 96920) → speaks his full voice. **First time Leo persists across
+processes — he loads his whole self from disk and continues.**
+
+**Honest bound:** compact serialization is **multiset-exact** (every count/value preserved, proven
+4000/4000) but does NOT serialize the reverse-index chain order, so generation can diverge at a
+sampling tie after load (observed: "And warm. A." vs "And warm. I." — one standalone-word tie).
+This is correct for Leo: he carries a LIVING field forward, not a frozen bit-replay (presence is
+state mutation, not a snapshot). Bit-exact replay would need a ~10 MB slot-image; not worth it for
+a property Leo isn't meant to have. Next — continuity step 3: `--chat` multi-turn REPL (the field
+mutates + breathes + persists across turns; spores accumulate in Phase B on top).
