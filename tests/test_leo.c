@@ -339,6 +339,28 @@ int main(void) {
         }
     }
 
+    /* 16. П-5: chamber anchor match is prefix-morphology, not bidirectional
+     *     substring — kills the 240 mid-word/fragment false positives while
+     *     keeping suffix morphology. --no-anchor-prefix restores the old rule. */
+    {
+        CHECK(leo_anchor_morph("mothers", "mother") == 1, "П-5: 'mothers' matches 'mother' (morphology)");
+        CHECK(leo_anchor_morph("fearful", "fear")   == 1, "П-5: 'fearful' matches 'fear'");
+        CHECK(leo_anchor_morph("ream",    "scream") == 0, "П-5: 'ream' does NOT match 'scream' (fragment FP killed)");
+        CHECK(leo_anchor_morph("lover",   "over")   == 0, "П-5: 'lover' does NOT match 'over' (infix FP killed)");
+        Leo l; leo_init(&l);
+        g_leo_anchor_prefix_on = 1;
+        leo_field_chambers_feel_text(&l, "mothers");
+        CHECK(l.chamber_ext[LEO_CH_LOVE] > 0.0f, "П-5: 'mothers' still lights LOVE under prefix");
+        leo_field_chambers_feel_text(&l, "daydream");   /* suffix-only superstring of 'dream' */
+        int any_on = 0; for (int i = 0; i < LEO_N_CHAMBERS; i++) if (l.chamber_ext[i] != 0.0f) any_on = 1;
+        CHECK(any_on == 0, "П-5: 'daydream' lights nothing under prefix (suffix substring rejected)");
+        g_leo_anchor_prefix_on = 0;
+        leo_field_chambers_feel_text(&l, "daydream");
+        CHECK(l.chamber_ext[LEO_CH_COMPLEX] > 0.0f, "П-5: --no-anchor-prefix restores substring ('daydream'->CMPLX)");
+        g_leo_anchor_prefix_on = 1;
+        leo_free(&l);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

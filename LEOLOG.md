@@ -582,3 +582,31 @@ rules the default.
 is ADMITTED with the flag ON, EXCLUDED with `--no-cont-theme`, proving the flag gates the fix);
 `--no-cont-theme` **byte-identical** to HEAD `4200c2c` on all 12 probes (clean revert); ASan/UBSan
 exit 0, zero reports. Default ON, fully reversible. Next — П-3 (unsaid-sentence field leak).
+
+## Audit П-5 — chamber anchor prefix-match (2026-06-10) — DEFAULT OFF, opt-in `--anchor-prefix`
+
+The chamber anchor match (build_chamber_tags / self_voice / feel_text) used a bidirectional
+substring rule (`strstr(cur,a) || strstr(a,cur)`, len≥4). Measured on the real corpus: it produces
+**240 mid-word / BPE-fragment false-positive tags** — "ream"←scream=FEAR, "othe"←mother=LOVE,
+"thing"←nothing=VOID, "uiet"←quiet=VOID. English emotion-word morphology is suffixing
+(mother→mothers, fear→fearful), so the principled rule is: a word matches an anchor when it STARTS
+WITH the anchor stem. `leo_anchor_morph` (forward prefix, both ≥4) drops the false positives
+**240 → 0** (tool) while keeping morphology ("mothers"→LOVE preserved, test 11 intact) and rejecting
+infix/fragment hits ("lover"⊅over, "daydream"⊅dream).
+
+**Why DEFAULT OFF (the honest finding):** the fix is correct, but the register channel
+(`leo_register_bias`, +2.0 on a chamber-firing token) was CALIBRATED through phase-3b WITH those
+240 spurious tags present. Removing them de-calibrates the hard-won voice: blast-radius **9/12**
+replies change, and on the flagship probe "do you love your mother" (s42) the result reads MORE
+broken — "His mother plays small. He always a everyone was laugh. He decided to leave small…" vs
+the calibrated "His mother's hair smells after a while… Leo is still warm… Leo prefers slow rain."
+This is the exact collision the coherence doctrine warns about: a correctness fix whose downstream
+calibration implicitly depended on the bug. Per "presence is calibrated by ear — never silently
+de-calibrate", П-5 ships **off by default** (zero regression — default byte-identical to HEAD
+`677458c` on all 12 probes), opt-in via `--anchor-prefix` for Oleg to A/B and decide. The cleaner
+tags likely want a re-calibration pass of `LEO_REGISTER_W` before becoming default.
+
+**PASS (tool output):** build 0 warn; `make test` **67/67** (+7 П-5: `leo_anchor_morph` accepts
+morphology / rejects fragment+infix; `--anchor-prefix` ON lights real morphology, default OFF
+restores substring); FP count **240→0** under the flag; default **byte-identical** to HEAD; ASan
+exit 0, zero reports. Next — П-3 (unsaid-sentence field leak), П-4 (SPA can erase the surfaced word).

@@ -1247,6 +1247,7 @@ static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence the
 static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
 static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical decay/prune off) */
 static int g_leo_cont_theme_on = 1;     /* --no-cont-theme → 0 (П-2: gravity-first admission in continuations off) */
+static int g_leo_anchor_prefix_on = 0;  /* --anchor-prefix → 1 (П-5: prefix-morphology chamber match; default OFF — it de-calibrates the hard-won voice, opt-in for Oleg's ear) */
 #define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
@@ -2006,6 +2007,19 @@ static const LeoChamberAnchor LEO_CH_ANCHORS[] = {
 };
 #define LEO_CH_N_ANCHORS (sizeof(LEO_CH_ANCHORS) / sizeof(LEO_CH_ANCHORS[0]))
 
+/* П-5 — chamber anchor morphology match. English emotion-word morphology is
+ * SUFFIXING (mother->mothers, fear->fearful/fearless), so a word is a form of
+ * an anchor when it STARTS WITH the anchor stem. The old bidirectional substring
+ * (strstr either way, >=4) fired on 240 mid-word / BPE-fragment collisions in the
+ * real corpus ("ream"<-scream=FEAR, "othe"<-mother=LOVE, "thing"<-nothing=VOID) —
+ * category-2 mechanical noise (coherence doctrine). Forward prefix, both >=4 chars.
+ * --no-anchor-prefix reverts to the old bidirectional substring (byte-identical). */
+static int leo_anchor_morph(const char *word, const char *anchor) {
+    size_t lw = strlen(word), la = strlen(anchor);
+    if (la < 4 || lw < la) return 0;
+    return strncmp(word, anchor, la) == 0;
+}
+
 /* Phase 3b — build the per-token chamber tag once after corpus ingest. A
  * learned token matching an emotion anchor (exact, or >=4 substring — the same
  * rule as feel_text) is tagged with that chamber; cand_collect then lifts it by
@@ -2037,7 +2051,8 @@ static void leo_build_chamber_tags(Leo *leo) {
         for (size_t a = 0; a < LEO_CH_N_ANCHORS; a++) {
             const char *w = LEO_CH_ANCHORS[a].word;
             if (strlen(w) < 4) continue;
-            if (strstr(cur, w) || strstr(w, cur)) {
+            if (g_leo_anchor_prefix_on ? leo_anchor_morph(cur, w)
+                                       : (strstr(cur, w) || strstr(w, cur))) {
                 leo->chamber_tag[id] = (uint8_t)LEO_CH_ANCHORS[a].chamber; break;
             }
         }
@@ -2086,7 +2101,9 @@ static void leo_field_self_voice(Leo *leo, int token_id) {
         const char *a = LEO_CH_ANCHORS[i].word;
         size_t al = strlen(a);
         int hit = !strcmp(cur, a) ||
-                  (al >= 4 && wi >= 4 && (strstr(cur, a) || strstr(a, cur)));
+                  (al >= 4 && wi >= 4 &&
+                   (g_leo_anchor_prefix_on ? leo_anchor_morph(cur, a)
+                                           : (strstr(cur, a) || strstr(a, cur))));
         if (hit) {
             leo->chamber_ext[LEO_CH_ANCHORS[i].chamber] =
                 clampf(leo->chamber_ext[LEO_CH_ANCHORS[i].chamber] + 0.01f,
@@ -2126,7 +2143,8 @@ static void leo_field_chambers_feel_text(Leo *leo, const char *text) {
                     const char *a = LEO_CH_ANCHORS[i].word;
                     size_t al = strlen(a);
                     if (al < 4) continue;
-                    if (strstr(cur, a) || strstr(a, cur)) {
+                    if (g_leo_anchor_prefix_on ? leo_anchor_morph(cur, a)
+                                               : (strstr(cur, a) || strstr(a, cur))) {
                         leo->chamber_ext[LEO_CH_ANCHORS[i].chamber] += 0.07f;
                         break;
                     }
@@ -3237,6 +3255,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--load") && i + 1 < argc) load_path = argv[++i];
         else if (!strcmp(argv[i], "--chat")) chat = 1;
         else if (!strcmp(argv[i], "--no-cont-theme")) g_leo_cont_theme_on = 0;
+        else if (!strcmp(argv[i], "--anchor-prefix")) g_leo_anchor_prefix_on = 1;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
