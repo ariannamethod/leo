@@ -171,6 +171,38 @@ int main(void) {
         leo_free(&l5);
     }
 
+    /* 12. breath: per-reply lexical decay + prune (continuity bundle, step 1) */
+    {
+        Leo l6; leo_init(&l6);
+        leo_ingest(&l6, "the warm light. the warm light. the warm light.");
+        int s0 = -1, d0 = -1; float before = 0.0f;
+        for (int i = 0; i < l6.cooc.capacity; i++)
+            if (l6.cooc.entries[i].count > 0.0f) {
+                s0 = l6.cooc.entries[i].src; d0 = l6.cooc.entries[i].dst;
+                before = l6.cooc.entries[i].count; break;
+            }
+        CHECK(before > 0.0f, "breath: field has a live cooc entry");
+        leo_breath(&l6);
+        float after = cooc_get(&l6.cooc, s0, d0);
+        CHECK(fabsf(after - before * LEO_LEX_DECAY_RATE) < 1e-4f,
+              "breath: cooc count decays by exactly LEO_LEX_DECAY_RATE");
+        /* prune: a sub-threshold entry drops, a strong one survives */
+        cooc_update(&l6.cooc, 9001, 9002, 0.05f);
+        cooc_prune_rebuild(&l6.cooc, LEO_LEX_PRUNE_THRESHOLD);
+        CHECK(cooc_get(&l6.cooc, 9001, 9002) == 0.0f, "breath: prune drops a sub-threshold entry");
+        CHECK(cooc_get(&l6.cooc, s0, d0) > 0.0f, "breath: prune keeps a strong entry");
+        /* flag off -> leo_respond leaves the field undecayed (alien prompt:
+         * its ingest touches only its own token pairs, not (s0,d0)) */
+        g_leo_breath_on = 0;
+        float pre = cooc_get(&l6.cooc, s0, d0);
+        char r[1024];
+        srand(5); leo_respond(&l6, "zuzu kex", r, sizeof r);
+        float post = cooc_get(&l6.cooc, s0, d0);
+        g_leo_breath_on = 1;
+        CHECK(post == pre, "breath: --no-breath leaves cooc undecayed through respond");
+        leo_free(&l6);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

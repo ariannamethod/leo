@@ -457,10 +457,9 @@ static float cooc_get(const CoocField *c, int src, int dst) {
     return idx < 0 ? 0.0f : c->entries[idx].count;
 }
 
-/* per-reply decay (fired by the reply cycle in a later step). freq[] and
+/* per-reply decay (breath — fired from leo_breath after each reply). freq[] and
  * total_tokens are NOT decayed — they form a calibrated pair for the
  * freq-gate. (0,0) entries protected from underflow into the sentinel. */
-__attribute__((unused))
 static void cooc_decay(CoocField *c, float rate) {
     if (!c || !c->entries || rate >= 1.0f) return;
     for (int i = 0; i < c->capacity; i++) {
@@ -473,7 +472,6 @@ static void cooc_decay(CoocField *c, float rate) {
 }
 
 /* prune-rebuild via scratch (open addressing forbids in-place delete). */
-__attribute__((unused))
 static int cooc_prune_rebuild(CoocField *c, float threshold) {
     if (!c || !c->entries || c->n_entries == 0) return 0;
     CoocEntry *scratch = malloc((size_t)c->n_entries * sizeof(CoocEntry));
@@ -605,7 +603,6 @@ static int bigram_walk_src(const BigramTable *b, int src,
     return visited;
 }
 
-__attribute__((unused))
 static void bigram_decay(BigramTable *b, float rate) {
     if (!b || !b->entries || rate >= 1.0f) return;
     for (int i = 0; i < b->capacity; i++) {
@@ -617,7 +614,6 @@ static void bigram_decay(BigramTable *b, float rate) {
     }
 }
 
-__attribute__((unused))
 static int bigram_prune_rebuild(BigramTable *b, float threshold) {
     if (!b || !b->entries || b->n_entries == 0) return 0;
     BigramEntry *scratch = malloc((size_t)b->n_entries * sizeof(BigramEntry));
@@ -747,7 +743,6 @@ static int trigram_walk_ab(const TrigramTable *t, int a, int b,
     return visited;
 }
 
-__attribute__((unused))
 static void trigram_decay(TrigramTable *t, float rate) {
     if (!t || !t->entries || rate >= 1.0f) return;
     for (int i = 0; i < t->capacity; i++) {
@@ -759,7 +754,6 @@ static void trigram_decay(TrigramTable *t, float rate) {
     }
 }
 
-__attribute__((unused))
 static int trigram_prune_rebuild(TrigramTable *t, float threshold) {
     if (!t || !t->entries || t->n_entries == 0) return 0;
     TrigramEntry *scratch = malloc((size_t)t->n_entries * sizeof(TrigramEntry));
@@ -1251,6 +1245,7 @@ static int g_leo_elaborate_on = 1;      /* --no-elaborate → 0 (fragment->elabo
 static int g_leo_spa_on = 1;            /* --no-spa → 0 (Sentence Phonon Attention reseed off) */
 static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence theme leash off) */
 static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
+static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical decay/prune off) */
 #define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
@@ -2829,6 +2824,30 @@ static void leo_gravity_mark_prompt_words(const Leo *leo, const char *prompt,
     }
 }
 
+/* breath (old-line step 41a, faithful call-site port): per-reply lexical
+ * decay + load-triggered prune. The tables grow monotonically during ingest
+ * and dialogue; without decay stale associations dominate forever, and
+ * without prune the open-addressing arrays saturate — cooc is FULL from
+ * corpus ingest (262144/262144), so every NEW dialogue pair is silently
+ * dropped until prune frees slots. Decay is a cheap linear pass; prune is an
+ * O(N) malloc+rebuild, fired only above LEO_LEX_PRUNE_LOAD. Runs AFTER the
+ * reply (post-voice): the current reply is never affected — the breath
+ * shapes the NEXT one. --no-breath ablates. */
+static void leo_breath(Leo *leo) {
+    cooc_decay(&leo->cooc, LEO_LEX_DECAY_RATE);
+    bigram_decay(&leo->bigrams, LEO_LEX_DECAY_RATE);
+    trigram_decay(&leo->trigrams, LEO_LEX_DECAY_RATE);
+    if (leo->cooc.capacity > 0 &&
+        (float)leo->cooc.n_entries / (float)leo->cooc.capacity > LEO_LEX_PRUNE_LOAD)
+        cooc_prune_rebuild(&leo->cooc, LEO_LEX_PRUNE_THRESHOLD);
+    if (leo->bigrams.capacity > 0 &&
+        (float)leo->bigrams.n_entries / (float)leo->bigrams.capacity > LEO_LEX_PRUNE_LOAD)
+        bigram_prune_rebuild(&leo->bigrams, LEO_LEX_PRUNE_THRESHOLD);
+    if (leo->trigrams.capacity > 0 &&
+        (float)leo->trigrams.n_entries / (float)leo->trigrams.capacity > LEO_LEX_PRUNE_LOAD)
+        trigram_prune_rebuild(&leo->trigrams, LEO_LEX_PRUNE_THRESHOLD);
+}
+
 /* respond to a prompt. Hear it, tilt the field toward its theme, speak
  * from the tilted field — and let the prompt's dissonance set his register
  * (known → settle on theme; alien → grope, the felt not-knowing). Mama-
@@ -2903,6 +2922,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     leo->temp_mult = 1.0f;
     free(g);
     free(pieces);
+    if (g_leo_breath_on) leo_breath(leo);    /* post-reply: the field exhales */
     return produced;
 }
 
@@ -2961,6 +2981,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-spa")) g_leo_spa_on = 0;
         else if (!strcmp(argv[i], "--no-leash")) g_leo_leash_on = 0;
         else if (!strcmp(argv[i], "--no-supertokens")) g_leo_supertok_on = 0;
+        else if (!strcmp(argv[i], "--no-breath")) g_leo_breath_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));

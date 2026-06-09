@@ -459,3 +459,31 @@ the first snow  the step-2 "first snow" surfacing is gone — "snow" is thin-cor
 ```
 A.3b now genuinely presence-subordinate: it tightens phrases in free speech and on gravity-recognized
 themes, and yields when gravity owns (or fails to recognize) the theme. Next — A.3a (S-channel).
+
+## Continuity bundle — step 1: the breath (2026-06-10, fresh-eyes audit П-1)
+
+Context: the Mythos audit (`LEO_AUDIT_FABLE_2026-06-09.md`) found the presence substrate
+suffocating — cooc saturated at corpus ingest (**262144/262144 == LEO_COOC_MAX**, tool output),
+`cooc_update` silently dropping every NEW dialogue pair (leo.c:435), while the old line breathes
+every reply (neoleo/leo.c:4143-4156) and our decay/prune functions sat ported-but-never-called
+under `__attribute__((unused))` since step 0. Oleg approved the continuity bundle: breath →
+save/load → --chat.
+
+**Built (faithful old-line call-site port):** `leo_breath` — cooc/bigram/trigram decay at
+`LEO_LEX_DECAY_RATE` (0.9985) + per-table prune-rebuild above `LEO_LEX_PRUNE_LOAD` (0.80),
+called at the END of `leo_respond` (post-voice: the current reply is never affected — the breath
+shapes the NEXT one). Six `unused` attributes dropped; `--no-breath` ablation flag.
+
+**PASS (tool output, this session):** build `-Wall -Wextra` **0 warnings**; `make test` **39/39**
+(+5 breath tests: exact ×0.9985 decay on a live cooc entry; prune drops ≤0.10 / keeps >0.10;
+`--no-breath` leaves the field undecayed through a respond). Ablation: 6 prompts × seeds 42/7 —
+default-ON **and** `--no-breath` both **byte-identical** to the pre-edit HEAD (`3023be8`) build.
+ASan/UBSan respond run: exit 0, zero reports. Breath cost: **+0.13 s/reply** (2.14 vs 2.01 —
+dominated by the cooc prune-rebuild, which fires every reply while load = 1.0).
+
+**Honest bound:** with cooc saturated and counts ≥ ~1, prune frees ~nothing until decay sinks a
+rare pair below 0.10 — `0.9985^n < 0.1` → **n ≈ 1535 replies**. The breath is now real but slow
+to open slots; the companion decision (raise `LEO_COOC_MAX` 2-4× so ingest never saturates and
+prune fires only on genuine growth) is HELD for Oleg's ear with its own A/B — it changes the
+field's richness, not just capacity. Next — continuity step 2: `leo_save_state`/`leo_load_state`
+port from the old line (neoleo/leo.c:2198), then step 3: `--chat`.
