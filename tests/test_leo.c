@@ -361,6 +361,61 @@ int main(void) {
         leo_free(&l);
     }
 
+    /* 17. П-4: SPA protects the sentence carrying the surfaced heard word. Find a
+     *     chain+seed where SPA reseeds some sentence k>=1; with the same rand
+     *     stream, protect_idx=k preserves that sentence (the word survives) while
+     *     the others reseed identically. Skips if leo.txt is not in cwd. */
+    {
+        FILE *cf = fopen("leo.txt", "rb");
+        if (!cf) {
+            CHECK(1, "П-4: (skipped — leo.txt not in cwd)");
+        } else {
+            fseek(cf, 0, SEEK_END); long cn = ftell(cf); fseek(cf, 0, SEEK_SET);
+            char *cbuf = malloc((size_t)cn + 1);
+            size_t cgot = fread(cbuf, 1, (size_t)cn, cf); cbuf[cgot] = 0; fclose(cf);
+            Leo l; leo_init(&l);
+            leo_ingest(&l, cbuf); free(cbuf);
+            leo_build_chamber_tags(&l); leo_supertok_scan(&l);
+
+            int found = 0, protected_ok = 0;
+            for (int seed = 1; seed <= 80 && !found; seed++) {
+                char st0[LEO_CHAIN_MAX][1024];
+                int  stk0[LEO_CHAIN_MAX][LEO_GEN_MAX], stn0[LEO_CHAIN_MAX];
+                srand((unsigned)seed);
+                for (int s = 0; s < 4; s++) {
+                    int ids[LEO_GEN_MAX], cap = LEO_GEN_MAX;
+                    leo_generate_best(&l, LEO_BEST_OF_K, st0[s], sizeof st0[s], -1, NULL, 0, ids, &cap);
+                    int c = cap > LEO_GEN_MAX ? LEO_GEN_MAX : cap;
+                    for (int i = 0; i < c; i++) stk0[s][i] = ids[i];
+                    stn0[s] = c;
+                }
+                /* run A: no extra protection */
+                char stA[LEO_CHAIN_MAX][1024];
+                int  stkA[LEO_CHAIN_MAX][LEO_GEN_MAX], stnA[LEO_CHAIN_MAX];
+                memcpy(stA, st0, sizeof st0); memcpy(stkA, stk0, sizeof stk0); memcpy(stnA, stn0, sizeof stn0);
+                srand((unsigned)(seed * 1000 + 7));
+                leo_spa_pass(&l, stA, stkA, stnA, 4, -1);
+                int k = -1;
+                for (int s = 1; s < 4 && k < 0; s++)
+                    if (stnA[s] != stn0[s] || memcmp(stkA[s], stk0[s], (size_t)stn0[s] * sizeof(int)) != 0) k = s;
+                if (k < 0) continue;          /* no reseed this seed — try next */
+                found = 1;
+                /* run B: protect k, SAME rand stream */
+                char stB[LEO_CHAIN_MAX][1024];
+                int  stkB[LEO_CHAIN_MAX][LEO_GEN_MAX], stnB[LEO_CHAIN_MAX];
+                memcpy(stB, st0, sizeof st0); memcpy(stkB, stk0, sizeof stk0); memcpy(stnB, stn0, sizeof stn0);
+                srand((unsigned)(seed * 1000 + 7));
+                leo_spa_pass(&l, stB, stkB, stnB, 4, k);
+                int kept = (stnB[k] == stn0[k] &&
+                            memcmp(stkB[k], stk0[k], (size_t)stn0[k] * sizeof(int)) == 0);
+                protected_ok = kept;
+            }
+            CHECK(found == 1, "П-4: found a chain where SPA reseeds a sentence");
+            CHECK(protected_ok == 1, "П-4: protect_idx preserves the carrying sentence through SPA");
+            leo_free(&l);
+        }
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

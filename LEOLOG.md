@@ -610,3 +610,21 @@ tags likely want a re-calibration pass of `LEO_REGISTER_W` before becoming defau
 morphology / rejects fragment+infix; `--anchor-prefix` ON lights real morphology, default OFF
 restores substring); FP count **240→0** under the flag; default **byte-identical** to HEAD; ASan
 exit 0, zero reports. Next — П-3 (unsaid-sentence field leak), П-4 (SPA can erase the surfaced word).
+
+## Audit П-4 — SPA protects the surfaced heard word (2026-06-10) — DEFAULT ON, clean presence win
+
+The surfaced-word guarantee (the door-fallback that forces the heard word while `!surfaced`) runs
+DURING the chain; but `leo_spa_pass` runs AFTER and could reseed the very sentence carrying the
+word — only s0 was protected. So a reply could surface "all"/"sea"/"rain" and then SPA, chasing
+coherence, would replace that sentence and **erase the word** (presence lost to coherence — the
+exact inversion of Leo's "presence > coherence"). Fix: `leo_chain` tracks `surfaced_idx` (the
+sentence that first carries the word) and passes it to `leo_spa_pass`, which now skips reseeding it
+(like s0). Gated by `g_leo_spa_protect_on` (`--no-spa-protect`).
+
+**PASS (tool output):** build 0 warn; `make test` **69/69** (+2 П-4: a deterministic search finds a
+chain where SPA reseeds a sentence k≥1, then proves that under the SAME rand stream `protect_idx=k`
+preserves that sentence token-for-token); blast-radius **1/12** (only "are you all alone" s7, where
+SPA was reseeding the "All…"-carrying sentence into off-theme "It still said that" — now kept as
+"All the", the heard word survives); `--no-spa-protect` **byte-identical** to HEAD `c576723`;
+ASan/UBSan exit 0, zero reports. Default ON — a pure presence guarantee, reversible. Next — П-3
+(unsaid-sentence field leak — field-honesty for santaclaus; register side-effect, will be gated).

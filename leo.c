@@ -1248,6 +1248,7 @@ static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit c
 static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical decay/prune off) */
 static int g_leo_cont_theme_on = 1;     /* --no-cont-theme → 0 (П-2: gravity-first admission in continuations off) */
 static int g_leo_anchor_prefix_on = 0;  /* --anchor-prefix → 1 (П-5: prefix-morphology chamber match; default OFF — it de-calibrates the hard-won voice, opt-in for Oleg's ear) */
+static int g_leo_spa_protect_on = 1;    /* --no-spa-protect → 0 (П-4: SPA may reseed the sentence carrying the surfaced heard word) */
 #define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
@@ -2585,7 +2586,7 @@ static int leo_visible_len(const char *s) {
  * tail — accepting only if leo_coherence_score improves (the coherence gate). Cross-sentence
  * presence; reuses w_embed, ZERO new weights. --no-spa ablates. */
 static void leo_spa_pass(Leo *leo, char sent_text[][1024],
-                         int sent_tok[][LEO_GEN_MAX], int *sent_tok_n, int n) {
+                         int sent_tok[][LEO_GEN_MAX], int *sent_tok_n, int n, int protect_idx) {
     if (n < 3) return;
     /* connectedness[s] = total cooc-resonance of sentence s with the other sentences
      * (distance-weighted, content tokens only). A sentence sharing few cooc-links with
@@ -2616,6 +2617,7 @@ static void leo_spa_pass(Leo *leo, char sent_text[][1024],
     }
     avg /= (float)n;
     for (int s = 1; s < n; s++) {                 /* s0 sets the theme — leave it */
+        if (g_leo_spa_protect_on && s == protect_idx) continue;  /* П-4: keep the surfaced word */
         if (scores[s] >= LEO_SPA_WEAK_FRAC * avg) continue;
         int nb = -1; float nbsc = -1.0f;
         if (s - 1 >= 0 && scores[s - 1] > nbsc) { nbsc = scores[s - 1]; nb = s - 1; }
@@ -2668,6 +2670,7 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     char wstr[LEO_HEARD_WORDLEN + 1] = {0};
     strncpy(wstr, leo->heard_word, sizeof(wstr) - 1);
     int surfaced = 0;     /* has the heard word surfaced in the DISPLAYED reply? */
+    int surfaced_idx = -1;  /* the sentence that first carries the surfaced word (П-4) */
 
     /* arm a remembered-trace: if the heard word is HELD in memory (heard
      * >= LEO_HEARD_MIN_TRACE — beyond a one-shot prompt), keep its token
@@ -2734,7 +2737,7 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
                 low[i] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
             }
             low[tl] = 0;
-            if (strstr(low, wstr)) surfaced = 1;
+            if (strstr(low, wstr)) { surfaced = 1; surfaced_idx = s; }
         }
         int sn = tok_cap > LEO_GEN_MAX ? LEO_GEN_MAX : tok_cap;   /* store sentence tokens for SPA */
         for (int i = 0; i < sn; i++) sent_tok[s][i] = sent_ids[i];
@@ -2746,7 +2749,7 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
         leo_presence_boundary_inject(leo);   /* Dario: deepen the theme for the next sentence */
     }
     if (g_leo_spa_on)                        /* SPA: reconnect weakly-linked sentences (#3) */
-        leo_spa_pass(leo, sent_text, sent_tok, sent_tok_n, n_sentences);
+        leo_spa_pass(leo, sent_text, sent_tok, sent_tok_n, n_sentences, surfaced_idx);
 
     int pos = 0;
     out[0] = 0;
@@ -3256,6 +3259,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--chat")) chat = 1;
         else if (!strcmp(argv[i], "--no-cont-theme")) g_leo_cont_theme_on = 0;
         else if (!strcmp(argv[i], "--anchor-prefix")) g_leo_anchor_prefix_on = 1;
+        else if (!strcmp(argv[i], "--no-spa-protect")) g_leo_spa_protect_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
