@@ -1246,6 +1246,7 @@ static int g_leo_spa_on = 1;            /* --no-spa → 0 (Sentence Phonon Atten
 static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence theme leash off) */
 static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
 static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical decay/prune off) */
+static int g_leo_cont_theme_on = 1;     /* --no-cont-theme → 0 (П-2: gravity-first admission in continuations off) */
 #define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
@@ -1410,16 +1411,54 @@ static int leo_choose_start(const Leo *leo) {
 }
 
 /* continuation start: like choose_start, biased by cooc resonance with
- * the previous sentence's tail so a chain stays on one theme. */
+ * the previous sentence's tail so a chain stays on one theme. Admission
+ * mirrors leo_choose_start (audit П-2): when a prompt theme is active,
+ * FIRST admit the strongest theme clean-seeds by gravity (the resonance-
+ * primary block), THEN fill by frequency. Without this, a continuation
+ * (sentence 2+) admitted by frequency alone could never OPEN on a low-freq
+ * theme seed (730 clean seeds vs a 64-slot pool — a rank>64 theme word was
+ * excluded even at max gravity); the v3 root-fix lived only in the opener. */
 static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) {
     int   cand_ids[LEO_SEED_CANDS];
     float cand_sc[LEO_SEED_CANDS];
     int   n = 0;
+
+    /* resonance-primary admission (mirror of leo_choose_start): with a prompt,
+     * admit the strongest theme clean-seeds by gravity into the first half of
+     * the pool, so a low-frequency theme opener can still open a continuation. */
+    if (leo->gravity && g_leo_cont_theme_on) {
+        for (int slot = 0; slot < LEO_SEED_CANDS / 2; slot++) {
+            int   best = -1;
+            float bestg = 1e-6f;
+            for (int i = 0; i < leo->cooc.freq_size; i++) {
+                if (leo->cooc.freq[i] <= 0) continue;
+                if (leo->gravity[i] <= bestg) continue;
+                if (!is_clean_seed_token(&leo->bpe, i)) continue;
+                int dup = 0;
+                for (int k = 0; k < n; k++) if (cand_ids[k] == i) { dup = 1; break; }
+                if (dup) continue;
+                best = i; bestg = leo->gravity[i];
+            }
+            if (best < 0) break;
+            cand_ids[n] = best;
+            cand_sc[n]  = leo->cooc.freq[best] *
+                          (1.0f + LEO_START_GRAVITY_W * leo->gravity[best]);
+            n++;
+        }
+    }
+
+    /* fill the rest with the top-frequency clean seeds (Leo's habitual
+     * openers), theme-tilted when a prompt is present; skip gravity-admitted
+     * dups so a theme seed is not double-counted. */
     float min_kept = 0;
+    for (int j = 0; j < n; j++) if (j == 0 || cand_sc[j] < min_kept) min_kept = cand_sc[j];
     for (int i = 0; i < leo->cooc.freq_size; i++) {
         float f = leo->cooc.freq[i];
         if (f <= 0) continue;
         if (!is_clean_seed_token(&leo->bpe, i)) continue;
+        int dup = 0;
+        for (int k = 0; k < n; k++) if (cand_ids[k] == i) { dup = 1; break; }
+        if (dup) continue;
         float fe = leo->gravity
                  ? f * (1.0f + LEO_START_GRAVITY_W * leo->gravity[i]) : f;
         if (n < LEO_SEED_CANDS) {
@@ -3197,6 +3236,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--save") && i + 1 < argc) save_path = argv[++i];
         else if (!strcmp(argv[i], "--load") && i + 1 < argc) load_path = argv[++i];
         else if (!strcmp(argv[i], "--chat")) chat = 1;
+        else if (!strcmp(argv[i], "--no-cont-theme")) g_leo_cont_theme_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));

@@ -295,6 +295,50 @@ int main(void) {
         leo_free(&l);
     }
 
+    /* 15. П-2: gravity-first admission lets a continuation OPEN on a theme seed
+     *     that frequency-only admission excludes (730 clean seeds vs a 64-slot
+     *     pool). Gated by g_leo_cont_theme_on (--no-cont-theme). Tested at a
+     *     gravity high enough that admission shows through sampling; the flag OFF
+     *     reproduces the freq-truncated pool that excludes it. Skips if no
+     *     leo.txt in cwd. */
+    {
+        FILE *cf = fopen("leo.txt", "rb");
+        if (!cf) {
+            CHECK(1, "П-2: (skipped — leo.txt not in cwd)");
+        } else {
+            fseek(cf, 0, SEEK_END); long cn = ftell(cf); fseek(cf, 0, SEEK_SET);
+            char *cbuf = malloc((size_t)cn + 1);
+            size_t cgot = fread(cbuf, 1, (size_t)cn, cf); cbuf[cgot] = 0; fclose(cf);
+            Leo l; leo_init(&l);
+            leo_ingest(&l, cbuf); free(cbuf);
+            int theme = -1;
+            for (int id = 256; id < l.bpe.vocab_size; id++) {
+                if (!is_clean_seed_token(&l.bpe, id)) continue;
+                float f = l.cooc.freq[id];
+                if (f < 2.0f || f > 5.0f) continue;
+                int rank = 1;
+                for (int i = 0; i < l.bpe.vocab_size; i++)
+                    if (is_clean_seed_token(&l.bpe, i) && l.cooc.freq[i] > f) rank++;
+                if (rank > LEO_SEED_CANDS) { theme = id; break; }
+            }
+            CHECK(theme >= 0, "П-2: found a clean seed ranked past the 64-slot pool");
+            float *g = calloc((size_t)l.cooc.freq_size, sizeof(float));
+            l.gravity = g;
+            g[theme] = 100.0f;   /* high enough that admission shows in sampling */
+            g_leo_cont_theme_on = 1;
+            int seen_on = 0;
+            for (int s = 0; s < 400 && !seen_on; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0) == theme) seen_on = 1; }
+            CHECK(seen_on == 1, "П-2: gravity-first ON -> excluded-rank theme seed is ADMITTED");
+            g_leo_cont_theme_on = 0;
+            int seen_off = 0;
+            for (int s = 0; s < 400; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0) == theme) seen_off = 1; }
+            CHECK(seen_off == 0, "П-2: --no-cont-theme -> freq-only pool EXCLUDES it (flag gates the fix)");
+            g_leo_cont_theme_on = 1;
+            l.gravity = NULL; free(g);
+            leo_free(&l);
+        }
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

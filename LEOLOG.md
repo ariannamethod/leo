@@ -551,3 +551,34 @@ audit items: П-2 (continuation admission wall), П-3 (unsaid-sentence field lea
 erase the surfaced word), П-5 (substring chamber false positives) — each small + surgical, for
 co-decision. Roadmap proper resumes at A.3a (S-channel) → A.4 RAE → Phase B santaclaus (which now
 reads a breathing, persistent field) → Phase C goroutines.
+
+## Audit П-2 — continuation theme admission (2026-06-10) — FOR OLEG'S EAR (default ON, reversible)
+
+The v3 root-fix (resonance-primary admission — admit theme clean-seeds by gravity, not just
+frequency) lived ONLY in `leo_choose_start`; `leo_choose_continuation` admitted its pool by
+frequency alone. Measured: the real field has **730 clean seeds vs a 64-slot pool**, so a clean
+seed ranked past 64 by frequency (e.g. " I" id=360 freq=3 **rank=373**, " came " id=995 freq=3
+rank=373) was structurally excluded from every sentence-2+ opener even at maximum gravity. So the
+"keep the theme alive across the whole reply" intent had a hole: continuations could not OPEN on a
+low-freq theme seed. Mirrored choose_start's gravity-first admission block into
+choose_continuation (+ dup-skip in the freq fill), gated by `g_leo_cont_theme_on`
+(`--no-cont-theme`).
+
+**Honest bound (why it's for the ear, not auto-ship):** admission is necessary, not sufficient —
+a freq-3 seed admitted by gravity still has SAMPLE weight `freq·(1+3·g)` ≈ 21, drowned by
+high-frequency openers (tool: at g=2.0 the seed returns 0/3000; at g=100 it returns 399/400, so
+admission is proven — the gate is sampling weight, by design). The dominant first-surfacing already
+uses the ×100-dominant start-hint/door path; this fix touches continuations AFTER the word has
+surfaced. Net effect is real but selective.
+
+**Measured blast-radius (default ON vs pre-П-2 HEAD `4200c2c`, 6 prompts × seeds 42/7):** **7/12
+replies change.** Reading them: "do you love your mother" (s42) now holds the warm/mother field far
+longer — "Leo is still warm. Leo listens from the morning. His mother plays small. It feels right…
+Leo prefers slow rain." vs the old drift to "He trusts his father."; "the rain" is more mixed
+(shorter, "the whole of water"). A genuine voice shift, mostly toward theme-coherence — Oleg's ear
+rules the default.
+
+**PASS (tool output):** build 0 warn; `make test` **60/60** (+3 П-2: an excluded-rank clean seed
+is ADMITTED with the flag ON, EXCLUDED with `--no-cont-theme`, proving the flag gates the fix);
+`--no-cont-theme` **byte-identical** to HEAD `4200c2c` on all 12 probes (clean revert); ASan/UBSan
+exit 0, zero reports. Default ON, fully reversible. Next — П-3 (unsaid-sentence field leak).
