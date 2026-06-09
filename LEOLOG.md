@@ -519,3 +519,35 @@ This is correct for Leo: he carries a LIVING field forward, not a frozen bit-rep
 state mutation, not a snapshot). Bit-exact replay would need a ~10 MB slot-image; not worth it for
 a property Leo isn't meant to have. Next — continuity step 3: `--chat` multi-turn REPL (the field
 mutates + breathes + persists across turns; spores accumulate in Phase B on top).
+
+## Continuity bundle — step 3: --chat, multi-turn (2026-06-10, audit П-1) — BUNDLE COMPLETE
+
+`--chat` — an interactive REPL where the field LIVES across turns. Each line is heard (ingest →
+tilt → speak) then breathes (decay/prune), so heard-counts climb, merges grow, and the field Leo
+speaks from on turn N is the field turn N-1 left him. `/save PATH` persists mid-chat; `/quit` or
+EOF leaves; `--save` also persists on exit; `--load PATH` resumes a saved organism (no corpus
+re-ingest). The default `--respond` path is untouched — `--chat` is a new branch in main only.
+
+This is the capstone that makes the dedication structurally true — *"Leo resonates with you more
+and more with every conversation"*: breath (step 1) keeps the saturated cooc field able to learn,
+persistence (step 2) carries it across processes, and `--chat` (step 3) lets it accumulate turn to
+turn within a session. Before this bundle, every mutation a prompt made died at process exit and
+the cooc substrate was full from minute one; now Leo genuinely holds a conversation.
+
+**PASS (tool output, this session):** build `-Wall -Wextra` **0 warnings**; `make test` **57/57**
+(+4 multi-turn tests: a word absent from the corpus — "dragon" — climbs heard-count **1→2→3**
+across three turns on one organism, crosses `LEO_HEARD_MIN_TRACE` to become HELD, `step` advances
+each turn). No-regression: 6 prompts × seeds 42/7 default `--respond` **byte-identical** to the
+pre-bundle HEAD `3023be8`. ASan/UBSan on a piped chat AND a load+chat session: exit 0, **zero
+reports**. End-to-end cross-process continuity proven: session-1 chat turn "i hear a dragon" +
+`/save` → session-2 `--load` shows `after load` field **larger than a fresh ingest**
+(bi 36716 / tri 68109 / tokens 96926 vs the corpus baseline 36714 / 68105 / 96920) — the dialogue
+turn persisted across processes and Leo continued from it.
+
+**Continuity bundle (breath → save/load → --chat) COMPLETE.** Three commits, all ablation-gated,
+byte-identical-off, ASan-clean, presence path untouched. The field now breathes, persists, and
+lives across turns — П-1 (the audit's nose item: "presence has no duration") closed. Remaining
+audit items: П-2 (continuation admission wall), П-3 (unsaid-sentence field leak), П-4 (SPA can
+erase the surfaced word), П-5 (substring chamber false positives) — each small + surgical, for
+co-decision. Roadmap proper resumes at A.3a (S-channel) → A.4 RAE → Phase B santaclaus (which now
+reads a breathing, persistent field) → Phase C goroutines.

@@ -263,6 +263,38 @@ int main(void) {
         leo_free(&a); leo_free(&b); leo_free(&c);
     }
 
+    /* 14. multi-turn continuity (the --chat engine path): the field LIVES across
+     *     turns. Repeating a word makes Leo HOLD it (heard-count climbs past the
+     *     trace threshold), and step advances each turn — the dedication's
+     *     "resonates more with every conversation", structurally. */
+    {
+        const char *corpus =
+            "The warm light. His mother holds him. The rain at night. "
+            "Leo loves the warm light and his mother and the rain. "
+            "The window is quiet. Leo is small and warm and close.";
+        Leo l; leo_init(&l);
+        for (int r = 0; r < 3; r++) leo_ingest(&l, corpus);
+        leo_build_chamber_tags(&l);
+        leo_supertok_scan(&l);
+        /* "dragon" is NOT in the corpus — Leo has never held it */
+        CHECK(leo_heard_count(&l.heard, "dragon") == 0, "multiturn: 'dragon' unheld before chat");
+        char reply[2048];
+        long step0 = l.step;
+        srand(7);
+        leo_respond(&l, "tell me about the dragon", reply, sizeof reply);
+        int h1 = leo_heard_count(&l.heard, "dragon");
+        long step1 = l.step;
+        leo_respond(&l, "the dragon is big", reply, sizeof reply);
+        int h2 = leo_heard_count(&l.heard, "dragon");
+        leo_respond(&l, "do you fear the dragon", reply, sizeof reply);
+        int h3 = leo_heard_count(&l.heard, "dragon");
+        long step3 = l.step;
+        CHECK(h1 == 1 && h2 == 2 && h3 == 3, "multiturn: 'dragon' heard-count climbs 1->2->3");
+        CHECK(h3 >= LEO_HEARD_MIN_TRACE, "multiturn: 'dragon' becomes HELD (>= trace threshold)");
+        CHECK(step1 > step0 && step3 > step1, "multiturn: step advances each turn (field lives on)");
+        leo_free(&l);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

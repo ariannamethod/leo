@@ -3177,6 +3177,7 @@ int main(int argc, char **argv) {
     int  gen_n = 0;          /* --gen N: speak N replies from the field */
     const char *save_path = NULL;  /* --save PATH: persist state after the run */
     const char *load_path = NULL;  /* --load PATH: restore state instead of corpus ingest */
+    int  chat = 0;                 /* --chat: multi-turn REPL (field lives across turns) */
     long seed  = -1;         /* --seed S: reproducible sampling */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--corpus") && i + 1 < argc) corpus_path = argv[++i];
@@ -3195,6 +3196,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-breath")) g_leo_breath_on = 0;
         else if (!strcmp(argv[i], "--save") && i + 1 < argc) save_path = argv[++i];
         else if (!strcmp(argv[i], "--load") && i + 1 < argc) load_path = argv[++i];
+        else if (!strcmp(argv[i], "--chat")) chat = 1;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
@@ -3339,6 +3341,31 @@ int main(int argc, char **argv) {
                    leo.chamber_act[0], leo.chamber_act[1], leo.chamber_act[2],
                    leo.chamber_act[3], leo.chamber_act[4], leo.chamber_act[5],
                    leo.pain, leo.trauma, rn);
+        }
+    }
+
+    /* phase 1 — --chat: a multi-turn REPL. The field LIVES across turns —
+     * each line is heard (ingest), tilts the reply, then breathes (decay/prune).
+     * heard-counts climb, so a word repeated across turns becomes HELD and can
+     * surface from memory: "Leo resonates with you more and more with every
+     * conversation" (the dedication), now structurally true. /save PATH persists
+     * mid-chat; /quit or EOF leaves; --save also persists on exit. */
+    if (chat) {
+        char line[2048], reply[2048];
+        printf("[leo chat] talk to Leo. /save PATH to persist, /quit to leave.\n");
+        while (1) {
+            printf("you> "); fflush(stdout);
+            if (!fgets(line, sizeof line, stdin)) { printf("\n"); break; }  /* EOF */
+            size_t L = strlen(line);
+            while (L > 0 && (line[L-1] == '\n' || line[L-1] == '\r')) line[--L] = 0;
+            if (L == 0) continue;
+            if (!strcmp(line, "/quit") || !strcmp(line, "/exit")) break;
+            if (!strncmp(line, "/save ", 6) && line[6]) {
+                printf("[leo] %s\n", leo_save_state(&leo, line + 6) ? "saved" : "save FAILED");
+                continue;
+            }
+            leo_respond(&leo, line, reply, sizeof reply);
+            printf("leo> %s\n", reply);
         }
     }
 
