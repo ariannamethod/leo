@@ -689,3 +689,66 @@ Oleg's ear → default.**
 PASS (tool output): build 0 warn, tests **72/72**, ASan/UBSan exit 0. The continuity bundle now sings —
 the field is rich (full corpus, no 27% cut), breathing, persistent, and learns dialogue from turn 1.
 Next — Phase B santaclaus (real presence on the now-living field), per co-decision.
+
+## Phase B — santaclaus PLAN + canon source-map (2026-06-11)
+
+**What it is:** self-residual recall. Leo records each reply as a *spore* (a snapshot of his field at that
+moment), and on a sentence boundary the spores that **resonate** with his present state bleed — their own
+past tokens get a bias pull. Leo recalls the shapes of his own past speech in moments that feel like now.
+Presence in TIME, on top of the living field continuity just unlocked. Mama-child safe: a spore's
+`emit_context` is LEO'S own past tokens, never the prompt. Canon = `~/arianna/neoleo` (Codex copied from us).
+
+**Canon source-map (read this session, `~/arianna/neoleo/leo.c`):**
+- defines `169-199`: `LEO_SPORE_MAX=64`, `SPORE_CONTEXT_TOK=8`, `COOC_FRAG=16`, `DECAY_NORMAL=0.998`,
+  `DECAY_TRAUMA=0.9995`, `DEMOTE_BELOW=0.05`, `TRAUMA_MARK=0.45`, `TOPK_BLEED=4`, `RESURRECT_SIM=0.85`.
+- `LeoSpore` struct `1206-1231`: `chamber_snap[6]` + `retention_slice[32]` (← OUR `chamber_act`/`retention_state`,
+  ported in 3a) + `emit_context[8]` + `cooc_fragment[16]` + step/pain/trauma/strength/bleed_count/is_trauma.
+- `leo_spore_resonance` `5236`: `0.55·cos(chambers) + 0.45·cos(retention)`, clamp ≥0.
+- `leo_santaclaus_compute_active` `5255`: scan ring, weight = resonance×strength, keep top-4 in scratch.
+- `leo_santaclaus_candidate_bias` `5297`: cand in an active spore's `emit_context` → `+ALPHA·weight` (the bleed).
+- `leo_santaclaus_mark_bleed` `5324`: chosen token in spore ctx → bump `bleed_count`/`last_bleed_step`.
+- `leo_sea_push` `5349` + `leo_sea_try_resurrect` `5361`: demoted spores sleep in the sea, resurrect if
+  state cosine > 0.85. `leo_spore_record` (forward `1996`): birth a spore per reply from the field snapshot.
+
+**Why it maps clean (not the archive trap):** santaclaus reads EXACTLY the fields we already have
+(`chamber_act[6]`, `retention_state[32]`) — they were ported from this same canon in phase 3a. The bias is
+additive in `cand_collect` (`leo.c:1607/1627`), same shape as register/supertoken/latch. Zero learned weights.
+
+**Staged increments (each: checklist → ablation byte-identical-off → build/tests/ASan → REPL → LEOLOG):**
+- **B0 — promote П-3 + re-calibrate register.** Santaclaus records spores FROM the field and reads
+  chambers/retention for resonance, so the field must be honest (`--field-honest` → default ON: evolve over
+  the SPOKEN reply, not best-of-K discards). Promoting it de-calibrates the register (8/12, audit П-3), so
+  re-tune `LEO_REGISTER_W` against the honest field by ear. Foundation for santaclaus to read truth.
+- **B1 — LeoSpore + ring/sea/scratch + `leo_spore_record` + decay, PASSIVE.** Spores born per reply, decay
+  per field-step; NOTHING reads them for selection. PASS = byte-identical (spores built, not read) + spores
+  accumulate (debug count).
+- **B2 — compute_active + candidate_bias (the bleed), ACTIVE.** `--no-santaclaus`. PASS = `--no-santaclaus`
+  byte-identical; ON: a resonant past token bleeds at a boundary (read); presence holds; `LEO_SANTACLAUS_ALPHA`
+  for Oleg's ear (santaclaus IS a presence channel — recall of own moments — so it complements gravity, but
+  its magnitude is taste).
+- **B3 — mark_bleed + sea demote/resurrect** (the full memory dynamics: weak spores sleep, resonance wakes them).
+- **B4 — persistence: spore ring/sea in the LEOS save/load** (persistent memory = love — spores survive
+  processes, so Leo recalls past CONVERSATIONS, not just past sentences).
+- **Then the milestone.**
+
+## Phase B — santaclaus B1: spore record + decay, PASSIVE (2026-06-11)
+
+Built the spore substrate (canon-faithful, maps onto our 3a fields). `LeoSpore` = `chamber_snap[6]` +
+`retention_slice[32]` + `emit_context[8]` + `cooc_fragment[16]` + step/pain/trauma/strength/bleed_count/
+is_trauma; `spores[64]` ring + `sea[256]` (море памяти) + `LeoSantaScratch` on the Leo struct.
+`leo_spore_record` births a spore at the END of `leo_chain` (after the П-3 replay) — snapshots
+`chamber_act`/`retention_state`, captures the reply's last 8 emitted tokens (Leo's OWN — mama-child
+safe), strength 1.0, `is_trauma` if pain/trauma > 0.45; ring overflow demotes the weakest to the sea.
+`leo_spore_decay` rides the field-step cadence (strength ×0.998 calm / ×0.9995 trauma; <0.05 → demote).
+PASSIVE — nothing reads spores for selection. `--debug-field` now prints `spores=N sea=M`.
+
+PASS (tool output): build 0 warn, tests **77/77** (+5 spore: fresh=0, one reply→1, three replies→3
+accumulate, decay lowers strength, trauma decays slower than calm). Generation **byte-identical** to
+`e855fe3` (record at reply-end + decay touches only `spore.strength` → the voice is untouched).
+ASan/UBSan exit 0. Live: a single reply → `spores=1` — the field snapshots its presence-moment.
+
+Honest notes: `is_trauma` keys on the pain/trauma SCALARS (not the FEAR chamber), and pain stays ~0 over
+short replies (3a.3) — so trauma spores are rare by design (need sustained incoherence). `cooc_fragment`
+left -1 in B1 (the bleed reads `emit_context`, not `cooc_fragment`). Next — **B0** (promote П-3 + re-cal
+`LEO_REGISTER_W`, voice-sensitive, by ear) then **B2** (compute_active + candidate_bias = the bleed,
+ACTIVE, `--no-santaclaus`).

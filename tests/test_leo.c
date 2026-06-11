@@ -464,6 +464,36 @@ int main(void) {
         leo_free(&l);
     }
 
+    /* santaclaus B1: spores are born per reply, accumulate, and decay
+     * (calm faster than trauma) — passive memory of presence-moments. */
+    {
+        Leo sl;
+        leo_init(&sl);
+        leo_ingest(&sl, "the rain falls soft. leo hears the sound. his mother is warm. "
+                        "the candle gives a small light. leo loves the quiet morning.");
+        char buf[512];
+        CHECK(sl.n_spores == 0, "spore: fresh Leo has 0 spores");
+        srand(11); leo_chain(&sl, LEO_CHAIN_MIN, buf, sizeof buf);
+        CHECK(sl.n_spores == 1, "spore: one reply births one spore");
+        srand(12); leo_chain(&sl, LEO_CHAIN_MIN, buf, sizeof buf);
+        srand(13); leo_chain(&sl, LEO_CHAIN_MIN, buf, sizeof buf);
+        CHECK(sl.n_spores == 3, "spore: three replies -> three spores accumulate");
+        float s0 = sl.spores[0].strength;
+        sl.spores[0].is_trauma = 0;
+        for (int i = 0; i < 100; i++) leo_spore_decay(&sl);
+        CHECK(sl.spores[0].strength < s0, "spore: decay lowers a spore's strength");
+        /* trauma spore decays slower than a calm one over the same step */
+        memset(&sl.spores[0], 0, sizeof(LeoSpore));
+        memset(&sl.spores[1], 0, sizeof(LeoSpore));
+        sl.spores[0].strength = 1.0f; sl.spores[0].is_trauma = 0;
+        sl.spores[1].strength = 1.0f; sl.spores[1].is_trauma = 1;
+        sl.n_spores = 2;
+        leo_spore_decay(&sl);
+        CHECK(sl.n_spores == 2 && sl.spores[1].strength > sl.spores[0].strength,
+              "spore: trauma spore decays slower than calm");
+        leo_free(&sl);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

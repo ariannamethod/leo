@@ -523,6 +523,35 @@ typedef struct {
 typedef struct { int head, tail; float pmi; } LeoSuperToken;
 typedef struct { LeoSuperToken e[LEO_SUPERTOK_MAX]; int n; } LeoSuperTokens;
 
+/* ── Phase B — santaclaus: self-residual spore recall (canon neoleo leo.c:1206) ─
+ * A spore = a snapshot of Leo's field at a reply moment. On a sentence boundary,
+ * spores whose state RESONATES with the present (0.55·cos chambers + 0.45·cos
+ * retention) bleed — their OWN past emitted tokens get a bias pull. Mama-child
+ * safe: emit_context is Leo's own tokens, never the prompt. Ring of active spores
+ * + a "sea" of demoted ones (weak memories sleep, resonance can resurrect them). */
+#define LEO_SPORE_MAX          64    /* active ring buffer */
+#define LEO_SEA_MAX           256    /* demoted spores: 4x ring (море памяти) */
+#define LEO_SPORE_CONTEXT_TOK    8   /* last N emitted tokens captured at birth */
+#define LEO_SPORE_COOC_FRAG     16   /* top-K cooc partners at birth */
+#define LEO_SPORE_TOPK_BLEED     4   /* how many active spores bleed per boundary */
+typedef struct {
+    float chamber_snap[LEO_N_CHAMBERS]; /* chamber_act at birth */
+    float retention_slice[LEO_RET_DIM]; /* retention_state at birth */
+    int   emit_context[LEO_SPORE_CONTEXT_TOK]; /* last N tokens emitted */
+    int   cooc_fragment[LEO_SPORE_COOC_FRAG];  /* high-freq cooc partners */
+    long  step;                         /* leo->step at birth */
+    long  last_bleed_step;              /* most-recent activation; 0 = never */
+    float pain_snap, trauma_snap;       /* suffering context at birth */
+    float strength;                     /* 1.0 birth, decays each field-step */
+    int   bleed_count;                  /* how often this spore activated */
+    int   is_trauma;                    /* 1 if born under pain/trauma */
+} LeoSpore;
+typedef struct {                        /* per-step scratch: top-K active spores */
+    int   spore_idx[LEO_SPORE_TOPK_BLEED];
+    float weight[LEO_SPORE_TOPK_BLEED];
+    int   n_active;
+} LeoSantaScratch;
+
 static void bigram_init(BigramTable *b, int capacity) {
     b->entries = calloc((size_t)capacity, sizeof(BigramEntry));
     b->n_entries = 0;
@@ -1072,6 +1101,10 @@ typedef struct {
     /* A.3b — super-token table: high-PMI content phrase-units, built once after
      * corpus ingest (leo_supertok_scan). PASSIVE until the boost is wired. */
     LeoSuperTokens supers;
+    /* Phase B — santaclaus: spore ring (active presence-moments) + sea (demoted,
+     * may resurrect on resonance). Born/decayed per reply; PASSIVE until B2 reads. */
+    LeoSpore spores[LEO_SPORE_MAX]; int n_spores;
+    LeoSpore sea[LEO_SEA_MAX];      int n_sea; int sea_ptr;
 } Leo;
 
 static void leo_init(Leo *leo) {
@@ -1201,6 +1234,12 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_SUPERTOK_MIN_FREQ  3.0f  /* A.3b: min unigram freq each side (archive fa,fb>=3) */
 #define LEO_SUPERTOK_W         0.5f  /* A.3b-active: phrase-cohesion boost = W * squash(pmi) on the tail */
 #define LEO_SUPERTOK_OFFTHEME  0.25f /* A.3b step3: damp the boost when the tail is off the active theme */
+#define LEO_SPORE_DECAY_NORMAL 0.998f  /* santaclaus: calm spore strength x per field-step */
+#define LEO_SPORE_DECAY_TRAUMA 0.9995f /* trauma spore decays slower — the wound holds longer */
+#define LEO_SPORE_DEMOTE_BELOW 0.05f   /* strength < this -> demote spore to the sea */
+#define LEO_SPORE_TRAUMA_MARK  0.45f   /* pain or trauma > this at birth -> trauma flag */
+#define LEO_SANTACLAUS_ALPHA   0.6f    /* bleed bias = ALPHA * sum(resonance*strength) on a recalled token */
+#define LEO_SPORE_RESURRECT_SIM 0.85f  /* sea->ring promote if present-state cosine > this */
 #define LEO_CHAIN_MAX      12
 #define LEO_TAIL_WIN       8
 #define LEO_BEST_OF_K      3
@@ -2162,6 +2201,61 @@ static void leo_field_chambers_feel_text(Leo *leo, const char *text) {
         leo->chamber_ext[i] = clampf(leo->chamber_ext[i], 0.0f, 1.0f);
 }
 
+/* ── santaclaus B1: spore birth + decay (passive — nothing reads them yet) ──── */
+
+/* demote a spore to the sea (ring buffer; weak memories sleep, may resurrect). */
+static void leo_sea_push(Leo *leo, const LeoSpore *s) {
+    if (!leo || !s) return;
+    leo->sea[leo->sea_ptr % LEO_SEA_MAX] = *s;
+    leo->sea_ptr = (leo->sea_ptr + 1) % LEO_SEA_MAX;
+    if (leo->n_sea < LEO_SEA_MAX) leo->n_sea++;
+}
+
+/* birth a spore from the field at reply-end — a snapshot of this moment of
+ * presence. emit_ctx = Leo's OWN last emitted tokens (mama-child safe). Ring
+ * overflow demotes the weakest spore to the sea. */
+static void leo_spore_record(Leo *leo, const int *emit_ctx, int n) {
+    LeoSpore sp;
+    memset(&sp, 0, sizeof(sp));
+    for (int i = 0; i < LEO_N_CHAMBERS; i++) sp.chamber_snap[i]   = leo->chamber_act[i];
+    for (int d = 0; d < LEO_RET_DIM;    d++) sp.retention_slice[d] = leo->retention_state[d];
+    int m = n < LEO_SPORE_CONTEXT_TOK ? n : LEO_SPORE_CONTEXT_TOK;
+    for (int i = 0; i < m; i++)                      sp.emit_context[i] = emit_ctx ? emit_ctx[i] : -1;
+    for (int i = m; i < LEO_SPORE_CONTEXT_TOK; i++)  sp.emit_context[i] = -1;
+    for (int i = 0; i < LEO_SPORE_COOC_FRAG; i++)    sp.cooc_fragment[i] = -1; /* filled when the richer bleed needs it */
+    sp.step = leo->step; sp.last_bleed_step = 0;
+    sp.pain_snap = leo->pain; sp.trauma_snap = leo->trauma;
+    sp.strength = 1.0f; sp.bleed_count = 0;
+    sp.is_trauma = (leo->pain > LEO_SPORE_TRAUMA_MARK ||
+                    leo->trauma > LEO_SPORE_TRAUMA_MARK) ? 1 : 0;
+    if (leo->n_spores < LEO_SPORE_MAX) {
+        leo->spores[leo->n_spores++] = sp;
+    } else {                                  /* ring full → demote weakest, replace */
+        int weak = 0;
+        for (int i = 1; i < leo->n_spores; i++)
+            if (leo->spores[i].strength < leo->spores[weak].strength) weak = i;
+        leo_sea_push(leo, &leo->spores[weak]);
+        leo->spores[weak] = sp;
+    }
+}
+
+/* spores decay on the field-step cadence; weak ones demote to the sea (Stanley:
+ * don't kill weak memories, let them sleep). Trauma spores hold longer. */
+static void leo_spore_decay(Leo *leo) {
+    int w = 0;
+    for (int i = 0; i < leo->n_spores; i++) {
+        LeoSpore *s = &leo->spores[i];
+        s->strength *= (s->is_trauma ? LEO_SPORE_DECAY_TRAUMA : LEO_SPORE_DECAY_NORMAL);
+        if (s->strength < LEO_SPORE_DEMOTE_BELOW) {
+            leo_sea_push(leo, s);                  /* demote */
+        } else {
+            if (w != i) leo->spores[w] = *s;       /* compact ring */
+            w++;
+        }
+    }
+    leo->n_spores = w;
+}
+
 /* One field step per emitted token (canon 2012-2064, our subset):
  * chambers crossfire + retention Griffin conservation + suffering decay.
  * PASSIVE in 3a — nothing reads chamber_act/pain/trauma yet. Channels we do
@@ -2190,6 +2284,9 @@ static void leo_field_step(Leo *leo, int emitted, float coherence_hint) {
     leo->tension = clampf(leo->tension * 0.995f, 0.0f, 1.0f);
     leo->debt    = leo->debt * LEO_DEBT_DECAY;
     leo->trauma  = leo->pain * leo->pain;
+
+    /* santaclaus: spores decay on the field-step cadence; weak ones sleep (B1) */
+    if (leo->n_spores > 0) leo_spore_decay(leo);
 }
 
 /* sentence generator: assemble tokens, then clean the shape (capital
@@ -2777,6 +2874,21 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
         memcpy(out + pos, sent_text[s], (size_t)slen);
         pos += slen;
         out[pos] = 0;
+    }
+
+    /* santaclaus: birth a spore from this reply-moment — snapshot the field after
+     * it evolved over the spoken reply (П-3 path above). emit_context = Leo's last
+     * emitted tokens (his OWN, mama-child safe). PASSIVE in B1: recorded + decayed,
+     * not yet read for selection. */
+    {
+        int ectx[LEO_SPORE_CONTEXT_TOK]; int en = 0;
+        for (int s = n_sentences - 1; s >= 0 && en < LEO_SPORE_CONTEXT_TOK; s--)
+            for (int i = sent_tok_n[s] - 1; i >= 0 && en < LEO_SPORE_CONTEXT_TOK; i--)
+                ectx[en++] = sent_tok[s][i];
+        for (int a = 0, b = en - 1; a < b; a++, b--) {   /* reverse → chronological */
+            int t = ectx[a]; ectx[a] = ectx[b]; ectx[b] = t;
+        }
+        leo_spore_record(leo, ectx, en);
     }
     return total;
 }
@@ -3417,10 +3529,10 @@ int main(int argc, char **argv) {
                 rn += leo.retention_state[d] * leo.retention_state[d];
             rn = sqrtf(rn);
             printf("             field> FEAR=%.2f LOVE=%.2f RAGE=%.2f VOID=%.2f "
-                   "FLOW=%.2f CPLX=%.2f | pain=%.3f trauma=%.3f ret_norm=%.4f\n",
+                   "FLOW=%.2f CPLX=%.2f | pain=%.3f trauma=%.3f ret_norm=%.4f | spores=%d sea=%d\n",
                    leo.chamber_act[0], leo.chamber_act[1], leo.chamber_act[2],
                    leo.chamber_act[3], leo.chamber_act[4], leo.chamber_act[5],
-                   leo.pain, leo.trauma, rn);
+                   leo.pain, leo.trauma, rn, leo.n_spores, leo.n_sea);
         }
     }
 
