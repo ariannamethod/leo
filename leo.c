@@ -75,7 +75,9 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_MAX_MERGES    8192
 #define LEO_MAX_TOKEN_LEN 64
 #define LEO_COOC_WINDOW   5
-#define LEO_COOC_MAX      (256 * 1024)
+#define LEO_COOC_MAX      (512 * 1024)  /* 2x (was 256K): corpus needs 361639 pairs — 256K cut 27% of the
+                                         * corpus cooc at ingest; 512K holds the full corpus + ~163K headroom
+                                         * so dialogue pairs enter from turn 1, not after ~1535 prune cycles. +3MB. */
 /* Phase 3a — retention (Griffin conservation), ported from canon neoleo. */
 #define LEO_RET_DIM       32       /* retention vector dim (canon LEO_RET_DIM) */
 #define LEO_RET_GAMMA     0.92f    /* retention decay (single-scale) */

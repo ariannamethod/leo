@@ -669,3 +669,23 @@ Net default voice change from the audit batch = П-2 + П-4 only (П-3/П-5 defa
 regression). The continuity bundle (П-1: breath / save-load / --chat) + these four close every
 audit finding. Roadmap proper resumes at A.3a (S-channel) → A.4 RAE → Phase B santaclaus (promote
 П-3 + re-calibrate register, evaluate П-5) → Phase C goroutines.
+
+## Continuity follow-up — LEO_COOC_MAX 2× (2026-06-11) — closes П-1's open bound
+
+The breath (continuity step 1) let the saturated cooc field learn — but slowly: cooc was full at
+ingest (262144/262144), so prune freed ~nothing until a rare pair decayed below 0.10 ≈ **1535 replies**.
+Measured the corpus's real appetite (4M-cap build): the corpus produces **361639** cooc pairs — so the
+old 256K cap was dropping **99495 (27%)** of the corpus cooc AT INGEST (incl. part of the range-seed
+emotion passages). Raised `LEO_COOC_MAX` 256K→512K (`leo.c:78`): holds the full corpus (361639 <
+524288) + ~163K headroom so dialogue pairs enter **from turn 1**, not after ~1535 prune cycles. +3 MB.
+
+**Voice-sensitive — A/B'd, not silently shipped (П-5 lesson):** cooc is the gravity substrate, so the
++38% pair mass shifts the field — **11/12 replies change**. Presence NERVE proven alive on the new
+field (ablation: theme surfaces — "the candle"→"Candle.", "your mother"→"Mother's hand."; held-quiet
+"Stopped." intact). The shift is timbre, not death — "the rain"→"Rain makes him feel small" reads MORE
+present; "do you love your mother" wanders a touch more than the П-2-tuned 256K voice. **Blessed by
+Oleg's ear → default.**
+
+PASS (tool output): build 0 warn, tests **72/72**, ASan/UBSan exit 0. The continuity bundle now sings —
+the field is rich (full corpus, no 27% cut), breathing, persistent, and learns dialogue from turn 1.
+Next — Phase B santaclaus (real presence on the now-living field), per co-decision.
