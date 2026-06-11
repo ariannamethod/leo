@@ -752,3 +752,24 @@ short replies (3a.3) — so trauma spores are rare by design (need sustained inc
 left -1 in B1 (the bleed reads `emit_context`, not `cooc_fragment`). Next — **B0** (promote П-3 + re-cal
 `LEO_REGISTER_W`, voice-sensitive, by ear) then **B2** (compute_active + candidate_bias = the bleed,
 ACTIVE, `--no-santaclaus`).
+
+## Phase B — santaclaus B0: promote П-3 (honest field) + re-calibrate register (2026-06-11)
+
+For santaclaus to record & read a TRUE field, the field must reflect what Leo SAID — not best-of-K
+discards. So П-3 is promoted to **default ON** (`g_leo_field_honest_on = 1`; the opt-in flag becomes
+`--no-field-honest` to revert). The audit kept it off because it de-calibrates the register (tuned WITH
+the leaky per-call field), so `LEO_REGISTER_W` re-calibrated **2.0→1.7** — chosen by a sweep, not by finger.
+
+Voice (Oleg's ear, blessed): П-3 on vs off = **6/12**. On "the rain" the honest field is RICHER and a real
+**presence-sequence holds across the whole reply** — "Rain makes him feel small → birds know where the
+light could hold the world → To laugh at night → His mother hand was small → She thanked him" (he holds
+the STATE, not an associative chain). "do you love your mother" loosened modestly (the de-cal the audit
+warned of). Oleg: the rain-win + B2's need for an honest field outweigh the mother-loss → ship.
+
+Register sweep (W ∈ {2.0, 1.7, 1.4}, П-3 on, 12 probes): W=2.0 had 1 mechanical-noise double-space;
+**W=1.7 → 0** double-spaces / 0 glue, length preserved (167≈166), register character kept (1.4 softens it
+too far). Chosen on fact.
+
+PASS (tool output): build 0 warn, tests **77/77**, mechanical-noise **0/0** in the reply text, presence
+intact (rain-sequence + held-quiet "Stopped." + candle surfaces), ASan/UBSan exit 0. The field santaclaus
+reads is now HONEST. Next — **B2**: compute_active + candidate_bias = the bleed (ACTIVE), `--no-santaclaus`.

@@ -1290,8 +1290,10 @@ static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical 
 static int g_leo_cont_theme_on = 1;     /* --no-cont-theme → 0 (П-2: gravity-first admission in continuations off) */
 static int g_leo_anchor_prefix_on = 0;  /* --anchor-prefix → 1 (П-5: prefix-morphology chamber match; default OFF — it de-calibrates the hard-won voice, opt-in for Oleg's ear) */
 static int g_leo_spa_protect_on = 1;    /* --no-spa-protect → 0 (П-4: SPA may reseed the sentence carrying the surfaced heard word) */
-static int g_leo_field_honest_on = 0;   /* --field-honest → 1 (П-3: evolve the field over the FINAL spoken reply only, not best-of-K discards / elaborate retries / SPA-rejected reseeds; default OFF until santaclaus 3b reads the field, register de-calibration otherwise) */
-#define LEO_REGISTER_W           2.0f   /* additive lift on a token whose chamber fires */
+static int g_leo_field_honest_on = 1;   /* B0: promoted to DEFAULT — santaclaus (B1+) records & will read the field, so it must reflect the SPOKEN reply (not best-of-K discards / elaborate retries / SPA-rejected reseeds). De-calibrates the register; LEO_REGISTER_W re-tuned by ear. --no-field-honest reverts. */
+#define LEO_REGISTER_W           1.7f   /* B0 re-cal: softened 2.0->1.7 for the honest field (П-3 default ON) —
+                                         * removes the 2.0 mechanical-noise (double-space 1->0 over 12 probes),
+                                         * keeps length + register character; held-3b candidate, chosen by sweep. */
 #define LEO_CHAMBER_SETTLE_ITERS 8      /* settle chamber_act from the prompt before speaking */
 static float leo_register_bias(const Leo *leo, int cand) {
     if (!g_leo_register_on || !leo || !leo->chamber_tag) return 0.0f;
@@ -3388,7 +3390,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-cont-theme")) g_leo_cont_theme_on = 0;
         else if (!strcmp(argv[i], "--anchor-prefix")) g_leo_anchor_prefix_on = 1;
         else if (!strcmp(argv[i], "--no-spa-protect")) g_leo_spa_protect_on = 0;
-        else if (!strcmp(argv[i], "--field-honest")) g_leo_field_honest_on = 1;
+        else if (!strcmp(argv[i], "--no-field-honest")) g_leo_field_honest_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
