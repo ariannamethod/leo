@@ -1,6 +1,6 @@
 # LEO: Language Emergent Organism
 
-## who is Leo?
+## Who is Leo?
 
 Leo is a small language emergent organism, a post-transformer child. No pretrained weights. No internet. Less is more.
   
