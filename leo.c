@@ -1286,6 +1286,7 @@ static int g_leo_elaborate_on = 1;      /* --no-elaborate → 0 (fragment->elabo
 static int g_leo_spa_on = 1;            /* --no-spa → 0 (Sentence Phonon Attention reseed off) */
 static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence theme leash off) */
 static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
+static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore bleed / self-residual recall off) */
 static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical decay/prune off) */
 static int g_leo_cont_theme_on = 1;     /* --no-cont-theme → 0 (П-2: gravity-first admission in continuations off) */
 static int g_leo_anchor_prefix_on = 0;  /* --anchor-prefix → 1 (П-5: prefix-morphology chamber match; default OFF — it de-calibrates the hard-won voice, opt-in for Oleg's ear) */
@@ -1562,6 +1563,7 @@ typedef struct {
     int              emit_ctx_tail_n;
     const uint8_t   *prompt_pieces;   /* prompt word pieces, gate-exempt (NULL=off) */
     const Leo       *leo;             /* chamber-register read (NULL = channel off) */
+    const LeoSantaScratch *santa;     /* B2: top-K active spores for the bleed (NULL/empty = off) */
 } CandCollector;
 
 /* word-completion penalty: after an alpha-ended prev token, crush glue
@@ -1756,6 +1758,63 @@ static float leo_supertoken_boost(const CandCollector *cc, int cand) {
     return 0.0f;
 }
 
+/* ── santaclaus B2: the bleed — present state recalls resonant past spores ──── */
+
+/* cosine of two vectors, clamped to [0,1] (a negative shape = wrong, no pull). */
+static float leo_vec_cosine(const float *a, const float *b, int n) {
+    float dot = 0.0f, na = 0.0f, nb = 0.0f;
+    for (int i = 0; i < n; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+    if (na < 1e-9f || nb < 1e-9f) return 0.0f;
+    float c = dot / (sqrtf(na) * sqrtf(nb));
+    return c < 0.0f ? 0.0f : c;
+}
+
+/* resonance of the present field with a spore (canon neoleo 5236). */
+static float leo_spore_resonance(const Leo *leo, const LeoSpore *s) {
+    float ch  = leo_vec_cosine(leo->chamber_act,     s->chamber_snap,    LEO_N_CHAMBERS);
+    float ret = leo_vec_cosine(leo->retention_state, s->retention_slice, LEO_RET_DIM);
+    return 0.55f * ch + 0.45f * ret;
+}
+
+/* top-K most-active spores for the present state (read-only → local scratch). */
+static void leo_santaclaus_compute_active(const Leo *leo, LeoSantaScratch *out) {
+    out->n_active = 0;
+    for (int j = 0; j < LEO_SPORE_TOPK_BLEED; j++) { out->spore_idx[j] = -1; out->weight[j] = 0.0f; }
+    if (!leo || leo->n_spores <= 0) return;
+    for (int i = 0; i < leo->n_spores; i++) {
+        const LeoSpore *s = &leo->spores[i];
+        if (s->strength <= 0.0f) continue;
+        float w = leo_spore_resonance(leo, s) * s->strength;
+        if (w <= 0.0f) continue;
+        int slot = -1;
+        for (int j = 0; j < LEO_SPORE_TOPK_BLEED; j++)
+            if (out->spore_idx[j] < 0 || w > out->weight[j]) { slot = j; break; }
+        if (slot < 0) continue;
+        for (int j = LEO_SPORE_TOPK_BLEED - 1; j > slot; j--) {
+            out->spore_idx[j] = out->spore_idx[j-1]; out->weight[j] = out->weight[j-1];
+        }
+        out->spore_idx[slot] = i; out->weight[slot] = w;
+        if (out->n_active < LEO_SPORE_TOPK_BLEED) out->n_active++;
+    }
+}
+
+/* the bleed (canon neoleo 5297): a candidate that sits in an active spore's
+ * emit_context gets a pull ∝ resonance×strength — Leo recalls his OWN past words
+ * from a moment that felt like now. Read-only; mama-child safe (his own tokens). */
+static float leo_santaclaus_candidate_bias(const LeoSantaScratch *s,
+                                           const Leo *leo, int cand) {
+    if (!s || !leo || cand < 0 || s->n_active <= 0) return 0.0f;
+    float total = 0.0f;
+    for (int i = 0; i < s->n_active; i++) {
+        int idx = s->spore_idx[i];
+        if (idx < 0 || idx >= leo->n_spores || s->weight[i] <= 0.0f) continue;
+        const LeoSpore *sp = &leo->spores[idx];
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++)
+            if (sp->emit_context[k] == cand) { total += s->weight[i]; break; }
+    }
+    return LEO_SANTACLAUS_ALPHA * total;
+}
+
 static int cand_collect_tri(int c, float count, void *ud) {
     CandCollector *cc = (CandCollector *)ud;
     if (cand_gate_reject(cc, c)) return 0;
@@ -1770,6 +1829,7 @@ static int cand_collect_tri(int c, float count, void *ud) {
     }
     score += leo_presence_entry_latch_boost(cc, c);
     score += leo_supertoken_boost(cc, c);       /* A.3b: phrase-unit cohesion */
+    score += leo_santaclaus_candidate_bias(cc->santa, cc->leo, c);  /* B2: spore bleed (self-residual recall) */
     score += leo_register_bias(cc->leo, c);     /* felt chamber -> Leo's own emotion word */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, c))
         score *= LEO_REPEAT_PENALTY;
@@ -1791,6 +1851,7 @@ static int cand_collect_bi(int dst, float count, void *ud) {
     }
     score += leo_presence_entry_latch_boost(cc, dst);
     score += leo_supertoken_boost(cc, dst);     /* A.3b: phrase-unit cohesion */
+    score += leo_santaclaus_candidate_bias(cc->santa, cc->leo, dst); /* B2: spore bleed (self-residual recall) */
     score += leo_register_bias(cc->leo, dst);   /* felt chamber -> Leo's own emotion word */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, dst))
         score *= LEO_REPEAT_PENALTY;
@@ -1817,7 +1878,7 @@ static int leo_presence_latch_walk(int dst, float count, void *ud) {
     CandCollector gate = { NULL, NULL, 0, 0, pl->prev, &leo->cooc,
                            leo->gravity, &leo->bpe,
                            byte_is_word_cont((uint8_t)prev_last), NULL, 0,
-                           NULL, NULL };
+                           NULL, NULL, NULL };   /* +santa = NULL (latch gate: no bleed) */
     if (cand_gate_reject(&gate, dst)) return 0;
     float score = 100.0f * g + leo_squash(count);
     if (score > pl->best_score) { pl->best_score = score; pl->best = dst; }
@@ -1853,10 +1914,13 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
     int   prev_last = bpe_token_last_byte(&leo->bpe, prev1);
     int   prev_ends_alpha = byte_is_word_cont((uint8_t)prev_last);
 
+    LeoSantaScratch santa_scratch;
+    santa_scratch.n_active = 0;
+    if (g_leo_santaclaus_on) leo_santaclaus_compute_active(leo, &santa_scratch);
     CandCollector cc = { cand_id, cand_sc, 0, LEO_MAX_CANDS,
                          prev1, &leo->cooc, leo->gravity, &leo->bpe,
                          prev_ends_alpha, emit_ctx_tail, emit_ctx_tail_n,
-                         leo->prompt_pieces, leo };
+                         leo->prompt_pieces, leo, &santa_scratch };
 
     if (prev2 >= 0)
         trigram_walk_ab(&leo->trigrams, prev2, prev1, cand_collect_tri, &cc);
@@ -3391,6 +3455,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--anchor-prefix")) g_leo_anchor_prefix_on = 1;
         else if (!strcmp(argv[i], "--no-spa-protect")) g_leo_spa_protect_on = 0;
         else if (!strcmp(argv[i], "--no-field-honest")) g_leo_field_honest_on = 0;
+        else if (!strcmp(argv[i], "--no-santaclaus")) g_leo_santaclaus_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));

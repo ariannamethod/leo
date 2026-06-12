@@ -494,6 +494,28 @@ int main(void) {
         leo_free(&sl);
     }
 
+    /* santaclaus B2: a resonant spore bleeds — its emit_context token gets a
+     * bias pull, others get none (the recall is selective + ablatable). */
+    {
+        Leo sl; leo_init(&sl);
+        leo_ingest(&sl, "the rain falls. leo hears the sound. his mother is warm.");
+        const int T = 300;
+        memset(&sl.spores[0], 0, sizeof(LeoSpore));
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) { sl.chamber_act[i] = 0.5f; sl.spores[0].chamber_snap[i] = 0.5f; }
+        for (int d = 0; d < LEO_RET_DIM; d++)    { sl.retention_state[d] = 0.1f; sl.spores[0].retention_slice[d] = 0.1f; }
+        sl.spores[0].strength = 1.0f;
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) sl.spores[0].emit_context[k] = -1;
+        sl.spores[0].emit_context[0] = T;
+        sl.n_spores = 1;
+        LeoSantaScratch sc; sc.n_active = 0;
+        leo_santaclaus_compute_active(&sl, &sc);
+        CHECK(sc.n_active == 1 && sc.spore_idx[0] == 0, "santaclaus: a resonant spore becomes active");
+        float bias_T   = leo_santaclaus_candidate_bias(&sc, &sl, T);
+        float bias_oth = leo_santaclaus_candidate_bias(&sc, &sl, T + 1);
+        CHECK(bias_T > 0.0f && bias_oth == 0.0f, "santaclaus: bleed pulls the spore's ctx token, not others");
+        leo_free(&sl);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

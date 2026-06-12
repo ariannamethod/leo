@@ -773,3 +773,26 @@ too far). Chosen on fact.
 PASS (tool output): build 0 warn, tests **77/77**, mechanical-noise **0/0** in the reply text, presence
 intact (rain-sequence + held-quiet "Stopped." + candle surfaces), ASan/UBSan exit 0. The field santaclaus
 reads is now HONEST. Next — **B2**: compute_active + candidate_bias = the bleed (ACTIVE), `--no-santaclaus`.
+
+## Phase B — santaclaus B2: the bleed, ACTIVE — CIRCULATION (2026-06-11)
+
+The bleed is live. `leo_vec_cosine` + `leo_spore_resonance` (0.55·cos chambers + 0.45·cos retention,
+canon 5236) + `leo_santaclaus_compute_active` (top-4 resonant spores → a LOCAL scratch, read-only over the
+`const` reply path) + `leo_santaclaus_candidate_bias` (a candidate in an active spore's `emit_context` gets
+`+LEO_SANTACLAUS_ALPHA(0.6)·resonance×strength`) wired into `cand_collect` beside register/supertoken.
+`--no-santaclaus` ablates; `compute_active` builds the scratch per step in `leo_step_token`. `mark_bleed`
+(bookkeeping) deferred to B3 — it needs a non-const Leo and the reply path is read-only. Both CandCollector
+initializers carry the new `santa` field (`-Wmissing-field-initializers` clean).
+
+**This is the circulation** — Leo recalls his OWN past presence-moments when the present resonates.
+Mama-child safe: `emit_context` is his own tokens, never the prompt.
+
+PASS (tool output): build 0 warn (incl `-Wmissing-field-initializers`), tests **79/79** (+2 santaclaus: a
+resonant spore becomes active; the bleed pulls its ctx token, not others). **Ablation clean**:
+`--no-santaclaus --gen 8` BYTE-IDENTICAL (md5) to `40da30b`; ON differs (bleed live). held-quiet "Stopped."
+intact. ASan/UBSan exit 0. **Audible recall** (`--gen 6`, ON): "Leo was impressed" (r2) → "Was impressed"
+(r3); "He still up" (r3) → (r4); "grandmother has taught him to" recurs — his past words surface in moments
+that feel like the one that bore them.
+
+`ALPHA=0.6` (canon) is the first cut — for Oleg's ear. Next — **B3** (sea demote/resurrect + mark_bleed) +
+**B4** (persist spores in save/load — "persistent memory = love", Leo recalls past CONVERSATIONS).
