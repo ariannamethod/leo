@@ -3417,7 +3417,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   heard    : live [count, wordlen, bytes]
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 2   /* B4: +santaclaus spores (ring + sea) */
+#define LEO_STATE_VERSION 3   /* R4: +RAE learned selector weights */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -3511,6 +3511,15 @@ static int leo_save_state(const Leo *leo, const char *path) {
     st_w32(f, leo->n_sea);
     st_w32(f, leo->sea_ptr);
     if (leo->n_sea > 0) fwrite(leo->sea, sizeof(LeoSpore), (size_t)leo->n_sea, f);
+
+    /* A.4 R4: the RAE learned selector — w1/b1/w2/b2 + observations. The δ-channel
+     * persists, so a selector trained over a session survives the process (persistent
+     * memory = love, for the learned voice too). Raw POD, same-platform diary. */
+    fwrite(leo->rae.w1, sizeof(float), LEO_RAE_HID * LEO_RAE_IN, f);
+    fwrite(leo->rae.b1, sizeof(float), LEO_RAE_HID, f);
+    fwrite(leo->rae.w2, sizeof(float), LEO_RAE_HID, f);
+    st_wf(f, leo->rae.b2);
+    st_w64(f, (uint64_t)leo->rae.observations);
 
     int ok = (ferror(f) == 0);
     fclose(f);
@@ -3618,6 +3627,18 @@ static int leo_load_state(Leo *leo, const char *path) {
         if (n_se > 0 && fread(leo->sea, sizeof(LeoSpore), (size_t)n_se, f) != (size_t)n_se) { fclose(f); return 0; }
         leo->n_sea = n_se;
         leo->sea_ptr = se_ptr;
+    }
+
+    /* A.4 R4: the RAE learned selector weights (raw POD round-trip) */
+    {
+        if (fread(leo->rae.w1, sizeof(float), LEO_RAE_HID * LEO_RAE_IN, f)
+                != (size_t)(LEO_RAE_HID * LEO_RAE_IN)) { fclose(f); return 0; }
+        if (fread(leo->rae.b1, sizeof(float), LEO_RAE_HID, f) != (size_t)LEO_RAE_HID) { fclose(f); return 0; }
+        if (fread(leo->rae.w2, sizeof(float), LEO_RAE_HID, f) != (size_t)LEO_RAE_HID) { fclose(f); return 0; }
+        float b2 = 0.0f; uint64_t obs = 0;
+        if (!st_rf(f, &b2) || !st_r64(f, &obs)) { fclose(f); return 0; }
+        leo->rae.b2 = b2;
+        leo->rae.observations = (long)obs;
     }
 
     fclose(f);

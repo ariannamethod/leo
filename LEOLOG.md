@@ -961,3 +961,28 @@ the shared test `main` overflows the 8MB macOS stack under ASan (too many `Leo` 
 padding) — present already at `229a579`, not an R3 change; the suite runs clean in the normal build, and the
 R3 path is ASan-covered in isolation. Next — **R4**: persist the RAE weights in `leo.state` (save/load
 version bump), then the ear-A/B on a live `--chat` with a trained selector → the default decision.
+
+## Phase A.4 — RAE R4: the learned δ-channel persists across the process (2026-06-12)
+
+The selector's weights now survive a `--save`/`--load`. `LEO_STATE_VERSION` 2→3; after the spore ring+sea,
+the state file carries `rae.w1/b1/w2/b2 + observations` (raw POD, same-platform diary like the spores). A
+selector trained over a session is no longer thrown away on exit — persistent memory = love, now for the
+learned voice too, not only the field and the spores.
+
+Hard version bump (same pattern as B4's 1→2): a pre-R4 version-2 state no longer matches and is **gracefully
+rejected** — `leo_load_state` returns 0, the CLI prints "could NOT load state … fresh start" and falls back
+to corpus ingest. No crash, no partial read. Dev states regenerate from the corpus; nothing load-bearing
+depends on an old state file.
+
+PASS (tool output): build 0 warn, tests **95/95** (+3: save+load succeed; observations round-trip; trained
+weights round-trip — `leo_rae_forward` matches to <1e-6 after a 50-step train → save → fresh load). Generation
+**byte-identical** to `6266fe2` (`--gen 8 --seed 42`, md5 `0f32d2c`) — only the save/load paths changed.
+Cross-process via the binary: a `--rae`-trained `--save` reloads cleanly ("loaded state from …"); an old
+version-2 file is rejected without a crash (exit 0, fresh start). ASan/UBSan on the binary `--save` and
+`--load` paths: exit 0 / 0 findings each.
+
+**A.4 RAE plumbing complete: R1a (MLP) → R1b (features) → R2 (wired, opt-in) → R3 (online learning, 0.7/0.3)
+→ R4 (persist).** The one thing left is not code — it's the ear: run a live `--chat --rae` so the selector
+trains + persists over real turns, and judge whether a trained RAE voice beats the coherence default. Only
+then does the default flip from `--rae` opt-in to on (the same way B0 / santaclaus ALPHA were the ear's call,
+not the build's). Held for Oleg. If it ruminates or flatlines: R3.5 = the contrastive/advantage target.

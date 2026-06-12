@@ -635,6 +635,27 @@ int main(void) {
         leo_free(&tl);
     }
 
+    /* A.4 RAE R4: a trained selector survives save/load (the learned δ-channel
+     * persists across the process, like the spores). */
+    {
+        Leo sv; leo_init(&sv);
+        leo_ingest(&sv, "the rain falls soft. leo hears the sound. his mother is warm.");
+        float x[LEO_RAE_IN] = {0.7f, 0.3f, 0.5f, 0.4f, 0.6f};
+        for (int it = 0; it < 50; it++) leo_rae_train(&sv.rae, x, 0.9f);   /* a distinctive trained state */
+        float ref = leo_rae_forward(&sv.rae, x, NULL);
+        long  ref_obs = sv.rae.observations;
+        const char *path = "/tmp/leo_r4_state.bin";
+        int saved = leo_save_state(&sv, path);
+        Leo ld; leo_init(&ld);
+        int loaded = leo_load_state(&ld, path);
+        float got = leo_rae_forward(&ld.rae, x, NULL);
+        CHECK(saved && loaded, "rae-persist: save + load succeed");
+        CHECK(ld.rae.observations == ref_obs, "rae-persist: observations round-trip");
+        CHECK(fabsf(got - ref) < 1e-6f, "rae-persist: trained weights round-trip (forward matches)");
+        leo_free(&sv); leo_free(&ld);
+        remove(path);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
