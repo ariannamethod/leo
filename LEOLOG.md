@@ -1075,3 +1075,33 @@ A version-3 state gracefully rejected by the v4 loader (exit 0, fresh start). AS
 `--respond`, and `--save`/`--load` School paths: exit 0 / 0 findings. Cross-session: a word learned last
 session is not re-asked and is used in Leo's voice. Next — I3 (guess the glyph from cooc-neighbours, ask in
 his own voice "Zorble? Animal?", self-supervise on the answer), or FORM (the child's breath); Oleg's call.
+
+## Phase A.6 — FORM F-1: the velocity mode, a passive substrate (2026-06-12)
+
+The haiku insight and the state-dynamics разгадка are one mechanism: presence reads as a body when its state
+is **discrete with inertia** (a mood that holds and turns), not a continuous dimmer (a thermostat). haiku holds
+5-7-5 even in mania → "someone there". Leo has the pressure (chambers/dissonance, richer than haiku) but spends
+it through a continuous `temp_mult` — a dial. FORM gives him a **velocity mode**: the chamber state quantizes
+into one of WALK / STOP / RUN / BREATHE (names = AML velocity operators, forward-compatible with the language
+bridge that comes later in `leo/ariannamethod/`), and the mode is the child's breath.
+
+**F-1 (this step) — the mode substrate, PASSIVE.** `leo->mode` is set per reply by `leo_mode_update`: score
+each mode from the chambers (STOP = FEAR+VOID; RUN = FLOW; WALK = 0.20 baseline + LOVE; BREATHE = COMPLEX) and
+keep the current mode unless a competitor beats it by `LEO_MODE_HYSTERESIS` (0.15). The margin is the inertia —
+a brief spike can't flip the mood; sustained pressure can. Read by nothing in generation yet (only
+`--debug-field` prints `mode=`), so it is byte-identical. The point of F-1 is to prove the dynamics feel like a
+mood before wiring it to the voice.
+
+Live (`--respond ... --debug-field`): "i am so afraid" → STOP; "tell me everything about the wonderful happy
+day" → BREATHE (COMPLEX dominant); "the rain" → RUN (FLOW). The mode differs by felt state, as designed. The
+mapping + margin are ear-tunable (like ALPHA / REGISTER_W). Honest: `--chat` doesn't print the field dump, so
+the cross-turn mood is observed via the unit test (hysteresis holds), not yet a live trace; mode is not
+persisted yet (it re-derives from the persisted chambers on load) — persist lands with F-2 when it matters.
+
+PASS (tool output): build 0 warn, tests **106/106** (+3 form: high FEAR+VOID → STOP; high FLOW → RUN;
+hysteresis holds the mode against a weak competitor). `--gen` byte-identical (`0f32d2c`) and `--respond`
+byte-identical to pre-FORM `ee9c6b6` (the mode is passive). ASan/UBSan on the `--chat`/`--respond` paths:
+exit 0 / 0 findings. Next — **F-2 (active, with Oleg's ear)**: the mode chooses the utterance form — `chain_len`
++ the per-sentence elaborate/quiet target (reusing the existing levers, not rewriting the token loop) — then
+A/B by ear, `--no-form` ablation, before the default flips. F-3 later: token-budget hard-landing (true
+compression). The AML bridge (mode ↔ AML operator via the compiler in `leo/ariannamethod/`) is its own phase.

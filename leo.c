@@ -93,6 +93,17 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_CH_VOID     3
 #define LEO_CH_FLOW     4
 #define LEO_CH_COMPLEX  5
+/* A.6 FORM — velocity modes (the child's breath): the chamber state quantizes
+ * into a discrete mode with hysteresis, so it reads as a MOOD (it holds, and
+ * turns only under sustained pressure) rather than a dimmer. Names = AML velocity
+ * operators (forward-compatible with the language bridge). WALK = 0 so leo_init's
+ * memset gives the calm default. */
+#define LEO_MODE_WALK       0   /* measured gait — the default */
+#define LEO_MODE_STOP       1   /* held quiet (FEAR+VOID) */
+#define LEO_MODE_RUN        2   /* a run of short phrases (FLOW) */
+#define LEO_MODE_BREATHE    3   /* a settling exhale (COMPLEX / overwhelm) */
+#define LEO_MODE_COUNT      4
+#define LEO_MODE_HYSTERESIS 0.15f  /* a competitor must beat the current mode by this to switch (inertia) */
 #define LEO_CHAMBER_K   0.03f
 #define LEO_CHAMBER_ITERS_PER_STEP 1
 #define LEO_PAIN_DECAY  0.985f     /* suffering decay (canon 98) */
@@ -1269,6 +1280,10 @@ typedef struct {
      * emit, nothing reads them for selection/temp until 3b. */
     float        chamber_act[LEO_N_CHAMBERS];
     float        chamber_ext[LEO_N_CHAMBERS];
+    /* A.6 FORM — the current velocity mode (the child's breath): a hysteretic
+     * quantization of the chamber state. PASSIVE in F-1 (set per reply, read by
+     * nothing but --debug-field yet). WALK by leo_init's memset. */
+    uint8_t      mode;
     /* Phase 3b — emotional register: per-token chamber tag (which chamber's
      * anchor a learned token matches, 0xFF = none). Sized LEO_MAX_VOCAB, built
      * after corpus ingest. The FIRST field->voice channel: cand_collect lifts a
@@ -3562,6 +3577,25 @@ static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out
     return 0;
 }
 
+/* A.6 FORM F-1 — quantize the chamber state into a velocity mode, with hysteresis
+ * so it reads as a MOOD: score each mode from the chambers, keep the current mode
+ * unless a competitor beats it by LEO_MODE_HYSTERESIS. PASSIVE — sets leo->mode,
+ * read by nothing yet (F-2 will let the mode choose the utterance form). Names are
+ * AML velocity operators (forward-compatible with the language bridge). */
+__attribute__((unused))  /* LEO_MODE_NAMES is read by --debug-field in main, absent in the test TU */
+static const char *LEO_MODE_NAMES[LEO_MODE_COUNT] = { "WALK", "STOP", "RUN", "BREATHE" };
+static void leo_mode_update(Leo *leo) {
+    float score[LEO_MODE_COUNT];
+    score[LEO_MODE_WALK]    = 0.20f + leo->chamber_act[LEO_CH_LOVE];   /* baseline gait + warmth */
+    score[LEO_MODE_STOP]    = leo->chamber_act[LEO_CH_FEAR] + leo->chamber_act[LEO_CH_VOID];
+    score[LEO_MODE_RUN]     = leo->chamber_act[LEO_CH_FLOW];
+    score[LEO_MODE_BREATHE] = leo->chamber_act[LEO_CH_COMPLEX];
+    int best = 0;
+    for (int i = 1; i < LEO_MODE_COUNT; i++) if (score[i] > score[best]) best = i;
+    if (best != leo->mode && score[best] - score[leo->mode] > LEO_MODE_HYSTERESIS)
+        leo->mode = (uint8_t)best;   /* hysteresis: leave the current mood only when beaten by the margin */
+}
+
 /* respond to a prompt. Hear it, tilt the field toward its theme, speak
  * from the tilted field — and let the prompt's dissonance set his register
  * (known → settle on theme; alien → grope, the felt not-knowing). Mama-
@@ -3576,6 +3610,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS); /* settle ACT from the prompt's
                                        * emotion BEFORE speaking, so the register channel reads a
                                        * live felt-state from token 1 (phase 3b field->voice) */
+    leo_mode_update(leo);            /* A.6 FORM F-1: the breath quantizes from the settled chambers (passive) */
     leo->heard_word[0] = 0;
 
     /* A.5 School: if Leo asked "What is X?" last turn, THIS prompt is the answer —
@@ -4155,10 +4190,10 @@ int main(int argc, char **argv) {
                 rn += leo.retention_state[d] * leo.retention_state[d];
             rn = sqrtf(rn);
             printf("             field> FEAR=%.2f LOVE=%.2f RAGE=%.2f VOID=%.2f "
-                   "FLOW=%.2f CPLX=%.2f | pain=%.3f trauma=%.3f ret_norm=%.4f | spores=%d sea=%d\n",
+                   "FLOW=%.2f CPLX=%.2f | pain=%.3f trauma=%.3f ret_norm=%.4f | mode=%s | spores=%d sea=%d\n",
                    leo.chamber_act[0], leo.chamber_act[1], leo.chamber_act[2],
                    leo.chamber_act[3], leo.chamber_act[4], leo.chamber_act[5],
-                   leo.pain, leo.trauma, rn, leo.n_spores, leo.n_sea);
+                   leo.pain, leo.trauma, rn, LEO_MODE_NAMES[leo.mode], leo.n_spores, leo.n_sea);
         }
     }
 

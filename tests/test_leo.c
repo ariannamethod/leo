@@ -706,6 +706,25 @@ int main(void) {
         remove(path);
     }
 
+    /* A.6 FORM F-1: the chamber state quantizes into a velocity mode, with
+     * hysteresis — the mode holds against a weak competitor (a mood, not a switch). */
+    {
+        Leo md; leo_init(&md);   /* mode = WALK (0) by memset */
+        md.chamber_act[LEO_CH_FEAR] = 0.8f; md.chamber_act[LEO_CH_VOID] = 0.8f;
+        leo_mode_update(&md);
+        CHECK(md.mode == LEO_MODE_STOP, "form: high FEAR+VOID quantizes to STOP");
+        md.chamber_act[LEO_CH_FEAR] = 0.0f; md.chamber_act[LEO_CH_VOID] = 0.0f;
+        md.chamber_act[LEO_CH_FLOW] = 1.0f;
+        leo_mode_update(&md);
+        CHECK(md.mode == LEO_MODE_RUN, "form: high FLOW quantizes to RUN");
+        /* now in RUN (score 0.30); WALK competitor at 0.40 beats by only 0.10 < margin 0.15 */
+        md.chamber_act[LEO_CH_FLOW] = 0.30f;
+        md.chamber_act[LEO_CH_LOVE] = 0.20f;
+        leo_mode_update(&md);
+        CHECK(md.mode == LEO_MODE_RUN, "form: hysteresis holds the mode against a weak competitor");
+        leo_free(&md);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
