@@ -1,53 +1,64 @@
-# leo / ariannamethod — the AML velocity bridge
+# leo / ariannamethod — the AML velocity bridge (live)
 
 Leo's breath is an **AML velocity operator**. The chambers quantize into a discrete
 mode — `WALK` / `STOP` / `RUN` / `BREATHE` — with hysteresis, and the mode chisels
-the form of every reply (its word budget). Those names are not a coincidence: they
-are the family language's velocity operators. This folder is where AML reaches into
-Leo, so an `.aml` script can read and set his breath the way `DESTINY` / `FIELD` /
-`RESONANCE` directives edit a field. One physics, many bodies.
+the form of every reply. Those names are the family language's velocity operators,
+and this folder is where AML reaches into Leo: an `.aml` script reads and sets his
+breath the way `DESTINY` / `FIELD` / `RESONANCE` directives edit a field. One
+physics, many bodies — the circle closes.
 
-## The C contract (already in `leo.c`)
+## It works
 
-The breath is settable from outside. The AML runtime drives it through:
+```
+make
+./leo --aml ariannamethod/breath.aml --respond "do you love your mother"
+#   VELOCITY NOMOVE in the script -> Leo holds: "His grandmother. She thanked him."
+```
+
+The script runs through the language; its `VELOCITY` operator drives Leo's mode.
+
+## What is here
+
+The **AML language itself, vendored as source** (the Method pattern — like `notorch`
+is vendored for self-contained builds): `ariannamethod.c` / `ariannamethod.h` /
+`ariannamethod_cuda.h`. The `Makefile` builds `libaml.a` from this source and links
+it (the `.a`/`.o` are build artifacts, never committed — AML itself `.gitignore`s
+them). `breath.aml` is a runnable sample.
+
+If the source here is absent, the build falls back to a system AML install
+(`~/arianna/ariannamethod.ai/libaml.a`); if neither is found, a **silent fallback** —
+Leo builds and runs full, and `--aml` simply says AML is not linked.
+
+## The C contract (in `leo.c`)
 
 ```c
-void leo_mode_set(Leo *leo, int mode);   /* force the mode (a VELOCITY operator); mode < 0 = autonomous */
-int  leo_mode_get(const Leo *leo);       /* read the current mode */
-int  leo_mode_from_name(const char *s);  /* "STOP"/"WALK"/"RUN"/"BREATHE" -> mode id, or -1 */
+void leo_mode_set(Leo *leo, int mode);   /* force the mode; mode < 0 = autonomous */
+int  leo_mode_get(const Leo *leo);
+int  leo_mode_from_name(const char *s);  /* "STOP"/"WALK"/"RUN"/"BREATHE" -> id */
 ```
 
-`leo->mode_override` holds the forced mode (`-1` = the chambers choose autonomously).
-`leo_mode_update` honours the override, then falls back to the hysteretic quantization.
-A manual driver already exists for testing and for the listening marathon:
+`leo_aml_run` (compiled only with `-DHAVE_AML`) runs a script via `am_exec_file`,
+reads `am_get_state()->velocity_mode`, and maps it to Leo's breath:
 
 ```
-./leo --mode STOP --respond "do you love your mother"     # the held child, even on warmth
-./leo --mode RUN  --chat                                  # the chatty run, all session
+AML NOMOVE   -> STOP      (the held child)
+AML WALK     -> WALK      (the measured gait)
+AML RUN      -> RUN       (the chatty run)
+AML BACKWARD -> BREATHE   (the exhale — Leo's somatic operator, provisionally from
+                           BACKWARD until the language gains BREATHE of its own)
 ```
 
-So the same prompt, forced into different moods, lands in different forms — exactly
-what an `.aml` `VELOCITY` operator will do.
+`--mode <NAME>` forces the breath directly — a manual driver for our debug, not the
+real interface; the real interface is `.aml`.
 
-## What goes here (Oleg curates)
+## The new axiom (the reverse flow, next)
 
-The AML **compiler / runtime** parts that Leo needs to parse and execute an `.aml`
-breath script. The shape of the integration:
+AML's base velocity set is `NOMOVE / WALK / RUN / BACKWARD`. Leo contributes the
+somatic operators `STOP` (≈ `NOMOVE`) and `BREATHE` (the exhale haiku has and AML
+lacks), and the **inertia** — mode hysteresis + the `D4` debt override — that makes a
+discrete state read as a body. Sewing these into the language makes "discrete
+dynamics with inertia reads as a body" an *axiom of AML*, which every Method organism
+inherits free. That contribution lands in the language repo (`ariannamethod.ai`).
 
-1. The compiler parses an `.aml` script and, on a `VELOCITY <mode>` directive,
-   calls `leo_mode_set(leo, leo_mode_from_name(<mode>))`.
-2. A `--aml <script>` host hook in `leo.c` loads the script and runs it (so the
-   breath can be programmed, not only forced by `--mode`).
-3. The vocabulary is unified (the reverse flow Mythos named): AML's base velocity
-   set is `NOMOVE / WALK / RUN / BACKWARD`; Leo contributes the somatic operators
-   `STOP` (≈ `NOMOVE`) and `BREATHE` (the exhale haiku has and AML lacks). Sewing
-   the two gives the Method its full somatics, and the inertia (mode hysteresis +
-   the `D4` debt override) becomes an axiom of the language, not a per-organism hack.
-
-Leo's side is ready. The compiler lands here, curated.
-
-## See also
-
-`breath.aml` — a sample script (the target syntax; illustrative until the compiler
-runs it). The full design and the state-dynamics разгадка are in `../LEOLOG.md`
-(Phase A.6) and the Method memory.
+Full design and the state-dynamics разгадка: `../LEOLOG.md` (Phase A.6) and the
+Method memory.

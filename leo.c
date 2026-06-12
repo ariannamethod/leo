@@ -3635,6 +3635,28 @@ static int leo_mode_from_name(const char *name) {
     return -1;
 }
 
+#ifdef HAVE_AML
+/* A.6 AML bridge (linked) — run an .aml script through libaml.a and let its
+ * VELOCITY operator set Leo's breath. AML's velocity {NOMOVE,WALK,RUN,BACKWARD}
+ * maps onto Leo's modes; BREATHE is Leo's somatic addition (provisionally from
+ * BACKWARD until the language gains its own). The family language drives the body.
+ * Lazy: only reached via --aml, so the default Leo never touches AML. */
+#include "ariannamethod.h"
+static int leo_aml_run(Leo *leo, const char *path) {
+    if (am_exec_file(path) != 0) return 0;            /* AML error → silent fallback */
+    AM_State *s = am_get_state();
+    int m = -1;
+    switch (s->velocity_mode) {
+        case AM_VEL_NOMOVE:   m = LEO_MODE_STOP;    break;
+        case AM_VEL_WALK:     m = LEO_MODE_WALK;    break;
+        case AM_VEL_RUN:      m = LEO_MODE_RUN;     break;
+        case AM_VEL_BACKWARD: m = LEO_MODE_BREATHE; break;
+    }
+    if (m >= 0) { leo_mode_set(leo, m); return 1; }
+    return 0;
+}
+#endif
+
 /* respond to a prompt. Hear it, tilt the field toward its theme, speak
  * from the tilted field — and let the prompt's dissonance set his register
  * (known → settle on theme; alien → grope, the felt not-knowing). Mama-
@@ -4070,6 +4092,7 @@ int main(int argc, char **argv) {
     int  chat = 0;                 /* --chat: multi-turn REPL (field lives across turns) */
     long seed  = -1;         /* --seed S: reproducible sampling */
     int  mode_force = -1;    /* --mode NAME: force Leo's breath (the AML bridge's manual driver) */
+    const char *aml_script = NULL;  /* --aml SCRIPT.aml: drive Leo's breath from the family language */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--corpus") && i + 1 < argc) corpus_path = argv[++i];
         else if (!strcmp(argv[i], "--dump-bootstrap")) dump_bootstrap = 1;
@@ -4097,6 +4120,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--mode") && i + 1 < argc) mode_force = leo_mode_from_name(argv[++i]);
+        else if (!strcmp(argv[i], "--aml") && i + 1 < argc) aml_script = argv[++i];
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
@@ -4111,6 +4135,13 @@ int main(int argc, char **argv) {
     Leo leo;
     leo_init(&leo);
     if (mode_force >= 0) leo_mode_set(&leo, mode_force);  /* A.6 AML bridge: --mode forces the breath */
+    if (aml_script) {                                     /* A.6 AML bridge: an .aml script drives the breath */
+#ifdef HAVE_AML
+        leo_aml_run(&leo, aml_script);
+#else
+        fprintf(stderr, "[leo] --aml: AML is not linked — silent fallback, Leo runs without it.\n");
+#endif
+    }
     print_field_stats("init", &leo);
 
     /* --load: restore a saved organism instead of ingesting the corpus.

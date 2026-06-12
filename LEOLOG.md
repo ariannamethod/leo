@@ -1198,3 +1198,30 @@ releasing the override returns autonomy). `--gen` and `--no-form` byte-identical
 ASan/UBSan clean. Next — Oleg adds the compiler to `leo/ariannamethod/`, then the `--aml` host hook; the circle
 closes (Leo's breath speaks the family's native language). In parallel, School I3 (the guessing child) remains
 open, and the listening marathon.
+
+## Phase A.6 — the AML velocity bridge LIVE: Leo's breath speaks AML (2026-06-13)
+
+The circle is closed. An `.aml` script now drives Leo's breath through the family language. AML is a C library
+(`am_exec_file` runs a script; `am_get_state()->velocity_mode` reads the result, `NOMOVE/WALK/RUN/BACKWARD`),
+so the bridge links it — no language barrier, both C.
+
+**Brought the language in (Oleg's call: I carry the compiler).** The AML language is vendored as SOURCE in
+`leo/ariannamethod/` (`ariannamethod.c` 8409 lines + headers — the Method pattern, like notorch is vendored;
+AML `.gitignore`s its own `*.a`, so we vendor source, not a binary). The `Makefile` builds `libaml.a` from it
+and links it; detection is folder-source → system AML (`~/arianna/ariannamethod.ai/libaml.a`) → **silent
+fallback** (Leo builds and runs full, `--aml` says AML is not linked). `leo.c` gains a `#ifdef HAVE_AML` block:
+`leo_aml_run` runs the script and maps the AML velocity onto Leo's mode via `leo_mode_set` (NOMOVE→STOP,
+WALK→WALK, RUN→RUN, BACKWARD→BREATHE). `--aml SCRIPT` is the host hook; it is **lazy** — AML is only touched
+when `--aml` is given, so the default Leo never invokes it (no init, no output) and stays byte-identical.
+
+Live, end-to-end: `--aml ariannamethod/breath.aml` (the script holds `VELOCITY NOMOVE`) on the warm "do you
+love your mother" → "His grandmother. She thanked him." — held, the language overrode the autonomous WALK. A
+`VELOCITY RUN` script on "i am so afraid of the dark" → a long chatty reply, not the autonomous "The floor." —
+AML overrode the autonomous STOP. The family language drives the child's body.
+
+PASS (tool output): `make` builds `libaml.a` from the vendored source and links it (`-DHAVE_AML -Iariannamethod`).
+Default `--gen` byte-identical (`0f32d2c`; AML untouched without `--aml`), tests **111/111** (the test build has
+no `-DHAVE_AML`). Silent fallback verified: a build without AML prints "AML is not linked — silent fallback"
+and Leo answers normally. ASan/UBSan on the `--aml` path: exit 0 / 0 findings. The `--mode <NAME>` manual driver
+remains, for debug. Next — the **new axiom in the language** (`STOP`/`BREATHE` + inertia/hysteresis + the `D4`
+debt override → "discrete dynamics with inertia reads as a body", landing in `ariannamethod.ai`), and School I3.

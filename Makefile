@@ -2,12 +2,31 @@ CC      ?= cc
 CFLAGS  ?= -O2 -lm -Wall -Wextra
 SANED    = -O1 -g -fsanitize=address,undefined -lm -Wall -Wextra
 
+# AML velocity bridge — build & link the family language so an .aml script can
+# drive Leo's breath (--aml). The language is vendored as SOURCE in ariannamethod/
+# (built into libaml.a here, never committed as a binary — AML itself .gitignores
+# *.a). If the source is absent, fall back to a system AML build; if neither, a
+# silent fallback (Leo runs full, --aml just says so).
+AML_SRC := ariannamethod/ariannamethod.c
+AML_LIB :=
+ifneq ($(wildcard $(AML_SRC)),)
+  AML_LIB   := ariannamethod/libaml.a
+  AML_FLAGS := -DHAVE_AML -Iariannamethod
+else ifneq ($(wildcard $(HOME)/arianna/ariannamethod.ai/libaml.a),)
+  AML_LIB   := $(HOME)/arianna/ariannamethod.ai/libaml.a
+  AML_FLAGS := -DHAVE_AML -I$(HOME)/arianna/ariannamethod.ai/core
+endif
+
 .PHONY: all test asan clean run
 
 all: leo
 
-leo: leo.c
-	$(CC) leo.c $(CFLAGS) -o leo
+ariannamethod/libaml.a: $(AML_SRC) ariannamethod/ariannamethod.h
+	$(CC) -O2 -Iariannamethod -c $(AML_SRC) -o ariannamethod/ariannamethod.o
+	ar rcs $@ ariannamethod/ariannamethod.o
+
+leo: leo.c $(AML_LIB)
+	$(CC) leo.c $(CFLAGS) $(AML_FLAGS) -o leo $(AML_LIB)
 
 run: leo
 	./leo

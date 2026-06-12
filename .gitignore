@@ -8,3 +8,7 @@ tests/test_leo
 # runtime state (regenerated from corpus + dialogue)
 *.state
 leo_mycelium/
+
+# AML bridge build artifacts (source is vendored; the .a/.o are built, not committed)
+ariannamethod/*.a
+ariannamethod/*.o

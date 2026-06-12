@@ -1,15 +1,16 @@
 # breath.aml — drive Leo's breath (his velocity mode) from the family language.
 #
-# Leo's modes ARE AML velocity operators. Once the compiler in this folder runs
-# this script, a VELOCITY directive sets Leo's breath through leo_mode_set the way
-# DESTINY / FIELD / RESONANCE edit a field. mode < 0 (or no directive) = autonomous:
-# the chambers choose, with hysteresis, and the mood holds until it turns.
+# Run:  ./leo --aml ariannamethod/breath.aml --respond "do you love your mother"
 #
-# Illustrative until Oleg's compiler lands here — the Leo-side contract is ready.
+# Leo's modes ARE AML velocity operators. This script runs through libaml.a; its
+# VELOCITY directive sets Leo's breath via leo_mode_set, the way DESTINY / FIELD /
+# RESONANCE edit a field. AML's velocity operators map onto Leo's modes:
+#
+#   VELOCITY NOMOVE    -> STOP     the held child — a few words, then quiet
+#   VELOCITY WALK      -> WALK     the measured default gait
+#   VELOCITY RUN       -> RUN      a run of short phrases (FLOW)
+#   VELOCITY BACKWARD  -> BREATHE  a settling exhale (Leo's somatic operator,
+#                                  provisionally from BACKWARD until the language
+#                                  gains BREATHE of its own — the reverse flow)
 
-VELOCITY STOP        # the held child — a few words, then quiet (≈ AML NOMOVE)
-
-# VELOCITY WALK      # the measured default gait
-# VELOCITY RUN       # a run of short phrases — the chatty child (FLOW)
-# VELOCITY BREATHE   # a settling exhale — overwhelmed, he barely speaks
-# VELOCITY AUTO      # release the override; the chambers choose the breath again
+VELOCITY NOMOVE
