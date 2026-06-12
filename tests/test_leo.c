@@ -725,6 +725,21 @@ int main(void) {
         leo_free(&md);
     }
 
+    /* A.6 FORM F-2: the mode gates elaboration — STOP/BREATHE hold (the breath),
+     * WALK/RUN fill; off-form every mode is eligible (byte-identical). */
+    {
+        Leo fm; leo_init(&fm);
+        int prev = g_leo_form_on;
+        g_leo_form_on = 0; fm.mode = LEO_MODE_STOP;
+        CHECK(leo_form_elaborates(&fm) == 1, "form: off-form, every mode may elaborate (byte-identical)");
+        g_leo_form_on = 1; fm.mode = LEO_MODE_STOP;
+        CHECK(leo_form_elaborates(&fm) == 0, "form: STOP holds — does not elaborate (the breath)");
+        fm.mode = LEO_MODE_RUN;
+        CHECK(leo_form_elaborates(&fm) == 1, "form: RUN fills out the utterance");
+        g_leo_form_on = prev;
+        leo_free(&fm);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

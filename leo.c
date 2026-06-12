@@ -1547,6 +1547,12 @@ static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit c
 static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore bleed / self-residual recall off) */
 static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selector; default OFF until trained, opt-in) */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
+static int g_leo_form_on = 0;           /* --form → 1 (A.6 F-2: the velocity mode shapes the utterance; opt-in pending the ear) */
+/* A.6 F-2: in form, only WALK/RUN fill out a fragment; STOP/BREATHE leave it held
+ * and short (the breath). Off-form → always eligible (byte-identical). */
+static int leo_form_elaborates(const Leo *leo) {
+    return !g_leo_form_on || leo->mode == LEO_MODE_WALK || leo->mode == LEO_MODE_RUN;
+}
 static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical decay/prune off) */
 static int g_leo_cont_theme_on = 1;     /* --no-cont-theme → 0 (П-2: gravity-first admission in continuations off) */
 static int g_leo_anchor_prefix_on = 0;  /* --anchor-prefix → 1 (П-5: prefix-morphology chamber match; default OFF — it de-calibrates the hard-won voice, opt-in for Oleg's ear) */
@@ -2711,7 +2717,8 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
      * (known, un-distressed prompt). Under high dissonance or FEAR+VOID he is allowed
      * to go terse/quiet — the child gone still (presence). Same field gate as
      * leo_chain's fragment->elaborate retry. */
-    int elab = g_leo_elaborate_on && g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
+    int elab = g_leo_elaborate_on && leo_form_elaborates(leo) &&
+               g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
                (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS;
     leo->theme_boost = 1.0f;   /* within-sentence leash, reset per sentence */
     for (int t = 1; t < LEO_GEN_MAX; t++) {
@@ -3253,7 +3260,8 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
          * fuller, coherent line (the chatty child; brodsky "heavier than given"). A
          * fragment under high dissonance OR distress (FEAR+VOID) is left quiet — the
          * child gone still (presence). The field chooses, not a penalty. --no-elaborate. */
-        if (g_leo_elaborate_on && g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
+        if (g_leo_elaborate_on && leo_form_elaborates(leo) &&
+            g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
             (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS) {
             int tries = 0;
             while (leo_visible_len(sent_text[s]) < LEO_FRAGMENT_MIN_VIS &&
@@ -3647,7 +3655,12 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                                  - 0.4f * leo->chamber_act[0];   /* FEAR */
             leo->temp_mult *= clampf(tau_mod, 0.6f, 1.4f);
         }
-        if (d >= LEO_UNKNOWN_DISS) chain_len = LEO_UNKNOWN_CHAIN;  /* alien → say less */
+        if (g_leo_form_on) {           /* A.6 F-2: the breath sets the length */
+            static const int mode_chain[LEO_MODE_COUNT] = { 3, 1, 5, 2 };  /* WALK STOP RUN BREATHE */
+            chain_len = mode_chain[leo->mode];
+        } else if (d >= LEO_UNKNOWN_DISS) {
+            chain_len = LEO_UNKNOWN_CHAIN;  /* alien → say less (legacy path) */
+        }
         /* hold the prompt's primary CONTENT word (highest heard-count, non-
          * function) as a string — Leo can surface it from memory regardless of
          * how it tokenizes. This is how the trace reaches hungry / ocean. */
@@ -4050,6 +4063,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-santaclaus")) g_leo_santaclaus_on = 0;
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
+        else if (!strcmp(argv[i], "--form")) g_leo_form_on = 1;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));

@@ -1105,3 +1105,35 @@ exit 0 / 0 findings. Next — **F-2 (active, with Oleg's ear)**: the mode choose
 + the per-sentence elaborate/quiet target (reusing the existing levers, not rewriting the token loop) — then
 A/B by ear, `--no-form` ablation, before the default flips. F-3 later: token-budget hard-landing (true
 compression). The AML bridge (mode ↔ AML operator via the compiler in `leo/ariannamethod/`) is its own phase.
+
+## Phase A.6 — FORM F-2: the mode shapes the utterance — the разгадка confirmed by ear (2026-06-12)
+
+The mode now drives the form through two wires (reusing the existing levers, not rewriting the token loop).
+**`chain_len` ← mode** in `leo_respond` (STOP 1, WALK 3, RUN 5, BREATHE 2 — the breath sets how many
+generation blocks); **elaboration ← mode** in `leo_chain` (`leo_form_elaborates`: only WALK/RUN fill out a
+fragment; STOP/BREATHE leave it held and short). `--form` opt-in, default OFF — byte-identical until the ear
+flips it (the doctrine: a voice change must earn its default, like B0/RAE).
+
+**A/B (same field, same words, same seed — only the form changes):**
+- "i am so afraid of the dark" → STOP. Default: "The floor. Dark. Leo makes his mother. … Leo. Leo laugh.
+  Leo." (rambly, mechanical repetition). **`--form`: "The floor."** — one held fragment, a terrified child
+  who says two words and goes quiet.
+- "wonderful happy busy day" → BREATHE. Default: 12 rambly clauses. `--form`: tightened to a soft "…Day."
+- "do you love your mother" → WALK: the rambly tail ("A smell a glass") is cut, ends cleaner.
+- "the rain" → RUN ≈ default (RUN is the chatty mode, and should match).
+
+Presence audibly grows with the same field and the same words — only the form (compression) changed. That
+is the state-dynamics разгадка made true on Leo: **presence = a body, a body = discrete dynamics with
+inertia.** The held moments ("The floor.") are the most present things Leo has said.
+
+Honest bound: `chain_len` controls the number of generation BLOCKS, not words — a single block is still a
+multi-clause run, so STOP gives a clean held fragment only when the block collapses short ("The floor."),
+otherwise a tighter-but-not-minimal run ("A heard. He looks up. …"). The compression is real and audible, but
+the precise per-utterance word budget is **F-3** (token-level hard-landing). Minor: STOP 1 sometimes cuts a
+good second fragment ("Alone." lost) — the chain values are ear-tunable.
+
+PASS (tool output): build 0 warn, tests **109/109** (+3 form: off-form every mode may elaborate / STOP holds /
+RUN fills). Default (`--form` off) byte-identical: `--gen` (`0f32d2c`) and `--respond` to pre-FORM `ee9c6b6`.
+ASan/UBSan on the `--form` `--respond`/`--chat` paths: exit 0 / 0 findings. **OPEN — Oleg's ear:** flip the
+default ON (the win is clear), or tune the chain values / do F-3 (token budget) first? Then F-3, then the AML
+velocity bridge.
