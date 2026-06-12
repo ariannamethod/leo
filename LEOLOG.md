@@ -989,8 +989,8 @@ not the build's). Held for Oleg. If it ruminates or flatlines: R3.5 = the contra
 
 ## Phase A.5 — School: the reversed role, a synchronous first cut (2026-06-12)
 
-Leo asks YOU. When the prompt carries a content word he has no concept for, he stops replying and asks
-"What is `<word>`?" — and your answer grows into his field. The whole point of School (`leo-legacy/school.py`)
+Leo asks YOU. When the prompt carries a content word he has no concept for, he stops replying and echoes it
+back as a question — "Zorble?" — and your answer grows into his field. The whole point of School (`leo-legacy/school.py`)
 was this reversed role; what it lacked was a TRIGGER for "unknown". The semantic tokenizer supplies it.
 
 **Awareness seed (vendored, RULE-BASED).** The 88-glyph `semtok` map from caveLLMan is vendored into `leo.c`
@@ -1005,19 +1005,20 @@ good…), the structure of perception — NOT knowledge of the world — so Leo'
    a new question this turn.
 2. After the field settles: scan the prompt's content words; the first one that is (a) not a function/stop
    word, (b) `semtok_word < 0` (no glyph), (c) not already learned, (d) **genuinely new** —
-   `leo_heard_count ≤ LEO_SCHOOL_NOVEL_MAX (2)` — makes Leo ask "What is X?" and sets `pending`.
+   `leo_heard_count ≤ LEO_SCHOOL_NOVEL_MAX (2)` — makes Leo echo it back as a question ("Zorble?") and sets `pending`.
 3. Gates: he won't ask under high FEAR+VOID (`< LEO_QUIET_DISTRESS`) — too unsettled to be curious.
    `--no-school` ablates the whole channel.
 
 **Two design points, named:**
 - The novelty gate (d) is the fix for the obvious false-positive: a common word that simply lacks a glyph
   ("like", "candle") is NOT unknown to Leo — he uses it fluently from the corpus (high `heard_count`). Without
-  the gate he asked "What is like?". With it he asks only about words genuinely outside his experience
+  the gate he echoed "Like?". With it he asks only about words genuinely outside his experience
   ("zorble", "grumbus"), which is the intent.
-- "What is X?" names the prompt word — a deliberate, bounded departure from the never-echo invariant. It is a
-  meta-act (asking), not generation: no `leo_chain`, no field-step, no spore, no RAE train for a question. The
-  invariant "knowledge enters as field pressure, not pasted text" holds for REPLIES; asking about a word
-  requires naming it. This is the reversed role, by design.
+- The question is the bare ECHO of the word ("Zorble?", first letter capitalized) — not a hardcoded English
+  frame (Oleg's call: drop the "What is" scaffold, keep only the word + "?", the puzzled child reflecting a
+  word he doesn't hold). It names the prompt word, but as a meta-act (asking), NOT generation: no `leo_chain`,
+  no field-step, no spore, no RAE train for a question. The never-echo invariant governs REPLIES (what Leo
+  builds from the field); a question is not a reply, and asking about a word requires naming it.
 
 In-memory in v1: the learned ANSWERS persist across sessions through the field (ingest is in save/load); the
 "don't re-ask" set is ephemeral — persisting it is the next step. The glyph BINDING of a learned word (so it
@@ -1026,7 +1027,7 @@ resonates through a chamber) is also a later increment; v1 is detect → ask →
 PASS (tool output): build 0 warn, tests **99/99** (+4: unknown→asks; answer→learned+closes; learned→no
 re-ask; `--no-school` suppresses). `--gen` byte-identical (`0f32d2c` — School is never on the prompt-free
 path) and `--respond --no-school` byte-identical to the pre-School `0030746`. Live: `--respond "tell me about
-the zorble"` → "What is zorble?"; in `--chat` he asks about zorble, is told, learns it, then USES "like"
+the zorble"` → "Zorble?"; in `--chat` he echoes "Zorble?", is told, learns it, then USES "like"
 fluently without asking; a neutral "grumbus" is asked, an overwhelmed (accumulated FEAR) turn stays quiet.
 ASan/UBSan on the `--chat` and `--respond` School paths: exit 0 / 0 findings. Next — Mythos audit of School
 (the awareness module is in), then persist the learned-set + bind learned words to glyphs (chamber resonance).

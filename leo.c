@@ -3604,14 +3604,18 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     }
     int produced;
     /* A.5 School: an unknown content word, and Leo is curious enough (not under
-     * high FEAR+VOID) → he ASKS instead of replying (reversed role). The "What is
-     * X?" names the prompt word — a meta-act of asking, not generation, so the
-     * never-echo invariant holds for REPLIES. Else he speaks from the field. */
+     * high FEAR+VOID) → he ECHOES it back as a question ("Zorble?") instead of
+     * replying — the puzzled child reflecting a word he doesn't hold. No English
+     * scaffold, just the word + "?". This names the prompt word, but as a meta-act
+     * (asking, the reversed role), NOT generation: the never-echo invariant governs
+     * REPLIES (what he builds from the field), and a question is not a reply. Else
+     * he speaks from the field. */
     char unk[LEO_HEARD_WORDLEN];
     if (g_leo_school_on && !was_answer &&
         (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS &&
         leo_school_find_unknown(leo, prompt, unk)) {
-        int n = snprintf(out, (size_t)max_len, "What is %s?", unk);
+        int n = snprintf(out, (size_t)max_len, "%s?", unk);
+        if (out[0] >= 'a' && out[0] <= 'z') out[0] = (char)(out[0] - 'a' + 'A');  /* his own utterance */
         produced = (n >= max_len) ? max_len - 1 : n;
         strncpy(leo->school.pending, unk, LEO_HEARD_WORDLEN - 1);
         leo->school.pending[LEO_HEARD_WORDLEN - 1] = 0;
