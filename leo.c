@@ -1229,6 +1229,7 @@ typedef struct {
     int8_t learned_glyph[LEO_SCHOOL_MAX];  /* I2: dominant glyph of the answer that taught the word */
     int    n_learned;
     char   pending[LEO_HEARD_WORDLEN];   /* non-empty = a question is open */
+    int    pending_glyph;                /* I3a: Leo's guess at the pending word's concept (-1 = no guess) */
 } LeoSchool;
 
 /* ========================================================================
@@ -3555,6 +3556,30 @@ static int leo_school_dominant_glyph(const char *text) {
     for (int i = 0; i < GLYPH_COUNT; i++) if (hist[i] > bestn) { bestn = hist[i]; best = i; }
     return best;
 }
+/* I3a: Leo's GUESS at an unknown word's concept — the dominant glyph of the rest
+ * of the prompt (its context), but only when it is confident (>= 2 supporting
+ * content words) and the guess is a concept, not a grammar word. -1 = no guess →
+ * the bare echo. This is the toddler hazarding "is it an animal?" from context. */
+static int leo_school_predict_glyph(const char *prompt) {
+    int hist[GLYPH_COUNT] = {0};
+    char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+    for (const char *q = prompt; ; q++) {
+        unsigned char ch = (unsigned char)*q;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi >= 2) { cur[wi] = 0; int g = semtok_word(cur); if (g >= 0) hist[g]++; }
+        wi = 0;
+        if (!ch) break;
+    }
+    int best = -1, bestn = 0;
+    for (int i = 0; i < GLYPH_COUNT; i++) if (hist[i] > bestn) { bestn = hist[i]; best = i; }
+    if (bestn < 2) return -1;               /* not confident — one word isn't a guess */
+    if (best >= 63 && best <= 70) return -1; /* GRAMMAR glyphs (not/many/and/one/…) — not a concept */
+    if (best == 86) return -1;               /* BE — not a concept noun */
+    return best;
+}
 /* I2: bind a taught word to the answer's concept (its dominant glyph), growing
  * the map. F2: at capacity, log instead of dying silently. */
 static void leo_school_learn(Leo *leo, const char *w, int glyph) {
@@ -3755,11 +3780,19 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (g_leo_school_on && !was_answer &&
         (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS &&
         leo_school_find_unknown(leo, prompt, unk)) {
-        int n = snprintf(out, (size_t)max_len, "%s?", unk);
+        /* I3a: hazard a guess from the prompt's context — "Zorble? Animal?" — the
+         * guess (a glyph name) is Leo's OWN word, mama-child safe. No confident
+         * guess → the bare echo "Zorble?". */
+        int pg = leo_school_predict_glyph(prompt);
+        int n = (pg >= 0) ? snprintf(out, (size_t)max_len, "%s? %s?", unk, GLYPH_NAMES[pg])
+                          : snprintf(out, (size_t)max_len, "%s?", unk);
         if (out[0] >= 'a' && out[0] <= 'z') out[0] = (char)(out[0] - 'a' + 'A');  /* his own utterance */
+        for (int i = 1; out[i]; i++)   /* capitalize the guess after "? " too */
+            if (out[i-1] == ' ' && out[i] >= 'a' && out[i] <= 'z') out[i] = (char)(out[i] - 'a' + 'A');
         produced = (n >= max_len) ? max_len - 1 : n;
         strncpy(leo->school.pending, unk, LEO_HEARD_WORDLEN - 1);
         leo->school.pending[LEO_HEARD_WORDLEN - 1] = 0;
+        leo->school.pending_glyph = pg;   /* I3b will check the guess against the answer */
     } else {
         produced = leo_chain(leo, chain_len, out, max_len);
     }

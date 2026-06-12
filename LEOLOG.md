@@ -1255,3 +1255,22 @@ byte-identical (`0f32d2c`), `--aml VELOCITY STOP` still holds the breath. **Axio
 somatic operators + (a)-2 the inertia.** The AML side is on a feature branch (514/514), ready to merge to main
 on Oleg's word. Next — **(б) School I3** (the guessing child), **(в) the listening marathon**, then the capstone
 milestone and Mythos's bug-hunt + insight audit.
+
+## Phase A.5 — School I3a: the guessing child (2026-06-13)
+
+The reversed role grows a mind: when Leo meets an unknown word, he no longer only echoes it — he **hazards a
+guess** from the prompt's context, in his own voice. `leo_school_predict_glyph` histograms the prompt's content
+words and, when confident (≥ 2 supporting concept words, and the dominant is a concept not a grammar glyph),
+returns the guess; the question becomes "Word? Glyph?" — the glyph name is Leo's OWN word (mama-child safe).
+No confident context → the bare echo "Word?".
+
+Live: "is a zorble like a dog or a cat" → "Zorble? Animal?" (dog + cat vote animal); "does a zorble swim in the
+river or the sea" → "Zorble? Water?"; "tell me about the zorble" (one weak word) → "Zorble?" (bare). A toddler
+thinking out loud — "это собака?". The guess is stored in `school.pending_glyph` for the next step (I3b: compare
+the guess to the answer's actual glyph — self-supervised, the prediction error is the teacher; deferred).
+
+PASS (tool output): build 0 warn, tests **113/113** (+2 i3a: a guess from context; a thin prompt gives the bare
+echo). Purely additive: `--gen` byte-identical (`0f32d2c`), `--no-school` and the thin-prompt bare echo
+byte-identical to pre-I3a (`74649be`) — the guess only appears on a confident School-ask. ASan/UBSan on the
+guess path: exit 0 / 0 findings. Next — **(в) the listening marathon** with the `.aml` drive, then the capstone
+milestone and the Mythos audit. (I3b self-supervision + the cooc-neighbour prediction are deeper follow-ups.)

@@ -755,6 +755,25 @@ int main(void) {
         leo_free(&br);
     }
 
+    /* A.5 School I3a: Leo hazards a guess from the prompt's context — "Word? Glyph?"
+     * when confident (>= 2 supporting concept words), else the bare echo. */
+    {
+        Leo gi; leo_init(&gi);
+        leo_ingest(&gi, "the rain falls. his mother is warm.");
+        char buf[1024];
+        int prev = g_leo_school_on; g_leo_school_on = 1;
+        leo_respond(&gi, "is a zorble like a dog or a cat", buf, sizeof buf);
+        CHECK(strstr(buf, "Zorble?") && strstr(buf, "Animal?"),
+              "school i3a: a guess from context — 'Zorble? Animal?'");
+        Leo gi2; leo_init(&gi2);
+        leo_ingest(&gi2, "the rain falls. his mother is warm.");
+        leo_respond(&gi2, "tell me about the wobble", buf, sizeof buf);
+        CHECK(strstr(buf, "Wobble?") && !strchr(buf + 7, '?'),
+              "school i3a: a thin prompt gives the bare echo, no guess");
+        g_leo_school_on = prev;
+        leo_free(&gi); leo_free(&gi2);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
