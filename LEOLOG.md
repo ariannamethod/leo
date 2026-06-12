@@ -884,3 +884,35 @@ PASS (tool output): build 0 warn, tests **88/88** (+2: the 5 features extract in
 all-distinct tokens). Generation **byte-identical** to `0b9d0b2` (features not called in generation).
 ASan/UBSan exit 0. Next — **R2**: wire features→MLP→3-step refinement into `leo_generate_best`'s pick +
 `--no-rae` ablation (byte-identical off), A/B by ear.
+
+## Phase A.4 — RAE R2: the learned selector wired into the pick, OPT-IN (2026-06-12)
+
+The selector now scores candidates. In `leo_generate_best`'s best-of-K loop, when `g_leo_rae_on` each
+candidate is scored by `leo_rae_forward(&leo->rae, leo_rae_features(...))` instead of
+`coherence + gravity`; the winner is the max-RAE candidate. The coherence-scale early-exit
+(`sc > 1.0f`) fires only on the coherence path — the MLP output isn't on that scale.
+
+**Two honest deviations from the R1b plan:**
+1. **Default OFF, opt-in `--rae`** (not `--no-rae`). The MLP weights are FNV-seeded, not yet trained
+   (training is R3) — so RAE-on right now picks an *arbitrary* one of the K candidates, not a *better*
+   one. Shipping it default-on would be de-calibrating the voice on an unproven channel — the same
+   discipline as П-3/П-5 (untrained/de-cal → default off until earned). The default stays the coherence
+   path, byte-identical. RAE becomes the default only after R3 trains it AND Oleg's ear confirms it beats
+   coherence.
+2. **No 3-step cross-candidate refinement.** The `rae_recursive.py` source has a normalize+blend recursion,
+   but it's degenerate for our use: features are fixed per candidate → the MLP output is constant per
+   candidate → the refinement only smooths a value whose argmax never moves. The direct per-candidate
+   `leo_rae_forward` IS that converged score. Faithful to the outcome, no dead loop. Revisit only if R3
+   makes features context-dependent across the K.
+
+Untrained RAE-on is NOT garbage: every candidate is already a valid best-of-K Leo sentence, so RAE just
+reorders which valid one wins. `--rae --gen 4 --seed 42` → coherent replies («She opened her. He looks
+again. Leo would know where the light could hold the world…» / «End.»), just a different pick than
+coherence. The voice A/B that decides the default waits for R3 (a trained selector) — judging an untrained
+random pick by ear would mislead.
+
+PASS (tool output): build 0 warn, tests **88/88**. Default (RAE off) **byte-identical** to `cf70022`
+(`--gen 8 --seed 42`, md5 `0f32d2c…` both). `--rae` on: live, md5 `44dd9e3…` ≠ off — selection genuinely
+differs. ASan/UBSan exit 0 on both paths. Next — **R3**: online learning — after each reply,
+`leo_rae_train` nudges the MLP toward an internal presence-coherence proxy, so the selector *earns* its
+weights over a session; then R4 persists them in `leo.state`, then the ear-A/B + default decision.

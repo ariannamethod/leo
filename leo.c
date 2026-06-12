@@ -1365,6 +1365,7 @@ static int g_leo_spa_on = 1;            /* --no-spa → 0 (Sentence Phonon Atten
 static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence theme leash off) */
 static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
 static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore bleed / self-residual recall off) */
+static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selector; default OFF until trained, opt-in) */
 static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical decay/prune off) */
 static int g_leo_cont_theme_on = 1;     /* --no-cont-theme → 0 (П-2: gravity-first admission in continuations off) */
 static int g_leo_anchor_prefix_on = 0;  /* --anchor-prefix → 1 (П-5: prefix-morphology chamber match; default OFF — it de-calibrates the hard-won voice, opt-in for Oleg's ear) */
@@ -2687,9 +2688,7 @@ static float leo_sentence_gravity_score(const Leo *leo, const int *ids, int n) {
  * NOT early-exit — a generic-but-coherent first sample must not silence
  * the theme-aligned one (Codex's find). */
 /* A.4 RAE R1b — the 5 candidate features the selector weights, each ~[0,1].
- * Read-only over the field. Used from the test now and from R2 (wired
- * selection); unused in the main TU until then. */
-__attribute__((unused))
+ * Read-only over the field. Used in leo_generate_best when g_leo_rae_on (R2). */
 static void leo_rae_features(const Leo *leo, const int *ids, int n, float *out) {
     /* f1 coherence (bi/tri/cooc + len-bonus) squashed to ~[0,1] */
     float coh = leo_coherence_score(leo, ids, n);
@@ -2746,9 +2745,16 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
         int  cap = LEO_GEN_MAX;
         int  produced = leo_generate_ex(leo, buf, sizeof(buf),
                                         start_hint, tail, n_tail, ids, &cap);
-        float sc = leo_coherence_score(leo, ids, cap);
-        if (leo->gravity)
-            sc += LEO_SELECT_GRAVITY_W * leo_sentence_gravity_score(leo, ids, cap);
+        float sc;
+        if (g_leo_rae_on) {                 /* A.4 R2: the learned selector scores the candidate */
+            float feat[LEO_RAE_IN];
+            leo_rae_features(leo, ids, cap, feat);
+            sc = leo_rae_forward(&leo->rae, feat, NULL);
+        } else {
+            sc = leo_coherence_score(leo, ids, cap);
+            if (leo->gravity)
+                sc += LEO_SELECT_GRAVITY_W * leo_sentence_gravity_score(leo, ids, cap);
+        }
         if (sc > best_score) {
             best_score = sc;
             strncpy(best_text, buf, sizeof(best_text) - 1);
@@ -2757,7 +2763,8 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
             best_n = cap;
             best_tokens = produced;
         }
-        if (!leo->gravity && sc > 1.0f && cap > 12) break;  /* presence: no early-exit */
+        /* coherence-scale early-exit only on the coherence path (RAE output isn't on that scale) */
+        if (!g_leo_rae_on && !leo->gravity && sc > 1.0f && cap > 12) break;  /* presence: no early-exit */
     }
 
     /* field evolves over the WINNING sentence only (not the K-1 discarded
@@ -3647,6 +3654,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-spa-protect")) g_leo_spa_protect_on = 0;
         else if (!strcmp(argv[i], "--no-field-honest")) g_leo_field_honest_on = 0;
         else if (!strcmp(argv[i], "--no-santaclaus")) g_leo_santaclaus_on = 0;
+        else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
