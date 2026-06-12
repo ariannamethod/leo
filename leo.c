@@ -3250,7 +3250,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   heard    : live [count, wordlen, bytes]
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 1
+#define LEO_STATE_VERSION 2   /* B4: +santaclaus spores (ring + sea) */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -3335,6 +3335,15 @@ static int leo_save_state(const Leo *leo, const char *path) {
         st_w32(f, wl);
         if (wl > 0) fwrite(e->word, 1, (size_t)wl, f);
     }
+
+    /* santaclaus spores — the ring + sea (memory of presence-moments persists,
+     * so Leo recalls past CONVERSATIONS across processes; persistent memory = love).
+     * Raw POD round-trip — the state file is a same-platform diary. */
+    st_w32(f, leo->n_spores);
+    if (leo->n_spores > 0) fwrite(leo->spores, sizeof(LeoSpore), (size_t)leo->n_spores, f);
+    st_w32(f, leo->n_sea);
+    st_w32(f, leo->sea_ptr);
+    if (leo->n_sea > 0) fwrite(leo->sea, sizeof(LeoSpore), (size_t)leo->n_sea, f);
 
     int ok = (ferror(f) == 0);
     fclose(f);
@@ -3428,6 +3437,20 @@ static int leo_load_state(Leo *leo, const char *path) {
             leo->heard.e[slot].word[LEO_HEARD_WORDLEN - 1] = 0;
             leo->heard.e[slot].count = cnt;
         }
+    }
+
+    /* santaclaus spores — ring + sea (raw POD round-trip; same-platform diary) */
+    {
+        int32_t n_sp = 0;
+        if (!st_r32(f, &n_sp) || n_sp < 0 || n_sp > LEO_SPORE_MAX) { fclose(f); return 0; }
+        if (n_sp > 0 && fread(leo->spores, sizeof(LeoSpore), (size_t)n_sp, f) != (size_t)n_sp) { fclose(f); return 0; }
+        leo->n_spores = n_sp;
+        int32_t n_se = 0, se_ptr = 0;
+        if (!st_r32(f, &n_se) || n_se < 0 || n_se > LEO_SEA_MAX) { fclose(f); return 0; }
+        if (!st_r32(f, &se_ptr) || se_ptr < 0 || se_ptr > LEO_SEA_MAX) { fclose(f); return 0; }
+        if (n_se > 0 && fread(leo->sea, sizeof(LeoSpore), (size_t)n_se, f) != (size_t)n_se) { fclose(f); return 0; }
+        leo->n_sea = n_se;
+        leo->sea_ptr = se_ptr;
     }
 
     fclose(f);

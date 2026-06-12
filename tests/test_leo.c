@@ -541,6 +541,34 @@ int main(void) {
         leo_free(&sl);
     }
 
+    /* santaclaus B4: spores persist across save/load — Leo recalls past CONVERSATIONS. */
+    {
+        Leo sl; leo_init(&sl);
+        leo_ingest(&sl, "the rain falls. leo hears the sound. his mother is warm.");
+        sl.n_spores = 2;
+        for (int s = 0; s < 2; s++) {
+            memset(&sl.spores[s], 0, sizeof(LeoSpore));
+            sl.spores[s].strength = 0.7f + 0.1f * s;
+            sl.spores[s].emit_context[0] = 400 + s;
+            sl.spores[s].step = 50 + s;
+        }
+        sl.n_sea = 1; sl.sea_ptr = 1;
+        memset(&sl.sea[0], 0, sizeof(LeoSpore));
+        sl.sea[0].strength = 0.3f; sl.sea[0].emit_context[0] = 999;
+        const char *path = "/tmp/leo_b4_spore.state";
+        int saved = leo_save_state(&sl, path);
+        Leo ld; leo_init(&ld);
+        int loaded = leo_load_state(&ld, path);
+        CHECK(saved && loaded, "spore-persist: save + load succeed");
+        CHECK(ld.n_spores == 2 && ld.n_sea == 1 && ld.sea_ptr == 1,
+              "spore-persist: ring + sea counts round-trip");
+        CHECK(ld.spores[1].emit_context[0] == 401 && ld.spores[1].step == 51 &&
+              ld.sea[0].emit_context[0] == 999,
+              "spore-persist: spore fields round-trip (Leo recalls past conversations)");
+        leo_free(&sl); leo_free(&ld);
+        remove(path);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

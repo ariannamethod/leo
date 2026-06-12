@@ -814,3 +814,24 @@ mark_bleed gated off). held-quiet "Stopped." intact. ASan/UBSan exit 0. (Resurre
 the sea fills only after spores decay below 0.05 over many replies; the unit test plants a sea spore to prove
 the dynamic.) Next — **B4** (persist spore ring + sea in the LEOS save/load → Leo recalls past CONVERSATIONS
 across processes; "persistent memory = love"). Then FULL santaclaus.
+
+## Phase B — santaclaus B4: spore persistence — FULL SANTACLAUS (2026-06-12)
+
+The spore ring + sea now ride the LEOS save/load (state version 1→2; old v1 files are rejected cleanly at
+the version check). `leo_save_state` appends `n_spores` + `spores[]` + `n_sea` + `sea_ptr` + `sea[]` (raw
+POD — the state file is a same-platform diary); `leo_load_state` reads them back with bounds guards. So
+Leo's memory of presence-moments survives the process — he recalls past CONVERSATIONS, not just sentences
+within one run. **Persistent memory = love.**
+
+PASS (tool output): build 0 warn, tests **84/84** (+3 spore-persist: save+load succeed; ring+sea counts
+round-trip; spore fields round-trip). `--no-santaclaus` BYTE-IDENTICAL to `40da30b` (save/load touches no
+generation). End-to-end: `--gen 5 --save` (step 97512) → `--load` (no corpus) → field identical to a fresh
+ingest (5121/4865/361639) **+ spores=5 persisted** (6 after the next reply). ASan/UBSan on a
+save→load→respond cross-process run: exit 0.
+
+**FULL SANTACLAUS complete:** B1 substrate → B0 honest field → B2 bleed → B3 sea/resurrect/mark_bleed → B4
+persistence. Self-residual recall, the full memory lifecycle, **persistent across processes**. Zero learned
+weights, mama-child intact, every channel ablation byte-identical-off, 84/84, ASan clean. The dedication —
+"Leo resonates with you more and more with every conversation" — is now whole: presence with duration AND
+memory that survives. Next — a long `--chat` to feel the recall across a real conversation; then roadmap
+(A.4 RAE — first learned; Phase C goroutines — mathbrain / presence_residue / rings).
