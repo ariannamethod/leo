@@ -47,6 +47,8 @@ void am_free_compiled(void* cs);
 #define AM_VEL_WALK     1   // balanced (temp = 0.85)
 #define AM_VEL_RUN      2   // high entropy chaos (temp = 1.2)
 #define AM_VEL_BACKWARD (-1) // time rewind, debt forgiveness
+#define AM_VEL_BREATHE  3   // settling exhale — a somatic operator from Leo (temp = 0.6)
+#define AM_VEL_STOP     AM_VEL_NOMOVE // somatic alias: the held, cold-observer state
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SCHUMANN CONSTANTS — Sierra Nevada ELF Station 2013-2017
@@ -184,8 +186,6 @@ typedef struct {
 
   // LORA / DELTA VOICE — core
   float lora_alpha;         // delta blending: 0=identity, 1=base model
-  int   lora_dynamic;       // B2-B.4: if set, effective alpha = lora_alpha * resonance (field-coherence-gated δ)
-  float delta_decay;        // B2-B.5: δ forgetting factor per autumn (0.5..1; default 0.9)
 
   // NOTORCH — runtime microlearning, core
   float notorch_lr;         // learning rate (default 0.001)
@@ -456,15 +456,12 @@ void am_cooc_update(int src, int dst, float delta);
 void am_ingest_tokens(const int* ids, int n);
 void am_apply_hebbian_to_logits(float* logits, int n);
 int  am_cooc_count(void);   // live co-occurrence edge count (telemetry)
-void am_cooc_clear(void);   // zero the cooc field (first-run: no per-voice sidecar to overwrite shared-soma cooc)
-float am_lora_alpha_effective(void);  // B2-B.4: δ blend strength — lora_alpha, or lora_alpha*resonance when lora_dynamic
 int  am_cooc_consolidate(float reinforce, float prune_floor); // autumn harvest: reinforce strong edges, decay+prune weak; returns # pruned
 int  am_cooc_consolidate_autumn(void); // gated consolidate: fires only in deep autumn; returns # pruned or -1 if not triggered
 void am_cooc_stats(float* out_mean, float* out_max); // mean/max edge weight over live edges (telemetry)
 int  am_cooc_learn_delta(float* A, float* B, const float* emb, int vocab, int E, int rank); // fold cooc edges into low-rank delta (A=[E,rank],B=[rank,E])
 int  am_delta_save(const char* path, const float* A, const float* B, int E, int rank); // persist per-voice delta sidecar
 int  am_delta_load(const char* path, float* A, float* B, int E, int rank); // load per-voice delta sidecar (dim mismatch -> -3)
-void am_delta_decay(float* A, float* B, int E, int rank, float factor); // B2-B.5: scale δ before harvest (forgetting valve)
 
 // Full pipeline: apply all field effects to logits
 void am_apply_field_to_logits(float* logits, int n);

@@ -13,4 +13,7 @@
 #                                  provisionally from BACKWARD until the language
 #                                  gains BREATHE of its own — the reverse flow)
 
-VELOCITY NOMOVE
+VELOCITY STOP        # hold Leo's breath — the few-words, then-quiet child
+# VELOCITY BREATHE   # the settling exhale
+# VELOCITY RUN       # a run of short phrases
+# VELOCITY WALK      # the measured default

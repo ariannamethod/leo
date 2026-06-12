@@ -1225,3 +1225,20 @@ no `-DHAVE_AML`). Silent fallback verified: a build without AML prints "AML is n
 and Leo answers normally. ASan/UBSan on the `--aml` path: exit 0 / 0 findings. The `--mode <NAME>` manual driver
 remains, for debug. Next — the **new axiom in the language** (`STOP`/`BREATHE` + inertia/hysteresis + the `D4`
 debt override → "discrete dynamics with inertia reads as a body", landing in `ariannamethod.ai`), and School I3.
+
+## Phase A.6 — the somatic operators land in the language (axiom (a)-1, 2026-06-13)
+
+The reverse flow ran: Leo's somatic velocity operators `STOP` and `BREATHE` were added to AML itself
+(`ariannamethod.ai`, branch `claude-velocity-axiom`, `make test` 512/512 — 509 + 3). `STOP` is a somatic alias
+for `NOMOVE` (held); `BREATHE` is a new mode `AM_VEL_BREATHE` (3), the settling exhale at temp 0.6. The vendored
+AML here was re-synced from that branch, and `leo_aml_run` gained the `AM_VEL_BREATHE` case (a real bug the
+re-sync caught: the switch had only `BACKWARD→BREATHE`, written before the language had its own `BREATHE`).
+
+Live, the language drives Leo's body through its own native operators: `VELOCITY STOP` → "His grandmother. She
+thanked him." (held); `VELOCITY BREATHE` → "His grandmother's you. He turns with it. What would not tell."
+(the exhale). The mapping: NOMOVE/STOP→STOP, WALK→WALK, RUN→RUN, BREATHE→BREATHE, BACKWARD→BREATHE.
+
+PASS: Leo rebuilds from the re-vendored source, tests **111/111**, default `--gen` byte-identical (`0f32d2c`).
+The AML side is on a feature branch (512/512), ready to merge to `ariannamethod.ai` main on Oleg's word. Next —
+**axiom (a)-2: the inertia** (a transition cost on velocity switching, via debt, so a discrete state with
+inertia reads as a body — the deeper half), then **(б) School I3** and **(в) the marathon with the `.aml` drive**.

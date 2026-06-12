@@ -89,11 +89,6 @@
 // See ariannamethod.h for struct definitions and pack flags
 
 static AM_State G;
-static int g_am_initialized = 0;   // A-4: field auto-inits on first am_exec; kept
-                                   // separate from G so am_init's memset(&G) cannot clear it.
-static char g_base_dir[256] = "";  // A-6: directory of the file being executed; seeds
-                                   // ctx.base_dir so relative INCLUDEs resolve against the
-                                   // including file, not the filesystem root.
 
 // Blood compiler globals (used by Level 0 dispatch + Blood API)
 static AM_BloodModule g_blood_modules[AM_BLOOD_MAX_MODULES];
@@ -458,6 +453,7 @@ static void update_effective_temp(void) {
     case AM_VEL_WALK:     vel_mult = 0.85f; G.time_direction = 1.0f;  break;
     case AM_VEL_RUN:      vel_mult = 1.2f;  G.time_direction = 1.0f;  break;
     case AM_VEL_BACKWARD: vel_mult = 0.7f;  G.time_direction = -1.0f; break;
+    case AM_VEL_BREATHE:  vel_mult = 0.6f;  G.time_direction = 1.0f;  break;
     default:              vel_mult = 1.0f;  G.time_direction = 1.0f;
   }
   float vel_temp = base * vel_mult;
@@ -502,7 +498,6 @@ static AML_Symtab g_persistent_globals;
 void am_persistent_clear(void);
 
 void am_init(void) {
-  g_am_initialized = 1;   // A-4: mark initialized so am_exec's auto-init won't re-fire
   // Clean up tape from previous session
   am_tape_destroy();
 
@@ -565,8 +560,6 @@ void am_init(void) {
 
   // lora / delta voice (core)
   G.lora_alpha = 0.0f;
-  G.lora_dynamic = 0;   // B2-B.4: off = static alpha (ablation default)
-  G.delta_decay = 0.9f; // B2-B.5: δ forgetting factor applied per autumn before harvest
 
   // notorch (core — always active)
   G.notorch_lr = 0.01f;
@@ -3541,13 +3534,11 @@ static void aml_exec_level0(const char* cmd, const char* arg, AML_ExecCtx* ctx, 
       G.destiny = clamp01(ctx_float(ctx, arg));
     }
     else if (!strcmp(t, "FIELD")) {
-      // FIELD ON|OFF — gate the field overlay on logits. A-7: honour the §1.1
-      // boolean-false set so FIELD 0 / FALSE / NO also disable (was: only "OFF").
+      // FIELD ON|OFF — gate the field overlay on logits
       char argup[8] = {0};
       snprintf(argup, sizeof(argup), "%.7s", arg);
       upcase(argup);
-      G.field_enabled = (strcmp(argup, "OFF") && strcmp(argup, "0") &&
-                         strcmp(argup, "FALSE") && strcmp(argup, "NO")) ? 1 : 0;
+      G.field_enabled = strcmp(argup, "OFF") ? 1 : 0;
     }
     else if (!strcmp(t, "RESONANCE")) {
       // RESONANCE <float> — set a resonance FLOOR: the field is held at or above
@@ -3614,9 +3605,10 @@ static void aml_exec_level0(const char* cmd, const char* arg, AML_ExecCtx* ctx, 
 
       if (!strcmp(argup, "RUN")) G.velocity_mode = AM_VEL_RUN;
       else if (!strcmp(argup, "WALK")) G.velocity_mode = AM_VEL_WALK;
-      else if (!strcmp(argup, "NOMOVE")) G.velocity_mode = AM_VEL_NOMOVE;
+      else if (!strcmp(argup, "NOMOVE") || !strcmp(argup, "STOP")) G.velocity_mode = AM_VEL_NOMOVE;
       else if (!strcmp(argup, "BACKWARD")) G.velocity_mode = AM_VEL_BACKWARD;
-      else G.velocity_mode = clampi(safe_atoi(arg), -1, 2);
+      else if (!strcmp(argup, "BREATHE")) G.velocity_mode = AM_VEL_BREATHE;
+      else G.velocity_mode = clampi(safe_atoi(arg), -1, 3);
 
       update_effective_temp();
     }
@@ -3846,12 +3838,6 @@ static void aml_exec_level0(const char* cmd, const char* arg, AML_ExecCtx* ctx, 
 
     else if (!strcmp(t, "LORA_ALPHA")) {
       G.lora_alpha = clamp01(ctx_float(ctx, arg));
-    }
-    else if (!strcmp(t, "LORA_DYNAMIC")) {
-      G.lora_dynamic = (ctx_float(ctx, arg) != 0.0f);   // B2-B.4: gate δ strength by field resonance
-    }
-    else if (!strcmp(t, "DELTA_DECAY")) {
-      G.delta_decay = clampf(ctx_float(ctx, arg), 0.5f, 1.0f);   // B2-B.5: δ forgetting valve
     }
     else if (!strcmp(t, "NOTORCH_LR")) {
       G.notorch_lr = clampf(ctx_float(ctx, arg), 0.001f, 0.5f);
@@ -4637,11 +4623,7 @@ static int aml_preprocess(const char* script, AML_Line* lines, int max_lines) {
         if (len == 0) { lineno++; continue; }
 
         // store
-        if (len >= AML_MAX_LINE_LEN) {
-            fprintf(stderr, "aml: line %d truncated at %d bytes (AML_MAX_LINE_LEN)\n",
-                    lineno, AML_MAX_LINE_LEN - 1);   // R-2: loud, was a silent drop
-            len = AML_MAX_LINE_LEN - 1;
-        }
+        if (len >= AML_MAX_LINE_LEN) len = AML_MAX_LINE_LEN - 1;
         memcpy(lines[count].text, start, len);
         lines[count].text[len] = 0;
         lines[count].indent = indent;
@@ -6132,45 +6114,6 @@ static int aml_exec_line(AML_ExecCtx* ctx, int idx) {
         return idx + 1;  // macro not found — ignore
     }
 
-    // --- A-3b: multi-line BLOOD COMPILE — gather the body across lines ---
-    // aml_exec_level0's one-line handler only compiles when '{' and '}' are on the
-    // same line; a multi-line block otherwise falls through here and its C body
-    // lines get dispatched as field commands (e.g. "PAIN 0.9;" would set pain).
-    // Detect an unbalanced opener, gather the body until the braces balance,
-    // compile it, and resume past the consumed lines so the body never reaches the
-    // dispatcher. (One-line blocks have net==0 and stay with aml_exec_level0.)
-    if (strncasecmp(text, "BLOOD COMPILE", 13) == 0) {
-        const char* open = strchr(text, '{');
-        int net = 0;
-        if (open) for (const char* c = text; *c; c++) net += (*c == '{') - (*c == '}');
-        if (open && net > 0) {
-            char bname[AM_BLOOD_MAX_NAME] = {0};
-            sscanf(text + 13, " %63s", bname);
-            size_t cap = 512, len = 0;
-            char* body = (char*)malloc(cap);
-            if (!body) return idx + 1;
-            int depth = 0, j = idx, done = 0;
-            const char* chunk = open;
-            while (j < ctx->nlines && !done) {
-                for (const char* c = chunk; *c; c++) {
-                    if (*c == '{') { if (++depth == 1) continue; }       // skip the opening '{'
-                    else if (*c == '}') { if (--depth == 0) { done = 1; break; } }
-                    if (len + 2 > cap) { char* nb = (char*)realloc(body, cap * 2); if (!nb) { done = 1; break; } body = nb; cap *= 2; }
-                    body[len++] = *c;
-                }
-                if (done) break;
-                if (len + 2 > cap) { char* nb = (char*)realloc(body, cap * 2); if (!nb) break; body = nb; cap *= 2; }
-                body[len++] = '\n';
-                if (++j < ctx->nlines) chunk = ctx->lines[j].text;
-            }
-            body[len] = 0;
-            if (am_blood_compile(bname, body) < 0)
-                set_error_at(ctx, ctx->lines[idx].lineno, "blood: compilation failed");
-            free(body);
-            return (j < ctx->nlines) ? j + 1 : ctx->nlines;
-        }
-    }
-
     // --- Level 0 fallback: split CMD ARG, dispatch ---
     {
         char linebuf[AML_MAX_LINE_LEN];
@@ -6204,11 +6147,6 @@ static int aml_exec_block(AML_ExecCtx* ctx, int start, int end) {
 
 int am_exec(const char* script) {
     if (!script || !*script) return 0;
-    /* A-4: auto-init the field on first use. The compiled-binary path applies
-     * top-level directives via an __attribute__((constructor)) before main and
-     * never calls am_init(), so without this the directives ran on a zeroed
-     * AM_State (base_temperature=0, etc.) instead of the spec §2 defaults. */
-    if (!g_am_initialized) am_init();
     g_error[0] = 0;
 
     // preprocess into lines
@@ -6221,7 +6159,6 @@ int am_exec(const char* script) {
     // set up execution context
     AML_ExecCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
-    snprintf(ctx.base_dir, sizeof(ctx.base_dir), "%s", g_base_dir);   // A-6: inherit include base dir
     ctx.lines = lines;
     ctx.nlines = nlines;
 
@@ -6665,15 +6602,6 @@ void am_free_compiled(void* handle) {
 
 int am_exec_file(const char* path) {
     if (!path) return 1;
-    // A-6: include recursion guard. am_exec() builds a fresh AML_ExecCtx on every
-    // call, resetting ctx.include_depth, so the INCLUDE handler's per-ctx guard
-    // never accumulated across am_exec_file — a file that INCLUDEs itself recursed
-    // to a stack overflow (SIGSEGV). Bound the nesting with a static counter here.
-    static int file_depth = 0;
-    if (file_depth >= AML_MAX_INCLUDE) {
-        snprintf(g_error, 256, "max include depth (%d) exceeded: %s", AML_MAX_INCLUDE, path);
-        return 1;
-    }
     g_error[0] = 0;
 
     FILE* f = fopen(path, "r");
@@ -6699,24 +6627,7 @@ int am_exec_file(const char* path) {
     fclose(f);
     buf[rd] = 0;
 
-    // A-6: publish this file's directory so relative INCLUDEs inside it resolve
-    // against it (am_exec seeds ctx.base_dir from g_base_dir). Save/restore for nesting.
-    char saved_base[256];
-    snprintf(saved_base, sizeof(saved_base), "%s", g_base_dir);
-    const char* slash = strrchr(path, '/');
-    if (slash) {
-        size_t n = (size_t)(slash - path);
-        if (n >= sizeof(g_base_dir)) n = sizeof(g_base_dir) - 1;
-        memcpy(g_base_dir, path, n);
-        g_base_dir[n] = 0;
-    } else {
-        snprintf(g_base_dir, sizeof(g_base_dir), ".");
-    }
-
-    file_depth++;
     int rc = am_exec(buf);
-    file_depth--;
-    snprintf(g_base_dir, sizeof(g_base_dir), "%s", saved_base);
     free(buf);
     return rc;
 }
@@ -6790,13 +6701,6 @@ int am_copy_state(float* out) {
 
 // Co-occurrence telemetry (H-term word circulation): live edge count.
 int am_cooc_count(void) { return G.cooc_n; }
-
-// Clear the co-occurrence field in G. Used when a per-voice cooc sidecar is
-// absent (first run of a voice): the shared soma carries cooc inside AM_State,
-// so without a sidecar to overwrite it the voice would inherit the OTHER voice's
-// edges (foreign token-ids) and bake the contamination into its own sidecar at
-// SAVE. Clearing on a failed am_cooc_load keeps the "cooc stays per-voice" invariant.
-void am_cooc_clear(void) { G.cooc_n = 0; G.cooc_total = 0; G.ctx_ring_n = 0; }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LOGIT MANIPULATION API — apply field state to generation
@@ -6890,16 +6794,6 @@ void am_apply_laws_to_logits(float* logits, int n) {
 // Apply delta voice: out += alpha * A @ (B @ x)
 // Low-rank weight modulation. From arianna.c/src/delta.c: apply_delta()
 // BLAS path: cblas_sgemv × 2 (matrix-vector multiply)
-// δ blend strength. Static lora_alpha by default; when lora_dynamic is set,
-// lora_alpha * G.resonance — the field coherence metric (am_step, c:~7964:
-// schumann_coherence + (1-dissonance) + attend_focus + (1-debt)). So the learned
-// δ voice breathes with the field's resonance: it colours the voice in coherent
-// moments and recedes as the field scatters (high dissonance/debt). Both factors
-// are clamp01, so the result stays in [0, lora_alpha]. (B2-B.4)
-float am_lora_alpha_effective(void) {
-    return G.lora_dynamic ? G.lora_alpha * G.resonance : G.lora_alpha;
-}
-
 void am_apply_delta(float* out, const float* A, const float* B,
                     const float* x, int out_dim, int in_dim, int rank,
                     float alpha) {
@@ -7097,17 +6991,6 @@ void am_cooc_stats(float* out_mean, float* out_max) {
 // (A=[out,rank], B=[rank,in]). With in=out=E we get the apply layout directly by
 // swapping the two vectors: pass the target direction as x and the input as dy.
 // Run in autumn after consolidation (only strong edges survive). Returns # folded.
-// Scale the low-rank δ (A,B) by `factor` (0.5..1). The forgetting valve: called
-// once per autumn BEFORE am_cooc_learn_delta folds in the current consolidated
-// cooc, so δ is a decaying EMA of recent consolidations (steady-state bounded ~
-// increment/(1-factor)) rather than an unbounded sum that would eventually drown
-// the base voice. (B2-B.5)
-void am_delta_decay(float* A, float* B, int E, int rank, float factor) {
-    if (!A || !B) return;
-    for (long i = 0; i < (long)E * rank; i++) A[i] *= factor;
-    for (long i = 0; i < (long)rank * E; i++) B[i] *= factor;
-}
-
 int am_cooc_learn_delta(float* A, float* B, const float* emb, int vocab,
                         int E, int rank) {
     if (!A || !B || !emb || vocab <= 0 || E <= 0 || rank <= 0 || G.cooc_n <= 0)

@@ -3650,7 +3650,8 @@ static int leo_aml_run(Leo *leo, const char *path) {
         case AM_VEL_NOMOVE:   m = LEO_MODE_STOP;    break;
         case AM_VEL_WALK:     m = LEO_MODE_WALK;    break;
         case AM_VEL_RUN:      m = LEO_MODE_RUN;     break;
-        case AM_VEL_BACKWARD: m = LEO_MODE_BREATHE; break;
+        case AM_VEL_BREATHE:  m = LEO_MODE_BREATHE; break;   /* the language now has BREATHE natively */
+        case AM_VEL_BACKWARD: m = LEO_MODE_BREATHE; break;   /* and BACKWARD still settles into the exhale */
     }
     if (m >= 0) { leo_mode_set(leo, m); return 1; }
     return 0;

@@ -41,12 +41,16 @@ int  leo_mode_from_name(const char *s);  /* "STOP"/"WALK"/"RUN"/"BREATHE" -> id 
 reads `am_get_state()->velocity_mode`, and maps it to Leo's breath:
 
 ```
-AML NOMOVE   -> STOP      (the held child)
-AML WALK     -> WALK      (the measured gait)
-AML RUN      -> RUN       (the chatty run)
-AML BACKWARD -> BREATHE   (the exhale — Leo's somatic operator, provisionally from
-                           BACKWARD until the language gains BREATHE of its own)
+AML NOMOVE / STOP   -> STOP      (the held child)
+AML WALK            -> WALK      (the measured gait)
+AML RUN             -> RUN       (the chatty run)
+AML BREATHE         -> BREATHE   (the settling exhale — now a native AML operator)
+AML BACKWARD        -> BREATHE   (also settles into the exhale)
 ```
+
+`STOP` and `BREATHE` are Leo's somatic operators, now landed in the language itself
+(`ariannamethod.ai`, the reverse flow — see that repo's `AMLLOG`). The vendored AML
+here carries them, so `VELOCITY STOP` / `VELOCITY BREATHE` drive Leo's breath directly.
 
 `--mode <NAME>` forces the breath directly — a manual driver for our debug, not the
 real interface; the real interface is `.aml`.
