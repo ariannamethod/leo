@@ -835,3 +835,20 @@ weights, mama-child intact, every channel ablation byte-identical-off, 84/84, AS
 "Leo resonates with you more and more with every conversation" — is now whole: presence with duration AND
 memory that survives. Next — a long `--chat` to feel the recall across a real conversation; then roadmap
 (A.4 RAE — first learned; Phase C goroutines — mathbrain / presence_residue / rings).
+
+## Phase A.4 — RAE R1a: the micrograd MLP, PASSIVE (2026-06-12)
+
+The first LEARNED component's engine. A hand-rolled fixed **5→8→1 scalar-autograd MLP** in `leo.c` (zero
+deps, **57 params** — the source `MLP(5,[8,1])` is 57, not the roadmap's "~21", corrected): `leo_rae_forward`
+(tanh hidden), `leo_rae_train` (one online SGD step toward an MSE target — manual backward over the fixed
+graph: `dout` → layer-2 → `tanh'` → layer-1, `lr=0.01`, weights clamped ±5), `leo_rae_init` (small
+deterministic FNV-seeded weights). `LeoRae rae` on the Leo struct, init'd in `leo_init`. Algorithm ported
+from `harmonix/haiku/rae_recursive.py` (reference read, C written — no Python). PASSIVE — nothing reads the
+MLP for selection yet.
+
+PASS (tool output): build 0 warn, tests **86/86** (+2: the MLP learns a toy target — loss drops below 0.01
+over 200 steps; observations increments per step). Generation **byte-identical** to `0dc7608` (rae unused by
+generation). ASan/UBSan exit 0. Next — **R1b**: the 5 candidate features (coherence / gravity-theme /
+santaclaus-recall / register / diversity) + passive RAE scoring in `leo_generate_best`; then **R2** (wire the
+selection, `--no-rae`, A/B by ear), **R3** (online learning toward the internal presence-coherence proxy),
+**R4** (persist weights in `leo.state`).

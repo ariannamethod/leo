@@ -552,6 +552,24 @@ typedef struct {                        /* per-step scratch: top-K active spores
     int   n_active;
 } LeoSantaScratch;
 
+/* ── A.4 RAE — recursive selector, a tiny LEARNED MLP (5→8→1, 57 params) ──────
+ * The first learned component: it weights the candidate channels we built
+ * (coherence / gravity-theme / santaclaus-recall / register / diversity) and
+ * picks the reply. Online/Hebbian — NO pretrained weights; trained toward an
+ * internal presence-coherence proxy. Hand-rolled scalar autograd in leo.c. */
+#define LEO_RAE_IN     5
+#define LEO_RAE_HID    8
+#define LEO_RAE_LR     0.01f
+#define LEO_RAE_CLAMP  5.0f
+#define LEO_RAE_REFINE 3
+typedef struct {
+    float w1[LEO_RAE_HID][LEO_RAE_IN];
+    float b1[LEO_RAE_HID];
+    float w2[LEO_RAE_HID];
+    float b2;
+    long  observations;
+} LeoRae;
+
 static void bigram_init(BigramTable *b, int capacity) {
     b->entries = calloc((size_t)capacity, sizeof(BigramEntry));
     b->n_entries = 0;
@@ -1105,7 +1123,66 @@ typedef struct {
      * may resurrect on resonance). Born/decayed per reply; PASSIVE until B2 reads. */
     LeoSpore spores[LEO_SPORE_MAX]; int n_spores;
     LeoSpore sea[LEO_SEA_MAX];      int n_sea; int sea_ptr;
+    /* A.4 — RAE: the first LEARNED component (recursive selector MLP). PASSIVE
+     * until R2 wires it into selection; weights persist in leo.state (R4). */
+    LeoRae rae;
 } Leo;
+
+/* A.4 RAE — micrograd MLP (fixed 5→8→1, hand-rolled scalar autograd, zero deps). */
+static void leo_rae_init(LeoRae *r) {
+    const uint64_t fnv_offset = 0xcbf29ce484222325ULL, fnv_prime = 0x100000001b3ULL;
+    const uint64_t salt = 0x52414521ULL;   /* "RAE!" */
+    uint32_t idx = 0;
+    for (int j = 0; j < LEO_RAE_HID; j++) {
+        for (int i = 0; i < LEO_RAE_IN; i++) {
+            uint64_t h = fnv_offset; h ^= idx++; h *= fnv_prime; h ^= salt; h *= fnv_prime;
+            r->w1[j][i] = (((float)((h >> 24) & 0xFFFFFFu) / (float)0xFFFFFFu) - 0.5f) * 0.2f;
+        }
+        r->b1[j] = 0.0f;
+    }
+    for (int j = 0; j < LEO_RAE_HID; j++) {
+        uint64_t h = fnv_offset; h ^= idx++; h *= fnv_prime; h ^= salt; h *= fnv_prime;
+        r->w2[j] = (((float)((h >> 24) & 0xFFFFFFu) / (float)0xFFFFFFu) - 0.5f) * 0.2f;
+    }
+    r->b2 = 0.0f;
+    r->observations = 0;
+}
+
+static float leo_rae_forward(const LeoRae *r, const float *x, float *h_out) {
+    float out = r->b2;
+    for (int j = 0; j < LEO_RAE_HID; j++) {
+        float z = r->b1[j];
+        for (int i = 0; i < LEO_RAE_IN; i++) z += r->w1[j][i] * x[i];
+        float hv = tanhf(z);
+        if (h_out) h_out[j] = hv;
+        out += r->w2[j] * hv;
+    }
+    return out;
+}
+
+/* one online SGD step toward target (MSE); manual backward over the fixed graph.
+ * Returns the pre-step loss. Weights clamped to ±LEO_RAE_CLAMP. Used from the
+ * test now and from R3 (online learning); unused in the main TU until then. */
+__attribute__((unused))
+static float leo_rae_train(LeoRae *r, const float *x, float target) {
+    float hv[LEO_RAE_HID];
+    float out = leo_rae_forward(r, x, hv);
+    float err = out - target;
+    float dout = 2.0f * err;
+    float dh[LEO_RAE_HID];
+    for (int j = 0; j < LEO_RAE_HID; j++) dh[j] = dout * r->w2[j];   /* read w2 before update */
+    for (int j = 0; j < LEO_RAE_HID; j++)
+        r->w2[j] = clampf(r->w2[j] - LEO_RAE_LR * (dout * hv[j]), -LEO_RAE_CLAMP, LEO_RAE_CLAMP);
+    r->b2 = clampf(r->b2 - LEO_RAE_LR * dout, -LEO_RAE_CLAMP, LEO_RAE_CLAMP);
+    for (int j = 0; j < LEO_RAE_HID; j++) {
+        float dz = dh[j] * (1.0f - hv[j] * hv[j]);   /* tanh' */
+        for (int i = 0; i < LEO_RAE_IN; i++)
+            r->w1[j][i] = clampf(r->w1[j][i] - LEO_RAE_LR * (dz * x[i]), -LEO_RAE_CLAMP, LEO_RAE_CLAMP);
+        r->b1[j] = clampf(r->b1[j] - LEO_RAE_LR * dz, -LEO_RAE_CLAMP, LEO_RAE_CLAMP);
+    }
+    r->observations++;
+    return err * err;
+}
 
 static void leo_init(Leo *leo) {
     memset(leo, 0, sizeof(*leo));
@@ -1139,6 +1216,7 @@ static void leo_init(Leo *leo) {
                 leo->w_embed[(size_t)i * LEO_RET_DIM + d] = 0.05f * r;
             }
     }
+    leo_rae_init(&leo->rae);   /* A.4 — first learned component */
 }
 
 static void leo_free(Leo *leo) {

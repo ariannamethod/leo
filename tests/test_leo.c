@@ -569,6 +569,18 @@ int main(void) {
         remove(path);
     }
 
+    /* A.4 RAE: the micrograd MLP learns — loss drops on a toy target. */
+    {
+        LeoRae r; leo_rae_init(&r);
+        float x[LEO_RAE_IN] = {0.6f, 0.4f, 0.2f, 0.5f, 0.3f};
+        float target = 0.8f;
+        float loss0 = leo_rae_train(&r, x, target);
+        for (int it = 0; it < 200; it++) leo_rae_train(&r, x, target);
+        float e = leo_rae_forward(&r, x, NULL) - target;
+        CHECK(e * e < loss0 && e * e < 0.01f, "rae: micrograd MLP learns a toy target (loss drops)");
+        CHECK(r.observations == 201, "rae: observations increments per train step");
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
