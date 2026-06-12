@@ -2704,7 +2704,15 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
     }
 
     int target = LEO_GEN_TARGET + (rand() % 10) - 5;
-    if (target < LEO_GEN_MIN) target = LEO_GEN_MIN;
+    int target_floor = LEO_GEN_MIN;
+    if (g_leo_form_on && leo->gravity) {   /* A.6 F-3: in a reply, the velocity mode sets the word budget —
+                                            * the breath lands the utterance hard, like a syllable counter.
+                                            * gravity is set only on the reply path, so --gen stays raw. */
+        static const int mode_target[LEO_MODE_COUNT] = { 14, 4, 24, 8 };  /* WALK STOP RUN BREATHE */
+        target = mode_target[leo->mode];
+        target_floor = 3;                  /* STOP may hold in a fragment below the default min */
+    }
+    if (target < target_floor) target = target_floor;
 
     int V = leo->bpe.vocab_size;
     int word_seen = 0;          /* has the heard word surfaced in THIS sentence? */

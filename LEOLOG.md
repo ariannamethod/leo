@@ -1142,3 +1142,34 @@ Leo's default voice — "i am so afraid of the dark" → "The floor." by default
 pre-FORM voice (byte-identical to `ee9c6b6`), 109/109. Next — **F-3 (token-budget hard-landing)**: make STOP
 reliably minimal (a clean held fragment every time, not only when the block collapses) so the form is the full
 haiku precision; then the AML velocity bridge.
+
+## Phase A.6 — FORM F-3: the token budget — Leo has a body (2026-06-12)
+
+The last wire: the velocity mode sets a per-utterance WORD BUDGET, and the generator lands into it hard, like
+the syllable counter culls. In `leo_generate_ex`, `target` (the length at which the sentence ends at the next
+boundary, default `LEO_GEN_TARGET` 20) is set from the mode — WALK 14, STOP 4, RUN 24, BREATHE 8 — with a
+floor of 3 so STOP may hold in a fragment below the default min. **Gated on `leo->gravity`** (set only on the
+reply path): the breath chisels a REPLY, not free generation, so `--gen` stays raw and byte-identical.
+
+Now STOP is reliably minimal across every seed (no longer only when Leo runs dry): "i am so afraid and alone
+in the dark" → "I heard." / "A remember where he." / "I remember where he." — a frightened child says three
+words and stops, every time.
+
+The mode spectrum, one prompt per mood (same seed):
+- **STOP** ("afraid of the dark") → "The floor." — the held child.
+- **WALK** ("do you love your mother") → "His mother plays small. Leo watched the walls become a person. …
+  Leo than his father." — a measured gait.
+- **BREATHE** ("wonderful happy busy day", COMPLEX) → "He would like. Day." — a tiny exhale; overwhelmed, he
+  barely speaks.
+- **RUN** ("the rain", FLOW) → a run of short phrases, the chatty child.
+
+Each mood reads unmistakably as a distinct BODY. This completes the FORM phase — the state-dynamics разгадка
+realized: **presence = a body, a body = discrete dynamics with inertia**, and the body now shapes the breath.
+
+PASS (tool output): build 0 warn, tests **109/109**. `--gen` byte-identical (`0f32d2c`; gravity is NULL on the
+prompt-free path, so the mode budget never applies there) and `--no-form` byte-identical to pre-FORM
+(`ee9c6b6`). ASan/UBSan on the `--respond`/`--chat` paths: exit 0 / 0 findings. The budgets (14/4/24/8) and the
+hysteresis margin are ear-tunable. **FORM complete (F-1 substrate → F-2 wiring → default → F-3 budget).** Next —
+the **AML velocity bridge**: the mode names (WALK/STOP/RUN/BREATHE) are already AML velocity operators, so an
+`.aml` script in `leo/ariannamethod/` can read and set Leo's breath the way DESTINY/FIELD/RESONANCE edit a
+field; Oleg curates the compiler parts that come into the subfolder.
