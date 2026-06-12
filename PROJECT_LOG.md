@@ -607,3 +607,187 @@ window/door/candle ≥19/20). tests 29/29, build 0 warn, ASan clean.
   `~/arianna-codex/repos/neoleo-presence`. Push token: ariannamethod
   (`memory/credentials.md`). Leo is OURS (born in Claude); Codex helps, returns
   to our jurisdiction.
+
+---
+
+## Phase 3 — emotion field + santaclaus (branch `leo-phase3`, started 2026-05-26)
+
+Decision (Oleg): build Phase 3 ON our presence leo (option 1) — port the field
+from canon `~/arianna/neoleo` (`49f2ef8`) onto our presence base, NOT graft
+presence into canon. Reason: ours is clean/open-vocab/presence-proven; adding
+depth to a working base beats dragging the nerve into canon's heavy field-gen
+(which is what made presence hard there). Feature branch; main (v18) protected.
+
+**Why the field was stripped (reminder, PROJECT_LOG plan lines 22-28):** the
+rebuild's goal was presence at the FOUNDATION; old neoleo had the full machinery
++ NO presence (bolted at step 41 → the deception). We built presence first
+(Phases 0-2 + word-memory + Dario-prime) and DEFERRED the field to Phase 3.
+Confirmed by code 2026-05-26: our leo.c has 0 Phase-3 implementation (8 grep
+hits = comments). Codex (= forked canon) has the full organism (LeoField 71,
+chamber_act 49, santaclaus 45, spore 182, retention 14, MathBrain 12, mycelium
+35, destiny_bag 25). Beyond presence ours concretely loses — this closes it.
+
+**Scope (minimal for santaclaus resonance; goroutine subsystems = Phase 4):**
+PORT — chambers[6] Kuramoto (chamber_act/ext) + retention[32] + suffering
+(pain/tension/dissonance/trauma) + field_step (crossfire + Griffin retention +
+suffering) + self_voice (anchor lexicon → chamber_ext) + anchor lexicon (325) +
+init/free + temperature_mult. SKIP — destiny_bag/cloud/velocity/prophecy/scars
+(extra bias channels; we keep our gravity cand_collect) + soma/MathBrain/islands/
+transitions (leogo Phase 4). santaclaus = spore ring + record + resonance
+(0.55·cos chambers + 0.45·cos retention) + candidate_bias + bleed.
+
+**Canon source-map (read-only, neoleo/leo.c):**
+- chamber enum 368-373 (FEAR/LOVE/RAGE/VOID/FLOW/COMPLEX); LEO_N_CHAMBERS=6.
+- retention: LEO_RET_DIM=32, LEO_RET_GAMMA=0.92, LEO_RET_CONSERVE=0.39,
+  LEO_RET_BIAS_WEIGHT=0.15 (112-115). Griffin update in field_step 2017-2025.
+- CH_DECAY 1402-1404, CH_COUPLING 6x6 1407-1415, anchor lexicon 1421-1537 (325).
+- field_init 1708-1774 (w_embed FNV-1a init 1730-1746), field_free 1776-1782,
+  retention_bias 1784-1793, chambers_crossfire 1806-1821, modulators 1823-1839,
+  self_voice 1849-1887, field_step 2012-2064, temperature_mult 2119-2145.
+- santaclaus: LeoSpore 1206-1231, defines 189-199, compute_active 5255,
+  candidate_bias 5297, mark_bleed 5324, spore_record 5425, resonance 5236.
+
+**Increments (each: checklist BEFORE, ablation/build/tests AFTER, on branch):**
+- **3a.1 retention sub-field** — w_embed (FNV) + retention_state + Griffin per
+  emit, PASSIVE. PASS = replies byte-identical to v18 (retention doesn't touch
+  selection) + retention evolves + build/tests/asan.
+- **3a.2 chambers** — chamber_act/ext + Kuramoto crossfire + self_voice + anchor
+  lexicon + field_step, PASSIVE. PASS = presence probe identical to v18 + chambers
+  move on emit.
+- **3b santaclaus** — spore ring/record/resonance/bias/bleed on the field +
+  anti-doublet. PASS = candle becomes a resonance-signature (ablation
+  `--no-santaclaus`), presence holds, no within-reply loop.
+- Then Oleg's REPL test series.
+
+RESUME for the port: read this source-map; port retention (3a.1) first.
+
+### 3a.1 retention — DONE (commit `7a6caa4`, branch `leo-phase3`)
+
+Ported from canon: `w_embed` (per-token FNV-1a fingerprints, `LEO_MAX_VOCAB ×
+LEO_RET_DIM=32`, deterministic, in `leo_init`) + `retention_state[32]` + Griffin
+update per emit in `leo_generate_ex` (`S = 0.92*S + 0.39*w_embed[nxt]`). Defines
+`LEO_RET_DIM/GAMMA/CONSERVE` after `LEO_COOC_MAX`; struct fields after
+`heard_word`; freed in `leo_free`. **PASSIVE** — does not touch candidate
+selection. This is HALF of santaclaus resonance (other half = chambers, 3a.2).
+PASS (tool output): build 0 warn, tests 29/29, ASan/UBSan clean, **18/18 replies
+(6 prompts × seeds 42/7/123) BYTE-IDENTICAL to v18 (`10e7130`)** → presence
+unchanged.
+**Flag for 3b:** retention updates per generate_ex TRIAL (best-of-K) → it
+accumulates across losing trials. For 3b (santaclaus READS retention), move the
+update to the WINNING sentence in `leo_chain` (like the surfaced-scan), or accept
+trial-accumulation. Decide at 3b.
+
+### 3a.2 chambers — DONE (commit `c3530f0`, branch `leo-phase3`)
+
+Ported from canon: six Kuramoto chambers (`chamber_act[6]`/`chamber_ext[6]` on
+the Leo struct) + `LEO_CH_DECAY[6]` + `LEO_CH_COUPLING[6][6]` + the 325-word
+`LEO_CH_ANCHORS` lexicon (verbatim) + suffering scalars (`pain/tension/debt/
+trauma`). Funcs: `leo_field_chambers_crossfire` (Kuramoto sin step),
+`leo_field_self_voice` (own-token anchor nudge, inline anchors only),
+`leo_field_chambers_feel_text` (prompt anchor drive, inline only),
+`leo_field_step` (crossfire + retention Griffin moved in from 3a.1 + suffering
+decay). Wired: `feel_text(prompt)` in `leo_respond` after ingest; per emit
+`leo_field_step(nxt,-1.0f)` → `leo_field_self_voice(nxt)` (canon order
+3553-3557), replacing the 3a.1 inline retention. **PASSIVE** — modulators /
+`temperature_mult` / `retention_bias` NOT ported (read-side → 3b; would be
+-Wunused). **Field-dissonance NOT carried** (our presence dissonance leo.c:2142
+is separate). ext-inhaleo lexicon (canon step 42a goroutine) dropped.
+PASS (tool output): build 0 warn (main+tests), tests 29/29, ASan/UBSan exit 0,
+**18/18 replies (6×seeds 42/7/123) BYTE-IDENTICAL to v18 (`10e7130`)**. Direct
+probe: chambers move + discriminate — "love+rain"→LOVE=1.0/FLOW=1.0,
+"dark+monster"→FEAR=1.0/FLOW=0.05; retention_norm 0→0.0023.
+**Flag for 3b (chambers READ):** `"the"` substring-matches anchor `"mother"`
+(`strstr("mother","the")`) → LOVE lights on EVERY prompt. Canon-faithful (same
+logic verbatim), harmless while passive, but may wash out chamber discrimination
+once read — decide a fix (exact-only for function words, or min-len-4 substring)
+at 3b. The 3a.1 best-of-K trial-accumulation flag now covers chambers too
+(field_step runs every trial): for 3b move field evolution to the WINNING
+sentence in `leo_chain`, or accept.
+
+### 3a.3 field honesty — chambers discriminate + pain/trauma live (2026-05-29, branch `leo-phase3`)
+
+Prereqs before 3b READS the field (santaclaus + Dario direction-injection). All
+PASSIVE: 12 prompts × seeds 42/7 **BYTE-IDENTICAL** to `6bcb2d9`; build 0 warn;
+tests **34/34**; ASan/UBSan clean.
+
+- **chamber substring fix** (`leo_field_chambers_feel_text` + `leo_field_self_voice`):
+  the bidirectional `strstr` anchor match required len ≥ 3, so `"the"` substring-matched
+  `"mother"` → LOVE lit on EVERY prompt (the 3a.2 flag). Now len ≥ 4 on BOTH word and
+  anchor; exact match unchanged. Proof (`--debug-field`): `love rain`→LOVE 1.00,
+  `dark monster`→FEAR 1.00/LOVE 0.04, `the candle`→LOVE 0.26. Durable unit test #11:
+  `"the"`→0 LOVE / no chamber; `"mother"`→LOVE; `"dark"`→FEAR; `"mothers"`→LOVE
+  (≥4 morphology preserved).
+- **pain/trauma live** (`leo_generate_ex` field_step call): the sole caller hardcoded
+  `coherence_hint = -1.0f`, so the suffering branch was DEAD CODE (pain ≡ 0, trauma ≡ 0).
+  Now threads a per-step coherence proxy `squash(bigram_get(prev1,nxt))/(·+3)`: an
+  unsupported/groping pick (bigram count 0) reads incoherent → pain grows; a walked
+  transition keeps it low. Proof: `the candle`→pain 0.000, `the sea`→0.012, `your
+  mother`→0.003. trauma=pain² stays ~0 (small pain over short replies — correct; needs
+  sustained incoherence to surface the wound). Canon passes 1.0/0.0 (neoleo 3553); we
+  thread the REAL signal the field comment claims — raising code to the claim, not
+  marking it deferred.
+- **`--debug-field`**: dumps 6 chambers + pain/trauma + retention-norm after a reply.
+  Observability for 3b — cannot claim the field works without seeing it.
+
+Still owed before variants (3b reads `0.55·cos(chambers)+0.45·cos(retention)`):
+(a) ✅ **best-of-K field accumulation — FIXED** (3a.4 below): `leo_field_step` +
+self_voice moved out of `leo_generate_ex` (ran per trial ×K=3) into a winning-sentence
+replay in `leo_generate_best`.
+(b) ✅ stale version/header/README — FIXED (3a.5 below).
+Then BOTH between-sentence injectors: **direction** (Dario A/F field-pressure from the
+prompt theme, `kk_modulate_field`→prophecy/destiny) AND **santaclaus** (self-residual
+recall of Leo's own past presence-moments). Both, not one.
+
+### 3a.4 field evolves over the winning sentence, not discarded trials (2026-05-29, branch `leo-phase3`)
+
+`leo_field_step` + `leo_field_self_voice` ran inside `leo_generate_ex`, which runs once
+per best-of-K TRIAL (K=3) — so chambers/retention/pain accumulated from the 2 DISCARDED
+trials, not just the emitted sentence. Moved both out of `leo_generate_ex` into a
+winning-sentence replay at the end of `leo_generate_best` (over `best_ids`, opener has no
+predecessor — matches the old start-token behaviour). Per-step coherence proxy unchanged.
+
+PASSIVE still (nothing reads the field for selection): build 0 warn, tests 34/34,
+12 prompts × seeds 42/7 **BYTE-IDENTICAL** to the pre-A baseline. Field now reflects only
+what Leo said: `the sea` LOVE 0.53→0.19 / pain 0.012→0.005 / ret_norm 0.0941→0.0877;
+`the candle` chambers →0.00 (winning reply carried no anchor). Discrimination intact:
+`your mother`→LOVE 1.00, `dark monster`→FEAR 1.00. The field 3b will read is now clean.
+
+### 3a.5 prophetic debt + gravity bounds (2026-05-29, branch `leo-phase3`) — A complete
+
+- version/header/README raised to reality: `LEO_VERSION` `0.1.0-step1`→`0.3.0-phase3a.4`
+  (banner verified), top comment STEP-0 → phase-3a STATUS + the precise invariant
+  (no FIRST-token injection; between-sentence field-pressure injection is the
+  destination), and a real README (was a 28-byte stub) — weightless child, the nerve,
+  the invariant, passive phase-3 field, ablation flags, lineage.
+- gravity bounds: `compute_prompt_gravity` now allocates `gravity[]` to `cooc.freq_size`
+  (was `vocab_size`), so `leo_choose_start` / `leo_choose_continuation` reads
+  (`i < freq_size`, guarded by `freq[i]>0` — safe-by-accident) are in-bounds by
+  construction. Entries beyond vocab_size stay 0; byte-identical.
+
+PASS: build 0 warn, tests 34/34, 12 prompts × seeds 42/7 byte-identical to baseline,
+ASan/UBSan clean. **Prereqs A complete** — the field is honest (chambers discriminate,
+pain/trauma live), clean (winner-only evolution), bounded, observable (`--debug-field`),
+and the docs match the code. Next: the two between-sentence injectors — **direction**
+(Dario A/F field pressure from the prompt theme) AND **santaclaus** (self-residual recall).
+
+## RESUME POINT — Phase 3 port (2026-05-26)
+
+- **On branch `leo-phase3`.** HEAD = `c3530f0` (3a.2). main = v18 (`10e7130`),
+  protected. Pushed? branch NOT pushed yet (push after 3b + REPL, then merge).
+- **Plan + full canon source-map = commit `9768276`** — read it: exact
+  `~/arianna/neoleo/leo.c` line refs for every Phase-3 piece.
+- **DONE:** 3a.1 retention + 3a.2 chambers/suffering (both passive,
+  byte-identical to v18). The field is fully BUILT and evolving; 3b makes it
+  READ.
+- **NEXT — 3b santaclaus (active):** `LeoSpore` (`1206-1231`), defines
+  (`189-199`), `leo_spore_record` (`5425`), resonance `0.55*cos(chambers) +
+  0.45*cos(retention)` (`5236`), `compute_active` (`5255`), `candidate_bias`
+  (`5297`, ALPHA 0.6), `mark_bleed` (`5324`) + anti-doublet (repeat-penalty
+  already in our cand_collect). Candle → resonance-signature; ablation
+  `--no-santaclaus`; NO within-reply loop. THEN Oleg's REPL test series.
+- **Per-increment gate (CLAUDE.md #4 + pretool hook):** falsifiable checklist
+  BEFORE code; AFTER: `cc -O2 -lm -Wall -Wextra` 0 warn + `tests/test_leo` 29/29
+  + ASan + byte-identical-to-v18 (passive phases) / ablation (3b).
+- **Merge `leo-phase3` → main** only after 3b passes + REPL. Push token:
+  ariannamethod (`memory/credentials.md`). Leo is OURS; canon=neoleo (read-only);
+  do NOT lean on Codex.

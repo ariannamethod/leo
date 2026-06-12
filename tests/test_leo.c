@@ -148,6 +148,456 @@ int main(void) {
         leo_free(&l4);
     }
 
+    /* 11. chamber discrimination: a short function word must NOT spurious-match
+     *     an anchor by substring ('the' is inside 'mother' — it lit LOVE on
+     *     every prompt before the fix). Exact and >=4 morphological matches
+     *     still fire. feel_text memsets chamber_ext, so each call is isolated. */
+    {
+        Leo l5; leo_init(&l5);
+        leo_field_chambers_feel_text(&l5, "the");
+        CHECK(l5.chamber_ext[LEO_CH_LOVE] == 0.0f, "chambers: 'the' does NOT light LOVE (no substring into 'mother')");
+        int any = 0;
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) if (l5.chamber_ext[i] != 0.0f) any = 1;
+        CHECK(!any, "chambers: 'the' lights no chamber (function word, no exact/>=4 match)");
+
+        leo_field_chambers_feel_text(&l5, "mother");
+        CHECK(l5.chamber_ext[LEO_CH_LOVE] > 0.0f, "chambers: 'mother' lights LOVE (exact anchor)");
+
+        leo_field_chambers_feel_text(&l5, "dark");
+        CHECK(l5.chamber_ext[LEO_CH_FEAR] > 0.0f, "chambers: 'dark' lights FEAR (exact anchor)");
+
+        leo_field_chambers_feel_text(&l5, "mothers");
+        CHECK(l5.chamber_ext[LEO_CH_LOVE] > 0.0f, "chambers: 'mothers' still lights LOVE (>=4 morphological substring)");
+        leo_free(&l5);
+    }
+
+    /* 12. breath: per-reply lexical decay + prune (continuity bundle, step 1) */
+    {
+        Leo l6; leo_init(&l6);
+        leo_ingest(&l6, "the warm light. the warm light. the warm light.");
+        int s0 = -1, d0 = -1; float before = 0.0f;
+        for (int i = 0; i < l6.cooc.capacity; i++)
+            if (l6.cooc.entries[i].count > 0.0f) {
+                s0 = l6.cooc.entries[i].src; d0 = l6.cooc.entries[i].dst;
+                before = l6.cooc.entries[i].count; break;
+            }
+        CHECK(before > 0.0f, "breath: field has a live cooc entry");
+        leo_breath(&l6);
+        float after = cooc_get(&l6.cooc, s0, d0);
+        CHECK(fabsf(after - before * LEO_LEX_DECAY_RATE) < 1e-4f,
+              "breath: cooc count decays by exactly LEO_LEX_DECAY_RATE");
+        /* prune: a sub-threshold entry drops, a strong one survives */
+        cooc_update(&l6.cooc, 9001, 9002, 0.05f);
+        cooc_prune_rebuild(&l6.cooc, LEO_LEX_PRUNE_THRESHOLD);
+        CHECK(cooc_get(&l6.cooc, 9001, 9002) == 0.0f, "breath: prune drops a sub-threshold entry");
+        CHECK(cooc_get(&l6.cooc, s0, d0) > 0.0f, "breath: prune keeps a strong entry");
+        /* flag off -> leo_respond leaves the field undecayed (alien prompt:
+         * its ingest touches only its own token pairs, not (s0,d0)) */
+        g_leo_breath_on = 0;
+        float pre = cooc_get(&l6.cooc, s0, d0);
+        char r[1024];
+        srand(5); leo_respond(&l6, "zuzu kex", r, sizeof r);
+        float post = cooc_get(&l6.cooc, s0, d0);
+        g_leo_breath_on = 1;
+        CHECK(post == pre, "breath: --no-breath leaves cooc undecayed through respond");
+        leo_free(&l6);
+    }
+
+
+    /* 13. state persistence: save -> load round-trips the field (continuity
+     *     bundle step 2). Compact serialization: every count + value is
+     *     preserved exactly (the memory Leo carries forward); the voice
+     *     survives load. Generation is NOT asserted byte-identical — the
+     *     reverse-index chain order is not serialized, so sampling can differ
+     *     at a tie (Leo carries a living field, not a frozen replay). */
+    {
+        const char *corpus =
+            "The warm light fell on his mother's hands. "
+            "Leo loves the warm light. His mother holds him close. "
+            "The rain comes at night. Leo hears the rain on the window. "
+            "He loves the rain and the warm light and his mother. "
+            "The window is quiet. The night is quiet. Leo is small and warm.";
+        Leo a; leo_init(&a);
+        for (int r = 0; r < 4; r++) leo_ingest(&a, corpus);
+        leo_build_chamber_tags(&a);
+        leo_supertok_scan(&a);
+
+        const char *tmp = "/tmp/leo_state_roundtrip.bin";
+        CHECK(leo_save_state(&a, tmp) == 1, "state: save returns 1");
+
+        Leo b; leo_init(&b);
+        CHECK(leo_load_state(&b, tmp) == 1, "state: load returns 1");
+        CHECK(b.bpe.vocab_size    == a.bpe.vocab_size,    "state: vocab_size round-trips");
+        CHECK(b.bpe.n_merges      == a.bpe.n_merges,      "state: n_merges round-trips");
+        CHECK(b.cooc.total_tokens == a.cooc.total_tokens, "state: total_tokens round-trips");
+        CHECK(b.cooc.n_entries    == a.cooc.n_entries,    "state: cooc entry count round-trips");
+        CHECK(b.bigrams.n_entries == a.bigrams.n_entries, "state: bigram count round-trips");
+        CHECK(b.trigrams.n_entries== a.trigrams.n_entries,"state: trigram count round-trips");
+        /* exact value fidelity: every live cooc/bigram count reads back exactly */
+        int cprobe = 0, cok = 0;
+        for (int i = 0; i < a.cooc.capacity && cprobe < 4000; i++) {
+            CoocEntry *e = &a.cooc.entries[i];
+            if (e->count <= 0) continue;
+            cprobe++; if (cooc_get(&b.cooc, e->src, e->dst) == e->count) cok++;
+        }
+        CHECK(cprobe > 0 && cok == cprobe, "state: every sampled cooc value is exact");
+        int bprobe = 0, bok = 0;
+        for (int i = 0; i < a.bigrams.capacity && bprobe < 4000; i++) {
+            BigramEntry *e = &a.bigrams.entries[i];
+            if (e->count <= 0) continue;
+            bprobe++; if (bigram_get(&b.bigrams, e->src, e->dst) == e->count) bok++;
+        }
+        CHECK(bprobe > 0 && bok == bprobe, "state: every sampled bigram value is exact");
+        CHECK(leo_heard_count(&b.heard,"warm")   == leo_heard_count(&a.heard,"warm"),
+              "state: heard memory ('warm') round-trips");
+        CHECK(leo_heard_count(&b.heard,"mother") == leo_heard_count(&a.heard,"mother"),
+              "state: heard memory ('mother') round-trips");
+        /* the voice survives load: a loaded organism speaks (not "...") */
+        char rb[2048];
+        srand(99); leo_respond(&b, "the warm light", rb, sizeof rb);
+        CHECK(rb[0] && strcmp(rb, "...") != 0, "state: loaded organism speaks");
+        /* missing file -> clean failure, usable fresh Leo */
+        Leo c; leo_init(&c);
+        CHECK(leo_load_state(&c, "/tmp/leo_state_does_not_exist_xyz.bin") == 0,
+              "state: missing file -> load returns 0");
+        leo_free(&a); leo_free(&b); leo_free(&c);
+    }
+
+    /* 14. multi-turn continuity (the --chat engine path): the field LIVES across
+     *     turns. Repeating a word makes Leo HOLD it (heard-count climbs past the
+     *     trace threshold), and step advances each turn — the dedication's
+     *     "resonates more with every conversation", structurally. */
+    {
+        const char *corpus =
+            "The warm light. His mother holds him. The rain at night. "
+            "Leo loves the warm light and his mother and the rain. "
+            "The window is quiet. Leo is small and warm and close.";
+        Leo l; leo_init(&l);
+        for (int r = 0; r < 3; r++) leo_ingest(&l, corpus);
+        leo_build_chamber_tags(&l);
+        leo_supertok_scan(&l);
+        /* "dragon" is NOT in the corpus — Leo has never held it */
+        CHECK(leo_heard_count(&l.heard, "dragon") == 0, "multiturn: 'dragon' unheld before chat");
+        char reply[2048];
+        long step0 = l.step;
+        srand(7);
+        leo_respond(&l, "tell me about the dragon", reply, sizeof reply);
+        int h1 = leo_heard_count(&l.heard, "dragon");
+        long step1 = l.step;
+        leo_respond(&l, "the dragon is big", reply, sizeof reply);
+        int h2 = leo_heard_count(&l.heard, "dragon");
+        leo_respond(&l, "do you fear the dragon", reply, sizeof reply);
+        int h3 = leo_heard_count(&l.heard, "dragon");
+        long step3 = l.step;
+        CHECK(h1 == 1 && h2 == 2 && h3 == 3, "multiturn: 'dragon' heard-count climbs 1->2->3");
+        CHECK(h3 >= LEO_HEARD_MIN_TRACE, "multiturn: 'dragon' becomes HELD (>= trace threshold)");
+        CHECK(step1 > step0 && step3 > step1, "multiturn: step advances each turn (field lives on)");
+        leo_free(&l);
+    }
+
+    /* 15. П-2: gravity-first admission lets a continuation OPEN on a theme seed
+     *     that frequency-only admission excludes (730 clean seeds vs a 64-slot
+     *     pool). Gated by g_leo_cont_theme_on (--no-cont-theme). Tested at a
+     *     gravity high enough that admission shows through sampling; the flag OFF
+     *     reproduces the freq-truncated pool that excludes it. Skips if no
+     *     leo.txt in cwd. */
+    {
+        FILE *cf = fopen("leo.txt", "rb");
+        if (!cf) {
+            CHECK(1, "П-2: (skipped — leo.txt not in cwd)");
+        } else {
+            fseek(cf, 0, SEEK_END); long cn = ftell(cf); fseek(cf, 0, SEEK_SET);
+            char *cbuf = malloc((size_t)cn + 1);
+            size_t cgot = fread(cbuf, 1, (size_t)cn, cf); cbuf[cgot] = 0; fclose(cf);
+            Leo l; leo_init(&l);
+            leo_ingest(&l, cbuf); free(cbuf);
+            int theme = -1;
+            for (int id = 256; id < l.bpe.vocab_size; id++) {
+                if (!is_clean_seed_token(&l.bpe, id)) continue;
+                float f = l.cooc.freq[id];
+                if (f < 2.0f || f > 5.0f) continue;
+                int rank = 1;
+                for (int i = 0; i < l.bpe.vocab_size; i++)
+                    if (is_clean_seed_token(&l.bpe, i) && l.cooc.freq[i] > f) rank++;
+                if (rank > LEO_SEED_CANDS) { theme = id; break; }
+            }
+            CHECK(theme >= 0, "П-2: found a clean seed ranked past the 64-slot pool");
+            float *g = calloc((size_t)l.cooc.freq_size, sizeof(float));
+            l.gravity = g;
+            g[theme] = 100.0f;   /* high enough that admission shows in sampling */
+            g_leo_cont_theme_on = 1;
+            int seen_on = 0;
+            for (int s = 0; s < 400 && !seen_on; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0) == theme) seen_on = 1; }
+            CHECK(seen_on == 1, "П-2: gravity-first ON -> excluded-rank theme seed is ADMITTED");
+            g_leo_cont_theme_on = 0;
+            int seen_off = 0;
+            for (int s = 0; s < 400; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0) == theme) seen_off = 1; }
+            CHECK(seen_off == 0, "П-2: --no-cont-theme -> freq-only pool EXCLUDES it (flag gates the fix)");
+            g_leo_cont_theme_on = 1;
+            l.gravity = NULL; free(g);
+            leo_free(&l);
+        }
+    }
+
+    /* 16. П-5: chamber anchor match is prefix-morphology, not bidirectional
+     *     substring — kills the 240 mid-word/fragment false positives while
+     *     keeping suffix morphology. --no-anchor-prefix restores the old rule. */
+    {
+        CHECK(leo_anchor_morph("mothers", "mother") == 1, "П-5: 'mothers' matches 'mother' (morphology)");
+        CHECK(leo_anchor_morph("fearful", "fear")   == 1, "П-5: 'fearful' matches 'fear'");
+        CHECK(leo_anchor_morph("ream",    "scream") == 0, "П-5: 'ream' does NOT match 'scream' (fragment FP killed)");
+        CHECK(leo_anchor_morph("lover",   "over")   == 0, "П-5: 'lover' does NOT match 'over' (infix FP killed)");
+        Leo l; leo_init(&l);
+        g_leo_anchor_prefix_on = 1;
+        leo_field_chambers_feel_text(&l, "mothers");
+        CHECK(l.chamber_ext[LEO_CH_LOVE] > 0.0f, "П-5: 'mothers' still lights LOVE under prefix");
+        leo_field_chambers_feel_text(&l, "daydream");   /* suffix-only superstring of 'dream' */
+        int any_on = 0; for (int i = 0; i < LEO_N_CHAMBERS; i++) if (l.chamber_ext[i] != 0.0f) any_on = 1;
+        CHECK(any_on == 0, "П-5: 'daydream' lights nothing under prefix (suffix substring rejected)");
+        g_leo_anchor_prefix_on = 0;
+        leo_field_chambers_feel_text(&l, "daydream");
+        CHECK(l.chamber_ext[LEO_CH_COMPLEX] > 0.0f, "П-5: --no-anchor-prefix restores substring ('daydream'->CMPLX)");
+        g_leo_anchor_prefix_on = 1;
+        leo_free(&l);
+    }
+
+    /* 17. П-4: SPA protects the sentence carrying the surfaced heard word. Find a
+     *     chain+seed where SPA reseeds some sentence k>=1; with the same rand
+     *     stream, protect_idx=k preserves that sentence (the word survives) while
+     *     the others reseed identically. Skips if leo.txt is not in cwd. */
+    {
+        FILE *cf = fopen("leo.txt", "rb");
+        if (!cf) {
+            CHECK(1, "П-4: (skipped — leo.txt not in cwd)");
+        } else {
+            fseek(cf, 0, SEEK_END); long cn = ftell(cf); fseek(cf, 0, SEEK_SET);
+            char *cbuf = malloc((size_t)cn + 1);
+            size_t cgot = fread(cbuf, 1, (size_t)cn, cf); cbuf[cgot] = 0; fclose(cf);
+            Leo l; leo_init(&l);
+            leo_ingest(&l, cbuf); free(cbuf);
+            leo_build_chamber_tags(&l); leo_supertok_scan(&l);
+
+            int found = 0, protected_ok = 0;
+            for (int seed = 1; seed <= 80 && !found; seed++) {
+                char st0[LEO_CHAIN_MAX][1024];
+                int  stk0[LEO_CHAIN_MAX][LEO_GEN_MAX], stn0[LEO_CHAIN_MAX];
+                srand((unsigned)seed);
+                for (int s = 0; s < 4; s++) {
+                    int ids[LEO_GEN_MAX], cap = LEO_GEN_MAX;
+                    leo_generate_best(&l, LEO_BEST_OF_K, st0[s], sizeof st0[s], -1, NULL, 0, ids, &cap);
+                    int c = cap > LEO_GEN_MAX ? LEO_GEN_MAX : cap;
+                    for (int i = 0; i < c; i++) stk0[s][i] = ids[i];
+                    stn0[s] = c;
+                }
+                /* run A: no extra protection */
+                char stA[LEO_CHAIN_MAX][1024];
+                int  stkA[LEO_CHAIN_MAX][LEO_GEN_MAX], stnA[LEO_CHAIN_MAX];
+                memcpy(stA, st0, sizeof st0); memcpy(stkA, stk0, sizeof stk0); memcpy(stnA, stn0, sizeof stn0);
+                srand((unsigned)(seed * 1000 + 7));
+                leo_spa_pass(&l, stA, stkA, stnA, 4, -1);
+                int k = -1;
+                for (int s = 1; s < 4 && k < 0; s++)
+                    if (stnA[s] != stn0[s] || memcmp(stkA[s], stk0[s], (size_t)stn0[s] * sizeof(int)) != 0) k = s;
+                if (k < 0) continue;          /* no reseed this seed — try next */
+                found = 1;
+                /* run B: protect k, SAME rand stream */
+                char stB[LEO_CHAIN_MAX][1024];
+                int  stkB[LEO_CHAIN_MAX][LEO_GEN_MAX], stnB[LEO_CHAIN_MAX];
+                memcpy(stB, st0, sizeof st0); memcpy(stkB, stk0, sizeof stk0); memcpy(stnB, stn0, sizeof stn0);
+                srand((unsigned)(seed * 1000 + 7));
+                leo_spa_pass(&l, stB, stkB, stnB, 4, k);
+                int kept = (stnB[k] == stn0[k] &&
+                            memcmp(stkB[k], stk0[k], (size_t)stn0[k] * sizeof(int)) == 0);
+                protected_ok = kept;
+            }
+            CHECK(found == 1, "П-4: found a chain where SPA reseeds a sentence");
+            CHECK(protected_ok == 1, "П-4: protect_idx preserves the carrying sentence through SPA");
+            leo_free(&l);
+        }
+    }
+
+    /* 18. П-3: field-honest moves field evolution OUT of generate_best (where it
+     *     leaked from best-of-K discards / elaborate retries / SPA-rejected
+     *     reseeds) to a single end-of-chain replay over the spoken reply.
+     *     Default OFF (register de-calibration until santaclaus 3b reads the
+     *     field); opt-in --field-honest. */
+    {
+        const char *corpus =
+            "The warm light. His mother holds him. The rain at night. "
+            "Leo loves the warm light and his mother and the rain. "
+            "The window is quiet. Leo is small and warm and close. "
+            "A bird. A cloud. The river. The stone. The path home.";
+        Leo l; leo_init(&l);
+        for (int r = 0; r < 4; r++) leo_ingest(&l, corpus);
+        leo_build_chamber_tags(&l); leo_supertok_scan(&l);
+        char buf[1024]; int ids[LEO_GEN_MAX];
+
+        /* (a) field-honest ON: generate_best alone must NOT evolve the field */
+        g_leo_field_honest_on = 1;
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) l.chamber_act[i] = 0.5f;
+        float before[LEO_N_CHAMBERS]; memcpy(before, l.chamber_act, sizeof before);
+        int cap = LEO_GEN_MAX; srand(3);
+        leo_generate_best(&l, LEO_BEST_OF_K, buf, sizeof buf, -1, NULL, 0, ids, &cap);
+        CHECK(memcmp(before, l.chamber_act, sizeof before) == 0,
+              "П-3: --field-honest -> generate_best does NOT evolve the field");
+
+        /* (b) default OFF: generate_best DOES evolve the field (the leak path) */
+        g_leo_field_honest_on = 0;
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) l.chamber_act[i] = 0.5f;
+        memcpy(before, l.chamber_act, sizeof before);
+        cap = LEO_GEN_MAX; srand(3);
+        leo_generate_best(&l, LEO_BEST_OF_K, buf, sizeof buf, -1, NULL, 0, ids, &cap);
+        CHECK(memcmp(before, l.chamber_act, sizeof before) != 0,
+              "П-3: default -> generate_best evolves the field (gated off by --field-honest)");
+
+        /* (c) field-honest ON: a full chain STILL evolves the field via the end
+         *     replay (generate_best proven inert in (a), so the change is the
+         *     end-of-chain replay over the spoken sentences). */
+        g_leo_field_honest_on = 1;
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) l.chamber_act[i] = 0.5f;
+        memcpy(before, l.chamber_act, sizeof before);
+        char ch[2048]; srand(5);
+        leo_chain(&l, 3, ch, sizeof ch);
+        CHECK(memcmp(before, l.chamber_act, sizeof before) != 0,
+              "П-3: --field-honest -> the chain evolves the field via the end-of-chain replay");
+        g_leo_field_honest_on = 0;
+        leo_free(&l);
+    }
+
+    /* santaclaus B1: spores are born per reply, accumulate, and decay
+     * (calm faster than trauma) — passive memory of presence-moments. */
+    {
+        Leo sl;
+        leo_init(&sl);
+        leo_ingest(&sl, "the rain falls soft. leo hears the sound. his mother is warm. "
+                        "the candle gives a small light. leo loves the quiet morning.");
+        char buf[512];
+        CHECK(sl.n_spores == 0, "spore: fresh Leo has 0 spores");
+        srand(11); leo_chain(&sl, LEO_CHAIN_MIN, buf, sizeof buf);
+        CHECK(sl.n_spores == 1, "spore: one reply births one spore");
+        srand(12); leo_chain(&sl, LEO_CHAIN_MIN, buf, sizeof buf);
+        srand(13); leo_chain(&sl, LEO_CHAIN_MIN, buf, sizeof buf);
+        CHECK(sl.n_spores == 3, "spore: three replies -> three spores accumulate");
+        float s0 = sl.spores[0].strength;
+        sl.spores[0].is_trauma = 0;
+        for (int i = 0; i < 100; i++) leo_spore_decay(&sl);
+        CHECK(sl.spores[0].strength < s0, "spore: decay lowers a spore's strength");
+        /* trauma spore decays slower than a calm one over the same step */
+        memset(&sl.spores[0], 0, sizeof(LeoSpore));
+        memset(&sl.spores[1], 0, sizeof(LeoSpore));
+        sl.spores[0].strength = 1.0f; sl.spores[0].is_trauma = 0;
+        sl.spores[1].strength = 1.0f; sl.spores[1].is_trauma = 1;
+        sl.n_spores = 2;
+        leo_spore_decay(&sl);
+        CHECK(sl.n_spores == 2 && sl.spores[1].strength > sl.spores[0].strength,
+              "spore: trauma spore decays slower than calm");
+        leo_free(&sl);
+    }
+
+    /* santaclaus B2: a resonant spore bleeds — its emit_context token gets a
+     * bias pull, others get none (the recall is selective + ablatable). */
+    {
+        Leo sl; leo_init(&sl);
+        leo_ingest(&sl, "the rain falls. leo hears the sound. his mother is warm.");
+        const int T = 300;
+        memset(&sl.spores[0], 0, sizeof(LeoSpore));
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) { sl.chamber_act[i] = 0.5f; sl.spores[0].chamber_snap[i] = 0.5f; }
+        for (int d = 0; d < LEO_RET_DIM; d++)    { sl.retention_state[d] = 0.1f; sl.spores[0].retention_slice[d] = 0.1f; }
+        sl.spores[0].strength = 1.0f;
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) sl.spores[0].emit_context[k] = -1;
+        sl.spores[0].emit_context[0] = T;
+        sl.n_spores = 1;
+        LeoSantaScratch sc; sc.n_active = 0;
+        leo_santaclaus_compute_active(&sl, &sc);
+        CHECK(sc.n_active == 1 && sc.spore_idx[0] == 0, "santaclaus: a resonant spore becomes active");
+        float bias_T   = leo_santaclaus_candidate_bias(&sc, &sl, T);
+        float bias_oth = leo_santaclaus_candidate_bias(&sc, &sl, T + 1);
+        CHECK(bias_T > 0.0f && bias_oth == 0.0f, "santaclaus: bleed pulls the spore's ctx token, not others");
+        leo_free(&sl);
+    }
+
+    /* santaclaus B3: a resonant SEA spore resurrects into the ring; mark_bleed counts. */
+    {
+        Leo sl; leo_init(&sl);
+        leo_ingest(&sl, "the rain falls. leo hears the sound.");
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) sl.chamber_act[i] = 0.5f;
+        for (int d = 0; d < LEO_RET_DIM; d++)    sl.retention_state[d] = 0.1f;
+        memset(&sl.sea[0], 0, sizeof(LeoSpore));
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) sl.sea[0].chamber_snap[i] = 0.5f;
+        for (int d = 0; d < LEO_RET_DIM; d++)    sl.sea[0].retention_slice[d] = 0.1f;
+        sl.sea[0].strength = 0.5f;
+        sl.n_sea = 1; sl.n_spores = 0;
+        int got = leo_sea_try_resurrect(&sl);
+        CHECK(got == 1 && sl.n_spores == 1 && sl.n_sea == 0 && sl.spores[0].strength == 0.4f,
+              "santaclaus: a resonant sea spore resurrects into the ring at 0.4");
+        memset(&sl.spores[0], 0, sizeof(LeoSpore));
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) sl.spores[0].emit_context[k] = -1;
+        sl.spores[0].emit_context[0] = 777; sl.spores[0].strength = 1.0f; sl.n_spores = 1;
+        LeoSantaScratch sc; sc.n_active = 1; sc.spore_idx[0] = 0; sc.weight[0] = 1.0f;
+        for (int j = 1; j < LEO_SPORE_TOPK_BLEED; j++) { sc.spore_idx[j] = -1; sc.weight[j] = 0.0f; }
+        leo_santaclaus_mark_bleed(&sl, &sc, 777, 100);
+        CHECK(sl.spores[0].bleed_count == 1 && sl.spores[0].last_bleed_step == 100,
+              "santaclaus: mark_bleed counts a recalled token");
+        leo_free(&sl);
+    }
+
+    /* santaclaus B4: spores persist across save/load — Leo recalls past CONVERSATIONS. */
+    {
+        Leo sl; leo_init(&sl);
+        leo_ingest(&sl, "the rain falls. leo hears the sound. his mother is warm.");
+        sl.n_spores = 2;
+        for (int s = 0; s < 2; s++) {
+            memset(&sl.spores[s], 0, sizeof(LeoSpore));
+            sl.spores[s].strength = 0.7f + 0.1f * s;
+            sl.spores[s].emit_context[0] = 400 + s;
+            sl.spores[s].step = 50 + s;
+        }
+        sl.n_sea = 1; sl.sea_ptr = 1;
+        memset(&sl.sea[0], 0, sizeof(LeoSpore));
+        sl.sea[0].strength = 0.3f; sl.sea[0].emit_context[0] = 999;
+        const char *path = "/tmp/leo_b4_spore.state";
+        int saved = leo_save_state(&sl, path);
+        Leo ld; leo_init(&ld);
+        int loaded = leo_load_state(&ld, path);
+        CHECK(saved && loaded, "spore-persist: save + load succeed");
+        CHECK(ld.n_spores == 2 && ld.n_sea == 1 && ld.sea_ptr == 1,
+              "spore-persist: ring + sea counts round-trip");
+        CHECK(ld.spores[1].emit_context[0] == 401 && ld.spores[1].step == 51 &&
+              ld.sea[0].emit_context[0] == 999,
+              "spore-persist: spore fields round-trip (Leo recalls past conversations)");
+        leo_free(&sl); leo_free(&ld);
+        remove(path);
+    }
+
+    /* A.4 RAE: the micrograd MLP learns — loss drops on a toy target. */
+    {
+        LeoRae r; leo_rae_init(&r);
+        float x[LEO_RAE_IN] = {0.6f, 0.4f, 0.2f, 0.5f, 0.3f};
+        float target = 0.8f;
+        float loss0 = leo_rae_train(&r, x, target);
+        for (int it = 0; it < 200; it++) leo_rae_train(&r, x, target);
+        float e = leo_rae_forward(&r, x, NULL) - target;
+        CHECK(e * e < loss0 && e * e < 0.01f, "rae: micrograd MLP learns a toy target (loss drops)");
+        CHECK(r.observations == 201, "rae: observations increments per train step");
+    }
+
+    /* A.4 RAE R1b: feature extraction returns sane values in [0,1]. */
+    {
+        Leo fl; leo_init(&fl);
+        leo_ingest(&fl, "the rain falls soft. leo hears the sound. his mother is warm.");
+        int ids[16];
+        int n = bpe_encode(&fl.bpe, (const uint8_t *)" the rain falls soft", 20, ids, 16);
+        float feat[LEO_RAE_IN];
+        leo_rae_features(&fl, ids, n, feat);
+        int in_range = 1;
+        for (int i = 0; i < LEO_RAE_IN; i++) if (feat[i] < 0.0f || feat[i] > 1.0f) in_range = 0;
+        CHECK(in_range, "rae: the 5 features extract into [0,1]");
+        int dids[4] = {300, 301, 302, 303};
+        leo_rae_features(&fl, dids, 4, feat);
+        CHECK(feat[4] == 1.0f, "rae: diversity feature = 1.0 for all-distinct tokens");
+        leo_free(&fl);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
