@@ -986,3 +986,47 @@ version-2 file is rejected without a crash (exit 0, fresh start). ASan/UBSan on 
 trains + persists over real turns, and judge whether a trained RAE voice beats the coherence default. Only
 then does the default flip from `--rae` opt-in to on (the same way B0 / santaclaus ALPHA were the ear's call,
 not the build's). Held for Oleg. If it ruminates or flatlines: R3.5 = the contrastive/advantage target.
+
+## Phase A.5 — School: the reversed role, a synchronous first cut (2026-06-12)
+
+Leo asks YOU. When the prompt carries a content word he has no concept for, he stops replying and asks
+"What is `<word>`?" — and your answer grows into his field. The whole point of School (`leo-legacy/school.py`)
+was this reversed role; what it lacked was a TRIGGER for "unknown". The semantic tokenizer supplies it.
+
+**Awareness seed (vendored, RULE-BASED).** The 88-glyph `semtok` map from caveLLMan is vendored into `leo.c`
+(single-file invariant — not an `#include` of an external path): `GLYPH_NAMES[88]` + a ~400-word `SEM_WORD_MAP`
++ stop-words, and `semtok_word(w) → 0..87, or -1`. The glyphs are awareness primitives (water/fear/love/death/
+good…), the structure of perception — NOT knowledge of the world — so Leo's zero-pretrained invariant holds:
+ε_small in θ=ε+γ+αδ. The `-1` is the School trigger.
+
+**The loop (in `leo_respond`, both `--respond` and `--chat`):**
+1. Entry: if a question was open from last turn (`school.pending`), THIS prompt is the answer — already
+   ingested above (it grows his field) — so mark the word learned (`learned[]`, won't re-ask) and don't open
+   a new question this turn.
+2. After the field settles: scan the prompt's content words; the first one that is (a) not a function/stop
+   word, (b) `semtok_word < 0` (no glyph), (c) not already learned, (d) **genuinely new** —
+   `leo_heard_count ≤ LEO_SCHOOL_NOVEL_MAX (2)` — makes Leo ask "What is X?" and sets `pending`.
+3. Gates: he won't ask under high FEAR+VOID (`< LEO_QUIET_DISTRESS`) — too unsettled to be curious.
+   `--no-school` ablates the whole channel.
+
+**Two design points, named:**
+- The novelty gate (d) is the fix for the obvious false-positive: a common word that simply lacks a glyph
+  ("like", "candle") is NOT unknown to Leo — he uses it fluently from the corpus (high `heard_count`). Without
+  the gate he asked "What is like?". With it he asks only about words genuinely outside his experience
+  ("zorble", "grumbus"), which is the intent.
+- "What is X?" names the prompt word — a deliberate, bounded departure from the never-echo invariant. It is a
+  meta-act (asking), not generation: no `leo_chain`, no field-step, no spore, no RAE train for a question. The
+  invariant "knowledge enters as field pressure, not pasted text" holds for REPLIES; asking about a word
+  requires naming it. This is the reversed role, by design.
+
+In-memory in v1: the learned ANSWERS persist across sessions through the field (ingest is in save/load); the
+"don't re-ask" set is ephemeral — persisting it is the next step. The glyph BINDING of a learned word (so it
+resonates through a chamber) is also a later increment; v1 is detect → ask → absorb → mark-known.
+
+PASS (tool output): build 0 warn, tests **99/99** (+4: unknown→asks; answer→learned+closes; learned→no
+re-ask; `--no-school` suppresses). `--gen` byte-identical (`0f32d2c` — School is never on the prompt-free
+path) and `--respond --no-school` byte-identical to the pre-School `0030746`. Live: `--respond "tell me about
+the zorble"` → "What is zorble?"; in `--chat` he asks about zorble, is told, learns it, then USES "like"
+fluently without asking; a neutral "grumbus" is asked, an overwhelmed (accumulated FEAR) turn stays quiet.
+ASan/UBSan on the `--chat` and `--respond` School paths: exit 0 / 0 findings. Next — Mythos audit of School
+(the awareness module is in), then persist the learned-set + bind learned words to glyphs (chamber resonance).

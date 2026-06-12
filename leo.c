@@ -1060,6 +1060,166 @@ static void leo_heard_ingest(LeoHeard *m, const char *text) {
 }
 
 /* ========================================================================
+ * AWARENESS SEED — semantic tokenizer (vendored from caveLLMan, RULE-BASED).
+ * 88 glyphs + a word→glyph map; semtok_word() → glyph 0..87, or -1 = a concept
+ * Leo has no slot for. That -1 is the School trigger: a content word with no
+ * glyph is a thing he doesn't grasp, so he asks "What is it?". Zero pretrained
+ * weights, zero deps — these are awareness primitives (good/fear/love/...), the
+ * structure of perception, not knowledge of the world. ε_small in θ=ε+γ+αδ.
+ * ======================================================================== */
+
+#define GLYPH_COUNT 88
+static const char *GLYPH_NAMES[GLYPH_COUNT] = {
+    "water","fire","earth","stone","tree","sky","light","dark","cold",
+    "person","man","woman","child","old","spirit","AI","animal",
+    "body","food","sleep","pain","strength",
+    "joy","grief","love","fear","anger","longing","tired","stress",
+    "go","make","break","see","speak","hear","seek","give","want","miss","agree",
+    "home","outside","work","internet","bond","conflict",
+    "know","idea","think","dream","remember","lie",
+    "path","up","down","far","back",
+    "before","now","after","never","always",
+    "not","many","much","and","one","question","how","cause",
+    "me","you","other","money","change","write","choose","help","have","free","death","music","good",
+    "small","same","BE","wait"
+};
+
+typedef struct { const char *word; const char *glyph; } SemWordMap;
+static const SemWordMap SEM_WORD_MAP[] = {
+    {"sun","light"},{"sunrise","light"},{"dawn","light"},{"morning","light"},{"bright","light"},{"shine","light"},
+    {"night","dark"},{"shadow","dark"},{"darkness","dark"},{"evening","dark"},{"midnight","dark"},
+    {"rain","water"},{"river","water"},{"sea","water"},{"ocean","water"},{"lake","water"},{"swim","water"},
+    {"fire","fire"},{"flame","fire"},{"burn","fire"},{"cook","fire"},{"hot","fire"},{"warm","fire"},
+    {"ground","earth"},{"soil","earth"},{"land","earth"},{"field","earth"},{"garden","earth"},{"farm","earth"},
+    {"rock","stone"},{"mountain","stone"},{"hill","stone"},{"castle","stone"},{"wall","stone"},{"building","stone"},
+    {"tree","tree"},{"forest","tree"},{"wood","tree"},{"leaf","tree"},{"flower","tree"},{"grass","tree"},
+    {"sky","sky"},{"cloud","sky"},{"wind","sky"},{"storm","sky"},{"air","sky"},
+    {"cold","cold"},{"ice","cold"},{"snow","cold"},{"frost","cold"},{"winter","cold"},{"freeze","cold"},
+    {"people","person"},{"human","person"},{"someone","person"},{"everyone","person"},{"they","person"},
+    {"he","man"},{"him","man"},{"boy","man"},{"guy","man"},{"father","man"},{"dad","man"},{"husband","man"},{"brother","man"},{"son","man"},{"king","man"},
+    {"she","woman"},{"her","woman"},{"girl","woman"},{"mother","woman"},{"mom","woman"},{"wife","woman"},{"sister","woman"},{"daughter","woman"},{"queen","woman"},
+    {"child","child"},{"kid","child"},{"baby","child"},{"children","child"},{"kids","child"},{"young","child"},{"little","child"},
+    {"old","old"},{"elderly","old"},{"ancient","old"},{"grandfather","old"},{"grandmother","old"},{"grandpa","old"},{"grandma","old"},
+    {"god","spirit"},{"prayer","spirit"},{"church","spirit"},{"soul","spirit"},{"angel","spirit"},{"holy","spirit"},
+    {"computer","AI"},{"robot","AI"},{"machine","AI"},{"software","AI"},{"technology","AI"},{"digital","AI"},
+    {"dog","animal"},{"cat","animal"},{"bird","animal"},{"horse","animal"},{"fish","animal"},{"chicken","animal"},{"rooster","animal"},
+    {"hand","body"},{"head","body"},{"face","body"},{"heart","body"},{"eye","body"},{"arm","body"},
+    {"eat","food"},{"meal","food"},{"bread","food"},{"coffee","food"},{"tea","food"},{"cake","food"},{"soup","food"},{"beer","food"},{"wine","food"},{"hungry","food"},{"dinner","food"},{"breakfast","food"},{"lunch","food"},
+    {"sleep","sleep"},{"bed","sleep"},{"rest","sleep"},{"nap","sleep"},{"pillow","sleep"},{"awake","sleep"},{"wake","sleep"},
+    {"hurt","pain"},{"sick","pain"},{"doctor","pain"},{"hospital","pain"},{"medicine","pain"},{"wound","pain"},{"fever","pain"},
+    {"strong","strength"},{"power","strength"},{"run","strength"},{"exercise","strength"},{"fight","strength"},{"sport","strength"},
+    {"happy","joy"},{"smile","joy"},{"laugh","joy"},{"celebrate","joy"},{"dance","joy"},{"fun","joy"},{"enjoy","joy"},
+    {"sad","grief"},{"cry","grief"},{"mourn","grief"},{"sorrow","grief"},{"funeral","grief"},{"tears","grief"},
+    {"love","love"},{"kiss","love"},{"hug","love"},{"romance","love"},{"wedding","love"},{"marry","love"},
+    {"afraid","fear"},{"scared","fear"},{"panic","fear"},{"worry","fear"},{"nightmare","fear"},{"danger","fear"},
+    {"angry","anger"},{"mad","anger"},{"rage","anger"},{"hate","anger"},{"yell","anger"},{"shout","anger"},
+    {"miss","longing"},{"yearn","longing"},{"homesick","longing"},{"nostalgia","longing"},
+    {"tired","tired"},{"exhausted","tired"},{"weary","tired"},{"sleepy","tired"},{"bored","tired"},
+    {"stress","stress"},{"pressure","stress"},{"overwhelm","stress"},{"busy","stress"},{"rush","stress"},
+    {"go","go"},{"walk","go"},{"move","go"},{"travel","go"},{"drive","go"},{"leave","go"},{"arrive","go"},{"come","go"},{"ran","go"},{"went","go"},{"walked","go"},
+    {"make","make"},{"build","make"},{"create","make"},{"produce","make"},{"craft","make"},
+    {"break","break"},{"destroy","break"},{"smash","break"},{"crash","break"},{"tear","break"},
+    {"see","see"},{"look","see"},{"watch","see"},{"read","see"},{"notice","see"},{"found","see"},{"saw","see"},
+    {"speak","speak"},{"say","speak"},{"tell","speak"},{"talk","speak"},{"call","speak"},{"sing","speak"},{"said","speak"},{"told","speak"},
+    {"hear","hear"},{"listen","hear"},{"sound","hear"},{"music","hear"},{"song","hear"},
+    {"seek","seek"},{"search","seek"},{"hunt","seek"},{"explore","seek"},
+    {"give","give"},{"share","give"},{"offer","give"},{"send","give"},{"gave","give"},
+    {"want","want"},{"wish","want"},{"desire","want"},{"need","want"},{"hope","want"},
+    {"miss","miss"},{"lost","miss"},{"gone","miss"},{"absent","miss"},{"lonely","miss"},
+    {"agree","agree"},{"yes","agree"},{"accept","agree"},{"nod","agree"},{"peace","agree"},
+    {"home","home"},{"house","home"},{"room","home"},{"door","home"},{"kitchen","home"},{"window","home"},{"roof","home"},
+    {"outside","outside"},{"nature","outside"},{"park","outside"},{"beach","outside"},{"city","outside"},{"market","outside"},{"shop","outside"},{"street","outside"},
+    {"work","work"},{"job","work"},{"office","work"},{"business","work"},{"career","work"},
+    {"internet","internet"},{"online","internet"},{"email","internet"},{"phone","internet"},{"website","internet"},
+    {"friend","bond"},{"family","bond"},{"together","bond"},{"team","bond"},{"community","bond"},
+    {"war","conflict"},{"battle","conflict"},{"attack","conflict"},{"argue","conflict"},{"enemy","conflict"},
+    {"know","know"},{"learn","know"},{"study","know"},{"school","know"},{"book","know"},{"understand","know"},{"knew","know"},{"taught","know"},
+    {"idea","idea"},{"plan","idea"},{"concept","idea"},{"solution","idea"},{"invention","idea"},
+    {"think","think"},{"thought","think"},{"consider","think"},{"wonder","think"},{"mind","think"},{"decide","think"},
+    {"dream","dream"},{"imagine","dream"},{"fantasy","dream"},{"story","dream"},
+    {"remember","remember"},{"memory","remember"},{"past","remember"},{"history","remember"},{"forgot","remember"},
+    {"lie","lie"},{"cheat","lie"},{"fake","lie"},{"trick","lie"},{"pretend","lie"},
+    {"road","path"},{"way","path"},{"direction","path"},{"trail","path"},
+    {"up","up"},{"rise","up"},{"climb","up"},{"above","up"},{"high","up"},{"tall","up"},{"top","up"},
+    {"down","down"},{"fall","down"},{"drop","down"},{"below","down"},{"low","down"},{"fell","down"},
+    {"far","far"},{"distant","far"},{"away","far"},{"abroad","far"},{"remote","far"},
+    {"back","back"},{"return","back"},{"behind","back"},{"again","back"},
+    {"before","before"},{"earlier","before"},{"yesterday","before"},{"once","before"},{"ago","before"},
+    {"now","now"},{"today","now"},{"moment","now"},{"current","now"},
+    {"after","after"},{"later","after"},{"tomorrow","after"},{"soon","after"},{"next","after"},{"then","after"},
+    {"never","never"},{"no","never"},{"nothing","never"},{"nobody","never"},{"stop","never"},
+    {"always","always"},{"forever","always"},{"every","always"},{"daily","always"},{"constant","always"},
+    {"not","not"},{"don't","not"},{"can't","not"},{"won't","not"},{"bad","not"},{"wrong","not"},
+    {"many","many"},{"lots","many"},{"several","many"},{"huge","many"},{"thousand","many"},
+    {"much","much"},{"very","much"},{"really","much"},{"extremely","much"},{"quite","much"},
+    {"and","and"},{"also","and"},{"with","and"},{"both","and"},{"plus","and"},
+    {"one","one"},{"single","one"},{"alone","one"},{"only","one"},{"first","one"},
+    {"question","question"},{"ask","question"},{"why","question"},{"what","question"},{"curious","question"},
+    {"how","how"},{"method","how"},{"step","how"},
+    {"because","cause"},{"reason","cause"},{"therefore","cause"},{"result","cause"},
+    {"i","me"},{"my","me"},{"myself","me"},
+    {"you","you"},{"your","you"},{"yourself","you"},
+    {"other","other"},{"another","other"},{"different","other"},{"new","other"},{"strange","other"},
+    {"money","money"},{"dollar","money"},{"pay","money"},{"buy","money"},{"sell","money"},{"rich","money"},{"poor","money"},{"price","money"},
+    {"change","change"},{"transform","change"},{"grow","change"},{"develop","change"},{"evolve","change"},
+    {"write","write"},{"pen","write"},{"paper","write"},{"letter","write"},{"note","write"},{"wrote","write"},{"poem","write"},{"code","write"},
+    {"choose","choose"},{"pick","choose"},{"select","choose"},{"vote","choose"},
+    {"help","help"},{"assist","help"},{"support","help"},{"save","help"},{"protect","help"},
+    {"have","have"},{"own","have"},{"keep","have"},{"hold","have"},{"got","have"},{"had","have"},
+    {"free","free"},{"freedom","free"},{"liberty","free"},{"escape","free"},{"open","free"},
+    {"death","death"},{"die","death"},{"dead","death"},{"kill","death"},{"grave","death"},{"died","death"},
+    {"music","music"},{"melody","music"},{"guitar","music"},{"piano","music"},{"drum","music"},{"sang","music"},{"singing","music"},
+    {"good","good"},{"great","good"},{"nice","good"},{"kind","good"},{"beautiful","good"},{"wonderful","good"},{"fine","good"},
+    {"small","small"},{"tiny","small"},{"short","small"},{"few","small"},
+    {"same","same"},{"equal","same"},{"similar","same"},{"identical","same"},
+    {"is","BE"},{"am","BE"},{"are","BE"},{"was","BE"},{"were","BE"},{"being","BE"},{"become","BE"},{"feel","BE"},
+    {"wait","wait"},{"patience","wait"},{"pause","wait"},{"delay","wait"},{"stay","wait"},
+    {NULL, NULL}
+};
+
+static const char *SEM_STOP_WORDS[] = {
+    "the","a","an","to","of","in","for","on","at","by","from","about","into",
+    "through","during","above","between","out","off","over","under","again",
+    "further","here","there","when","where","all","each","both","few","more",
+    "most","some","such","so","than","too","just","but","if","or","while","as",
+    "until","that","this","these","those","it","its","itself","which","who","whom",
+    NULL
+};
+static int semtok_is_stop_word(const char *w) {
+    for (int i = 0; SEM_STOP_WORDS[i]; i++)
+        if (strcmp(w, SEM_STOP_WORDS[i]) == 0) return 1;
+    return 0;
+}
+
+/* glyph name → id 0..87, -1 if not a base glyph. */
+static int semtok_find_glyph(const char *name) {
+    for (int i = 0; i < GLYPH_COUNT; i++)
+        if (strcmp(name, GLYPH_NAMES[i]) == 0) return i;
+    return -1;
+}
+/* a single (lowercased) word → glyph id 0..87, or -1 = no concept slot. */
+static int semtok_word(const char *word) {
+    int id = semtok_find_glyph(word);
+    if (id >= 0) return id;
+    for (int i = 0; SEM_WORD_MAP[i].word; i++)
+        if (strcmp(word, SEM_WORD_MAP[i].word) == 0)
+            return semtok_find_glyph(SEM_WORD_MAP[i].glyph);
+    return -1;
+}
+
+/* A.5 School — the reversed role: Leo asks YOU what an unfamiliar word means,
+ * and your answer grows into his field. learned[] = words he has been taught (so
+ * he won't re-ask); pending = the word he just asked about, awaiting your reply. */
+#define LEO_SCHOOL_MAX 256
+#define LEO_SCHOOL_NOVEL_MAX 2   /* only ask about a word heard <= this — genuinely new,
+                                  * not a common word that just lacks a glyph ("like") */
+typedef struct {
+    char learned[LEO_SCHOOL_MAX][LEO_HEARD_WORDLEN];
+    int  n_learned;
+    char pending[LEO_HEARD_WORDLEN];   /* non-empty = a question is open */
+} LeoSchool;
+
+/* ========================================================================
  * LEO — the organism (step 0: tokenizer + field + ingest)
  * ======================================================================== */
 
@@ -1127,6 +1287,9 @@ typedef struct {
     /* A.4 — RAE: the first LEARNED component (recursive selector MLP). PASSIVE
      * until R2 wires it into selection; weights persist in leo.state (R4). */
     LeoRae rae;
+    /* A.5 — School: the reversed role (Leo asks YOU what an unknown word means).
+     * In-memory in v1; learned answers persist via the field (ingest save/load). */
+    LeoSchool school;
 } Leo;
 
 /* A.4 RAE — micrograd MLP (fixed 5→8→1, hand-rolled scalar autograd, zero deps). */
@@ -1367,6 +1530,7 @@ static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence the
 static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
 static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore bleed / self-residual recall off) */
 static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selector; default OFF until trained, opt-in) */
+static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_breath_on = 1;         /* --no-breath → 0 (per-reply lexical decay/prune off) */
 static int g_leo_cont_theme_on = 1;     /* --no-cont-theme → 0 (П-2: gravity-first admission in continuations off) */
 static int g_leo_anchor_prefix_on = 0;  /* --anchor-prefix → 1 (П-5: prefix-morphology chamber match; default OFF — it de-calibrates the hard-won voice, opt-in for Oleg's ear) */
@@ -3317,6 +3481,49 @@ static void leo_breath(Leo *leo) {
         trigram_prune_rebuild(&leo->trigrams, LEO_LEX_PRUNE_THRESHOLD);
 }
 
+/* A.5 School helpers — the reversed role. A content word with no glyph
+ * (semtok_word < 0) that Leo has not been taught is a concept he doesn't hold:
+ * the trigger to ask "What is it?". learned[] keeps him from re-asking. */
+static int leo_school_is_learned(const Leo *leo, const char *w) {
+    for (int i = 0; i < leo->school.n_learned; i++)
+        if (strcmp(leo->school.learned[i], w) == 0) return 1;
+    return 0;
+}
+static int leo_school_unknown(const Leo *leo, const char *w) {
+    return semtok_word(w) < 0 && !leo_school_is_learned(leo, w);
+}
+static void leo_school_learn(Leo *leo, const char *w) {
+    if (!w[0] || leo_school_is_learned(leo, w) || leo->school.n_learned >= LEO_SCHOOL_MAX) return;
+    strncpy(leo->school.learned[leo->school.n_learned], w, LEO_HEARD_WORDLEN - 1);
+    leo->school.learned[leo->school.n_learned][LEO_HEARD_WORDLEN - 1] = 0;
+    leo->school.n_learned++;
+}
+/* scan the prompt's content words; copy the first one Leo has no concept for
+ * (not a function/stop word, semtok < 0, not already learned) into out. 1 = found. */
+static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out) {
+    char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+    for (const char *q = prompt; ; q++) {
+        unsigned char ch = (unsigned char)*q;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi >= 3) {
+            cur[wi] = 0;
+            if (!leo_word_is_function(cur) && !semtok_is_stop_word(cur) &&
+                leo_school_unknown(leo, cur) &&
+                leo_heard_count(&leo->heard, cur) <= LEO_SCHOOL_NOVEL_MAX) {
+                strncpy(out, cur, LEO_HEARD_WORDLEN - 1);
+                out[LEO_HEARD_WORDLEN - 1] = 0;
+                return 1;
+            }
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
 /* respond to a prompt. Hear it, tilt the field toward its theme, speak
  * from the tilted field — and let the prompt's dissonance set his register
  * (known → settle on theme; alien → grope, the felt not-knowing). Mama-
@@ -3332,6 +3539,16 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                                        * emotion BEFORE speaking, so the register channel reads a
                                        * live felt-state from token 1 (phase 3b field->voice) */
     leo->heard_word[0] = 0;
+
+    /* A.5 School: if Leo asked "What is X?" last turn, THIS prompt is the answer —
+     * already ingested above (it grows his field). Mark X learned so he won't
+     * re-ask, and don't open a new question this turn (he just got an answer). */
+    int was_answer = 0;
+    if (g_leo_school_on && leo->school.pending[0]) {
+        leo_school_learn(leo, leo->school.pending);
+        leo->school.pending[0] = 0;
+        was_answer = 1;
+    }
 
     float   *g = NULL;
     uint8_t *pieces = NULL;
@@ -3385,7 +3602,22 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             }
         }
     }
-    int produced = leo_chain(leo, chain_len, out, max_len);
+    int produced;
+    /* A.5 School: an unknown content word, and Leo is curious enough (not under
+     * high FEAR+VOID) → he ASKS instead of replying (reversed role). The "What is
+     * X?" names the prompt word — a meta-act of asking, not generation, so the
+     * never-echo invariant holds for REPLIES. Else he speaks from the field. */
+    char unk[LEO_HEARD_WORDLEN];
+    if (g_leo_school_on && !was_answer &&
+        (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS &&
+        leo_school_find_unknown(leo, prompt, unk)) {
+        int n = snprintf(out, (size_t)max_len, "What is %s?", unk);
+        produced = (n >= max_len) ? max_len - 1 : n;
+        strncpy(leo->school.pending, unk, LEO_HEARD_WORDLEN - 1);
+        leo->school.pending[LEO_HEARD_WORDLEN - 1] = 0;
+    } else {
+        produced = leo_chain(leo, chain_len, out, max_len);
+    }
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
@@ -3716,6 +3948,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-field-honest")) g_leo_field_honest_on = 0;
         else if (!strcmp(argv[i], "--no-santaclaus")) g_leo_santaclaus_on = 0;
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
+        else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));

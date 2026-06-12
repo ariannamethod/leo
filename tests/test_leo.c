@@ -656,6 +656,30 @@ int main(void) {
         remove(path);
     }
 
+    /* A.5 School: an unknown content word makes Leo ASK; the answer is learned;
+     * a learned word no longer triggers; --no-school suppresses the question. */
+    {
+        Leo sc; leo_init(&sc);
+        leo_ingest(&sc, "the rain falls. leo hears the sound. his mother is warm.");
+        char buf[1024];
+        int prev = g_leo_school_on; g_leo_school_on = 1;
+        leo_respond(&sc, "tell me about the zorble", buf, sizeof buf);
+        CHECK(strstr(buf, "What is") && strstr(buf, "zorble") &&
+              strcmp(sc.school.pending, "zorble") == 0,
+              "school: an unknown word makes Leo ask 'What is <word>?'");
+        leo_respond(&sc, "a zorble is a small round stone", buf, sizeof buf);
+        CHECK(sc.school.pending[0] == 0 && leo_school_is_learned(&sc, "zorble"),
+              "school: the answer is learned and the question closes");
+        leo_respond(&sc, "tell me about the zorble again", buf, sizeof buf);
+        CHECK(strncmp(buf, "What is", 7) != 0,
+              "school: a learned word no longer triggers a question");
+        g_leo_school_on = 0;
+        leo_respond(&sc, "tell me about the wobble", buf, sizeof buf);
+        CHECK(strncmp(buf, "What is", 7) != 0, "school: --no-school suppresses the question");
+        g_leo_school_on = prev;
+        leo_free(&sc);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
