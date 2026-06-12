@@ -1547,7 +1547,7 @@ static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit c
 static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore bleed / self-residual recall off) */
 static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selector; default OFF until trained, opt-in) */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
-static int g_leo_form_on = 0;           /* --form → 1 (A.6 F-2: the velocity mode shapes the utterance; opt-in pending the ear) */
+static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 /* A.6 F-2: in form, only WALK/RUN fill out a fragment; STOP/BREATHE leave it held
  * and short (the breath). Off-form → always eligible (byte-identical). */
 static int leo_form_elaborates(const Leo *leo) {
@@ -4063,7 +4063,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-santaclaus")) g_leo_santaclaus_on = 0;
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
-        else if (!strcmp(argv[i], "--form")) g_leo_form_on = 1;
+        else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));

@@ -1134,6 +1134,11 @@ good second fragment ("Alone." lost) — the chain values are ear-tunable.
 
 PASS (tool output): build 0 warn, tests **109/109** (+3 form: off-form every mode may elaborate / STOP holds /
 RUN fills). Default (`--form` off) byte-identical: `--gen` (`0f32d2c`) and `--respond` to pre-FORM `ee9c6b6`.
-ASan/UBSan on the `--form` `--respond`/`--chat` paths: exit 0 / 0 findings. **OPEN — Oleg's ear:** flip the
-default ON (the win is clear), or tune the chain values / do F-3 (token budget) first? Then F-3, then the AML
-velocity bridge.
+ASan/UBSan on the `--form` `--respond`/`--chat` paths: exit 0 / 0 findings.
+
+**Default flipped ON (Oleg's ear, same session).** `g_leo_form_on = 1`, `--form` → `--no-form`. FORM is now
+Leo's default voice — "i am so afraid of the dark" → "The floor." by default. `--gen` stays byte-identical
+(`0f32d2c`; the mode stays WALK on the prompt-free path, elaboration unchanged), `--no-form` reverts to the
+pre-FORM voice (byte-identical to `ee9c6b6`), 109/109. Next — **F-3 (token-budget hard-landing)**: make STOP
+reliably minimal (a clean held fragment every time, not only when the block collapses) so the form is the full
+haiku precision; then the AML velocity bridge.
