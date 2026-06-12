@@ -3696,6 +3696,12 @@ int main(int argc, char **argv) {
             }
             leo_respond(&leo, line, reply, sizeof reply);
             printf("leo> %s\n", reply);
+            if (g_leo_santaclaus_on) {   /* santaclaus metrics: the circulation, in numbers */
+                long bled = 0;
+                for (int i = 0; i < leo.n_spores; i++) bled += leo.spores[i].bleed_count;
+                printf("     [santaclaus: spores=%d sea=%d | recall-events Sum(bleed)=%ld]\n",
+                       leo.n_spores, leo.n_sea, bled);
+            }
         }
     }
 
