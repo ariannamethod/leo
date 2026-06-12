@@ -89,6 +89,11 @@
 // See ariannamethod.h for struct definitions and pack flags
 
 static AM_State G;
+static int g_am_initialized = 0;   // A-4: field auto-inits on first am_exec; kept
+                                   // separate from G so am_init's memset(&G) cannot clear it.
+static char g_base_dir[256] = "";  // A-6: directory of the file being executed; seeds
+                                   // ctx.base_dir so relative INCLUDEs resolve against the
+                                   // including file, not the filesystem root.
 
 // Blood compiler globals (used by Level 0 dispatch + Blood API)
 static AM_BloodModule g_blood_modules[AM_BLOOD_MAX_MODULES];
@@ -226,6 +231,7 @@ static int clampi(int x, int a, int b) {
 #define AM_METONIC_YEARS    19        // years per cycle
 #define AM_METONIC_LEAPS    7         // leap years per cycle
 #define AM_MAX_UNCORRECTED  33.0f     // max drift before correction (~3yr × 11.25)
+#define AM_VELOCITY_INERTIA 2.0f      // debt cost of switching the velocity mode (the body resists; D4 at debt>5 forces NOMOVE)
 
 static const int g_metonic_leap_years[7] = {3, 6, 8, 11, 14, 17, 19};
 static time_t g_epoch_t = 0;
@@ -498,6 +504,7 @@ static AML_Symtab g_persistent_globals;
 void am_persistent_clear(void);
 
 void am_init(void) {
+  g_am_initialized = 1;   // A-4: mark initialized so am_exec's auto-init won't re-fire
   // Clean up tape from previous session
   am_tape_destroy();
 
@@ -3534,11 +3541,13 @@ static void aml_exec_level0(const char* cmd, const char* arg, AML_ExecCtx* ctx, 
       G.destiny = clamp01(ctx_float(ctx, arg));
     }
     else if (!strcmp(t, "FIELD")) {
-      // FIELD ON|OFF — gate the field overlay on logits
+      // FIELD ON|OFF — gate the field overlay on logits. A-7: honour the §1.1
+      // boolean-false set so FIELD 0 / FALSE / NO also disable (was: only "OFF").
       char argup[8] = {0};
       snprintf(argup, sizeof(argup), "%.7s", arg);
       upcase(argup);
-      G.field_enabled = strcmp(argup, "OFF") ? 1 : 0;
+      G.field_enabled = (strcmp(argup, "OFF") && strcmp(argup, "0") &&
+                         strcmp(argup, "FALSE") && strcmp(argup, "NO")) ? 1 : 0;
     }
     else if (!strcmp(t, "RESONANCE")) {
       // RESONANCE <float> — set a resonance FLOOR: the field is held at or above
@@ -3603,12 +3612,21 @@ static void aml_exec_level0(const char* cmd, const char* arg, AML_ExecCtx* ctx, 
       snprintf(argup, sizeof(argup), "%.31s", arg);
       upcase(argup);
 
+      int prev_vel = G.velocity_mode;
       if (!strcmp(argup, "RUN")) G.velocity_mode = AM_VEL_RUN;
       else if (!strcmp(argup, "WALK")) G.velocity_mode = AM_VEL_WALK;
       else if (!strcmp(argup, "NOMOVE") || !strcmp(argup, "STOP")) G.velocity_mode = AM_VEL_NOMOVE;
       else if (!strcmp(argup, "BACKWARD")) G.velocity_mode = AM_VEL_BACKWARD;
       else if (!strcmp(argup, "BREATHE")) G.velocity_mode = AM_VEL_BREATHE;
       else G.velocity_mode = clampi(safe_atoi(arg), -1, 3);
+
+      // INERTIA — the body resists changing its gait. Switching the velocity mode
+      // costs (adds to debt); re-stating the same mode is free. Over-switching
+      // exhausts the field, and the recovery rule (debt > 5 in am_step) then forces
+      // NOMOVE. This makes "discrete dynamics with inertia reads as a body" a
+      // property of the language: a mood that holds and resists, not a switch.
+      if (G.velocity_mode != prev_vel)
+        G.debt = clampf(G.debt + AM_VELOCITY_INERTIA, 0.0f, 100.0f);
 
       update_effective_temp();
     }
@@ -4623,7 +4641,11 @@ static int aml_preprocess(const char* script, AML_Line* lines, int max_lines) {
         if (len == 0) { lineno++; continue; }
 
         // store
-        if (len >= AML_MAX_LINE_LEN) len = AML_MAX_LINE_LEN - 1;
+        if (len >= AML_MAX_LINE_LEN) {
+            fprintf(stderr, "aml: line %d truncated at %d bytes (AML_MAX_LINE_LEN)\n",
+                    lineno, AML_MAX_LINE_LEN - 1);   // R-2: loud, was a silent drop
+            len = AML_MAX_LINE_LEN - 1;
+        }
         memcpy(lines[count].text, start, len);
         lines[count].text[len] = 0;
         lines[count].indent = indent;
@@ -6114,6 +6136,45 @@ static int aml_exec_line(AML_ExecCtx* ctx, int idx) {
         return idx + 1;  // macro not found — ignore
     }
 
+    // --- A-3b: multi-line BLOOD COMPILE — gather the body across lines ---
+    // aml_exec_level0's one-line handler only compiles when '{' and '}' are on the
+    // same line; a multi-line block otherwise falls through here and its C body
+    // lines get dispatched as field commands (e.g. "PAIN 0.9;" would set pain).
+    // Detect an unbalanced opener, gather the body until the braces balance,
+    // compile it, and resume past the consumed lines so the body never reaches the
+    // dispatcher. (One-line blocks have net==0 and stay with aml_exec_level0.)
+    if (strncasecmp(text, "BLOOD COMPILE", 13) == 0) {
+        const char* open = strchr(text, '{');
+        int net = 0;
+        if (open) for (const char* c = text; *c; c++) net += (*c == '{') - (*c == '}');
+        if (open && net > 0) {
+            char bname[AM_BLOOD_MAX_NAME] = {0};
+            sscanf(text + 13, " %63s", bname);
+            size_t cap = 512, len = 0;
+            char* body = (char*)malloc(cap);
+            if (!body) return idx + 1;
+            int depth = 0, j = idx, done = 0;
+            const char* chunk = open;
+            while (j < ctx->nlines && !done) {
+                for (const char* c = chunk; *c; c++) {
+                    if (*c == '{') { if (++depth == 1) continue; }       // skip the opening '{'
+                    else if (*c == '}') { if (--depth == 0) { done = 1; break; } }
+                    if (len + 2 > cap) { char* nb = (char*)realloc(body, cap * 2); if (!nb) { done = 1; break; } body = nb; cap *= 2; }
+                    body[len++] = *c;
+                }
+                if (done) break;
+                if (len + 2 > cap) { char* nb = (char*)realloc(body, cap * 2); if (!nb) break; body = nb; cap *= 2; }
+                body[len++] = '\n';
+                if (++j < ctx->nlines) chunk = ctx->lines[j].text;
+            }
+            body[len] = 0;
+            if (am_blood_compile(bname, body) < 0)
+                set_error_at(ctx, ctx->lines[idx].lineno, "blood: compilation failed");
+            free(body);
+            return (j < ctx->nlines) ? j + 1 : ctx->nlines;
+        }
+    }
+
     // --- Level 0 fallback: split CMD ARG, dispatch ---
     {
         char linebuf[AML_MAX_LINE_LEN];
@@ -6147,6 +6208,11 @@ static int aml_exec_block(AML_ExecCtx* ctx, int start, int end) {
 
 int am_exec(const char* script) {
     if (!script || !*script) return 0;
+    /* A-4: auto-init the field on first use. The compiled-binary path applies
+     * top-level directives via an __attribute__((constructor)) before main and
+     * never calls am_init(), so without this the directives ran on a zeroed
+     * AM_State (base_temperature=0, etc.) instead of the spec §2 defaults. */
+    if (!g_am_initialized) am_init();
     g_error[0] = 0;
 
     // preprocess into lines
@@ -6159,6 +6225,7 @@ int am_exec(const char* script) {
     // set up execution context
     AML_ExecCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
+    snprintf(ctx.base_dir, sizeof(ctx.base_dir), "%s", g_base_dir);   // A-6: inherit include base dir
     ctx.lines = lines;
     ctx.nlines = nlines;
 
@@ -6602,6 +6669,15 @@ void am_free_compiled(void* handle) {
 
 int am_exec_file(const char* path) {
     if (!path) return 1;
+    // A-6: include recursion guard. am_exec() builds a fresh AML_ExecCtx on every
+    // call, resetting ctx.include_depth, so the INCLUDE handler's per-ctx guard
+    // never accumulated across am_exec_file — a file that INCLUDEs itself recursed
+    // to a stack overflow (SIGSEGV). Bound the nesting with a static counter here.
+    static int file_depth = 0;
+    if (file_depth >= AML_MAX_INCLUDE) {
+        snprintf(g_error, 256, "max include depth (%d) exceeded: %s", AML_MAX_INCLUDE, path);
+        return 1;
+    }
     g_error[0] = 0;
 
     FILE* f = fopen(path, "r");
@@ -6627,7 +6703,24 @@ int am_exec_file(const char* path) {
     fclose(f);
     buf[rd] = 0;
 
+    // A-6: publish this file's directory so relative INCLUDEs inside it resolve
+    // against it (am_exec seeds ctx.base_dir from g_base_dir). Save/restore for nesting.
+    char saved_base[256];
+    snprintf(saved_base, sizeof(saved_base), "%s", g_base_dir);
+    const char* slash = strrchr(path, '/');
+    if (slash) {
+        size_t n = (size_t)(slash - path);
+        if (n >= sizeof(g_base_dir)) n = sizeof(g_base_dir) - 1;
+        memcpy(g_base_dir, path, n);
+        g_base_dir[n] = 0;
+    } else {
+        snprintf(g_base_dir, sizeof(g_base_dir), ".");
+    }
+
+    file_depth++;
     int rc = am_exec(buf);
+    file_depth--;
+    snprintf(g_base_dir, sizeof(g_base_dir), "%s", saved_base);
     free(buf);
     return rc;
 }
@@ -6701,6 +6794,13 @@ int am_copy_state(float* out) {
 
 // Co-occurrence telemetry (H-term word circulation): live edge count.
 int am_cooc_count(void) { return G.cooc_n; }
+
+// Clear the co-occurrence field in G. Used when a per-voice cooc sidecar is
+// absent (first run of a voice): the shared soma carries cooc inside AM_State,
+// so without a sidecar to overwrite it the voice would inherit the OTHER voice's
+// edges (foreign token-ids) and bake the contamination into its own sidecar at
+// SAVE. Clearing on a failed am_cooc_load keeps the "cooc stays per-voice" invariant.
+void am_cooc_clear(void) { G.cooc_n = 0; G.cooc_total = 0; G.ctx_ring_n = 0; }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LOGIT MANIPULATION API — apply field state to generation

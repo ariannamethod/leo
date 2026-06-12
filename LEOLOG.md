@@ -1242,3 +1242,16 @@ PASS: Leo rebuilds from the re-vendored source, tests **111/111**, default `--ge
 The AML side is on a feature branch (512/512), ready to merge to `ariannamethod.ai` main on Oleg's word. Next —
 **axiom (a)-2: the inertia** (a transition cost on velocity switching, via debt, so a discrete state with
 inertia reads as a body — the deeper half), then **(б) School I3** and **(в) the marathon with the `.aml` drive**.
+
+## Phase A.6 — axiom (a)-2: velocity inertia in the language (2026-06-13)
+
+The deeper half landed. In AML (`ariannamethod.ai`, branch `claude-velocity-inertia`, `make test` 514/514),
+switching the `VELOCITY` mode now costs `debt` (`AM_VELOCITY_INERTIA` = 2.0); re-stating the same mode is free.
+Over-switching exhausts the field, and the recovery rule (`debt > 5` → forced `NOMOVE`, in `am_step`) holds it
+still — the body **resists** changing its gait. "A discrete state with inertia reads as a body" is now a
+property of the language, inherited by every Method organism. The vendored AML here was re-synced; the inertia
+is internal to AML's debt, so Leo (which reads the final `velocity_mode`) is unchanged: 111/111, `--gen`
+byte-identical (`0f32d2c`), `--aml VELOCITY STOP` still holds the breath. **Axiom (a) complete: (a)-1 the
+somatic operators + (a)-2 the inertia.** The AML side is on a feature branch (514/514), ready to merge to main
+on Oleg's word. Next — **(б) School I3** (the guessing child), **(в) the listening marathon**, then the capstone
+milestone and Mythos's bug-hunt + insight audit.

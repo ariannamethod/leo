@@ -150,7 +150,7 @@ typedef struct {
 
   // MOVEMENT
   int   pending_jump;       // queued jump (sim steps)
-  int   velocity_mode;      // NOMOVE=0, WALK=1, RUN=2, BACKWARD=-1
+  int   velocity_mode;      // NOMOVE=0, WALK=1, RUN=2, BACKWARD=-1, BREATHE=3 (STOP=NOMOVE)
   float velocity_magnitude; // current speed (0..1)
   float base_temperature;   // base temp before velocity modulation
   float effective_temp;     // computed: base + velocity + expert blend
@@ -456,6 +456,7 @@ void am_cooc_update(int src, int dst, float delta);
 void am_ingest_tokens(const int* ids, int n);
 void am_apply_hebbian_to_logits(float* logits, int n);
 int  am_cooc_count(void);   // live co-occurrence edge count (telemetry)
+void am_cooc_clear(void);   // zero the cooc field (first-run: no per-voice sidecar to overwrite shared-soma cooc)
 int  am_cooc_consolidate(float reinforce, float prune_floor); // autumn harvest: reinforce strong edges, decay+prune weak; returns # pruned
 int  am_cooc_consolidate_autumn(void); // gated consolidate: fires only in deep autumn; returns # pruned or -1 if not triggered
 void am_cooc_stats(float* out_mean, float* out_max); // mean/max edge weight over live edges (telemetry)
