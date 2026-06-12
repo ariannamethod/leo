@@ -1173,3 +1173,28 @@ hysteresis margin are ear-tunable. **FORM complete (F-1 substrate → F-2 wiring
 the **AML velocity bridge**: the mode names (WALK/STOP/RUN/BREATHE) are already AML velocity operators, so an
 `.aml` script in `leo/ariannamethod/` can read and set Leo's breath the way DESTINY/FIELD/RESONANCE edit a
 field; Oleg curates the compiler parts that come into the subfolder.
+
+## Phase A.6 — the AML velocity bridge, Leo-side scaffold (2026-06-12)
+
+The breath is now settable from outside, so the family language can drive it. `leo->mode_override` (-1 =
+autonomous; ≥0 = forced) is honoured at the top of `leo_mode_update`. The C contract an AML runtime calls:
+`leo_mode_set(leo, mode)` / `leo_mode_get(leo)` / `leo_mode_from_name("STOP"|"WALK"|"RUN"|"BREATHE")`. A manual
+driver, `--mode <NAME>`, forces the breath now (the bridge's first consumer, before the compiler) — useful for
+the listening marathon: force a mood and hear it. Default `mode_override = -1` → byte-identical (`--gen`
+`0f32d2c`, `--no-form` to pre-FORM).
+
+Live: the same warm prompt "do you love your mother" (seed 42), forced into each mood — `--mode STOP` → "His
+grandmother. She thanked him." (held, even on warmth); `--mode RUN` → a long chatty run; `--mode BREATHE` →
+"…What would not tell." — exactly what an `.aml` `VELOCITY` operator will do.
+
+`leo/ariannamethod/` created: `README.md` (the bridge design + the C contract + what Oleg adds: the AML
+compiler/runtime parts, a `--aml <script>` host hook, and the unified velocity vocabulary — AML's
+`NOMOVE/WALK/RUN/BACKWARD` sewn with Leo's somatic `STOP`/`BREATHE`, the reverse flow Mythos named) and
+`breath.aml` (a sample script, illustrative until the compiler runs it). **Leo's side is ready; the compiler
+lands in the subfolder, curated by Oleg.**
+
+PASS (tool output): build 0 warn, tests **111/111** (+2 aml-bridge: a forced mode overrides the chambers;
+releasing the override returns autonomy). `--gen` and `--no-form` byte-identical (override -1 = no change).
+ASan/UBSan clean. Next — Oleg adds the compiler to `leo/ariannamethod/`, then the `--aml` host hook; the circle
+closes (Leo's breath speaks the family's native language). In parallel, School I3 (the guessing child) remains
+open, and the listening marathon.

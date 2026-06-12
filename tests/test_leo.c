@@ -740,6 +740,21 @@ int main(void) {
         leo_free(&fm);
     }
 
+    /* A.6 AML bridge: an external driver (an .aml VELOCITY operator) forces the
+     * breath; leo_mode_update respects the override, and releasing it returns
+     * autonomy. This is the C contract the AML compiler in leo/ariannamethod/ calls. */
+    {
+        Leo br; leo_init(&br);
+        br.chamber_act[LEO_CH_FLOW] = 1.0f;     /* would autonomously be RUN */
+        leo_mode_set(&br, LEO_MODE_STOP);       /* the .aml operator forces STOP */
+        leo_mode_update(&br);
+        CHECK(br.mode == LEO_MODE_STOP, "aml-bridge: a forced mode overrides the chambers");
+        leo_mode_set(&br, -1);                   /* release → autonomous */
+        leo_mode_update(&br);
+        CHECK(br.mode == LEO_MODE_RUN, "aml-bridge: releasing the override returns autonomy");
+        leo_free(&br);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

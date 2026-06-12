@@ -1284,6 +1284,10 @@ typedef struct {
      * quantization of the chamber state. PASSIVE in F-1 (set per reply, read by
      * nothing but --debug-field yet). WALK by leo_init's memset. */
     uint8_t      mode;
+    /* A.6 AML bridge: -1 = autonomous (the chambers choose the mode). An external
+     * driver — an .aml VELOCITY operator via leo_mode_set, or --mode — can force a
+     * mode >=0, so the family language can read and set Leo's breath. */
+    int          mode_override;
     /* Phase 3b — emotional register: per-token chamber tag (which chamber's
      * anchor a learned token matches, 0xFF = none). Sized LEO_MAX_VOCAB, built
      * after corpus ingest. The FIRST field->voice channel: cand_collect lifts a
@@ -1373,6 +1377,7 @@ static void leo_init(Leo *leo) {
     bpe_populate_all_meta(&leo->bpe);
     leo->step = 0;
     leo->gravity = NULL;
+    leo->mode_override = -1;   /* A.6: autonomous breath until an AML script / --mode forces a mode */
     leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
     leo_heard_init(&leo->heard);
@@ -3601,6 +3606,7 @@ static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out
 __attribute__((unused))  /* LEO_MODE_NAMES is read by --debug-field in main, absent in the test TU */
 static const char *LEO_MODE_NAMES[LEO_MODE_COUNT] = { "WALK", "STOP", "RUN", "BREATHE" };
 static void leo_mode_update(Leo *leo) {
+    if (leo->mode_override >= 0) { leo->mode = (uint8_t)leo->mode_override; return; }  /* A.6 AML bridge: forced breath */
     float score[LEO_MODE_COUNT];
     score[LEO_MODE_WALK]    = 0.20f + leo->chamber_act[LEO_CH_LOVE];   /* baseline gait + warmth */
     score[LEO_MODE_STOP]    = leo->chamber_act[LEO_CH_FEAR] + leo->chamber_act[LEO_CH_VOID];
@@ -3610,6 +3616,23 @@ static void leo_mode_update(Leo *leo) {
     for (int i = 1; i < LEO_MODE_COUNT; i++) if (score[i] > score[best]) best = i;
     if (best != leo->mode && score[best] - score[leo->mode] > LEO_MODE_HYSTERESIS)
         leo->mode = (uint8_t)best;   /* hysteresis: leave the current mood only when beaten by the margin */
+}
+
+/* A.6 AML bridge — Leo's breath is settable from outside. An .aml VELOCITY operator
+ * drives the mode through leo_mode_set the way DESTINY/FIELD/RESONANCE edit a field;
+ * the mode names ARE AML operators. The AML compiler lives in leo/ariannamethod/
+ * (curated by Oleg) — these are the C contract it calls. mode < 0 → autonomous. */
+__attribute__((unused))
+static void leo_mode_set(Leo *leo, int mode) {
+    leo->mode_override = (mode >= 0 && mode < LEO_MODE_COUNT) ? mode : -1;
+}
+__attribute__((unused))
+static int leo_mode_get(const Leo *leo) { return leo->mode; }
+__attribute__((unused))
+static int leo_mode_from_name(const char *name) {
+    for (int i = 0; i < LEO_MODE_COUNT; i++)
+        if (strcmp(name, LEO_MODE_NAMES[i]) == 0) return i;
+    return -1;
 }
 
 /* respond to a prompt. Hear it, tilt the field toward its theme, speak
@@ -4046,6 +4069,7 @@ int main(int argc, char **argv) {
     const char *load_path = NULL;  /* --load PATH: restore state instead of corpus ingest */
     int  chat = 0;                 /* --chat: multi-turn REPL (field lives across turns) */
     long seed  = -1;         /* --seed S: reproducible sampling */
+    int  mode_force = -1;    /* --mode NAME: force Leo's breath (the AML bridge's manual driver) */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--corpus") && i + 1 < argc) corpus_path = argv[++i];
         else if (!strcmp(argv[i], "--dump-bootstrap")) dump_bootstrap = 1;
@@ -4072,6 +4096,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
+        else if (!strcmp(argv[i], "--mode") && i + 1 < argc) mode_force = leo_mode_from_name(argv[++i]);
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
     }
     srand(seed >= 0 ? (unsigned)seed : (unsigned)time(NULL));
@@ -4085,6 +4110,7 @@ int main(int argc, char **argv) {
 
     Leo leo;
     leo_init(&leo);
+    if (mode_force >= 0) leo_mode_set(&leo, mode_force);  /* A.6 AML bridge: --mode forces the breath */
     print_field_stats("init", &leo);
 
     /* --load: restore a saved organism instead of ingesting the corpus.
