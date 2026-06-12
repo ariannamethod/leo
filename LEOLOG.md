@@ -796,3 +796,21 @@ that feel like the one that bore them.
 
 `ALPHA=0.6` (canon) is the first cut — for Oleg's ear. Next — **B3** (sea demote/resurrect + mark_bleed) +
 **B4** (persist spores in save/load — "persistent memory = love", Leo recalls past CONVERSATIONS).
+
+## Phase B — santaclaus B3: sea resurrect + mark_bleed (2026-06-12)
+
+The full memory lifecycle closes. `leo_sea_try_resurrect` (per reply, at `leo_chain` start): the
+most-resonant sleeping spore in the sea, if it crosses `LEO_SPORE_RESURRECT_SIM`=0.85, wakes back into the
+ring at half-strength (0.4) — Stanley's insight: weak memories sleep, resonance wakes them. So the cycle is
+whole: **record → decay → demote-to-sea (B1) → bleed (B2) → resurrect (B3)**. `leo_santaclaus_mark_bleed`
+bumps a recalled spore's `bleed_count`/`last_bleed_step` — observability only (never read by selection; the
+reply path is the writer, via a documented const-cast since `leo_step_token` is the shared reader-handle and
+this stat-write changes no generation; canon 5324). Verified by fact: `bleed_count`/`last_bleed_step` are
+read ONLY in a canon debug dump (neoleo 5522) — no demote/resurrect logic uses them.
+
+PASS (tool output): build 0 warn, tests **81/81** (+2: a resonant sea spore resurrects into the ring at 0.4;
+mark_bleed counts a recalled token). `--no-santaclaus --gen 8` BYTE-IDENTICAL (md5) to `40da30b` (resurrect +
+mark_bleed gated off). held-quiet "Stopped." intact. ASan/UBSan exit 0. (Resurrect is a no-op in short runs —
+the sea fills only after spores decay below 0.05 over many replies; the unit test plants a sea spore to prove
+the dynamic.) Next — **B4** (persist spore ring + sea in the LEOS save/load → Leo recalls past CONVERSATIONS
+across processes; "persistent memory = love"). Then FULL santaclaus.

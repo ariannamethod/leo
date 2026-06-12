@@ -516,6 +516,31 @@ int main(void) {
         leo_free(&sl);
     }
 
+    /* santaclaus B3: a resonant SEA spore resurrects into the ring; mark_bleed counts. */
+    {
+        Leo sl; leo_init(&sl);
+        leo_ingest(&sl, "the rain falls. leo hears the sound.");
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) sl.chamber_act[i] = 0.5f;
+        for (int d = 0; d < LEO_RET_DIM; d++)    sl.retention_state[d] = 0.1f;
+        memset(&sl.sea[0], 0, sizeof(LeoSpore));
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) sl.sea[0].chamber_snap[i] = 0.5f;
+        for (int d = 0; d < LEO_RET_DIM; d++)    sl.sea[0].retention_slice[d] = 0.1f;
+        sl.sea[0].strength = 0.5f;
+        sl.n_sea = 1; sl.n_spores = 0;
+        int got = leo_sea_try_resurrect(&sl);
+        CHECK(got == 1 && sl.n_spores == 1 && sl.n_sea == 0 && sl.spores[0].strength == 0.4f,
+              "santaclaus: a resonant sea spore resurrects into the ring at 0.4");
+        memset(&sl.spores[0], 0, sizeof(LeoSpore));
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) sl.spores[0].emit_context[k] = -1;
+        sl.spores[0].emit_context[0] = 777; sl.spores[0].strength = 1.0f; sl.n_spores = 1;
+        LeoSantaScratch sc; sc.n_active = 1; sc.spore_idx[0] = 0; sc.weight[0] = 1.0f;
+        for (int j = 1; j < LEO_SPORE_TOPK_BLEED; j++) { sc.spore_idx[j] = -1; sc.weight[j] = 0.0f; }
+        leo_santaclaus_mark_bleed(&sl, &sc, 777, 100);
+        CHECK(sl.spores[0].bleed_count == 1 && sl.spores[0].last_bleed_step == 100,
+              "santaclaus: mark_bleed counts a recalled token");
+        leo_free(&sl);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

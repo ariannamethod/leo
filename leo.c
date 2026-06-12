@@ -1815,6 +1815,25 @@ static float leo_santaclaus_candidate_bias(const LeoSantaScratch *s,
     return LEO_SANTACLAUS_ALPHA * total;
 }
 
+/* santaclaus mark_bleed (canon neoleo 5324): a chosen token that sat in an active
+ * spore's emit_context bumps that spore's activation counters. Observability only —
+ * bleed_count is never read by selection; the reply path is the writer (B3). */
+static void leo_santaclaus_mark_bleed(Leo *leo, const LeoSantaScratch *s,
+                                      int chosen, long step) {
+    if (!leo || !s || s->n_active <= 0 || chosen < 0) return;
+    for (int i = 0; i < s->n_active; i++) {
+        int idx = s->spore_idx[i];
+        if (idx < 0 || idx >= leo->n_spores) continue;
+        LeoSpore *sp = &leo->spores[idx];
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++)
+            if (sp->emit_context[k] == chosen) {
+                if (sp->bleed_count < 65535) sp->bleed_count++;
+                sp->last_bleed_step = step;
+                break;
+            }
+    }
+}
+
 static int cand_collect_tri(int c, float count, void *ud) {
     CandCollector *cc = (CandCollector *)ud;
     if (cand_gate_reject(cc, c)) return 0;
@@ -1961,7 +1980,13 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
         cand_sc[i] = powf(cand_sc[i], inv_temp);
 
     int pick = weighted_sample(cand_sc, cc.n);
-    return pick < 0 ? -1 : cand_id[pick];
+    if (pick < 0) return -1;
+    /* santaclaus mark_bleed: the reply path is the writer (canon allow_santaclaus=1);
+     * bleed_count is observability and never read by selection, so this stat-write
+     * through the const reader-handle changes no generation. */
+    if (g_leo_santaclaus_on && santa_scratch.n_active > 0)
+        leo_santaclaus_mark_bleed((Leo *)leo, &santa_scratch, cand_id[pick], leo->step);
+    return cand_id[pick];
 }
 
 /* ========================================================================
@@ -2320,6 +2345,25 @@ static void leo_spore_decay(Leo *leo) {
         }
     }
     leo->n_spores = w;
+}
+
+/* santaclaus B3: resurrect the most-resonant sea spore (sleeping memory) if it
+ * crosses LEO_SPORE_RESURRECT_SIM — back into the ring at half-strength (0.4).
+ * Weak memories sleep in the sea; resonance wakes them. Per-reply (non-const). */
+static int leo_sea_try_resurrect(Leo *leo) {
+    if (!leo || leo->n_sea <= 0 || leo->n_spores >= LEO_SPORE_MAX) return 0;
+    int best = -1; float best_r = LEO_SPORE_RESURRECT_SIM;
+    for (int i = 0; i < leo->n_sea; i++) {
+        float r = leo_spore_resonance(leo, &leo->sea[i]);
+        if (r > best_r) { best_r = r; best = i; }
+    }
+    if (best < 0) return 0;
+    LeoSpore reborn = leo->sea[best];
+    reborn.strength = 0.4f;
+    for (int i = best; i < leo->n_sea - 1; i++) leo->sea[i] = leo->sea[i+1];
+    leo->n_sea--;
+    leo->spores[leo->n_spores++] = reborn;
+    return 1;
 }
 
 /* One field step per emitted token (canon 2012-2064, our subset):
@@ -2809,6 +2853,10 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     if (!out || max_len < 2) return 0;
     if (n_sentences < 1) n_sentences = 1;
     if (n_sentences > LEO_CHAIN_MAX) n_sentences = LEO_CHAIN_MAX;
+
+    /* santaclaus B3: a sleeping memory (sea spore) that resonates with the present
+     * wakes back into the ring, so it can bleed into this reply. */
+    if (g_leo_santaclaus_on) leo_sea_try_resurrect(leo);
 
     char sent_text[LEO_CHAIN_MAX][1024];
     int  sent_tok[LEO_CHAIN_MAX][LEO_GEN_MAX];   /* per-sentence tokens, for the SPA pass */
