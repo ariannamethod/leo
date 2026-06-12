@@ -852,3 +852,35 @@ generation). ASan/UBSan exit 0. Next — **R1b**: the 5 candidate features (cohe
 santaclaus-recall / register / diversity) + passive RAE scoring in `leo_generate_best`; then **R2** (wire the
 selection, `--no-rae`, A/B by ear), **R3** (online learning toward the internal presence-coherence proxy),
 **R4** (persist weights in `leo.state`).
+
+## Roadmap addendum — the awareness module (planned, Phase C) (2026-06-12)
+
+Logged for continuity (full plan: `memory/project_leo_awareness_school_semantic_2026_06_12.md`). Leo was
+born with zero world-knowledge; the reversed-role idea — **Leo asks the human "what is this?" and grows a
+concept table from the answers** — finally has its missing trigger. The caveLLMan semantic tokenizer
+(`caveLLMan/ariannamethod/semantic_tokenizer.h`) is **RULE-BASED**: 88 awareness-primitive glyphs
+(`good`/`love`/`fear`/`death`/`home`…) + a word→glyph lookup; `semtok_word()→-1` on an unknown word IS the
+"what is this?" trigger that School (`leo-legacy/school.py`) never had. Closed loop: input → compress to
+glyphs → `-1` → ask → the answer `observe()`s into the field AND extends the table → next time it compresses,
+not asks. The glyphs map onto Leo's 6 chambers (affect) and become a new **resonance axis for santaclaus**
+(meaning, not just time); feeding the glyphs into **mathbrain** (body-perception, online-Hebbian) lets the
+body react to MEANING, not only affect (glyph→chamber_ext + a 12-category aggregate as extra MLP inputs).
+Invariant intact: the tokenizer stays rule-based (zero pretrained, crisp `-1` OOV — its strength); the
+LEARNING is mathbrain/RAE (online-Hebbian). Place: a `leogo` goroutine (async compress + School re-ask),
+**Phase C — after RAE**. **Mythos audit comes AFTER the school lands (Oleg).** Substrate already present
+(`leo.c`): 6 chambers + 109 anchors + `feel_text`; missing: cooc-inference (OOV projection), School re-ask,
+table growth.
+
+## Phase A.4 — RAE R1b: the 5 candidate features, PASSIVE (2026-06-12)
+
+`leo_rae_features(leo, ids, n, out[5])` — the 5 channels the selector weights, each normalized to ~[0,1]:
+**f1** coherence (`leo_coherence_score`, tanh-squashed), **f2** gravity-theme (mean prompt-gravity over the
+candidate's tokens), **f3** santaclaus-recall (mean spore resonance×strength over recalled tokens), **f4**
+register (mean chamber-tag lift), **f5** diversity (unique/n). Read-only — these ARE the channels we built
+(presence + santaclaus + register); RAE will LEARN to weight them. PASSIVE — nothing scores candidates with
+the MLP yet.
+
+PASS (tool output): build 0 warn, tests **88/88** (+2: the 5 features extract into [0,1]; diversity=1.0 for
+all-distinct tokens). Generation **byte-identical** to `0b9d0b2` (features not called in generation).
+ASan/UBSan exit 0. Next — **R2**: wire features→MLP→3-step refinement into `leo_generate_best`'s pick +
+`--no-rae` ablation (byte-identical off), A/B by ear.

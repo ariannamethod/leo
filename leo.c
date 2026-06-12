@@ -2686,6 +2686,48 @@ static float leo_sentence_gravity_score(const Leo *leo, const int *ids, int n) {
  * weighs prompt-resonance (the selection nerve, phase-1 step 5) and does
  * NOT early-exit — a generic-but-coherent first sample must not silence
  * the theme-aligned one (Codex's find). */
+/* A.4 RAE R1b — the 5 candidate features the selector weights, each ~[0,1].
+ * Read-only over the field. Used from the test now and from R2 (wired
+ * selection); unused in the main TU until then. */
+__attribute__((unused))
+static void leo_rae_features(const Leo *leo, const int *ids, int n, float *out) {
+    /* f1 coherence (bi/tri/cooc + len-bonus) squashed to ~[0,1] */
+    float coh = leo_coherence_score(leo, ids, n);
+    out[0] = 0.5f * (tanhf(coh * 0.2f) + 1.0f);
+    /* f2 gravity-theme: mean prompt-gravity over the candidate's tokens */
+    float g = 0.0f; int gc = 0;
+    if (leo->gravity)
+        for (int i = 0; i < n; i++)
+            if (ids[i] >= 0 && ids[i] < leo->cooc.freq_size) { g += leo->gravity[ids[i]]; gc++; }
+    out[1] = gc > 0 ? clampf(g / (float)gc, 0.0f, 1.0f) : 0.0f;
+    /* f3 santaclaus-recall: mean spore resonance×strength over recalled tokens */
+    float scl = 0.0f;
+    if (n > 0 && leo->n_spores > 0) {
+        for (int i = 0; i < n; i++)
+            for (int s = 0; s < leo->n_spores; s++) {
+                const LeoSpore *sp = &leo->spores[s];
+                int hit = 0;
+                for (int kk = 0; kk < LEO_SPORE_CONTEXT_TOK; kk++)
+                    if (sp->emit_context[kk] == ids[i]) { hit = 1; break; }
+                if (hit) scl += leo_spore_resonance(leo, sp) * sp->strength;
+            }
+        scl /= (float)n;
+    }
+    out[2] = clampf(scl, 0.0f, 1.0f);
+    /* f4 register: mean chamber-tag lift over the tokens (felt-state expression) */
+    float rg = 0.0f;
+    for (int i = 0; i < n; i++) rg += leo_register_bias(leo, ids[i]);
+    out[3] = n > 0 ? clampf((rg / (float)n) / (LEO_REGISTER_W + 1e-6f), 0.0f, 1.0f) : 0.0f;
+    /* f5 diversity: unique tokens / n */
+    int uniq = 0;
+    for (int i = 0; i < n; i++) {
+        int dup = 0;
+        for (int j = 0; j < i; j++) if (ids[j] == ids[i]) { dup = 1; break; }
+        if (!dup) uniq++;
+    }
+    out[4] = n > 0 ? (float)uniq / (float)n : 0.0f;
+}
+
 static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
                              int start_hint, const int *tail, int n_tail,
                              int *emitted_tail, int *n_emit) {

@@ -581,6 +581,23 @@ int main(void) {
         CHECK(r.observations == 201, "rae: observations increments per train step");
     }
 
+    /* A.4 RAE R1b: feature extraction returns sane values in [0,1]. */
+    {
+        Leo fl; leo_init(&fl);
+        leo_ingest(&fl, "the rain falls soft. leo hears the sound. his mother is warm.");
+        int ids[16];
+        int n = bpe_encode(&fl.bpe, (const uint8_t *)" the rain falls soft", 20, ids, 16);
+        float feat[LEO_RAE_IN];
+        leo_rae_features(&fl, ids, n, feat);
+        int in_range = 1;
+        for (int i = 0; i < LEO_RAE_IN; i++) if (feat[i] < 0.0f || feat[i] > 1.0f) in_range = 0;
+        CHECK(in_range, "rae: the 5 features extract into [0,1]");
+        int dids[4] = {300, 301, 302, 303};
+        leo_rae_features(&fl, dids, 4, feat);
+        CHECK(feat[4] == 1.0f, "rae: diversity feature = 1.0 for all-distinct tokens");
+        leo_free(&fl);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
