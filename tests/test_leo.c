@@ -680,6 +680,32 @@ int main(void) {
         leo_free(&sc);
     }
 
+    /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
+     * concept-slot; a taught word then returns that glyph (no longer -1); the
+     * grown map survives save/load. */
+    {
+        Leo gl; leo_init(&gl);
+        leo_ingest(&gl, "the rain falls. his mother is warm.");
+        int g = leo_school_dominant_glyph("a zorble is a small animal that lives in water");
+        CHECK(g >= 0 && g < GLYPH_COUNT, "i2: the answer's dominant glyph is a real concept");
+        CHECK(leo_school_dominant_glyph("qwzx blat frnk") == -1,
+              "i2: a non-answer (no concepts) yields no glyph");
+        int wb = semtok_word("animal");
+        leo_school_learn(&gl, "zorble", wb);
+        CHECK(leo_semtok_word(&gl, "zorble") == wb && leo_school_unknown(&gl, "zorble") == 0,
+              "i2: a taught word returns its glyph, not -1 (concept map grew)");
+        const char *path = "/tmp/leo_i2_state.bin";
+        int saved = leo_save_state(&gl, path);
+        Leo gl2; leo_init(&gl2);
+        int loaded = leo_load_state(&gl2, path);
+        CHECK(saved && loaded && gl2.school.n_learned == 1 &&
+              strcmp(gl2.school.learned[0], "zorble") == 0 &&
+              leo_semtok_word(&gl2, "zorble") == wb,
+              "i2: the grown concept map round-trips through save/load");
+        leo_free(&gl); leo_free(&gl2);
+        remove(path);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

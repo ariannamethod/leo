@@ -1214,9 +1214,10 @@ static int semtok_word(const char *word) {
 #define LEO_SCHOOL_NOVEL_MAX 2   /* only ask about a word heard <= this — genuinely new,
                                   * not a common word that just lacks a glyph ("like") */
 typedef struct {
-    char learned[LEO_SCHOOL_MAX][LEO_HEARD_WORDLEN];
-    int  n_learned;
-    char pending[LEO_HEARD_WORDLEN];   /* non-empty = a question is open */
+    char   learned[LEO_SCHOOL_MAX][LEO_HEARD_WORDLEN];
+    int8_t learned_glyph[LEO_SCHOOL_MAX];  /* I2: dominant glyph of the answer that taught the word */
+    int    n_learned;
+    char   pending[LEO_HEARD_WORDLEN];   /* non-empty = a question is open */
 } LeoSchool;
 
 /* ========================================================================
@@ -3482,21 +3483,58 @@ static void leo_breath(Leo *leo) {
 }
 
 /* A.5 School helpers — the reversed role. A content word with no glyph
- * (semtok_word < 0) that Leo has not been taught is a concept he doesn't hold:
- * the trigger to ask "What is it?". learned[] keeps him from re-asking. */
+ * (leo_semtok_word < 0) that Leo has not been taught is a concept he doesn't
+ * hold: the trigger to ask. I2: a taught word is bound to the dominant glyph of
+ * the answer, so learned[] is a GROWN word→glyph map over the static seed —
+ * Leo's own picture of the world, grown from conversation, zero weights. */
 static int leo_school_is_learned(const Leo *leo, const char *w) {
     for (int i = 0; i < leo->school.n_learned; i++)
         if (strcmp(leo->school.learned[i], w) == 0) return 1;
     return 0;
 }
-static int leo_school_unknown(const Leo *leo, const char *w) {
-    return semtok_word(w) < 0 && !leo_school_is_learned(leo, w);
+/* I2: a word's glyph — the GROWN map (learned from talk) over the seed map.
+ * A learned word now returns its concept (0..87), not -1. */
+static int leo_semtok_word(const Leo *leo, const char *w) {
+    for (int i = 0; i < leo->school.n_learned; i++)
+        if (strcmp(leo->school.learned[i], w) == 0) return leo->school.learned_glyph[i];
+    return semtok_word(w);
 }
-static void leo_school_learn(Leo *leo, const char *w) {
-    if (!w[0] || leo_school_is_learned(leo, w) || leo->school.n_learned >= LEO_SCHOOL_MAX) return;
+/* I2: the dominant glyph of a text — its concept-slot. Histogram over content
+ * words via the SEED map; the most-frequent glyph, or -1 if the text grounds in
+ * no concept (a non-answer: pure unknowns, a counter-question). */
+static int leo_school_dominant_glyph(const char *text) {
+    int hist[GLYPH_COUNT] = {0};
+    char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+    for (const char *q = text; ; q++) {
+        unsigned char ch = (unsigned char)*q;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi >= 2) { cur[wi] = 0; int g = semtok_word(cur); if (g >= 0) hist[g]++; }
+        wi = 0;
+        if (!ch) break;
+    }
+    int best = -1, bestn = 0;
+    for (int i = 0; i < GLYPH_COUNT; i++) if (hist[i] > bestn) { bestn = hist[i]; best = i; }
+    return best;
+}
+/* I2: bind a taught word to the answer's concept (its dominant glyph), growing
+ * the map. F2: at capacity, log instead of dying silently. */
+static void leo_school_learn(Leo *leo, const char *w, int glyph) {
+    if (!w[0] || leo_school_is_learned(leo, w)) return;
+    if (leo->school.n_learned >= LEO_SCHOOL_MAX) {
+        fprintf(stderr, "[leo school] concept vocabulary full (%d) — '%s' not learned\n",
+                LEO_SCHOOL_MAX, w);
+        return;
+    }
     strncpy(leo->school.learned[leo->school.n_learned], w, LEO_HEARD_WORDLEN - 1);
     leo->school.learned[leo->school.n_learned][LEO_HEARD_WORDLEN - 1] = 0;
+    leo->school.learned_glyph[leo->school.n_learned] = (int8_t)glyph;
     leo->school.n_learned++;
+}
+static int leo_school_unknown(const Leo *leo, const char *w) {
+    return leo_semtok_word(leo, w) < 0;   /* grown map subsumes the learned-set */
 }
 /* scan the prompt's content words; copy the first one Leo has no concept for
  * (not a function/stop word, semtok < 0, not already learned) into out. 1 = found. */
@@ -3545,7 +3583,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
      * re-ask, and don't open a new question this turn (he just got an answer). */
     int was_answer = 0;
     if (g_leo_school_on && leo->school.pending[0]) {
-        leo_school_learn(leo, leo->school.pending);
+        int g = leo_school_dominant_glyph(prompt);  /* I2: the answer's concept-slot */
+        if (g >= 0) leo_school_learn(leo, leo->school.pending, g);  /* I4: bind only a real answer */
         leo->school.pending[0] = 0;
         was_answer = 1;
     }
@@ -3653,7 +3692,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   heard    : live [count, wordlen, bytes]
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 3   /* R4: +RAE learned selector weights */
+#define LEO_STATE_VERSION 4   /* A.5 I2: +School concept map (word→glyph + pending) */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -3756,6 +3795,17 @@ static int leo_save_state(const Leo *leo, const char *path) {
     fwrite(leo->rae.w2, sizeof(float), LEO_RAE_HID, f);
     st_wf(f, leo->rae.b2);
     st_w64(f, (uint64_t)leo->rae.observations);
+
+    /* A.5 I2: the School concept map — taught words + their glyphs + any open
+     * question. The grown word→glyph map survives the process, so a concept
+     * learned from conversation isn't re-asked next session (persistent memory =
+     * love, for understanding too). Raw POD, same-platform diary. */
+    st_w32(f, leo->school.n_learned);
+    if (leo->school.n_learned > 0) {
+        fwrite(leo->school.learned, LEO_HEARD_WORDLEN, (size_t)leo->school.n_learned, f);
+        fwrite(leo->school.learned_glyph, sizeof(int8_t), (size_t)leo->school.n_learned, f);
+    }
+    fwrite(leo->school.pending, 1, LEO_HEARD_WORDLEN, f);
 
     int ok = (ferror(f) == 0);
     fclose(f);
@@ -3875,6 +3925,18 @@ static int leo_load_state(Leo *leo, const char *path) {
         if (!st_rf(f, &b2) || !st_r64(f, &obs)) { fclose(f); return 0; }
         leo->rae.b2 = b2;
         leo->rae.observations = (long)obs;
+    }
+
+    /* A.5 I2: the School concept map (raw POD round-trip) */
+    {
+        int32_t n_l = 0;
+        if (!st_r32(f, &n_l) || n_l < 0 || n_l > LEO_SCHOOL_MAX) { fclose(f); return 0; }
+        if (n_l > 0) {
+            if (fread(leo->school.learned, LEO_HEARD_WORDLEN, (size_t)n_l, f) != (size_t)n_l) { fclose(f); return 0; }
+            if (fread(leo->school.learned_glyph, sizeof(int8_t), (size_t)n_l, f) != (size_t)n_l) { fclose(f); return 0; }
+        }
+        leo->school.n_learned = n_l;
+        if (fread(leo->school.pending, 1, LEO_HEARD_WORDLEN, f) != LEO_HEARD_WORDLEN) { fclose(f); return 0; }
     }
 
     fclose(f);

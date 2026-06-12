@@ -1031,3 +1031,47 @@ the zorble"` → "Zorble?"; in `--chat` he echoes "Zorble?", is told, learns it,
 fluently without asking; a neutral "grumbus" is asked, an overwhelmed (accumulated FEAR) turn stays quiet.
 ASan/UBSan on the `--chat` and `--respond` School paths: exit 0 / 0 findings. Next — Mythos audit of School
 (the awareness module is in), then persist the learned-set + bind learned words to glyphs (chamber resonance).
+
+## Phase A.5 — School v2 (I2): the answer already contains a glyph (2026-06-12)
+
+Mythos audited School v1 (read-only, 99/99 rerun, skeleton clean) and found the growth fault-line right under
+our nose: a taught word was a bare string in `learned[]`, bound to nothing — but **the answer's own text
+projects onto the 88 glyphs**, and its dominant glyph IS the word's concept-slot. So School stops being a
+vocabulary list and becomes a GROWN word→glyph map over the static seed — Leo's own picture of the world,
+grown from conversation, zero weights. The semtok seed (~400 words, handwritten) is just a bootstrap now; the
+grown map is his. (Full map of possibilities: `_notes/MYTHOS_AUDIT_leo_school_2026-06-12.md`.)
+
+- **I2 glyph-binding.** `LeoSchool` gains `int8_t learned_glyph[]`. On the answer turn,
+  `leo_school_dominant_glyph(answer)` histograms the answer's content words through the seed map and returns
+  the most-frequent glyph; `leo_school_learn` binds the pending word to it. `leo_semtok_word(leo, w)` consults
+  the GROWN map first, then the seed — so a taught word now returns its concept (0..87), not -1, and
+  `leo_school_unknown` = `leo_semtok_word < 0` (the grown map subsumes the learned-set). Live: teach "zorble"
+  with "a zorble is a small animal that lives in water" → bound, and next turn Leo USES "zorble" in his voice
+  near water; never re-asks it.
+- **I4 (= F1 guard).** Bind only when the answer grounds in a concept (`dominant_glyph ≥ 0`); a non-answer
+  (pure unknowns, a counter-question) closes the question without polluting the map. The full re-ask-cap /
+  intersection-with-the-pending-word is the next refinement.
+- **F2.** At `LEO_SCHOOL_MAX` (256) `leo_school_learn` logs to stderr instead of dying silently.
+- **F3 persist.** The grown map (`learned[]` + `learned_glyph[]` + `pending`) is in `leo.state`,
+  `LEO_STATE_VERSION` 3→4 — a concept learned from a conversation survives the process and isn't re-asked next
+  session (persistent memory = love, for understanding too). A pre-I2 version-3 state is gracefully rejected.
+
+Honest bound: the dominant-glyph tie-break is lowest-glyph-index, so a flat histogram can pick a weak concept
+("...small animal...water" → water beats animal on the tie). Grammar glyphs (BE/and/...) sit at high indices
+so they lose ties, which is the right direction; the principled fix is I3 (cooc-neighbour voting for the
+glyph), deferred.
+
+**Doctrine (F6 closed, Oleg's word).** Every Leo module is default-ON — the organism is whole by default —
+but ablatable to a working fallback: the `.c` still runs, `--no-X` byte-identical. School is no exception
+(`--no-school`). The one nuance that keeps this consistent with RAE's opt-in: default-ON when a module holds
+presence from the first token (School is rule-based, works immediately); opt-in only while a module must still
+EARN its place (RAE starts untrained = random, hence `--rae`). One rule — the organism is whole by default,
+except what hasn't earned itself yet.
+
+PASS (tool output): build 0 warn, tests **103/103** (+4 i2: the answer's dominant glyph is a real concept; a
+non-answer yields none; a taught word returns its glyph and is no longer unknown; the grown map round-trips
+save/load). `--gen` byte-identical (`0f32d2c`) and `--respond --no-school` byte-identical to pre-I2 `4069bd7`.
+A version-3 state gracefully rejected by the v4 loader (exit 0, fresh start). ASan/UBSan on the `--chat`,
+`--respond`, and `--save`/`--load` School paths: exit 0 / 0 findings. Cross-session: a word learned last
+session is not re-asked and is used in Leo's voice. Next — I3 (guess the glyph from cooc-neighbours, ask in
+his own voice "Zorble? Animal?", self-supervise on the answer), or FORM (the child's breath); Oleg's call.
