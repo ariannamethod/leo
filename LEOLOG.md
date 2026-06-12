@@ -916,3 +916,48 @@ PASS (tool output): build 0 warn, tests **88/88**. Default (RAE off) **byte-iden
 differs. ASan/UBSan exit 0 on both paths. Next — **R3**: online learning — after each reply,
 `leo_rae_train` nudges the MLP toward an internal presence-coherence proxy, so the selector *earns* its
 weights over a session; then R4 persists them in `leo.state`, then the ear-A/B + default decision.
+
+## Phase A.4 — RAE R3: online learning, the selector EARNS its weights (2026-06-12)
+
+The selector now learns from its own picks. After each reply, in `leo_chain` — once the field has evolved
+over the spoken reply (П-3 replay) and BEFORE this reply's spore is recorded — when `g_leo_rae_on`:
+`leo_rae_train(&leo->rae, feat, quality)` with `quality = 0.7·self-resonance + 0.3·coherence`.
+
+**The target signal (Oleg's ear, decided together).** `quality` is not an external grader (Leo has none) —
+it's two things Leo computes about what he just said:
+- **self-resonance** (`leo_rae_self_resonance`) — mean of the active-spore weights (`resonance×strength`,
+  each ∈[0,1]) of the POST-reply field against Leo's REMEMBERED self. Computed before the new spore exists,
+  so it can't resonate with its own snapshot. **Non-circular vs the f3 input feature**: f3 is pre-speech
+  token-recall over candidates; this is post-speech field-state cosine — a different time and a different
+  quantity, so it rewards *being in a continuous felt-state*, not repeating tokens.
+- **coherence** (`feat[0]`, already the f1 channel) — the leash. 0.3 weight: enough to keep RAE from
+  picking a self-resonant-but-broken sentence and to give a stable signal while the spore-sea is still
+  sparse early in a session; small enough that most of the gradient pressure goes to the genuinely new
+  resonance mapping (f1 is already an input → the coherence part is "easy" for the MLP). `LEO_RAE_W_RESONANCE`
+  is the one knob.
+
+Why 0.7/0.3 not pure self-resonance: pure resonance, with best-of-K, drifts into an attractor of "favourite"
+presence-states → the voice narrows into rumination, and early-session resonance (few spores) is noise. The
+0.3 coherence leash holds the thread. Why not coherence-as-target: f1 already is coherence → RAE would
+collapse to `w≈1·f1`, no learned character. The first *learned* δ-channel has to be about presence.
+
+Honest bound: the target is absolute (faithful port of `rae_recursive.py:223 target=Value(quality)`). It
+mis-teaches when a low-resonance pick was still the best of K. A contrastive/advantage target (resonance of
+the pick *relative* to the K mean) is the fix — deferred to R3.5, only if the voice flatlines or ruminates.
+Training is reply-level (one step per reply on the concatenated reply tokens, capped `LEO_GEN_MAX`), matching
+the reply-level self-resonance signal; per-sentence training is a possible refinement, not needed yet.
+
+Still OPT-IN `--rae`, default OFF: the selector is now *learning*, but whether a trained RAE beats coherence
+is the ear's call (R4 + live `--chat`), and the default flips only then. RAE off → the training block is a
+no-op → default byte-identical, untouched.
+
+PASS (tool output): build 0 warn, tests **92/92** (+4: self-resonance 0 with no memory; positive on a matched
+spore; online training fires per reply — observations grow; trained weights stay within clamp). Default
+(`--rae` off) **byte-identical** to `229a579` (`--gen 8 --seed 42`, md5 `0f32d2c`). `--rae` deterministic
+under seed (md5 `7d78b73`, two runs equal) and ≠ off — and ≠ R2's untrained `44dd9e3`, because the selector
+now evolves mid-run. ASan/UBSan: binary `--gen`+`--rae` exit 0 / 0 findings; the R3 training path in isolation
+exit 0 / 0 findings, `observations=4` for 4 replies (one train step per reply, as designed). Pre-existing:
+the shared test `main` overflows the 8MB macOS stack under ASan (too many `Leo` fixtures, ASan redzone
+padding) — present already at `229a579`, not an R3 change; the suite runs clean in the normal build, and the
+R3 path is ASan-covered in isolation. Next — **R4**: persist the RAE weights in `leo.state` (save/load
+version bump), then the ear-A/B on a live `--chat` with a trained selector → the default decision.

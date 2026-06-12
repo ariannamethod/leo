@@ -562,6 +562,7 @@ typedef struct {                        /* per-step scratch: top-K active spores
 #define LEO_RAE_LR     0.01f
 #define LEO_RAE_CLAMP  5.0f
 #define LEO_RAE_REFINE 3
+#define LEO_RAE_W_RESONANCE 0.7f   /* R3 target = this·self-resonance + (1-this)·coherence (Oleg's ear, 2026-06-12) */
 typedef struct {
     float w1[LEO_RAE_HID][LEO_RAE_IN];
     float b1[LEO_RAE_HID];
@@ -2727,6 +2728,22 @@ static void leo_rae_features(const Leo *leo, const int *ids, int n, float *out) 
     out[4] = n > 0 ? (float)uniq / (float)n : 0.0f;
 }
 
+/* A.4 R3 — realized self-resonance: how strongly the POST-reply field resonates
+ * with Leo's REMEMBERED self (mean of the active-spore weights, resonance×strength,
+ * each ∈[0,1]). 0 when there is no memory yet. This is the target the selector learns
+ * toward — non-circular vs the pre-speech f3 recall feature: a different time
+ * (after speaking) and a different quantity (field-state cosine, not token overlap),
+ * so it can't reward mere repetition. Read-only; call BEFORE this reply's spore is
+ * recorded so the new snapshot doesn't resonate with itself. */
+static float leo_rae_self_resonance(const Leo *leo) {
+    LeoSantaScratch sc;
+    leo_santaclaus_compute_active(leo, &sc);
+    if (sc.n_active <= 0) return 0.0f;
+    float s = 0.0f;
+    for (int i = 0; i < sc.n_active; i++) s += sc.weight[i];
+    return clampf(s / (float)sc.n_active, 0.0f, 1.0f);
+}
+
 static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
                              int start_hint, const int *tail, int n_tail,
                              int *emitted_tail, int *n_emit) {
@@ -3115,6 +3132,29 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
         memcpy(out + pos, sent_text[s], (size_t)slen);
         pos += slen;
         out[pos] = 0;
+    }
+
+    /* A.4 R3: online learning — the selector earns its weights. The field has just
+     * evolved over the spoken reply (П-3 replay above), so train the MLP toward
+     * quality = W·self-resonance + (1-W)·coherence over what Leo actually said. Over a
+     * session RAE learns to pick the candidate that deepens his own continuity.
+     * Computed BEFORE this reply's spore is recorded → self-resonance is against Leo's
+     * REMEMBERED self, not the snapshot he's about to make. Only when RAE selects
+     * (g_leo_rae_on); off → no-op → default byte-identical. */
+    if (g_leo_rae_on) {
+        int rids[LEO_GEN_MAX]; int rn = 0;
+        for (int s = 0; s < n_sentences && rn < LEO_GEN_MAX; s++)
+            for (int i = 0; i < sent_tok_n[s] && rn < LEO_GEN_MAX; i++)
+                rids[rn++] = sent_tok[s][i];
+        if (rn > 0) {
+            float feat[LEO_RAE_IN];
+            leo_rae_features(leo, rids, rn, feat);
+            float self_res = leo_rae_self_resonance(leo);
+            float coh_norm = feat[0];     /* f1 already IS coherence squashed to [0,1] */
+            float quality  = LEO_RAE_W_RESONANCE * self_res +
+                             (1.0f - LEO_RAE_W_RESONANCE) * coh_norm;
+            leo_rae_train(&leo->rae, feat, quality);
+        }
     }
 
     /* santaclaus: birth a spore from this reply-moment — snapshot the field after

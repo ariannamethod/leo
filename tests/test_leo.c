@@ -598,6 +598,43 @@ int main(void) {
         leo_free(&fl);
     }
 
+    /* A.4 RAE R3a: self-resonance target — 0 with no memory, positive when the field
+     * matches a held spore (the signal the selector learns toward). */
+    {
+        Leo rl; leo_init(&rl);
+        CHECK(leo_rae_self_resonance(&rl) == 0.0f, "rae: self-resonance = 0 with no spores");
+        rl.chamber_act[0] = 1.0f;             /* present felt-state */
+        rl.n_spores = 1;
+        rl.spores[0].chamber_snap[0] = 1.0f;  /* a remembered moment that felt the same */
+        rl.spores[0].strength = 1.0f;
+        float sr = leo_rae_self_resonance(&rl);   /* 0.55·cos(ch)=0.55 (retention zero) */
+        CHECK(sr > 0.5f && sr <= 1.0f, "rae: self-resonance positive when field matches a spore");
+        leo_free(&rl);
+    }
+
+    /* A.4 RAE R3b: online learning fires once per reply when RAE selects, and the
+     * trained weights stay finite (within clamp, no explosion / NaN). */
+    {
+        Leo tl; leo_init(&tl);
+        leo_ingest(&tl, "the rain falls soft. leo hears the sound. his mother is warm. "
+                        "he keeps the light. she thanked him. the room is quiet.");
+        long obs0 = tl.rae.observations;
+        int prev = g_leo_rae_on; g_leo_rae_on = 1;
+        char buf[2048];
+        leo_chain(&tl, 2, buf, sizeof buf);
+        leo_chain(&tl, 2, buf, sizeof buf);
+        g_leo_rae_on = prev;
+        int finite = 1;
+        for (int j = 0; j < LEO_RAE_HID; j++) {
+            if (!(tl.rae.w2[j] >= -LEO_RAE_CLAMP && tl.rae.w2[j] <= LEO_RAE_CLAMP)) finite = 0;
+            for (int i = 0; i < LEO_RAE_IN; i++)
+                if (!(tl.rae.w1[j][i] >= -LEO_RAE_CLAMP && tl.rae.w1[j][i] <= LEO_RAE_CLAMP)) finite = 0;
+        }
+        CHECK(tl.rae.observations >= obs0 + 2, "rae: online training fires per reply (observations grow)");
+        CHECK(finite, "rae: trained weights stay within clamp (finite, no explosion)");
+        leo_free(&tl);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
