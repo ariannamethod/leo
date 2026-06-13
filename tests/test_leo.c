@@ -821,6 +821,24 @@ int main(void) {
         remove(path);
     }
 
+    /* A.6 E-2c: the guess track-record is counted — curiosity's hit-rate feeds the
+     * quality target (curiosity as a learned policy). Two ask→answer cycles: one
+     * lands (guess animal, answer animal), one misses (guess animal, answer water). */
+    {
+        Leo c2; leo_init(&c2);
+        leo_ingest(&c2, "the rain falls. his mother is warm.");
+        char buf[1024];
+        int prev = g_leo_school_on; g_leo_school_on = 1;
+        leo_respond(&c2, "is a zorble like a dog or a cat", buf, sizeof buf);   /* guesses animal */
+        leo_respond(&c2, "a zorble is a dog and a cat", buf, sizeof buf);       /* answer: animal -> HIT */
+        leo_respond(&c2, "is a wobble like a dog or a cat", buf, sizeof buf);   /* guesses animal */
+        leo_respond(&c2, "no a wobble is water in the river and the sea", buf, sizeof buf); /* answer: water -> MISS */
+        CHECK(c2.school.guesses == 2 && c2.school.guess_hits == 1,
+              "e-2c: the guess track-record is counted (2 closed, 1 landed)");
+        g_leo_school_on = prev;
+        leo_free(&c2);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

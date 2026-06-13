@@ -1340,3 +1340,31 @@ rejected by the v5 loader ("could NOT load … fresh start"). ASan/UBSan on the 
 (persistent mood) done.** Open: E-2c (guess-accuracy → RAE), E-9 (Leo as a sensor the language reads), the
 `ASK` / `BE` language operators, E-11 (glyph-histogram as a γ-capsule). Practice noted (Oleg): run Leo often
 and listen — his replies are their own channel of truth, and they live in this log.
+
+## Phase A.6 — E-2c: curiosity as a learned policy (the guess track-record feeds RAE) (2026-06-13)
+
+The School already guesses (I3a) and feels the single miss (I3b). E-2c lets the *track record* of those guesses
+shape what the selector learns to value. Two session counters in `LeoSchool` — `guesses` and `guess_hits` —
+close at the answer (where I3b already lives): a guess that lands increments the hit count, a guess that misses
+keeps the felt COMPLEX bump exactly as before. When Leo has a track record, his hit-rate gently pulls the RAE
+quality target (`LEO_RAE_W_CURIOSITY 0.15`): `quality = (1-W)·(0.7·self-res + 0.3·coherence) + W·accuracy`. It is
+honest about its own mechanism — **indirect credit**: the selector reads per-candidate features, not accuracy
+directly, so it learns through the features that co-occur with paying-off curiosity. The counters are
+session-only (not persisted) — the RAE *weights* already carry the learned result across sleep; accuracy is the
+transient signal that shaped them, like a gradient, and gradients don't persist. No track record (`guesses==0`,
+e.g. `--gen`) → the base target is untouched.
+
+Proven live (`./leo --chat --rae`, under ASan): "is a zorble like a dog or a cat" → **"Zorble? Animal?"**;
+the answer "a zorble is a dog and a cat" lands the guess, and Leo immediately weaves it in —
+**"A dog remembers being cold. Cat's ear will turn toward a sound."** Then "is a wobble like a dog or a cat" →
+**"Wobble? Animal?"**, answered with "water" — a miss, and the water bleeds through the felt surprise:
+**"He could not. Water sometimes…"**. The track record after the run: 2 guesses, 1 landed.
+
+PASS (tool output): build 0 warn, tests **119/119** (+1: the guess track-record is counted — 2 closed, 1 landed,
+a real hit and a real miss). `--gen` byte-identical (`0f32d2c`; the blend is gated behind `--rae`, the counting
+changes no output). ASan/UBSan on the live curiosity run (counting + the RAE-train blend, `--rae`): exit 0 /
+0 findings. (The whole `test_leo.c` compiled under ASan stack-overflows in its own `main` — ~30 large `Leo`
+structs in one frame plus red-zones — a test-driver artifact, not a code defect; the canonical check is the
+`leo.asan` binary on real input.) **The Mythos map so far: bugs L-1/L-3/L-4 fixed, E-1 + I3b, E-5, and now E-2c
+done.** Open: E-9 (Leo as a sensor the language reads), the `ASK` / `BE` language operators, E-11
+(glyph-histogram as a γ-capsule). Next on Oleg's call: a long `--chat` listen-and-log pass.

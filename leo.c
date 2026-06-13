@@ -574,6 +574,7 @@ typedef struct {                        /* per-step scratch: top-K active spores
 #define LEO_RAE_CLAMP  5.0f
 #define LEO_RAE_REFINE 3
 #define LEO_RAE_W_RESONANCE 0.7f   /* R3 target = this·self-resonance + (1-this)·coherence (Oleg's ear, 2026-06-12) */
+#define LEO_RAE_W_CURIOSITY 0.15f  /* E-2c: how strongly the guess hit-rate pulls the quality target (curiosity as a learned policy) */
 typedef struct {
     float w1[LEO_RAE_HID][LEO_RAE_IN];
     float b1[LEO_RAE_HID];
@@ -1231,6 +1232,8 @@ typedef struct {
     int    n_learned;
     char   pending[LEO_HEARD_WORDLEN];   /* non-empty = a question is open */
     int    pending_glyph;                /* I3a: Leo's guess at the pending word's concept (-1 = no guess) */
+    int    guesses;                      /* E-2c: closed guesses this session (the track record; session-only, not persisted) */
+    int    guess_hits;                   /* E-2c: how many landed (pending_glyph == the answer's glyph) */
 } LeoSchool;
 
 /* ========================================================================
@@ -3357,6 +3360,17 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
             float coh_norm = feat[0];     /* f1 already IS coherence squashed to [0,1] */
             float quality  = LEO_RAE_W_RESONANCE * self_res +
                              (1.0f - LEO_RAE_W_RESONANCE) * coh_norm;
+            /* E-2c — curiosity as a learned policy. Once Leo has a guessing track record,
+             * his hit-rate gently pulls the quality target: replies made while his curiosity
+             * is paying off are valued more, so over a session the selector drifts toward that
+             * mode. Indirect credit — the selector reads per-candidate features, not accuracy
+             * directly; it learns via the features that co-occur with paying-off curiosity.
+             * No track record (guesses==0, e.g. --gen) → the base target is unchanged. */
+            if (leo->school.guesses > 0) {
+                float acc = (float)leo->school.guess_hits / (float)leo->school.guesses;
+                quality = (1.0f - LEO_RAE_W_CURIOSITY) * quality +
+                          LEO_RAE_W_CURIOSITY * acc;
+            }
             leo_rae_train(&leo->rae, feat, quality);
         }
     }
@@ -3715,10 +3729,16 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
          * re-quantizes (being wrong reshapes the body). The word always binds to the
          * ANSWER's glyph (mama wins the guess). */
         if (g >= 0) {
-            if (leo->school.pending_glyph >= 0 && leo->school.pending_glyph != g) {
-                leo->chamber_act[LEO_CH_COMPLEX] =
-                    clampf(leo->chamber_act[LEO_CH_COMPLEX] + LEO_SCHOOL_SURPRISE, 0.0f, 1.0f);
-                leo_mode_update(leo);   /* the surprise reshapes the breath */
+            if (leo->school.pending_glyph >= 0) {   /* E-2c: a guess was open; the answer closes it */
+                leo->school.guesses++;
+                if (leo->school.pending_glyph == g) {
+                    leo->school.guess_hits++;       /* curiosity landed */
+                } else {
+                    /* I3b: being wrong is FELT — a bump to COMPLEX, the breath re-quantizes. */
+                    leo->chamber_act[LEO_CH_COMPLEX] =
+                        clampf(leo->chamber_act[LEO_CH_COMPLEX] + LEO_SCHOOL_SURPRISE, 0.0f, 1.0f);
+                    leo_mode_update(leo);   /* the surprise reshapes the breath */
+                }
             }
             leo_school_learn(leo, leo->school.pending, g);  /* I4: bind only a real answer */
         }
