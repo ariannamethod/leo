@@ -1274,3 +1274,30 @@ echo). Purely additive: `--gen` byte-identical (`0f32d2c`), `--no-school` and th
 byte-identical to pre-I3a (`74649be`) — the guess only appears on a confident School-ask. ASan/UBSan on the
 guess path: exit 0 / 0 findings. Next — **(в) the listening marathon** with the `.aml` drive, then the capstone
 milestone and the Mythos audit. (I3b self-supervision + the cooc-neighbour prediction are deeper follow-ups.)
+
+## Phase A.5/A.6 — Mythos audit fixes: L-1 / L-3 / L-4 (2026-06-13)
+
+Mythos audited the FORM + AML + School arc (`_notes/MYTHOS_AUDIT_leo_form_aml_2026-06-13.md`, leo 113/113 +
+AML 514/514 rerun by him, sacred core verified clean). Three real bugs, each reproduced here before the fix:
+
+- **L-1 (MED, semantics): the I2 teacher could learn a word into the copula `BE`.** `leo_school_dominant_glyph`
+  did not exclude grammar/`BE` glyphs (predict did), so a copula non-answer voted them: probe
+  `dominant("it is what it is") = 86 (BE)` → I4 saw `g≥0` → bound the pending word to BE, persisted. Fix:
+  `leo_glyph_concept(g)` (a concept is not glyph 63-70 nor BE 86); both `dominant_glyph` and `predict_glyph`
+  now drop grammar/BE from the histogram, so a grammar-dominant text is a non-answer (`-1`). Verified:
+  `dominant("it is what it is") = -1` now, while `dominant("a zorble is a small animal") = 16` (animal) stands.
+- **L-3 (LOW-MED, flags): `--load` clobbered `--mode` / `--aml`.** The breath force was applied before
+  `leo_load_state` (which re-inits the field, resetting `mode_override = -1`). Verified live: `--load --mode
+  STOP` gave `RUN`. Fix: apply the force AFTER the load/ingest block. Now `--load --mode STOP` → `mode=STOP`.
+- **L-4 (LOW, latent): `pending_glyph` was memset-0 = the "water" glyph, not -1.** A mine under I3b (a restored
+  open question would carry a "water" guess from nowhere). Fix: `leo_init` sets `pending_glyph = -1`. (The
+  fuller fix — persisting `pending_glyph` + `mode` in a v5 state, Mythos E-5 — is the next small increment.)
+
+PASS (tool output): build 0 warn, tests **114/114** (+1: a copula/grammar non-answer teaches no concept).
+`--gen` byte-identical (`0f32d2c`). ASan/UBSan on the `--load`/`--mode`/guess paths: exit 0 / 0 findings.
+Credit (Mythos, verified clean): the F-3 budget cuts only on a boundary token, the gravity-gate keeps `--gen`
+raw, `--no-form` is a byte-exact revert, the mode-table indices match the defines, the bridge is lazy, the
+silent fallback holds, `amlc` needs no change (verbatim passthrough), vendor ≡ canon. **Next — the headline
+E-1 + I3b as one loop:** the grown map should vote (`leo_semtok_word`, so knowledge compounds — "zorble taught
+yesterday helps guess grumbus today"), balanced by self-supervision (the prediction error binds to the answer,
+nudges the chambers, and feeds RAE — being wrong should be felt). Then E-5 (v5: persist mode + pending_glyph).

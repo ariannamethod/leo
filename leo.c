@@ -1379,6 +1379,7 @@ static void leo_init(Leo *leo) {
     leo->step = 0;
     leo->gravity = NULL;
     leo->mode_override = -1;   /* A.6: autonomous breath until an AML script / --mode forces a mode */
+    leo->school.pending_glyph = -1;  /* I3a (L-4 fix): no open guess — memset-0 would be the "water" glyph */
     leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
     leo_heard_init(&leo->heard);
@@ -3536,9 +3537,13 @@ static int leo_semtok_word(const Leo *leo, const char *w) {
         if (strcmp(leo->school.learned[i], w) == 0) return leo->school.learned_glyph[i];
     return semtok_word(w);
 }
+/* a CONCEPT glyph — not a grammar word (indices 63-70) or the copula BE (86).
+ * Grammar glyphs are never a concept-slot or a guess, so they must not vote (L-1:
+ * "it is what it is" must not teach a word the BE glyph). */
+static int leo_glyph_concept(int g) { return g >= 0 && !(g >= 63 && g <= 70) && g != 86; }
 /* I2: the dominant glyph of a text — its concept-slot. Histogram over content
- * words via the SEED map; the most-frequent glyph, or -1 if the text grounds in
- * no concept (a non-answer: pure unknowns, a counter-question). */
+ * words via the SEED map; the most-frequent CONCEPT glyph, or -1 if the text
+ * grounds in no concept (a non-answer: pure unknowns, a copula, a counter-question). */
 static int leo_school_dominant_glyph(const char *text) {
     int hist[GLYPH_COUNT] = {0};
     char cur[LEO_HEARD_WORDLEN]; int wi = 0;
@@ -3548,7 +3553,7 @@ static int leo_school_dominant_glyph(const char *text) {
             if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
             continue;
         }
-        if (wi >= 2) { cur[wi] = 0; int g = semtok_word(cur); if (g >= 0) hist[g]++; }
+        if (wi >= 2) { cur[wi] = 0; int g = semtok_word(cur); if (leo_glyph_concept(g)) hist[g]++; }
         wi = 0;
         if (!ch) break;
     }
@@ -3569,16 +3574,14 @@ static int leo_school_predict_glyph(const char *prompt) {
             if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
             continue;
         }
-        if (wi >= 2) { cur[wi] = 0; int g = semtok_word(cur); if (g >= 0) hist[g]++; }
+        if (wi >= 2) { cur[wi] = 0; int g = semtok_word(cur); if (leo_glyph_concept(g)) hist[g]++; }
         wi = 0;
         if (!ch) break;
     }
     int best = -1, bestn = 0;
     for (int i = 0; i < GLYPH_COUNT; i++) if (hist[i] > bestn) { bestn = hist[i]; best = i; }
     if (bestn < 2) return -1;               /* not confident — one word isn't a guess */
-    if (best >= 63 && best <= 70) return -1; /* GRAMMAR glyphs (not/many/and/one/…) — not a concept */
-    if (best == 86) return -1;               /* BE — not a concept noun */
-    return best;
+    return best;                            /* grammar/BE already excluded from the histogram (L-1) */
 }
 /* I2: bind a taught word to the answer's concept (its dominant glyph), growing
  * the map. F2: at capacity, log instead of dying silently. */
@@ -4168,14 +4171,6 @@ int main(int argc, char **argv) {
 
     Leo leo;
     leo_init(&leo);
-    if (mode_force >= 0) leo_mode_set(&leo, mode_force);  /* A.6 AML bridge: --mode forces the breath */
-    if (aml_script) {                                     /* A.6 AML bridge: an .aml script drives the breath */
-#ifdef HAVE_AML
-        leo_aml_run(&leo, aml_script);
-#else
-        fprintf(stderr, "[leo] --aml: AML is not linked — silent fallback, Leo runs without it.\n");
-#endif
-    }
     print_field_stats("init", &leo);
 
     /* --load: restore a saved organism instead of ingesting the corpus.
@@ -4277,6 +4272,18 @@ int main(int argc, char **argv) {
             printf("[leo step0] probe token id=%d (\"%s\"...): bigram successors=%d\n",
                    ids[0], probe, succ);
         }
+    }
+
+    /* A.6 AML bridge (L-3 fix): force the breath AFTER load/ingest — --load re-inits
+     * the field (resetting mode_override), so applying --mode/--aml before it would
+     * be clobbered. */
+    if (mode_force >= 0) leo_mode_set(&leo, mode_force);
+    if (aml_script) {
+#ifdef HAVE_AML
+        leo_aml_run(&leo, aml_script);
+#else
+        fprintf(stderr, "[leo] --aml: AML is not linked — silent fallback, Leo runs without it.\n");
+#endif
     }
 
     /* step 1 — Leo speaks from his learned field (no prompt path). */

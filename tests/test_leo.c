@@ -690,6 +690,9 @@ int main(void) {
         CHECK(g >= 0 && g < GLYPH_COUNT, "i2: the answer's dominant glyph is a real concept");
         CHECK(leo_school_dominant_glyph("qwzx blat frnk") == -1,
               "i2: a non-answer (no concepts) yields no glyph");
+        CHECK(leo_school_dominant_glyph("it is what it is") == -1 &&
+              leo_glyph_concept(86) == 0 && leo_glyph_concept(16) == 1,
+              "i2 l-1: a copula/grammar non-answer teaches no concept (BE excluded)");
         int wb = semtok_word("animal");
         leo_school_learn(&gl, "zorble", wb);
         CHECK(leo_semtok_word(&gl, "zorble") == wb && leo_school_unknown(&gl, "zorble") == 0,
