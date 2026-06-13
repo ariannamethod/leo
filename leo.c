@@ -3843,7 +3843,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   heard    : live [count, wordlen, bytes]
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 4   /* A.5 I2: +School concept map (word→glyph + pending) */
+#define LEO_STATE_VERSION 5   /* A.6 E-5: +velocity mode + pending_glyph (the mood survives sleep) */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -3957,6 +3957,11 @@ static int leo_save_state(const Leo *leo, const char *path) {
         fwrite(leo->school.learned_glyph, sizeof(int8_t), (size_t)leo->school.n_learned, f);
     }
     fwrite(leo->school.pending, 1, LEO_HEARD_WORDLEN, f);
+
+    /* A.6 E-5 (v5): the body's mood + the open guess survive sleep — Leo wakes in
+     * the mood he slept in (hysteresis then holds it until the conversation turns). */
+    st_w32(f, (int32_t)leo->school.pending_glyph);
+    st_w32(f, (int32_t)leo->mode);
 
     int ok = (ferror(f) == 0);
     fclose(f);
@@ -4088,6 +4093,14 @@ static int leo_load_state(Leo *leo, const char *path) {
         }
         leo->school.n_learned = n_l;
         if (fread(leo->school.pending, 1, LEO_HEARD_WORDLEN, f) != LEO_HEARD_WORDLEN) { fclose(f); return 0; }
+    }
+
+    /* A.6 E-5 (v5): the body's mood + the open guess */
+    {
+        int32_t pg = -1, md = 0;
+        if (!st_r32(f, &pg) || !st_r32(f, &md)) { fclose(f); return 0; }
+        leo->school.pending_glyph = pg;
+        leo->mode = (uint8_t)((md >= 0 && md < LEO_MODE_COUNT) ? md : 0);
     }
 
     fclose(f);

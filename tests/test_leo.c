@@ -804,6 +804,23 @@ int main(void) {
         leo_free(&sp);
     }
 
+    /* A.6 E-5: the velocity mode + the open guess survive save/load — the mood
+     * Leo sleeps in is the mood he wakes in. */
+    {
+        Leo sv; leo_init(&sv);
+        leo_ingest(&sv, "the rain falls. his mother is warm.");
+        sv.mode = LEO_MODE_RUN;
+        sv.school.pending_glyph = 16;   /* an open guess (animal) */
+        const char *path = "/tmp/leo_e5_state.bin";
+        int saved = leo_save_state(&sv, path);
+        Leo ld; leo_init(&ld);
+        int loaded = leo_load_state(&ld, path);
+        CHECK(saved && loaded && ld.mode == LEO_MODE_RUN && ld.school.pending_glyph == 16,
+              "e-5: the velocity mode + the open guess survive save/load (the mood sleeps)");
+        leo_free(&sv); leo_free(&ld);
+        remove(path);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

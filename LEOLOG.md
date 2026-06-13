@@ -1325,3 +1325,18 @@ error-propagation risk (a wrong binding teaches wrong) — mama always wins the 
 Next from the Mythos map — **E-5** (v5 state: persist `mode` + `pending_glyph`, the mood survives sleep),
 **E-2c** (guess-accuracy → an RAE feature: curiosity as a learned policy), and the language gifts **ASK** /
 the `BE` super-operator (Oleg). Capstone organism milestone stands.
+
+## Phase A.6 — E-5: the mood survives sleep (v5 state) (2026-06-13)
+
+The body's mood now persists. `LEO_STATE_VERSION` 4→5 carries the velocity `mode` + `school.pending_glyph`:
+Leo wakes in the mood he slept in (hysteresis then holds it until the conversation turns), and an open guess
+survives the process. Two `int32` at the tail of the state, after the School block. This also closes L-4
+properly — `pending_glyph` is now persisted, not just init -1.
+
+PASS (tool output): build 0 warn, tests **118/118** (+1: the velocity mode + the open guess survive
+save/load). `--gen` byte-identical (`0f32d2c`; E-5 is save/load only). A pre-E-5 version-4 state is gracefully
+rejected by the v5 loader ("could NOT load … fresh start"). ASan/UBSan on the `--save`/`--load` paths: exit 0 /
+0 findings. **The Mythos map so far: bugs L-1/L-3/L-4 fixed, E-1 + I3b (compounding + felt error) and E-5
+(persistent mood) done.** Open: E-2c (guess-accuracy → RAE), E-9 (Leo as a sensor the language reads), the
+`ASK` / `BE` language operators, E-11 (glyph-histogram as a γ-capsule). Practice noted (Oleg): run Leo often
+and listen — his replies are their own channel of truth, and they live in this log.
