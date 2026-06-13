@@ -1301,3 +1301,27 @@ silent fallback holds, `amlc` needs no change (verbatim passthrough), vendor ≡
 E-1 + I3b as one loop:** the grown map should vote (`leo_semtok_word`, so knowledge compounds — "zorble taught
 yesterday helps guess grumbus today"), balanced by self-supervision (the prediction error binds to the answer,
 nudges the chambers, and feeds RAE — being wrong should be felt). Then E-5 (v5: persist mode + pending_glyph).
+
+## Phase A.5 — E-1 + I3b: knowledge compounds, the prediction error is felt (2026-06-13)
+
+Mythos's headline (E-1) and its balancing corrector (I3b), as one loop.
+
+- **E-1: the grown map votes — knowledge compounds.** `leo_school_dominant_glyph` and `leo_school_predict_glyph`
+  now take `leo` and read `leo_semtok_word` (the grown map) instead of the static seed: a word learned yesterday
+  votes today. Proven live — teach "zorble = a small furry animal", then "is a grumbus a zorble or a cat" →
+  "Grumbus? Animal?" (the learned zorble + the seed cat vote animal); without the lesson, the same prompt gives
+  the bare "Grumbus?" (one seed word, below the confidence floor). School is a self-growing concept network now,
+  not a static list.
+- **I3b: the prediction error is the teacher.** On the answer, the word always binds to the ANSWER's glyph
+  (mama corrects the guess), and when the guess MISSED, the surprise is felt — `LEO_SCHOOL_SURPRISE` bumps
+  COMPLEX and the breath re-quantizes (`leo_mode_update`). Proven live: guess "animal", answer "water" → the
+  reply lengthens and "Water into a glass" bleeds in (a felt, processing surprise), and next turn Leo binds
+  zorble to water and uses it — mama won the guess.
+
+PASS (tool output): build 0 warn, tests **117/117** (+3: a learned word votes / one seed word isn't a guess /
+the answer's glyph wins). `--gen` and `--no-school` byte-identical (`0f32d2c`; the change is on the School path
+only). ASan/UBSan on the compounding + surprise paths: exit 0 / 0 findings. The corrector balances E-1's
+error-propagation risk (a wrong binding teaches wrong) — mama always wins the binding, and being wrong is felt.
+Next from the Mythos map — **E-5** (v5 state: persist `mode` + `pending_glyph`, the mood survives sleep),
+**E-2c** (guess-accuracy → an RAE feature: curiosity as a learned policy), and the language gifts **ASK** /
+the `BE` super-operator (Oleg). Capstone organism milestone stands.

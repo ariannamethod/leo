@@ -686,11 +686,11 @@ int main(void) {
     {
         Leo gl; leo_init(&gl);
         leo_ingest(&gl, "the rain falls. his mother is warm.");
-        int g = leo_school_dominant_glyph("a zorble is a small animal that lives in water");
+        int g = leo_school_dominant_glyph(&gl, "a zorble is a small animal that lives in water");
         CHECK(g >= 0 && g < GLYPH_COUNT, "i2: the answer's dominant glyph is a real concept");
-        CHECK(leo_school_dominant_glyph("qwzx blat frnk") == -1,
+        CHECK(leo_school_dominant_glyph(&gl, "qwzx blat frnk") == -1,
               "i2: a non-answer (no concepts) yields no glyph");
-        CHECK(leo_school_dominant_glyph("it is what it is") == -1 &&
+        CHECK(leo_school_dominant_glyph(&gl, "it is what it is") == -1 &&
               leo_glyph_concept(86) == 0 && leo_glyph_concept(16) == 1,
               "i2 l-1: a copula/grammar non-answer teaches no concept (BE excluded)");
         int wb = semtok_word("animal");
@@ -775,6 +775,33 @@ int main(void) {
               "school i3a: a thin prompt gives the bare echo, no guess");
         g_leo_school_on = prev;
         leo_free(&gi); leo_free(&gi2);
+    }
+
+    /* A.5 E-1: a learned word VOTES — knowledge compounds (yesterday's lesson
+     * grounds today's guess). */
+    {
+        Leo e1; leo_init(&e1);
+        leo_school_learn(&e1, "zorble", semtok_word("animal"));   /* taught: zorble = animal */
+        CHECK(leo_school_predict_glyph(&e1, "is a zorble or a cat") == semtok_word("animal"),
+              "e-1: a learned word votes — zorble + cat -> animal (knowledge compounds)");
+        Leo e2; leo_init(&e2);                                     /* without the lesson */
+        CHECK(leo_school_predict_glyph(&e2, "is a zorble or a cat") < 0,
+              "e-1: without the lesson, one seed word alone is not a confident guess");
+        leo_free(&e1); leo_free(&e2);
+    }
+
+    /* A.5 I3b: the answer's glyph wins the guess — Leo guesses, mama corrects. */
+    {
+        Leo sp; leo_init(&sp);
+        leo_ingest(&sp, "the rain falls. his mother is warm.");
+        char buf[1024];
+        int prev = g_leo_school_on; g_leo_school_on = 1;
+        leo_respond(&sp, "is a zorble like a dog or a cat", buf, sizeof buf);   /* guesses animal */
+        leo_respond(&sp, "no a zorble is water in the river and the sea", buf, sizeof buf);  /* answer: water */
+        CHECK(leo_semtok_word(&sp, "zorble") == semtok_word("water"),
+              "school i3b: the answer's glyph wins the guess (mama corrects)");
+        g_leo_school_on = prev;
+        leo_free(&sp);
     }
 
     printf("\n%d/%d passed\n", g_pass, g_total);
