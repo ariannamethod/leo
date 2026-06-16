@@ -1391,3 +1391,32 @@ by ear.
 PASS (tool output): build 0 warn, tests **120/120** (+1: `--mode` is case-insensitive). `--gen`
 byte-identical (`0f32d2c`; the fix is in CLI name parsing only). leo.asan on the `--mode` path: exit 0 /
 0 findings. The velocity body shapes the live voice — autonomously always, and now on command too.
+
+## Phase A.6 — E-9: the reverse bridge, per reply (the body speaks to the field) (2026-06-16)
+
+The AML bridge was one-way and one-shot: `--aml` ran ONCE at startup and set Leo's initial breath. E-9
+makes it live and closes the loop. First the placement bug: `leo_aml_run` was called before any prompt, when
+Leo's chambers are still zero — a startup body-write reads an empty child (proven: a distress prompt and a
+calm one both gave pain 0.000). So the bridge moved INTO `leo_respond`, per reply, right after the chambers
+settle (crossfire) and before the breath quantizes. Now `--aml` binds a script (`g_leo_aml_script`) that runs
+every turn over Leo's live body.
+
+Each turn the bridge projects Leo's felt state onto the field's soma fields — already in the AML field-map, so
+any `.aml` expression can read them: `pain ← FEAR+VOID` (his suffering), `tension ←` the hottest chamber (his
+arousal), `dissonance ←` his prompt-dissonance. Then the script runs, and its velocity sets his breath back.
+Forward and reverse close in one `am_exec`.
+
+One trap, found and fixed: `am_exec` lazily calls `am_init()` on its first run, which memsets the whole field —
+wiping the body we just wrote (the first reply read pain 0.000 despite live FEAR+VOID 1.056). So the field is
+initialised ONCE up front when `--aml` binds; after that the write survives AND the field persists across turns
+(the soma's own memory — the ground for a klaus-style emotional history next).
+
+Proven (tool output): forward — `VELOCITY STOP` per reply holds the breath, **"The nothing. It still said
+that."** vs the default run-length reply. Reverse — instrumented, a distress prompt drives FEAR+VOID 1.056 →
+field.pain 1.000 → a `DESTINY pain` script reads it (destiny 1.000); a calm prompt 0.028 → 0.028 → 0.028. The
+child's body reaches the field live, and the field's language reads it.
+
+PASS: build 0 warn, tests **120/120** (the bridge is HAVE_AML-only — verified by the binary, not the unit TU).
+`--gen` and the no-`--aml` path byte-identical (`0f32d2c`; the bridge is opt-in, NULL script → no-op). ASan/
+UBSan with AML linked, single `--respond` and a multi-turn `--chat`: exit 0 / 0 findings. Next: enrich the
+language (Leo's full chamber palette as readable fields) + the klaus memory layer (distress accumulates).

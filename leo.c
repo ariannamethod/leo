@@ -1559,6 +1559,9 @@ static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore blee
 static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selector; default OFF until trained, opt-in) */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
+#ifdef HAVE_AML
+static const char *g_leo_aml_script = NULL;  /* E-9: --aml SCRIPT — run per reply (leo_respond) so the script reads Leo's LIVE body; NULL → no bridge → byte-identical. */
+#endif
 /* A.6 F-2: in form, only WALK/RUN fill out a fragment; STOP/BREATHE leave it held
  * and short (the breath). Off-form → always eligible (byte-identical). */
 static int leo_form_elaborates(const Leo *leo) {
@@ -3691,8 +3694,19 @@ static int leo_mode_from_name(const char *name) {
  * Lazy: only reached via --aml, so the default Leo never touches AML. */
 #include "ariannamethod.h"
 static int leo_aml_run(Leo *leo, const char *path) {
-    if (am_exec_file(path) != 0) return 0;            /* AML error → silent fallback */
+    /* E-9 — the reverse bridge. Called per reply (from leo_respond, after the chambers
+     * settle), so Leo's body is LIVE. Project his felt state onto the field's soma fields
+     * (already in the AML field-map, readable by any .aml expression): his suffering
+     * (FEAR+VOID), his arousal (the hottest chamber), his dissonance. The script then runs
+     * over a field that holds the child's body, and its velocity sets his breath back —
+     * forward (velocity → breath) and reverse (body → field) close in one am_exec. */
     AM_State *s = am_get_state();
+    s->pain       = clampf(leo->chamber_act[LEO_CH_FEAR] + leo->chamber_act[LEO_CH_VOID], 0.0f, 1.0f);
+    s->tension    = clampf(fmaxf(leo->chamber_act[LEO_CH_FEAR],
+                                 fmaxf(leo->chamber_act[LEO_CH_LOVE], leo->chamber_act[LEO_CH_RAGE])),
+                           0.0f, 1.0f);
+    s->dissonance = clampf(g_leo_last_dissonance, 0.0f, 1.0f);
+    if (am_exec_file(path) != 0) return 0;            /* AML error → silent fallback */
     int m = -1;
     switch (s->velocity_mode) {
         case AM_VEL_NOMOVE:   m = LEO_MODE_STOP;    break;
@@ -3720,7 +3734,14 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS); /* settle ACT from the prompt's
                                        * emotion BEFORE speaking, so the register channel reads a
                                        * live felt-state from token 1 (phase 3b field->voice) */
-    leo_mode_update(leo);            /* A.6 FORM F-1: the breath quantizes from the settled chambers (passive) */
+#ifdef HAVE_AML
+    /* E-9: the reverse bridge — the chambers are settled now, so let a bound .aml script
+     * read Leo's live body and set his breath (via mode_override), which the mode_update
+     * below then applies. Opt-in via --aml; with no script bound (g_leo_aml_script == NULL)
+     * this is a no-op → default byte-identical. */
+    if (g_leo_aml_script) leo_aml_run(leo, g_leo_aml_script);
+#endif
+    leo_mode_update(leo);            /* A.6 FORM F-1: applies the script's forced breath, else quantizes from the settled chambers */
     leo->heard_word[0] = 0;
 
     /* A.5 School: if Leo asked "What is X?" last turn, THIS prompt is the answer —
@@ -4331,7 +4352,10 @@ int main(int argc, char **argv) {
     if (mode_force >= 0) leo_mode_set(&leo, mode_force);
     if (aml_script) {
 #ifdef HAVE_AML
-        leo_aml_run(&leo, aml_script);
+        am_init();                       /* E-9: init the field ONCE up front — otherwise am_exec's lazy
+                                          * auto-init would memset away the body we write each reply. After
+                                          * this the field persists across turns (the soma's own memory). */
+        g_leo_aml_script = aml_script;   /* leo_respond runs it per reply, where Leo's body is live. */
 #else
         fprintf(stderr, "[leo] --aml: AML is not linked — silent fallback, Leo runs without it.\n");
 #endif
