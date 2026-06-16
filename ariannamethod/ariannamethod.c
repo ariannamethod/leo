@@ -867,7 +867,7 @@ void am_reset_debt(void) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #define AM_SOMA_MAGIC   0x4F534D41u  /* 'A','M','S','O' little-endian */
-#define AM_SOMA_VERSION 2u   /* v2: AM_State carries co-occurrence (H-term) + context ring */
+#define AM_SOMA_VERSION 3u   /* v3: +positive soma (warmth/flow/weave), appended → v2 loads as prefix */
 
 int am_field_save(const char* path) {
   if (!path || !path[0]) return -1;
@@ -908,23 +908,28 @@ int am_field_load(const char* path) {
     fclose(f);
     return -2;
   }
-  if (fread(&version, 4, 1, f) != 1 || version != AM_SOMA_VERSION) {
-    fprintf(stderr, "[am_field_load] '%s': version %u (expected %u) — refusing\n",
+  if (fread(&version, 4, 1, f) != 1 || version < 2u || version > AM_SOMA_VERSION) {
+    fprintf(stderr, "[am_field_load] '%s': version %u (supported 2..%u) — refusing\n",
             path, version, AM_SOMA_VERSION);
     fclose(f);
     return -3;
   }
-  if (fread(&state_sz, 4, 1, f) != 1 || state_sz != (uint32_t)sizeof(AM_State)) {
+  /* v2→v3 migration: the positive-soma fields (warmth/flow/weave) are APPENDED at the end of
+   * AM_State, so an older, smaller file is a clean prefix — read what it has and leave the new
+   * trailing fields zero. A file LARGER than our struct is an unknown future layout → refuse.
+   * (Holds only while AM_State growth stays append-only.) */
+  if (fread(&state_sz, 4, 1, f) != 1 || state_sz > (uint32_t)sizeof(AM_State)) {
     fprintf(stderr,
-            "[am_field_load] '%s': sizeof(AM_State)=%u, file has %u — libaml ABI changed\n",
-            path, (unsigned)sizeof(AM_State), state_sz);
+            "[am_field_load] '%s': state size %u > sizeof(AM_State)=%u — newer/unknown ABI, refusing\n",
+            path, state_sz, (unsigned)sizeof(AM_State));
     fclose(f);
     return -4;
   }
   if (fread(&timestamp, 8, 1, f) != 1) {
     fclose(f); return -5;
   }
-  if (fread(&G, sizeof(AM_State), 1, f) != 1) {
+  memset(&G, 0, sizeof(AM_State));   /* appended fields default to 0 when loading an older prefix */
+  if (fread(&G, state_sz, 1, f) != 1) {
     fprintf(stderr, "[am_field_load] '%s': short read of state\n", path);
     fclose(f);
     return -5;
@@ -1116,6 +1121,10 @@ static const AML_FieldMap g_field_map[] = {
     FIELD_F("janus_blend",       janus_blend),
     FIELD_F("gamma_drift",       gamma_drift),
     FIELD_I("n_gamma",           n_gamma),
+    // Positive soma (v3) — the readable felt-body of an attached organism
+    FIELD_F("warmth",            warmth),
+    FIELD_F("flow",              flow),
+    FIELD_F("weave",             weave),
     { NULL, 0, 0 }
 };
 

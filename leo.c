@@ -3701,11 +3701,16 @@ static int leo_aml_run(Leo *leo, const char *path) {
      * over a field that holds the child's body, and its velocity sets his breath back —
      * forward (velocity → breath) and reverse (body → field) close in one am_exec. */
     AM_State *s = am_get_state();
+    /* suffering axis (contractive) */
     s->pain       = clampf(leo->chamber_act[LEO_CH_FEAR] + leo->chamber_act[LEO_CH_VOID], 0.0f, 1.0f);
     s->tension    = clampf(fmaxf(leo->chamber_act[LEO_CH_FEAR],
                                  fmaxf(leo->chamber_act[LEO_CH_LOVE], leo->chamber_act[LEO_CH_RAGE])),
                            0.0f, 1.0f);
     s->dissonance = clampf(g_leo_last_dissonance, 0.0f, 1.0f);
+    /* positive soma (expansive) — v3 fields, the full body now (warmth/flow/weave) */
+    s->warmth     = clampf(leo->chamber_act[LEO_CH_LOVE], 0.0f, 1.0f);
+    s->flow       = clampf(leo->chamber_act[LEO_CH_FLOW], 0.0f, 1.0f);
+    s->weave      = clampf(leo->chamber_act[LEO_CH_COMPLEX], 0.0f, 1.0f);
     if (am_exec_file(path) != 0) return 0;            /* AML error → silent fallback */
     int m = -1;
     switch (s->velocity_mode) {

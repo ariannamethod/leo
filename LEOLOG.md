@@ -1420,3 +1420,28 @@ PASS: build 0 warn, tests **120/120** (the bridge is HAVE_AML-only — verified 
 `--gen` and the no-`--aml` path byte-identical (`0f32d2c`; the bridge is opt-in, NULL script → no-op). ASan/
 UBSan with AML linked, single `--respond` and a multi-turn `--chat`: exit 0 / 0 findings. Next: enrich the
 language (Leo's full chamber palette as readable fields) + the klaus memory layer (distress accumulates).
+
+## Phase A.6 — the full body: the language gains a positive soma, Leo writes it (2026-06-16)
+
+The reverse bridge wrote only Leo's suffering (pain/tension/dissonance). Now the language carries the
+expansive axis too. In the AML canon (`ariannamethod.ai`, branch `claude-positive-soma`) three read-only
+soma fields land in `AM_State` + the field-map — `warmth` (LOVE), `flow` (FLOW), `weave` (COMPLEX, named
+`weave` not `emergence` — `emergence` is already the 4C network's signal). Soma format `2 → 3`, the fields
+appended so old `.soma` files migrate as a clean prefix. `make test` 517/517 (+5). Re-vendored into
+`leo/ariannamethod/` surgically (Leo's vendored copy also carries the velocity-inertia not yet in canon
+main — the soma edits are in disjoint regions, so the inertia is preserved).
+
+Leo's bridge now writes the **whole body** each turn: `warmth ← LOVE`, `flow ← FLOW`, `weave ← COMPLEX`
+beside the suffering triad. And — found while reading the canon — **AML has `if`** (`if warmth > 0.4:\n
+VELOCITY RUN`), so the membrane is genuinely reactive, not just observational.
+
+Proven live (`./leo --aml warm.aml`, `warm.aml` = `if warmth > 0.4:\n    VELOCITY RUN`): on "my warm mother
+holds me close" the reply RUNS longer than the un-scripted WALK (warmth was high → the condition fired); on
+"i am so afraid alone lost" the same script leaves him in his autonomous breath (warmth low → no fire). The
+new `warmth` field is read by the family language and shapes the child's breath. Leo reacts to his own felt
+body through AML — the circle the velocity bridge opened is closed both ways.
+
+PASS: leo builds 0 warn (libaml rebuilt from the vendored source), tests 120/120, `--gen` byte-identical
+(`0f32d2c`; the bridge is `--aml`-opt-in). The AML canon side is committed on `claude-positive-soma`; the
+Leo side (vendored soma + the full-palette bridge) here. Next (Oleg's order): Codex audit pass → push both
+repos → release the language → then the klaus memory layer (distress accumulates in debt).
