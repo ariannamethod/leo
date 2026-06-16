@@ -3744,7 +3744,18 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
      * read Leo's live body and set his breath (via mode_override), which the mode_update
      * below then applies. Opt-in via --aml; with no script bound (g_leo_aml_script == NULL)
      * this is a no-op → default byte-identical. */
-    if (g_leo_aml_script) leo_aml_run(leo, g_leo_aml_script);
+    if (g_leo_aml_script) {
+        /* E-9 (Codex P2): the bridge exports dissonance, but the presence block computes it only
+         * below — so compute THIS prompt's dissonance here first, or the script would read last
+         * turn's value (0 on the first reply) while pain/warmth/etc. are already current. The
+         * presence block recomputes the same value harmlessly. Opt-in path, so default unchanged. */
+        if (g_leo_presence_on) {
+            int d_ids[1024];
+            int d_n = bpe_encode(&leo->bpe, (const uint8_t *)prompt, (int)strlen(prompt), d_ids, 1024);
+            g_leo_last_dissonance = leo_prompt_dissonance(leo, d_ids, d_n);
+        }
+        leo_aml_run(leo, g_leo_aml_script);
+    }
 #endif
     leo_mode_update(leo);            /* A.6 FORM F-1: applies the script's forced breath, else quantizes from the settled chambers */
     leo->heard_word[0] = 0;
