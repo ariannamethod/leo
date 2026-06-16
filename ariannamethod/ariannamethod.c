@@ -915,13 +915,16 @@ int am_field_load(const char* path) {
     return -3;
   }
   /* v2→v3 migration: the positive-soma fields (warmth/flow/weave) are APPENDED at the end of
-   * AM_State, so an older, smaller file is a clean prefix — read what it has and leave the new
-   * trailing fields zero. A file LARGER than our struct is an unknown future layout → refuse.
-   * (Holds only while AM_State growth stays append-only.) */
-  if (fread(&state_sz, 4, 1, f) != 1 || state_sz > (uint32_t)sizeof(AM_State)) {
+   * AM_State, so a v2 file is a clean prefix — read it and leave the new trailing fields zero.
+   * Only the two known sizes are valid: v3 = the current sizeof, v2 = that minus the 3 appended
+   * floats. Any other size is malformed/corrupt → refuse before overwriting G.
+   * (Holds only while AM_State growth stays append-only — bump this when a new version lands.) */
+  uint32_t expect_sz = (version >= 3u) ? (uint32_t)sizeof(AM_State)
+                                       : (uint32_t)(sizeof(AM_State) - 3u * sizeof(float));
+  if (fread(&state_sz, 4, 1, f) != 1 || state_sz != expect_sz) {
     fprintf(stderr,
-            "[am_field_load] '%s': state size %u > sizeof(AM_State)=%u — newer/unknown ABI, refusing\n",
-            path, state_sz, (unsigned)sizeof(AM_State));
+            "[am_field_load] '%s': state size %u != %u expected for version %u — refusing\n",
+            path, state_sz, expect_sz, version);
     fclose(f);
     return -4;
   }
