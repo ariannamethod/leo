@@ -1368,3 +1368,26 @@ structs in one frame plus red-zones — a test-driver artifact, not a code defec
 `leo.asan` binary on real input.) **The Mythos map so far: bugs L-1/L-3/L-4 fixed, E-1 + I3b, E-5, and now E-2c
 done.** Open: E-9 (Leo as a sensor the language reads), the `ASK` / `BE` language operators, E-11
 (glyph-histogram as a γ-capsule). Next on Oleg's call: a long `--chat` listen-and-log pass.
+
+## Phase A.6 — FORM reaches the live voice; the `--mode` flag was case-deaf (2026-06-16)
+
+A measurement scare turned into a clean bill of health. `--mode` looked inert — forcing
+walk/stop/run/breathe on `--respond` changed the reply not at all, byte-for-byte. The instrumented
+truth: the forced mode never arrived (`override=-1`) because `leo_mode_from_name` matched the user's
+word against the UPPERCASE `LEO_MODE_NAMES` with a case-sensitive `strcmp`, so the natural lowercase
+`--mode stop` returned -1 and the force was silently dropped. Every "forced" run was really the
+default autonomous mode — hence identical.
+
+The good news under the scare: the autonomous body IS live in the reply path. With the prompt's own
+chambers driving it, the mode varies and shapes the breath — "i am so afraid alone in the dark" →
+STOP, chain_len 1 (the child gone still); "my mother loves me warm" → WALK, chain_len 3; "the night
+sky" → RUN, chain_len 5. FORM was never inert in conversation; only the manual override knob was deaf.
+
+Fix: `leo_mode_from_name` upper-cases its input before matching (case-insensitive). Now lowercase
+`--mode stop` lands — **"The nothing. It still said that."** (held) vs `--mode run` **"The table from
+the window. To think he should be. ..."** (running). The flag finally lets us A/B the body's length
+by ear.
+
+PASS (tool output): build 0 warn, tests **120/120** (+1: `--mode` is case-insensitive). `--gen`
+byte-identical (`0f32d2c`; the fix is in CLI name parsing only). leo.asan on the `--mode` path: exit 0 /
+0 findings. The velocity body shapes the live voice — autonomously always, and now on command too.

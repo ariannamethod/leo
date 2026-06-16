@@ -3673,8 +3673,13 @@ __attribute__((unused))
 static int leo_mode_get(const Leo *leo) { return leo->mode; }
 __attribute__((unused))
 static int leo_mode_from_name(const char *name) {
+    char up[16]; int j = 0;                         /* case-insensitive: the natural lowercase
+                                                     * --mode stop must match the UPPERCASE names. */
+    for (; name[j] && j < (int)sizeof(up) - 1; j++)
+        up[j] = (char)toupper((unsigned char)name[j]);
+    up[j] = 0;
     for (int i = 0; i < LEO_MODE_COUNT; i++)
-        if (strcmp(name, LEO_MODE_NAMES[i]) == 0) return i;
+        if (strcmp(up, LEO_MODE_NAMES[i]) == 0) return i;
     return -1;
 }
 

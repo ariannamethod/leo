@@ -839,6 +839,15 @@ int main(void) {
         leo_free(&c2);
     }
 
+    /* A.6 FORM fix: --mode is case-insensitive. leo_mode_from_name matched only the
+     * UPPERCASE LEO_MODE_NAMES, so the natural lowercase "--mode stop" returned -1 and
+     * the forced breath was silently dropped (override stayed -1). */
+    CHECK(leo_mode_from_name("stop") == LEO_MODE_STOP &&
+          leo_mode_from_name("STOP") == LEO_MODE_STOP &&
+          leo_mode_from_name("BreaThe") == LEO_MODE_BREATHE &&
+          leo_mode_from_name("nope") == -1,
+          "form: --mode name is case-insensitive (stop==STOP, garbage stays -1)");
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
