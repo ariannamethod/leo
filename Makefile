@@ -5,16 +5,13 @@ SANED    = -O1 -g -fsanitize=address,undefined -lm -Wall -Wextra
 # AML velocity bridge — build & link the family language so an .aml script can
 # drive Leo's breath (--aml). The language is vendored as SOURCE in ariannamethod/
 # (built into libaml.a here, never committed as a binary — AML itself .gitignores
-# *.a). If the source is absent, fall back to a system AML build; if neither, a
-# silent fallback (Leo runs full, --aml just says so).
+# *.a). VENDOR ONLY — no sibling/external checkout reference. If the vendored source
+# is absent, a silent fallback (Leo runs full; --aml just reports it is not linked).
 AML_SRC := ariannamethod/ariannamethod.c
 AML_LIB :=
-ifneq ($(wildcard $(AML_SRC)),)
+ifneq ($(wildcard $(AML_SRC)),)   # the ONLY AML source is the vendored copy in ariannamethod/
   AML_LIB   := ariannamethod/libaml.a
   AML_FLAGS := -DHAVE_AML -Iariannamethod
-else ifneq ($(wildcard $(HOME)/arianna/ariannamethod.ai/libaml.a),)
-  AML_LIB   := $(HOME)/arianna/ariannamethod.ai/libaml.a
-  AML_FLAGS := -DHAVE_AML -I$(HOME)/arianna/ariannamethod.ai/core
 endif
 
 .PHONY: all test asan clean run
