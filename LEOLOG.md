@@ -1445,3 +1445,12 @@ PASS: leo builds 0 warn (libaml rebuilt from the vendored source), tests 120/120
 (`0f32d2c`; the bridge is `--aml`-opt-in). The AML canon side is committed on `claude-positive-soma`; the
 Leo side (vendored soma + the full-palette bridge) here. Next (Oleg's order): Codex audit pass → push both
 repos → release the language → then the klaus memory layer (distress accumulates in debt).
+
+## Waypoint — vendor-only build, self-contained (2026-06-17)
+
+State note. The Makefile's old fallback to an external AML checkout was cut: the build now sources AML
+**only** from the committed `ariannamethod/` (vendor); if that source is ever absent, a silent no-AML
+fallback. `git grep` for external/`$(HOME)` paths in `Makefile`/`leo.c` = 0. Build 0-warn from the vendor,
+tests 120/120, `--gen` byte-identical (`0f32d2c`), the `--aml` bridge drives the breath through the vendored
+copy (Codex-reviewed: clean removal, no correctness issues). Open language gifts not yet built: `ASK`, `BE`,
+`E-11` (the glyph-histogram γ-capsule). Commit `c833a34`.
