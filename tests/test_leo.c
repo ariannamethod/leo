@@ -848,6 +848,74 @@ int main(void) {
           leo_mode_from_name("nope") == -1,
           "form: --mode name is case-insensitive (stop==STOP, garbage stays -1)");
 
+    /* klaus-memory: scars accumulate on distress, decay on calm (the body remembers HOW). */
+    {
+        Leo ks; leo_init(&ks);
+        leo_ingest(&ks, "the rain falls. his mother is warm. he is afraid alone in the dark.");
+        char buf[1024];
+        int prev = g_leo_klaus_on; g_leo_klaus_on = 1;
+        for (int t = 0; t < 6; t++)  leo_respond(&ks, "i am so afraid alone lost in the dark", buf, sizeof buf);
+        float fear_scar = ks.scar[LEO_CH_FEAR];
+        for (int t = 0; t < 12; t++) leo_respond(&ks, "my warm mother holds me close", buf, sizeof buf);
+        float calm_scar = ks.scar[LEO_CH_FEAR];
+        CHECK(fear_scar > 0.01f && calm_scar < fear_scar,
+              "klaus: scar[FEAR] accumulates on distress, decays on calm");
+        g_leo_klaus_on = prev;
+        leo_free(&ks);
+    }
+
+    /* klaus-memory: the scars survive save/load (state v6). */
+    {
+        Leo sv; leo_init(&sv);
+        leo_ingest(&sv, "the rain falls. his mother is warm.");
+        sv.scar[LEO_CH_FEAR] = 0.42f;
+        sv.scar[LEO_CH_VOID] = 0.17f;
+        const char *path = "/tmp/leo_klaus_state.bin";
+        int saved = leo_save_state(&sv, path);
+        Leo ld; leo_init(&ld);
+        int loaded = leo_load_state(&ld, path);
+        CHECK(saved && loaded &&
+              fabsf(ld.scar[LEO_CH_FEAR] - 0.42f) < 0.001f &&
+              fabsf(ld.scar[LEO_CH_VOID] - 0.17f) < 0.001f,
+              "klaus: scars survive save/load (v6)");
+        leo_free(&sv); leo_free(&ld);
+        remove(path);
+    }
+
+    /* klaus-memory: a v5 state (saved before scar existed) migrates into the v6 loader
+     * with scar=0 — the organism survives a pure-append upgrade (decision B: persistent
+     * memory = love). A real v5 file is a v6 file with version=5 and without the trailing
+     * scar[] floats; build exactly that from a v6 save and prove the v6 loader accepts it. */
+    {
+        Leo sv; leo_init(&sv);
+        leo_ingest(&sv, "the rain falls. his mother is warm.");
+        sv.scar[LEO_CH_FEAR] = 0.5f;   /* dropped when the v5 scar tail is stripped */
+        const char *p6 = "/tmp/leo_v6_mig.bin", *p5 = "/tmp/leo_v5_mig.bin";
+        int saved = leo_save_state(&sv, p6);
+        int built = 0;
+        FILE *fi = fopen(p6, "rb");
+        if (fi) {
+            fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
+            unsigned char *buf = (unsigned char *)malloc(sz > 0 ? (size_t)sz : 1);
+            if (buf && sz > (long)(LEO_N_CHAMBERS * sizeof(float)) &&
+                (long)fread(buf, 1, (size_t)sz, fi) == sz) {
+                uint32_t five = 5; memcpy(buf + 4, &five, sizeof five);       /* version 6 -> 5 */
+                long v5sz = sz - (long)(LEO_N_CHAMBERS * sizeof(float));      /* strip scar tail */
+                FILE *fo = fopen(p5, "wb");
+                if (fo) { built = ((long)fwrite(buf, 1, (size_t)v5sz, fo) == v5sz); fclose(fo); }
+            }
+            free(buf); fclose(fi);
+        }
+        Leo ld; leo_init(&ld);
+        int loaded = built && leo_load_state(&ld, p5);
+        int scar_zero = 1;
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) if (ld.scar[c] != 0.0f) scar_zero = 0;
+        CHECK(saved && built && loaded && scar_zero,
+              "klaus: a v5 state migrates into the v6 loader, scar=0 (B)");
+        leo_free(&sv); leo_free(&ld);
+        remove(p6); remove(p5);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

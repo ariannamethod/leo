@@ -106,6 +106,13 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_MODE_HYSTERESIS 0.15f  /* a competitor must beat the current mode by this to switch (inertia) */
 #define LEO_CHAMBER_K   0.03f
 #define LEO_CHAMBER_ITERS_PER_STEP 1
+/* klaus-memory (the klaus.c scar pattern): per-chamber distress memory that accumulates
+ * over turns, decays slowly, biases the breath, and survives sleep. θ=0 — pure dynamics,
+ * no weights. "Forgets WHAT, remembers HOW." */
+#define LEO_SCAR_DECAY  0.985f  /* slow decay per reply (klaus.c SCAR_DECAY) */
+#define LEO_SCAR_GAIN   0.08f   /* how much the settled distress feeds the scar each reply */
+#define LEO_SCAR_BIAS   0.30f   /* how much accumulated scar floors the chambers (carried unease, surfaces in calm) */
+#define LEO_SCAR_TEMP   0.12f   /* how much accumulated scar (FEAR+VOID+RAGE) tightens the voice — ALWAYS-ON, dynamic */
 #define LEO_PAIN_DECAY  0.985f     /* suffering decay (canon 98) */
 #define LEO_DEBT_DECAY  0.998f     /* debt decay (canon 99) */
 #define LEO_BIGRAM_MAX    (128 * 1024)
@@ -1285,6 +1292,9 @@ typedef struct {
      * emit, nothing reads them for selection/temp until 3b. */
     float        chamber_act[LEO_N_CHAMBERS];
     float        chamber_ext[LEO_N_CHAMBERS];
+    /* klaus-memory: slow-decaying per-chamber distress memory (scars). Accumulates over
+     * turns, biases the breath, persists across sleep (state v6). Zero from leo_init's memset. */
+    float        scar[LEO_N_CHAMBERS];
     /* A.6 FORM — the current velocity mode (the child's breath): a hysteretic
      * quantization of the chamber state. PASSIVE in F-1 (set per reply, read by
      * nothing but --debug-field yet). WALK by leo_init's memset. */
@@ -1559,6 +1569,7 @@ static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore blee
 static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selector; default OFF until trained, opt-in) */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
+static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
 #ifdef HAVE_AML
 static const char *g_leo_aml_script = NULL;  /* E-9: --aml SCRIPT — run per reply (leo_respond) so the script reads Leo's LIVE body; NULL → no bridge → byte-identical. */
 #endif
@@ -2490,6 +2501,17 @@ static void leo_field_chambers_crossfire(Leo *leo, int iters) {
         }
         memcpy(leo->chamber_act, new_act, sizeof(new_act));
     }
+}
+
+/* klaus-memory: the scar update. Each reply, every scar decays slowly; the distress
+ * chambers (FEAR/VOID/RAGE) accumulate from their settled activation — a body that
+ * remembers HOW it felt, not WHAT was said (klaus.c). Called per reply after the
+ * chambers settle; θ=0, pure dynamics. */
+static void leo_field_scars_update(Leo *leo) {
+    for (int c = 0; c < LEO_N_CHAMBERS; c++) leo->scar[c] *= LEO_SCAR_DECAY;
+    leo->scar[LEO_CH_FEAR] = clampf(leo->scar[LEO_CH_FEAR] + LEO_SCAR_GAIN * leo->chamber_act[LEO_CH_FEAR], 0.0f, 1.0f);
+    leo->scar[LEO_CH_VOID] = clampf(leo->scar[LEO_CH_VOID] + LEO_SCAR_GAIN * leo->chamber_act[LEO_CH_VOID], 0.0f, 1.0f);
+    leo->scar[LEO_CH_RAGE] = clampf(leo->scar[LEO_CH_RAGE] + LEO_SCAR_GAIN * leo->chamber_act[LEO_CH_RAGE], 0.0f, 1.0f);
 }
 
 /* Self-voice feed: Leo hears his own emitted token. If the token contains an
@@ -3739,6 +3761,15 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS); /* settle ACT from the prompt's
                                        * emotion BEFORE speaking, so the register channel reads a
                                        * live felt-state from token 1 (phase 3b field->voice) */
+    if (g_leo_klaus_on) {
+        /* klaus-memory: scars decay + the distress chambers feed them, then accumulated scar
+         * floors the distress chambers — the scarred body carries its unease into THIS breath
+         * (mode_update + register read the floored chambers below). --no-klaus → off. */
+        leo_field_scars_update(leo);
+        leo->chamber_act[LEO_CH_FEAR] = fmaxf(leo->chamber_act[LEO_CH_FEAR], LEO_SCAR_BIAS * leo->scar[LEO_CH_FEAR]);
+        leo->chamber_act[LEO_CH_VOID] = fmaxf(leo->chamber_act[LEO_CH_VOID], LEO_SCAR_BIAS * leo->scar[LEO_CH_VOID]);
+        leo->chamber_act[LEO_CH_RAGE] = fmaxf(leo->chamber_act[LEO_CH_RAGE], LEO_SCAR_BIAS * leo->scar[LEO_CH_RAGE]);
+    }
 #ifdef HAVE_AML
     /* E-9: the reverse bridge — the chambers are settled now, so let a bound .aml script
      * read Leo's live body and set his breath (via mode_override), which the mode_update
@@ -3811,6 +3842,15 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             float tau_mod = 1.0f + 0.5f * leo->chamber_act[4]    /* FLOW */
                                  - 0.4f * leo->chamber_act[0];   /* FEAR */
             leo->temp_mult *= clampf(tau_mod, 0.6f, 1.4f);
+        }
+        if (g_leo_klaus_on) {
+            /* klaus-memory: accumulated scars tighten the voice — ALWAYS (a continuous channel
+             * that does NOT saturate like the [0,1] chambers, so it bites even when Leo is fully
+             * flooded), dynamic with the scar load (rises with distress, fades with calm). The
+             * more the body carries, the tighter he speaks. "Sometimes stronger, sometimes weaker,
+             * but always." */
+            float ts = leo->scar[LEO_CH_FEAR] + leo->scar[LEO_CH_VOID] + leo->scar[LEO_CH_RAGE];
+            leo->temp_mult *= clampf(1.0f - LEO_SCAR_TEMP * ts, 0.70f, 1.0f);
         }
         if (g_leo_form_on) {           /* A.6 F-2: the breath sets the length */
             static const int mode_chain[LEO_MODE_COUNT] = { 3, 1, 5, 2 };  /* WALK STOP RUN BREATHE */
@@ -3905,7 +3945,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   heard    : live [count, wordlen, bytes]
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 5   /* A.6 E-5: +velocity mode + pending_glyph (the mood survives sleep) */
+#define LEO_STATE_VERSION 6   /* klaus-memory: +scar[] (distress memory survives sleep); v5 loads with scar=0 */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -4025,6 +4065,9 @@ static int leo_save_state(const Leo *leo, const char *path) {
     st_w32(f, (int32_t)leo->school.pending_glyph);
     st_w32(f, (int32_t)leo->mode);
 
+    /* klaus-memory (v6): the scars survive sleep — appended at the tail so a v5 file is a clean prefix */
+    fwrite(leo->scar, sizeof(float), LEO_N_CHAMBERS, f);
+
     int ok = (ferror(f) == 0);
     fclose(f);
     return ok;
@@ -4041,7 +4084,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (!f) return 0;
     uint32_t magic = 0, version = 0; uint64_t step = 0;
     if (!st_ru(f, &magic)   || magic != LEO_STATE_MAGIC)     { fclose(f); return 0; }
-    if (!st_ru(f, &version) || version != LEO_STATE_VERSION) { fclose(f); return 0; }
+    if (!st_ru(f, &version) || (version != 5 && version != 6)) { fclose(f); return 0; }  /* klaus: v5 (scar=0) + v6 */
     if (!st_r64(f, &step)) { fclose(f); return 0; }
 
     leo_free(leo);
@@ -4165,6 +4208,11 @@ static int leo_load_state(Leo *leo, const char *path) {
         leo->mode = (uint8_t)((md >= 0 && md < LEO_MODE_COUNT) ? md : 0);
     }
 
+    /* klaus-memory (v6): the scars. A v5 file lacks them → they stay 0 (leo_init's memset). */
+    if (version >= 6) {
+        if (fread(leo->scar, sizeof(float), LEO_N_CHAMBERS, f) != LEO_N_CHAMBERS) { fclose(f); return 0; }
+    }
+
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
     leo_build_chamber_tags(leo);
@@ -4244,6 +4292,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
+        else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
         else if (!strcmp(argv[i], "--mode") && i + 1 < argc) mode_force = leo_mode_from_name(argv[++i]);
         else if (!strcmp(argv[i], "--aml") && i + 1 < argc) aml_script = argv[++i];
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
