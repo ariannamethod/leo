@@ -120,6 +120,7 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_GAMMA_DIM   (2 * LEO_N_CHAMBERS)  /* [0..5] = chamber EMA, [6..11] = scar EMA */
 #define LEO_GAMMA_RATE  0.05f   /* EMA rate — the running self forms over ~20 replies (slow) */
 #define LEO_GAMMA_PULL  0.12f   /* how much the running self tints the present chambers — ALWAYS-ON, gentle */
+#define LEO_GMEAN_RATE  0.04f   /* E-11 meaning axis: EMA rate of the perceived glyph histogram + the gap (slow) */
 #define LEO_PAIN_DECAY  0.985f     /* suffering decay (canon 98) */
 #define LEO_DEBT_DECAY  0.998f     /* debt decay (canon 99) */
 #define LEO_BIGRAM_MAX    (128 * 1024)
@@ -1306,6 +1307,12 @@ typedef struct {
      * body on first use, tints the present, persists across sleep (state v7). Zero from leo_init's memset. */
     float        gamma[LEO_GAMMA_DIM];
     uint8_t      gamma_primed;
+    /* E-11 meaning axis: the perceived-meaning half of the capsule — an EMA of the glyph histogram
+     * Leo has been perceiving (gamma_meaning) + the unknown/ungraspable mass (gamma_gap = his
+     * darkmatter, "gravitational memory from rejected injections", the AML SCAR lineage). Readout +
+     * resonance, never word-selection. Zero from leo_init's memset; persists (state v8). */
+    float        gamma_meaning[GLYPH_COUNT];
+    float        gamma_gap;
     /* A.6 FORM — the current velocity mode (the child's breath): a hysteretic
      * quantization of the chamber state. PASSIVE in F-1 (set per reply, read by
      * nothing but --debug-field yet). WALK by leo_init's memset. */
@@ -3625,7 +3632,7 @@ static int leo_semtok_word(const Leo *leo, const char *w) {
 /* a CONCEPT glyph — not a grammar word (indices 63-70) or the copula BE (86).
  * Grammar glyphs are never a concept-slot or a guess, so they must not vote (L-1:
  * "it is what it is" must not teach a word the BE glyph). */
-static int leo_glyph_concept(int g) { return g >= 0 && !(g >= 63 && g <= 70) && g != 86; }
+static int leo_glyph_concept(int g) { return g >= 0 && g < GLYPH_COUNT && !(g >= 63 && g <= 70) && g != 86; }  /* g<GLYPH_COUNT: a corrupt loaded learned_glyph can't OOB any hist[g] */
 /* I2: the dominant glyph of a text — its concept-slot. Histogram over content
  * words via the SEED map; the most-frequent CONCEPT glyph, or -1 if the text
  * grounds in no concept (a non-answer: pure unknowns, a copula, a counter-question). */
@@ -3709,6 +3716,38 @@ static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out
         if (!ch) break;
     }
     return 0;
+}
+
+/* E-11 meaning axis: each reply, absorb the meaning Leo PERCEIVED in the prompt — a glyph histogram
+ * over its content words (the grown School map; grammar/BE excluded via leo_glyph_concept), plus the
+ * gap = the mass of content words he has NO concept for (his darkmatter, "mass without acceptance",
+ * the same unknown School asks about). EMA, like the body cast. Read-only over the field — readout +
+ * resonance for santaclaus + BE/ASK, NEVER word-selection. θ=0, pure dynamics. */
+static void leo_gamma_meaning(Leo *leo, const char *prompt) {
+    int hist[GLYPH_COUNT] = {0};
+    int concept = 0, unknown = 0;
+    char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+    for (const char *q = prompt; ; q++) {
+        unsigned char ch = (unsigned char)*q;
+        if (ch && (isalpha(ch) || ch == '\'')) { if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch); continue; }
+        if (wi >= 2) {
+            cur[wi] = 0;
+            if (!leo_word_is_function(cur)) {
+                int g = leo_semtok_word(leo, cur);
+                if (leo_glyph_concept(g)) { hist[g]++; concept++; }
+                else if (g < 0 && wi >= 3 && !semtok_is_stop_word(cur)) unknown++;  /* content word >=3 (School's find_unknown threshold), no concept = the gap (darkmatter) */
+            }
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    int graspable = concept + unknown;
+    float gap_now = graspable > 0 ? (float)unknown / (float)graspable : 0.0f;
+    leo->gamma_gap = (1.0f - LEO_GMEAN_RATE) * leo->gamma_gap + LEO_GMEAN_RATE * gap_now;
+    for (int i = 0; i < GLYPH_COUNT; i++) {
+        float p = concept > 0 ? (float)hist[i] / (float)concept : 0.0f;
+        leo->gamma_meaning[i] = (1.0f - LEO_GMEAN_RATE) * leo->gamma_meaning[i] + LEO_GMEAN_RATE * p;
+    }
 }
 
 /* A.6 FORM F-1 — quantize the chamber state into a velocity mode, with hysteresis
@@ -3960,7 +3999,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     } else {
         produced = leo_chain(leo, chain_len, out, max_len);
     }
-    if (g_leo_capsule_on) leo_gamma_absorb(leo);   /* E-11 diary: the capsule records the body that ACTUALLY SPOKE (post-reply, like santaclaus) */
+    if (g_leo_capsule_on) { leo_gamma_absorb(leo); leo_gamma_meaning(leo, prompt); }  /* E-11 diary: record the body that SPOKE + the meaning perceived (post-reply, like santaclaus) */
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
@@ -3992,7 +4031,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   heard    : live [count, wordlen, bytes]
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 7   /* E-11: +gamma[] capsule (+primed flag); v5/v6 load with gamma primed from the body */
+#define LEO_STATE_VERSION 8   /* E-11 meaning axis: +gamma_meaning[88]+gamma_gap; v5/v6/v7 load with them 0 (soft-migrate) */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -4119,6 +4158,10 @@ static int leo_save_state(const Leo *leo, const char *path) {
     fwrite(leo->gamma, sizeof(float), LEO_GAMMA_DIM, f);
     st_w32(f, (int32_t)leo->gamma_primed);
 
+    /* E-11 meaning axis (v8): the perceived-meaning EMA + the gap (darkmatter) — appended after the capsule */
+    fwrite(leo->gamma_meaning, sizeof(float), GLYPH_COUNT, f);
+    st_wf(f, leo->gamma_gap);
+
     int ok = (ferror(f) == 0);
     fclose(f);
     return ok;
@@ -4135,7 +4178,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (!f) return 0;
     uint32_t magic = 0, version = 0; uint64_t step = 0;
     if (!st_ru(f, &magic)   || magic != LEO_STATE_MAGIC)     { fclose(f); return 0; }
-    if (!st_ru(f, &version) || (version != 5 && version != 6 && version != 7)) { fclose(f); return 0; }  /* soft-migrate v5/v6/v7 */
+    if (!st_ru(f, &version) || (version != 5 && version != 6 && version != 7 && version != 8)) { fclose(f); return 0; }  /* soft-migrate v5/v6/v7/v8 */
     if (!st_r64(f, &step)) { fclose(f); return 0; }
 
     leo_free(leo);
@@ -4271,6 +4314,12 @@ static int leo_load_state(Leo *leo, const char *path) {
         if (fread(leo->gamma, sizeof(float), LEO_GAMMA_DIM, f) != LEO_GAMMA_DIM) { fclose(f); return 0; }
         if (!st_r32(f, &primed)) { fclose(f); return 0; }
         leo->gamma_primed = (uint8_t)(primed ? 1 : 0);
+    }
+
+    /* E-11 meaning axis (v8): a v5/v6/v7 file lacks it → stays 0 (leo_init's memset). */
+    if (version >= 8) {
+        if (fread(leo->gamma_meaning, sizeof(float), GLYPH_COUNT, f) != GLYPH_COUNT) { fclose(f); return 0; }
+        if (!st_rf(f, &leo->gamma_gap)) { fclose(f); return 0; }
     }
 
     fclose(f);
@@ -4520,6 +4569,13 @@ int main(int argc, char **argv) {
                        leo.gamma[0], leo.gamma[1], leo.gamma[2], leo.gamma[3], leo.gamma[4], leo.gamma[5],
                        leo.gamma[6], leo.gamma[7], leo.gamma[8], leo.gamma[9], leo.gamma[10], leo.gamma[11],
                        leo.gamma_primed);
+            if (g_leo_capsule_on) {
+                int top = 0;
+                for (int gi = 1; gi < GLYPH_COUNT; gi++)
+                    if (leo.gamma_meaning[gi] > leo.gamma_meaning[top]) top = gi;
+                printf("             mean>  top=%s(%.2f) gap=%.2f\n",
+                       GLYPH_NAMES[top], leo.gamma_meaning[top], leo.gamma_gap);
+            }
         }
     }
 

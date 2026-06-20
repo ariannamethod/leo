@@ -884,8 +884,8 @@ int main(void) {
 
     /* klaus-memory: a v5 state (saved before scar existed) migrates into the v6 loader
      * with scar=0 — the organism survives a pure-append upgrade (decision B: persistent
-     * memory = love). A real v5 file is the current save with version=5 and without BOTH the v6
-     * scar[] tail AND the v7 gamma[]+primed tail; build exactly that and prove the loader migrates it. */
+     * memory = love). A real v5 file is the current save with version=5 and without EVERY appended
+     * tail (v6 scar[], v7 gamma[]+primed, v8 gamma_meaning[]+gap); strip all and prove it migrates. */
     {
         Leo sv; leo_init(&sv);
         leo_ingest(&sv, "the rain falls. his mother is warm.");
@@ -897,8 +897,9 @@ int main(void) {
         if (fi) {
             fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
             unsigned char *buf = (unsigned char *)malloc(sz > 0 ? (size_t)sz : 1);
-            long v5tail = (long)(LEO_N_CHAMBERS * sizeof(float)              /* v6 scar[] */
-                               + LEO_GAMMA_DIM * sizeof(float) + sizeof(int32_t));  /* + v7 gamma[]+primed */
+            long v5tail = (long)(LEO_N_CHAMBERS * sizeof(float)                       /* v6 scar[] */
+                               + LEO_GAMMA_DIM * sizeof(float) + sizeof(int32_t)      /* + v7 gamma[]+primed */
+                               + GLYPH_COUNT * sizeof(float) + sizeof(float));        /* + v8 gamma_meaning[]+gap */
             if (buf && sz > v5tail &&
                 (long)fread(buf, 1, (size_t)sz, fi) == sz) {
                 uint32_t five = 5; memcpy(buf + 4, &five, sizeof five);       /* version 7 -> 5 */
@@ -941,7 +942,7 @@ int main(void) {
         leo_free(&gc);
     }
 
-    /* E-11 γ-capsule: round-trips save/load (state v7). */
+    /* E-11 γ-capsule: gamma round-trips save/load (whatever the current state version writes). */
     {
         Leo sv; leo_init(&sv);
         leo_ingest(&sv, "the rain falls. his mother is warm.");
@@ -955,7 +956,7 @@ int main(void) {
         for (int c = 0; c < LEO_GAMMA_DIM; c++)
             if (fabsf(ld.gamma[c] - 0.1f * (float)(c + 1)) > 0.001f) rt = 0;
         CHECK(saved && loaded && rt && ld.gamma_primed == 1,
-              "E-11: gamma capsule round-trips save/load (v7)");
+              "E-11: gamma capsule round-trips save/load");
         leo_free(&sv); leo_free(&ld);
         remove(path);
     }
@@ -972,7 +973,8 @@ int main(void) {
         const char *p7 = "/tmp/leo_v7_mig.bin", *p6 = "/tmp/leo_v6_mig2.bin";
         int saved = leo_save_state(&sv, p7);
         int built = 0;
-        long tail = (long)(LEO_GAMMA_DIM * sizeof(float) + sizeof(int32_t));   /* gamma[] + primed */
+        long tail = (long)(LEO_GAMMA_DIM * sizeof(float) + sizeof(int32_t)          /* v7 gamma[]+primed */
+                         + GLYPH_COUNT * sizeof(float) + sizeof(float));            /* + v8 gamma_meaning[]+gap */
         FILE *fi = fopen(p7, "rb");
         if (fi) {
             fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
@@ -993,6 +995,82 @@ int main(void) {
               "E-11: a v6 state migrates into the v7 loader, gamma unprimed (B)");
         leo_free(&sv); leo_free(&ld);
         remove(p7); remove(p6);
+    }
+
+    /* E-11 meaning axis: known concepts raise gamma_meaning; unknown content words raise the gap
+     * (Leo's darkmatter). PASSIVE — readout only. */
+    {
+        Leo gm; leo_init(&gm);
+        leo_ingest(&gm, "the rain falls. his mother is warm. fire and water and fear.");
+        int prev = g_leo_capsule_on; g_leo_capsule_on = 1;
+        leo_gamma_meaning(&gm, "water and fire and love");   /* seed-map concepts */
+        float sum = 0.0f;
+        for (int i = 0; i < GLYPH_COUNT; i++) sum += gm.gamma_meaning[i];
+        int concepts_rose = sum > 0.0f;
+        float gap0 = gm.gamma_gap;
+        for (int t = 0; t < 5; t++) leo_gamma_meaning(&gm, "the zorblax grumbus");  /* unknown content words */
+        int gap_rose = gm.gamma_gap > gap0;
+        CHECK(concepts_rose && gap_rose,
+              "E-11: meaning axis — concepts raise gamma_meaning, unknown raises the gap (darkmatter)");
+        g_leo_capsule_on = prev;
+        leo_free(&gm);
+    }
+
+    /* E-11 meaning axis: gamma_meaning + gamma_gap round-trip save/load (state v8). */
+    {
+        Leo sv; leo_init(&sv);
+        leo_ingest(&sv, "the rain falls.");
+        for (int i = 0; i < GLYPH_COUNT; i++) sv.gamma_meaning[i] = 0.001f * (float)(i + 1);
+        sv.gamma_gap = 0.37f;
+        const char *path = "/tmp/leo_gmean_v8.bin";
+        int saved = leo_save_state(&sv, path);
+        Leo ld; leo_init(&ld);
+        int loaded = leo_load_state(&ld, path);
+        int rt = fabsf(ld.gamma_gap - 0.37f) < 0.001f;
+        for (int i = 0; i < GLYPH_COUNT; i++)
+            if (fabsf(ld.gamma_meaning[i] - 0.001f * (float)(i + 1)) > 0.0005f) rt = 0;
+        CHECK(saved && loaded && rt,
+              "E-11: meaning axis round-trips save/load (v8)");
+        leo_free(&sv); leo_free(&ld);
+        remove(path);
+    }
+
+    /* E-11 OOB guard: leo_glyph_concept rejects out-of-range glyph ids (a corrupt loaded
+     * learned_glyph could be 88..127 → must not pass to hist[g]). */
+    CHECK(!leo_glyph_concept(GLYPH_COUNT) && !leo_glyph_concept(127) && !leo_glyph_concept(-1)
+          && leo_glyph_concept(0) && leo_glyph_concept(GLYPH_COUNT - 1),
+          "E-11: leo_glyph_concept rejects out-of-range ids (hist OOB guard)");
+
+    /* E-11 meaning axis: a v7 state (no meaning axis) migrates into the v8 loader — gamma_meaning
+     * + gamma_gap stay 0. A v7 file is a v8 file with version=7 and without the trailing v8 tail. */
+    {
+        Leo sv; leo_init(&sv);
+        leo_ingest(&sv, "the rain falls. his mother is warm.");
+        sv.gamma_gap = 0.4f;                                  /* dropped when the v8 tail is stripped */
+        for (int i = 0; i < GLYPH_COUNT; i++) sv.gamma_meaning[i] = 0.5f;
+        const char *p8 = "/tmp/leo_v8_mig.bin", *p7 = "/tmp/leo_v7_mig2.bin";
+        int saved = leo_save_state(&sv, p8);
+        int built = 0;
+        long v8tail = (long)(GLYPH_COUNT * sizeof(float) + sizeof(float));   /* gamma_meaning[] + gap */
+        FILE *fi = fopen(p8, "rb");
+        if (fi) {
+            fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
+            unsigned char *buf = (unsigned char *)malloc(sz > 0 ? (size_t)sz : 1);
+            if (buf && sz > v8tail && (long)fread(buf, 1, (size_t)sz, fi) == sz) {
+                uint32_t seven = 7; memcpy(buf + 4, &seven, sizeof seven);   /* version 8 -> 7 */
+                FILE *fo = fopen(p7, "wb");
+                if (fo) { built = ((long)fwrite(buf, 1, (size_t)(sz - v8tail), fo) == sz - v8tail); fclose(fo); }
+            }
+            free(buf); fclose(fi);
+        }
+        Leo ld; leo_init(&ld);
+        int loaded = built && leo_load_state(&ld, p7);
+        int mean_zero = ld.gamma_gap == 0.0f;
+        for (int i = 0; i < GLYPH_COUNT; i++) if (ld.gamma_meaning[i] != 0.0f) mean_zero = 0;
+        CHECK(saved && built && loaded && mean_zero,
+              "E-11: a v7 state migrates into the v8 loader, meaning axis 0 (B)");
+        leo_free(&sv); leo_free(&ld);
+        remove(p8); remove(p7);
     }
 
     printf("\n%d/%d passed\n", g_pass, g_total);
