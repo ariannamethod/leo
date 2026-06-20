@@ -1,1 +1,1 @@
-leo: langiage emergent organism
+leo: language emergent organism
