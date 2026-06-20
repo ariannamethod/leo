@@ -918,23 +918,25 @@ int main(void) {
         remove(p6); remove(p5);
     }
 
-    /* E-11 γ-capsule: primes from the body, then pulls the present toward the running self and
-     * absorbs it (the living body cast — dynamic, like klaus). */
+    /* E-11 γ-capsule: prior (pull) tints toward the running self only once primed; diary (absorb)
+     * primes from the body, then EMA-evolves — the prior/diary split (Codex/Mythos). */
     {
         Leo gc; leo_init(&gc);
         leo_ingest(&gc, "the rain falls. his mother is warm. he is afraid alone in the dark.");
         int prev = g_leo_capsule_on; g_leo_capsule_on = 1;
         for (int c = 0; c < LEO_N_CHAMBERS; c++) gc.chamber_act[c] = 0.0f;
         gc.chamber_act[LEO_CH_FEAR] = 1.0f;   /* a strong-fear body */
-        gc.gamma_primed = 0;
-        leo_gamma_step(&gc);                  /* prime turn: gamma snapshots the body, no pull */
+        leo_gamma_pull(&gc);                  /* unprimed → no pull */
+        int no_pull_unprimed = fabsf(gc.chamber_act[LEO_CH_FEAR] - 1.0f) < 1e-6f;
+        leo_gamma_absorb(&gc);                /* diary primes from the body */
         int primed = gc.gamma_primed == 1 && fabsf(gc.gamma[LEO_CH_FEAR] - 1.0f) < 1e-6f;
         for (int c = 0; c < LEO_N_CHAMBERS; c++) gc.chamber_act[c] = 0.0f;   /* now a calm body */
-        leo_gamma_step(&gc);
-        int pulled  = gc.chamber_act[LEO_CH_FEAR] > 0.0f;   /* the running fear tinted the present */
-        int evolved = gc.gamma[LEO_CH_FEAR] < 1.0f;         /* the EMA absorbed the calmer body */
-        CHECK(primed && pulled && evolved,
-              "E-11: gamma primes from the body, pulls the present, then evolves");
+        leo_gamma_pull(&gc);                  /* primed → running fear tints the present */
+        int pulled = gc.chamber_act[LEO_CH_FEAR] > 0.0f;
+        leo_gamma_absorb(&gc);                /* EMA absorbs the calmer body */
+        int evolved = gc.gamma[LEO_CH_FEAR] < 1.0f;
+        CHECK(no_pull_unprimed && primed && pulled && evolved,
+              "E-11: gamma prior pulls once primed, diary primes then evolves");
         g_leo_capsule_on = prev;
         leo_free(&gc);
     }

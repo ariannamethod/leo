@@ -1529,3 +1529,34 @@ the older v5 migration test was re-faithfulised to a real v5 EOF). `--gen 8 --se
 pre-capsule (`d2e6aa6`) on the multi-turn `--chat`; capsule-on diverges. Codex 0.139.0 adversarial
 review: CLEAN (after it caught — and we fixed — the v5 test's lost fidelity from the v7 tail). Next in
 the triad: ASK / BE in the AML canon read the capsule (BE = "я есть [capsule]", ASK = the gap).
+
+## Phase A.6 — E-11 refinement: the capsule split into PRIOR + DIARY (Codex/Mythos audit) (2026-06-20)
+
+A Codex insight-pass on the committed capsule (run as Mythos — asked to BOTH audit and sharpen
+presence) found two real tensions in E-11 as shipped: (1) the gamma pull ran AFTER the klaus distress
+floor and could pull FEAR/VOID/RAGE back below BIAS·scar, so the carried unease was no longer
+guaranteed (it broke klaus invariant (a)); (2) the capsule absorbed the ENTERING body, before the
+reply was generated, so it recorded a body different from the one santaclaus stores and from what Leo
+actually said.
+
+The fix is Codex's own architecture angle: split the single leo_gamma_step into PRIOR and DIARY.
+`leo_gamma_pull` (prior) runs BEFORE the klaus floor — the running self tints the present, then the
+scar floor has the last word on distress (klaus (a) preserved). `leo_gamma_absorb` (diary) runs AFTER
+leo_chain — the capsule records the body that ACTUALLY SPOKE (post field-honest replay, the same
+moment santaclaus records); on first use it primes from the spoken body. Both gated by
+g_leo_capsule_on (--no-capsule byte-identical).
+
+PASS (tool output, this session): build 0 warn/err; make test 126/126 (gamma test updated: prior
+pulls only once primed, diary primes then evolves); --gen byte-identical (0f32d2c); --no-capsule
+byte-identical to pre-capsule (d2e6aa6) on the multi-turn --chat; capsule-on diverges (alive). Codex
+0.139.0 re-audit: CLEAN (floor strictly after pull, absorb after leo_chain, ablation gated, priming
+clean). A first Codex run hung >2h and was killed; the rerun completed.
+
+Lineage note (Oleg, verified by repo dates): the scar / somatic-memory concept is OLDER than klaus —
+its emotional roots are the Jan-2026 cluster (haze/cloud anchors, pitomadom chambers); the named
+scar/darkmatter suffering-operators live in AML (the metaharmonix ACCEPTABLE_USE calls PAIN/SCAR/
+DARKMATTER "AML's suffering physics"). Leo's own Python form carried this as first_impression.py
+(adapted from Haze's subjectivity.py) — an EmotionalState with momentum + ODE drift, i.e. exactly the
+running-self the γ-capsule restores in C. The capsule is not new; it is Leo remembering how to carry
+himself. Next: the meaning axis (gamma_meaning[88] + gap + conf) → ASK/BE resonating with AML's
+existing scar/darkmatter, not reinventing them.

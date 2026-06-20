@@ -2526,24 +2526,34 @@ static void leo_field_scars_update(Leo *leo) {
     leo->scar[LEO_CH_RAGE] = clampf(leo->scar[LEO_CH_RAGE] + LEO_SCAR_GAIN * leo->chamber_act[LEO_CH_RAGE], 0.0f, 1.0f);
 }
 
-/* E-11 γ-capsule: the living body cast. On first use it is primed from the body (so Leo is never
- * pulled toward an empty self); thereafter it gently pulls the present chambers toward the running
- * self (inertia — a character that persists across prompts) and then absorbs the new body into the
- * EMA. The scar half (gamma[N..]) is carried for expression (BE), not the pull. θ=0, pure dynamics.
- * Called per reply after the chambers settle (and after the klaus floor). */
-static void leo_gamma_step(Leo *leo) {
+/* E-11 γ-capsule — split into PRIOR (pull) and DIARY (absorb), so the capsule tints the body
+ * BEFORE speech but records what ACTUALLY SPOKE (Codex/Mythos angle). */
+
+/* PRIOR (pull): tint the present chambers toward the running self — a character that persists
+ * across prompts; the present still dominates. Only once primed (turn 1 has no running self yet).
+ * Runs BEFORE the klaus floor, so the scar's carried unease stays the last word on distress
+ * (klaus invariant (a)). θ=0, pure dynamics. */
+static void leo_gamma_pull(Leo *leo) {
+    if (!leo->gamma_primed) return;            /* no running self yet → no pull */
+    for (int c = 0; c < LEO_N_CHAMBERS; c++)
+        leo->chamber_act[c] = clampf(leo->chamber_act[c]
+            + LEO_GAMMA_PULL * (leo->gamma[c] - leo->chamber_act[c]), 0.0f, 1.0f);
+}
+
+/* DIARY (absorb): the running self absorbs the body that ACTUALLY SPOKE — called after leo_chain
+ * (+ the field-honest replay), so the capsule and santaclaus record the same moment. On first use
+ * it primes from the spoken body (so Leo is never pulled toward an empty self). The scar half
+ * (gamma[N..]) is carried for expression (BE), not the pull. θ=0, pure dynamics. */
+static void leo_gamma_absorb(Leo *leo) {
     if (!leo->gamma_primed) {
         for (int c = 0; c < LEO_N_CHAMBERS; c++) {
             leo->gamma[c]                  = leo->chamber_act[c];
             leo->gamma[LEO_N_CHAMBERS + c] = leo->scar[c];
         }
         leo->gamma_primed = 1;
-        return;                            /* turn 1: the present IS the running self, no pull */
+        return;
     }
-    for (int c = 0; c < LEO_N_CHAMBERS; c++)   /* inertia: tint the present toward the running self */
-        leo->chamber_act[c] = clampf(leo->chamber_act[c]
-            + LEO_GAMMA_PULL * (leo->gamma[c] - leo->chamber_act[c]), 0.0f, 1.0f);
-    for (int c = 0; c < LEO_N_CHAMBERS; c++) {  /* then the running self absorbs the new body */
+    for (int c = 0; c < LEO_N_CHAMBERS; c++) {
         leo->gamma[c]                  = (1.0f - LEO_GAMMA_RATE) * leo->gamma[c]                  + LEO_GAMMA_RATE * leo->chamber_act[c];
         leo->gamma[LEO_N_CHAMBERS + c] = (1.0f - LEO_GAMMA_RATE) * leo->gamma[LEO_N_CHAMBERS + c] + LEO_GAMMA_RATE * leo->scar[c];
     }
@@ -3796,16 +3806,16 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS); /* settle ACT from the prompt's
                                        * emotion BEFORE speaking, so the register channel reads a
                                        * live felt-state from token 1 (phase 3b field->voice) */
+    if (g_leo_klaus_on) leo_field_scars_update(leo);  /* scars decay + accumulate from the PURE settled body */
+    if (g_leo_capsule_on) leo_gamma_pull(leo);         /* E-11 prior: the running self tints the present (BEFORE the floor) */
     if (g_leo_klaus_on) {
-        /* klaus-memory: scars decay + the distress chambers feed them, then accumulated scar
-         * floors the distress chambers — the scarred body carries its unease into THIS breath
-         * (mode_update + register read the floored chambers below). --no-klaus → off. */
-        leo_field_scars_update(leo);
+        /* klaus-memory: accumulated scar floors the distress chambers — the carried unease is the
+         * LAST word on distress (applied AFTER the capsule pull, so the gamma tint cannot soften it;
+         * klaus invariant (a)). mode_update + register read the floored chambers below. --no-klaus → off. */
         leo->chamber_act[LEO_CH_FEAR] = fmaxf(leo->chamber_act[LEO_CH_FEAR], LEO_SCAR_BIAS * leo->scar[LEO_CH_FEAR]);
         leo->chamber_act[LEO_CH_VOID] = fmaxf(leo->chamber_act[LEO_CH_VOID], LEO_SCAR_BIAS * leo->scar[LEO_CH_VOID]);
         leo->chamber_act[LEO_CH_RAGE] = fmaxf(leo->chamber_act[LEO_CH_RAGE], LEO_SCAR_BIAS * leo->scar[LEO_CH_RAGE]);
     }
-    if (g_leo_capsule_on) leo_gamma_step(leo);   /* E-11: the running self tints the present, then absorbs it */
 #ifdef HAVE_AML
     /* E-9: the reverse bridge — the chambers are settled now, so let a bound .aml script
      * read Leo's live body and set his breath (via mode_override), which the mode_update
@@ -3950,6 +3960,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     } else {
         produced = leo_chain(leo, chain_len, out, max_len);
     }
+    if (g_leo_capsule_on) leo_gamma_absorb(leo);   /* E-11 diary: the capsule records the body that ACTUALLY SPOKE (post-reply, like santaclaus) */
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
     leo->temp_mult = 1.0f;
