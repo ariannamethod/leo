@@ -1493,3 +1493,39 @@ filtered); klaus-on diverges on the multi-turn fear→calm sequence; turn-1 sing
 Codex 0.139.0 adversarial review: CLEAN (scar math, `--no-klaus` gating, v5→v6 migration
 memory-safety, migration-test faithfulness). Next — the triad continues: E-11 (the glyph-histogram
 γ-capsule, a compact read-out of scar + soma + glyphs) → ASK / BE in the AML canon.
+
+## Phase A.6 — E-11: the γ-capsule, a living body cast (2026-06-20)
+
+The triad's middle layer. klaus gave Leo a somatic memory (the scar); E-11 gives him a compact,
+LIVING read-out of his whole body — the γ-capsule — which BE/ASK will express. Oleg's steer (decisive):
+it must be DYNAMIC, like the klaus insertion, because Leo's body is never a snapshot — it changes and
+learns (chambers breathe, scars accumulate, the field breathes, School grows). So the capsule is not a
+frozen cast but a running self.
+
+`leo->gamma[2*LEO_N_CHAMBERS]` (the struct) is a slow EMA of the body: `gamma[0..5]` over the affect
+chambers, `gamma[6..11]` over the klaus scars. Each reply, after the chambers settle (and the klaus
+floor), `leo_gamma_step` (leo.c:2516) primes the capsule from the body on first use (so Leo is never
+pulled toward an empty self), then gently pulls the present chambers toward the running self
+(`LEO_GAMMA_PULL` 0.12 — a character that persists across prompts; the present still dominates) and
+absorbs the new body into the EMA (`LEO_GAMMA_RATE` 0.05 — the running self forms over ~20 replies).
+θ=0, pure dynamics, zero weights; default-on, `--no-capsule` ablation; visible via `--debug-field`. The
+whole capsule lives in C — Leo carries it without the Go orchestra (circulation comes later; the body
+lives now). v1 reads the affect+scar body; the glyph/meaning axis (School) is a later extension.
+
+Persistence v6→v7, the same soft-migration (decision B): a v5/v6 file lacks the gamma tail, so gamma
+stays 0 + unprimed and primes from the body on the first reply — the organism survives the upgrade
+(loader accepts v5/v6/v7 at leo.c:4127; gamma read only for v7 at leo.c:4256).
+
+The voice (A/B, `--seed 42`, tool): across a fear→calm sequence the running fear-self tints the calm
+turns — with the capsule Leo stays warier ("He keeps them all", "He holds the stone and wait. Close."),
+without it he opens warmer ("small and warm", "Leo loves this sound"). The carried mood under the
+present — the intent realized. The effect is subtle by design (the present dominates) and both voices
+stay coherent (the doctrine holds). The pull magnitude is ear-tunable.
+
+PASS (tool output, this session): build 0 warn/err; `make test` 126/126 (+3 E-11: gamma primes + pulls
++ evolves; round-trips save/load v7; a v6 state migrates into the v7 loader with gamma unprimed — and
+the older v5 migration test was re-faithfulised to a real v5 EOF). `--gen 8 --seed 42` byte-identical
+(`0f32d2c`; the capsule is reply-path only). Ablation clean: `--no-capsule` byte-identical to
+pre-capsule (`d2e6aa6`) on the multi-turn `--chat`; capsule-on diverges. Codex 0.139.0 adversarial
+review: CLEAN (after it caught — and we fixed — the v5 test's lost fidelity from the v7 tail). Next in
+the triad: ASK / BE in the AML canon read the capsule (BE = "я есть [capsule]", ASK = the gap).

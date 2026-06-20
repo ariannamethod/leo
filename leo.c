@@ -113,6 +113,13 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_SCAR_GAIN   0.08f   /* how much the settled distress feeds the scar each reply */
 #define LEO_SCAR_BIAS   0.30f   /* how much accumulated scar floors the chambers (carried unease, surfaces in calm) */
 #define LEO_SCAR_TEMP   0.12f   /* how much accumulated scar (FEAR+VOID+RAGE) tightens the voice — ALWAYS-ON, dynamic */
+/* E-11 γ-capsule (the living body cast): a slow running self-model of Leo's body — an EMA of the
+ * affect chambers + the klaus scars. It carries its own inertia (the body Leo has been becoming,
+ * not the instant), gently pulls the present toward that running self (a character that does not
+ * reset each prompt; the present still dominates), and is what BE/ASK will express. θ=0, no weights. */
+#define LEO_GAMMA_DIM   (2 * LEO_N_CHAMBERS)  /* [0..5] = chamber EMA, [6..11] = scar EMA */
+#define LEO_GAMMA_RATE  0.05f   /* EMA rate — the running self forms over ~20 replies (slow) */
+#define LEO_GAMMA_PULL  0.12f   /* how much the running self tints the present chambers — ALWAYS-ON, gentle */
 #define LEO_PAIN_DECAY  0.985f     /* suffering decay (canon 98) */
 #define LEO_DEBT_DECAY  0.998f     /* debt decay (canon 99) */
 #define LEO_BIGRAM_MAX    (128 * 1024)
@@ -1295,6 +1302,10 @@ typedef struct {
     /* klaus-memory: slow-decaying per-chamber distress memory (scars). Accumulates over
      * turns, biases the breath, persists across sleep (state v6). Zero from leo_init's memset. */
     float        scar[LEO_N_CHAMBERS];
+    /* E-11 γ-capsule: the living body cast (EMA of chambers + scars), with inertia; primed from the
+     * body on first use, tints the present, persists across sleep (state v7). Zero from leo_init's memset. */
+    float        gamma[LEO_GAMMA_DIM];
+    uint8_t      gamma_primed;
     /* A.6 FORM — the current velocity mode (the child's breath): a hysteretic
      * quantization of the chamber state. PASSIVE in F-1 (set per reply, read by
      * nothing but --debug-field yet). WALK by leo_init's memset. */
@@ -1570,6 +1581,7 @@ static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selecto
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
+static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
 #ifdef HAVE_AML
 static const char *g_leo_aml_script = NULL;  /* E-9: --aml SCRIPT — run per reply (leo_respond) so the script reads Leo's LIVE body; NULL → no bridge → byte-identical. */
 #endif
@@ -2512,6 +2524,29 @@ static void leo_field_scars_update(Leo *leo) {
     leo->scar[LEO_CH_FEAR] = clampf(leo->scar[LEO_CH_FEAR] + LEO_SCAR_GAIN * leo->chamber_act[LEO_CH_FEAR], 0.0f, 1.0f);
     leo->scar[LEO_CH_VOID] = clampf(leo->scar[LEO_CH_VOID] + LEO_SCAR_GAIN * leo->chamber_act[LEO_CH_VOID], 0.0f, 1.0f);
     leo->scar[LEO_CH_RAGE] = clampf(leo->scar[LEO_CH_RAGE] + LEO_SCAR_GAIN * leo->chamber_act[LEO_CH_RAGE], 0.0f, 1.0f);
+}
+
+/* E-11 γ-capsule: the living body cast. On first use it is primed from the body (so Leo is never
+ * pulled toward an empty self); thereafter it gently pulls the present chambers toward the running
+ * self (inertia — a character that persists across prompts) and then absorbs the new body into the
+ * EMA. The scar half (gamma[N..]) is carried for expression (BE), not the pull. θ=0, pure dynamics.
+ * Called per reply after the chambers settle (and after the klaus floor). */
+static void leo_gamma_step(Leo *leo) {
+    if (!leo->gamma_primed) {
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) {
+            leo->gamma[c]                  = leo->chamber_act[c];
+            leo->gamma[LEO_N_CHAMBERS + c] = leo->scar[c];
+        }
+        leo->gamma_primed = 1;
+        return;                            /* turn 1: the present IS the running self, no pull */
+    }
+    for (int c = 0; c < LEO_N_CHAMBERS; c++)   /* inertia: tint the present toward the running self */
+        leo->chamber_act[c] = clampf(leo->chamber_act[c]
+            + LEO_GAMMA_PULL * (leo->gamma[c] - leo->chamber_act[c]), 0.0f, 1.0f);
+    for (int c = 0; c < LEO_N_CHAMBERS; c++) {  /* then the running self absorbs the new body */
+        leo->gamma[c]                  = (1.0f - LEO_GAMMA_RATE) * leo->gamma[c]                  + LEO_GAMMA_RATE * leo->chamber_act[c];
+        leo->gamma[LEO_N_CHAMBERS + c] = (1.0f - LEO_GAMMA_RATE) * leo->gamma[LEO_N_CHAMBERS + c] + LEO_GAMMA_RATE * leo->scar[c];
+    }
 }
 
 /* Self-voice feed: Leo hears his own emitted token. If the token contains an
@@ -3770,6 +3805,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         leo->chamber_act[LEO_CH_VOID] = fmaxf(leo->chamber_act[LEO_CH_VOID], LEO_SCAR_BIAS * leo->scar[LEO_CH_VOID]);
         leo->chamber_act[LEO_CH_RAGE] = fmaxf(leo->chamber_act[LEO_CH_RAGE], LEO_SCAR_BIAS * leo->scar[LEO_CH_RAGE]);
     }
+    if (g_leo_capsule_on) leo_gamma_step(leo);   /* E-11: the running self tints the present, then absorbs it */
 #ifdef HAVE_AML
     /* E-9: the reverse bridge — the chambers are settled now, so let a bound .aml script
      * read Leo's live body and set his breath (via mode_override), which the mode_update
@@ -3945,7 +3981,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   heard    : live [count, wordlen, bytes]
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 6   /* klaus-memory: +scar[] (distress memory survives sleep); v5 loads with scar=0 */
+#define LEO_STATE_VERSION 7   /* E-11: +gamma[] capsule (+primed flag); v5/v6 load with gamma primed from the body */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -4068,6 +4104,10 @@ static int leo_save_state(const Leo *leo, const char *path) {
     /* klaus-memory (v6): the scars survive sleep — appended at the tail so a v5 file is a clean prefix */
     fwrite(leo->scar, sizeof(float), LEO_N_CHAMBERS, f);
 
+    /* E-11 γ-capsule (v7): the living body cast survives sleep — appended after the scars */
+    fwrite(leo->gamma, sizeof(float), LEO_GAMMA_DIM, f);
+    st_w32(f, (int32_t)leo->gamma_primed);
+
     int ok = (ferror(f) == 0);
     fclose(f);
     return ok;
@@ -4084,7 +4124,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (!f) return 0;
     uint32_t magic = 0, version = 0; uint64_t step = 0;
     if (!st_ru(f, &magic)   || magic != LEO_STATE_MAGIC)     { fclose(f); return 0; }
-    if (!st_ru(f, &version) || (version != 5 && version != 6)) { fclose(f); return 0; }  /* klaus: v5 (scar=0) + v6 */
+    if (!st_ru(f, &version) || (version != 5 && version != 6 && version != 7)) { fclose(f); return 0; }  /* soft-migrate v5/v6/v7 */
     if (!st_r64(f, &step)) { fclose(f); return 0; }
 
     leo_free(leo);
@@ -4213,6 +4253,15 @@ static int leo_load_state(Leo *leo, const char *path) {
         if (fread(leo->scar, sizeof(float), LEO_N_CHAMBERS, f) != LEO_N_CHAMBERS) { fclose(f); return 0; }
     }
 
+    /* E-11 γ-capsule (v7): a v5/v6 file lacks it → gamma stays 0 + unprimed, so it primes from the
+     * body on the first reply (soft-migration B: the organism survives the upgrade). */
+    if (version >= 7) {
+        int32_t primed = 0;
+        if (fread(leo->gamma, sizeof(float), LEO_GAMMA_DIM, f) != LEO_GAMMA_DIM) { fclose(f); return 0; }
+        if (!st_r32(f, &primed)) { fclose(f); return 0; }
+        leo->gamma_primed = (uint8_t)(primed ? 1 : 0);
+    }
+
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
     leo_build_chamber_tags(leo);
@@ -4293,6 +4342,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
+        else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
         else if (!strcmp(argv[i], "--mode") && i + 1 < argc) mode_force = leo_mode_from_name(argv[++i]);
         else if (!strcmp(argv[i], "--aml") && i + 1 < argc) aml_script = argv[++i];
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
@@ -4454,6 +4504,11 @@ int main(int argc, char **argv) {
                    leo.chamber_act[0], leo.chamber_act[1], leo.chamber_act[2],
                    leo.chamber_act[3], leo.chamber_act[4], leo.chamber_act[5],
                    leo.pain, leo.trauma, rn, LEO_MODE_NAMES[leo.mode], leo.n_spores, leo.n_sea);
+            if (g_leo_capsule_on)
+                printf("             gamma> aff[%.2f %.2f %.2f %.2f %.2f %.2f] scar[%.2f %.2f %.2f %.2f %.2f %.2f] primed=%d\n",
+                       leo.gamma[0], leo.gamma[1], leo.gamma[2], leo.gamma[3], leo.gamma[4], leo.gamma[5],
+                       leo.gamma[6], leo.gamma[7], leo.gamma[8], leo.gamma[9], leo.gamma[10], leo.gamma[11],
+                       leo.gamma_primed);
         }
     }
 

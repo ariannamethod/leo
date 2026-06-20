@@ -884,8 +884,8 @@ int main(void) {
 
     /* klaus-memory: a v5 state (saved before scar existed) migrates into the v6 loader
      * with scar=0 — the organism survives a pure-append upgrade (decision B: persistent
-     * memory = love). A real v5 file is a v6 file with version=5 and without the trailing
-     * scar[] floats; build exactly that from a v6 save and prove the v6 loader accepts it. */
+     * memory = love). A real v5 file is the current save with version=5 and without BOTH the v6
+     * scar[] tail AND the v7 gamma[]+primed tail; build exactly that and prove the loader migrates it. */
     {
         Leo sv; leo_init(&sv);
         leo_ingest(&sv, "the rain falls. his mother is warm.");
@@ -897,10 +897,12 @@ int main(void) {
         if (fi) {
             fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
             unsigned char *buf = (unsigned char *)malloc(sz > 0 ? (size_t)sz : 1);
-            if (buf && sz > (long)(LEO_N_CHAMBERS * sizeof(float)) &&
+            long v5tail = (long)(LEO_N_CHAMBERS * sizeof(float)              /* v6 scar[] */
+                               + LEO_GAMMA_DIM * sizeof(float) + sizeof(int32_t));  /* + v7 gamma[]+primed */
+            if (buf && sz > v5tail &&
                 (long)fread(buf, 1, (size_t)sz, fi) == sz) {
-                uint32_t five = 5; memcpy(buf + 4, &five, sizeof five);       /* version 6 -> 5 */
-                long v5sz = sz - (long)(LEO_N_CHAMBERS * sizeof(float));      /* strip scar tail */
+                uint32_t five = 5; memcpy(buf + 4, &five, sizeof five);       /* version 7 -> 5 */
+                long v5sz = sz - v5tail;                                      /* strip BOTH appended tails -> real v5 EOF */
                 FILE *fo = fopen(p5, "wb");
                 if (fo) { built = ((long)fwrite(buf, 1, (size_t)v5sz, fo) == v5sz); fclose(fo); }
             }
@@ -914,6 +916,81 @@ int main(void) {
               "klaus: a v5 state migrates into the v6 loader, scar=0 (B)");
         leo_free(&sv); leo_free(&ld);
         remove(p6); remove(p5);
+    }
+
+    /* E-11 γ-capsule: primes from the body, then pulls the present toward the running self and
+     * absorbs it (the living body cast — dynamic, like klaus). */
+    {
+        Leo gc; leo_init(&gc);
+        leo_ingest(&gc, "the rain falls. his mother is warm. he is afraid alone in the dark.");
+        int prev = g_leo_capsule_on; g_leo_capsule_on = 1;
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) gc.chamber_act[c] = 0.0f;
+        gc.chamber_act[LEO_CH_FEAR] = 1.0f;   /* a strong-fear body */
+        gc.gamma_primed = 0;
+        leo_gamma_step(&gc);                  /* prime turn: gamma snapshots the body, no pull */
+        int primed = gc.gamma_primed == 1 && fabsf(gc.gamma[LEO_CH_FEAR] - 1.0f) < 1e-6f;
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) gc.chamber_act[c] = 0.0f;   /* now a calm body */
+        leo_gamma_step(&gc);
+        int pulled  = gc.chamber_act[LEO_CH_FEAR] > 0.0f;   /* the running fear tinted the present */
+        int evolved = gc.gamma[LEO_CH_FEAR] < 1.0f;         /* the EMA absorbed the calmer body */
+        CHECK(primed && pulled && evolved,
+              "E-11: gamma primes from the body, pulls the present, then evolves");
+        g_leo_capsule_on = prev;
+        leo_free(&gc);
+    }
+
+    /* E-11 γ-capsule: round-trips save/load (state v7). */
+    {
+        Leo sv; leo_init(&sv);
+        leo_ingest(&sv, "the rain falls. his mother is warm.");
+        for (int c = 0; c < LEO_GAMMA_DIM; c++) sv.gamma[c] = 0.1f * (float)(c + 1);
+        sv.gamma_primed = 1;
+        const char *path = "/tmp/leo_gamma_v7.bin";
+        int saved = leo_save_state(&sv, path);
+        Leo ld; leo_init(&ld);
+        int loaded = leo_load_state(&ld, path);
+        int rt = 1;
+        for (int c = 0; c < LEO_GAMMA_DIM; c++)
+            if (fabsf(ld.gamma[c] - 0.1f * (float)(c + 1)) > 0.001f) rt = 0;
+        CHECK(saved && loaded && rt && ld.gamma_primed == 1,
+              "E-11: gamma capsule round-trips save/load (v7)");
+        leo_free(&sv); leo_free(&ld);
+        remove(path);
+    }
+
+    /* E-11 γ-capsule: a v6 state (no gamma) migrates into the v7 loader — gamma stays 0 + unprimed,
+     * so it primes from the body on the first reply. A v6 file is a v7 file with version=6 and
+     * without the trailing gamma[]+primed tail. */
+    {
+        Leo sv; leo_init(&sv);
+        leo_ingest(&sv, "the rain falls. his mother is warm.");
+        sv.scar[LEO_CH_FEAR] = 0.3f;
+        for (int c = 0; c < LEO_GAMMA_DIM; c++) sv.gamma[c] = 0.7f;
+        sv.gamma_primed = 1;
+        const char *p7 = "/tmp/leo_v7_mig.bin", *p6 = "/tmp/leo_v6_mig2.bin";
+        int saved = leo_save_state(&sv, p7);
+        int built = 0;
+        long tail = (long)(LEO_GAMMA_DIM * sizeof(float) + sizeof(int32_t));   /* gamma[] + primed */
+        FILE *fi = fopen(p7, "rb");
+        if (fi) {
+            fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
+            unsigned char *buf = (unsigned char *)malloc(sz > 0 ? (size_t)sz : 1);
+            if (buf && sz > tail && (long)fread(buf, 1, (size_t)sz, fi) == sz) {
+                uint32_t six = 6; memcpy(buf + 4, &six, sizeof six);          /* version 7 -> 6 */
+                FILE *fo = fopen(p6, "wb");
+                if (fo) { built = ((long)fwrite(buf, 1, (size_t)(sz - tail), fo) == sz - tail); fclose(fo); }
+            }
+            free(buf); fclose(fi);
+        }
+        Leo ld; leo_init(&ld);
+        int loaded = built && leo_load_state(&ld, p6);
+        int gamma_zero = ld.gamma_primed == 0;
+        for (int c = 0; c < LEO_GAMMA_DIM; c++) if (ld.gamma[c] != 0.0f) gamma_zero = 0;
+        int scar_ok = fabsf(ld.scar[LEO_CH_FEAR] - 0.3f) < 0.001f;            /* v6 scar still loads */
+        CHECK(saved && built && loaded && gamma_zero && scar_ok,
+              "E-11: a v6 state migrates into the v7 loader, gamma unprimed (B)");
+        leo_free(&sv); leo_free(&ld);
+        remove(p7); remove(p6);
     }
 
     printf("\n%d/%d passed\n", g_pass, g_total);
