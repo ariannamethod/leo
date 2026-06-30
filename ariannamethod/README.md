@@ -25,9 +25,9 @@ is vendored for self-contained builds): `ariannamethod.c` / `ariannamethod.h` /
 it (the `.a`/`.o` are build artifacts, never committed — AML itself `.gitignore`s
 them). `breath.aml` is a runnable sample.
 
-If the source here is absent, the build falls back to a system AML install
-(`~/arianna/ariannamethod.ai/libaml.a`); if neither is found, a **silent fallback** —
-Leo builds and runs full, and `--aml` simply says AML is not linked.
+Vendor only — the build references no sibling or external checkout. If the source
+here is absent, AML is **silently omitted**: Leo builds and runs full, and `--aml`
+simply reports that AML is not linked.
 
 ## The C contract (in `leo.c`)
 
@@ -54,6 +54,27 @@ here carries them, so `VELOCITY STOP` / `VELOCITY BREATHE` drive Leo's breath di
 
 `--mode <NAME>` forces the breath directly — a manual driver for our debug, not the
 real interface; the real interface is `.aml`.
+
+## Expression — BE / ASK (the body speaks)
+
+Beyond the breath, two operators let the language shape the register the body speaks
+in, from Leo's own state — his E-11 capsule (the running-self) and his gap (the
+darkmatter of words he holds no concept for):
+
+```
+BE [x]    speak-from-body: the capsule colors which of Leo's OWN words surface, this
+          strongly (default 1.0). "я есть [тело]".
+ASK [x]   voice the not-knowing: the carried gap heats the groping, questioning
+          register, this strongly. No argument = the field's own dark_gravity, so
+          `ASK` alone voices whatever darkmatter the body is carrying.
+```
+
+`leo_aml_run` exposes Leo's gap as `field.dark_gravity` before the script runs, resets
+the two intensities, then reads `am_get_state()->be_voice` / `->ask_voice` back into
+`leo->be_override` / `leo->ask_override` — the same shape as the velocity readback. A
+`-1` (no `BE` / `ASK` fired this run) leaves Leo autonomous: the capsule and the gap
+decide on their own, exactly as without `--aml`. These resonate with the existing
+darkmatter (`SCAR` / `dark_gravity`); they do not reinvent it. See `body.aml`.
 
 ## The new axiom (the reverse flow, next)
 

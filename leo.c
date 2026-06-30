@@ -1347,6 +1347,11 @@ typedef struct {
      * driver — an .aml VELOCITY operator via leo_mode_set, or --mode — can force a
      * mode >=0, so the family language can read and set Leo's breath. */
     int          mode_override;
+    /* E-11 #4 AML bridge: a bound .aml BE/ASK operator can force the expression gains
+     * (-1 = autonomous, the capsule/gap decide; 0..1 = the language scales them). Set
+     * per reply by leo_aml_run, read by leo_be_bias / the ASK temp term. */
+    float        be_override;
+    float        ask_override;
     /* Phase 3b — emotional register: per-token chamber tag (which chamber's
      * anchor a learned token matches, 0xFF = none). Sized LEO_MAX_VOCAB, built
      * after corpus ingest. The FIRST field->voice channel: cand_collect lifts a
@@ -1437,6 +1442,8 @@ static void leo_init(Leo *leo) {
     leo->step = 0;
     leo->gravity = NULL;
     leo->mode_override = -1;   /* A.6: autonomous breath until an AML script / --mode forces a mode */
+    leo->be_override = -1.0f;  /* E-11 #4: autonomous expression until an AML BE/ASK operator forces it */
+    leo->ask_override = -1.0f;
     leo->school.pending_glyph = -1;  /* I3a (L-4 fix): no open guess — memset-0 would be the "water" glyph */
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
@@ -1665,7 +1672,9 @@ static float leo_be_bias(const Leo *leo, int cand) {
     uint8_t tag = leo->chamber_tag[cand];
     if (tag >= LEO_N_CHAMBERS) return 0.0f;
     float g = leo->gamma[tag];   /* capsule chamber-EMA (gamma[0..5]) for this token's chamber */
-    return g > 0.0f ? LEO_BE_W * g : 0.0f;
+    if (g <= 0.0f) return 0.0f;
+    float gain = (leo->be_override >= 0.0f) ? leo->be_override : 1.0f;  /* E-11 #4: a bound AML BE operator scales the channel */
+    return LEO_BE_W * gain * g;
 }
 
 /* dissonance reaction (haiku: "how far are your words from my words?").
@@ -3883,7 +3892,16 @@ static int leo_aml_run(Leo *leo, const char *path) {
     s->warmth     = clampf(leo->chamber_act[LEO_CH_LOVE], 0.0f, 1.0f);
     s->flow       = clampf(leo->chamber_act[LEO_CH_FLOW], 0.0f, 1.0f);
     s->weave      = clampf(leo->chamber_act[LEO_CH_COMPLEX], 0.0f, 1.0f);
+    /* E-11 #4: expose Leo's darkmatter so an ASK expression can read his real gap, and
+     * reset the expression overrides so a script that does NOT fire BE/ASK leaves Leo
+     * autonomous this reply (the body, not the language, decides). */
+    s->dark_gravity = clampf(leo->gamma_gap, 0.0f, 1.0f);
+    s->be_voice = -1.0f; s->ask_voice = -1.0f;
+    leo->be_override = -1.0f; leo->ask_override = -1.0f;
     if (am_exec_file(path) != 0) return 0;            /* AML error → silent fallback */
+    /* E-11 #4: read back the expression intensities the BE / ASK operators set */
+    if (s->be_voice  >= 0.0f) leo->be_override  = clampf(s->be_voice,  0.0f, 1.0f);
+    if (s->ask_voice >= 0.0f) leo->ask_override = clampf(s->ask_voice, 0.0f, 1.0f);
     int m = -1;
     switch (s->velocity_mode) {
         case AM_VEL_NOMOVE:   m = LEO_MODE_STOP;    break;
@@ -4006,8 +4024,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         }
         if (g_leo_ask_on && g_leo_capsule_on) {
             /* E-11 #4 ASK: the carried not-knowing (gamma_gap — Leo's darkmatter) heats the voice
-             * toward the groping, questioning register. The felt gap speaks. gamma_gap=0 → ×1 (byte-id). */
-            leo->temp_mult *= (1.0f + LEO_ASK_W * leo->gamma_gap);
+             * toward the groping, questioning register. The felt gap speaks. gamma_gap=0 → ×1 (byte-id).
+             * A bound AML ASK operator scales it (ask_override>=0); else autonomous (×1). */
+            float askgain = (leo->ask_override >= 0.0f) ? leo->ask_override : 1.0f;
+            leo->temp_mult *= (1.0f + LEO_ASK_W * askgain * leo->gamma_gap);
         }
         if (g_leo_form_on) {           /* A.6 F-2: the breath sets the length */
             static const int mode_chain[LEO_MODE_COUNT] = { 3, 1, 5, 2 };  /* WALK STOP RUN BREATHE */

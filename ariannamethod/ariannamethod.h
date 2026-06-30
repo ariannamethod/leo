@@ -181,6 +181,12 @@ typedef struct {
   int   n_scars;            // number of deposited scars
   char  scar_texts[AM_MAX_SCARS][AM_SCAR_MAX_LEN]; // gravitational memory text
 
+  // EXPRESSION — the body speaks (Leo's BE / ASK operators). Per-run intensities a
+  // host reads back the way it reads velocity_mode: -1 = the directive did not fire
+  // this run (host stays autonomous); 0..1 = how strongly to express.
+  float be_voice;           // BE: speak-from-body intensity ("я есть [тело]")
+  float ask_voice;          // ASK: voice-the-not-knowing intensity (the gap / darkmatter)
+
   // WORMHOLE STATE
   int wormhole_active;      // 1 if wormhole fired this step
 

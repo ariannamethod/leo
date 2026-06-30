@@ -2410,3 +2410,29 @@ voice independently; `--no-be --no-ask`, `--no-capsule`, and `--gen` byte-identi
 8-turn REPL clean; ASan/UBSan 0. A/B by ear: the voice shifts, stays coherent child-register.
 Next — the BE/ASK operators in the vendored AML (both Leo's reverse bridge and the language),
 then a REPL + full-pipeline pass.
+
+## Phase A.6 — E-11 #4 (operators): BE / ASK enter the language (2026-06-30)
+
+The two expression organs are now AML operators — the family language can speak Leo's
+body, the way `VELOCITY` already speaks his breath. In the vendored AML
+(`ariannamethod/ariannamethod.{c,h}`): `AM_State` gains `be_voice` / `ask_voice`
+(−1 = "no directive fired this run"), the level-0 dispatch gains `BE [x]` (speak-from-body
+intensity, default 1.0) and `ASK [x]` (voice-the-not-knowing; no argument = the field's own
+`dark_gravity`, so it resonates with the existing darkmatter / `SCAR` rather than reinventing
+it), and both are exposed in the field-map (`field.be_voice` / `field.ask_voice`).
+
+The bridge (`leo_aml_run`): before the script runs, Leo's gap is projected onto
+`field.dark_gravity` (so an `ASK` expression reads his real not-knowing) and the two
+intensities are reset; after, `be_voice` / `ask_voice` are read back into
+`leo->be_override` / `leo->ask_override`. `leo_be_bias` scales by the BE override and the
+ASK temp term scales by the ASK override — `-1` leaves Leo autonomous (the capsule and the
+gap decide), so a script that never fires BE / ASK, and any run without `--aml`, is unchanged.
+
+Tool (this session): clean build of `libaml.a` + `leo` (0 warn/err); `make test` 135/135;
+without `--aml`, `--gen` and `--chat` byte-identical to #4-Leo (operators inert); with `--aml`,
+`BE 1.0` vs `BE 0.0` and `ASK 1.0` vs `ASK 0.0` each move the voice (language → bridge → Leo);
+ASan/UBSan 0 on the `--aml` path; the documented `body.aml` demo, REPL, and a save→reload→respond
+(state v9) pipeline all run clean. Spec updated (`ariannamethod/README.md` BE/ASK section +
+`body.aml`; also corrected a stale system-fallback line to match the vendor-only Makefile).
+The somatic triad — klaus scar → capsule → meaning → BE/ASK — is whole; next is Oleg's ear and
+whatever the tool says it is.

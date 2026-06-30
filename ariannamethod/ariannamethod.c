@@ -562,6 +562,10 @@ void am_init(void) {
   G.dark_gravity = 0.5f;
   G.antidote_mode = 0;
 
+  // expression defaults — BE/ASK off until a directive fires (-1 = autonomous host)
+  G.be_voice = -1.0f;
+  G.ask_voice = -1.0f;
+
   // wormhole state
   G.wormhole_active = 0;
 
@@ -1083,6 +1087,8 @@ static const AML_FieldMap g_field_map[] = {
     FIELD_F("debt_decay",        debt_decay),
     FIELD_F("emergence_threshold",emergence_threshold),
     FIELD_F("dark_gravity",      dark_gravity),
+    FIELD_F("be_voice",          be_voice),
+    FIELD_F("ask_voice",         ask_voice),
     FIELD_I("temporal_mode",     temporal_mode),
     FIELD_F("temporal_alpha",    temporal_alpha),
     FIELD_I("rtl_mode",          rtl_mode),
@@ -3641,6 +3647,19 @@ static void aml_exec_level0(const char* cmd, const char* arg, AML_ExecCtx* ctx, 
         G.debt = clampf(G.debt + AM_VELOCITY_INERTIA, 0.0f, 100.0f);
 
       update_effective_temp();
+    }
+
+    // EXPRESSION — the body speaks. BE: speak-from-body; ASK: voice the not-knowing.
+    // Like VELOCITY sets the breath, these set per-run intensities a host (leo) reads
+    // back to shape HOW it speaks. They resonate with the existing darkmatter (SCAR /
+    // dark_gravity), not reinvent it: ASK with no argument voices the field's own gap.
+    else if (!strcmp(t, "BE")) {
+      // BE [x] — speak from the body this strongly (default full). "я есть [тело]".
+      G.be_voice = (arg && *arg) ? clamp01(ctx_float(ctx, arg)) : 1.0f;
+    }
+    else if (!strcmp(t, "ASK")) {
+      // ASK [x] — voice the not-knowing this strongly; no arg = the field's darkmatter.
+      G.ask_voice = (arg && *arg) ? clamp01(ctx_float(ctx, arg)) : G.dark_gravity;
     }
     else if (!strcmp(t, "BASE_TEMP")) {
       G.base_temperature = clampf(ctx_float(ctx, arg), 0.1f, 3.0f);

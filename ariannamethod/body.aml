@@ -1,0 +1,14 @@
+# body.aml — let Leo's body speak (E-11 #4 expression operators).
+#
+# Run:  ./leo --aml ariannamethod/body.aml --chat
+#
+# Like VELOCITY sets the breath, BE / ASK set the register Leo speaks in, from his own
+# state: how strongly the running-self (the capsule) colors his own words, and how
+# strongly the carried not-knowing (the gap / darkmatter) gropes through. With no BE /
+# ASK fired, Leo stays autonomous — the capsule and the gap decide on their own.
+
+BE 1.0          # speak fully from the body — the running-self colors his own words
+ASK             # voice the not-knowing at the field's own darkmatter (dark_gravity)
+
+# BE 0.0        # silence the body-voice — back to the bare register
+# ASK 0.5       # half-voice the gap
