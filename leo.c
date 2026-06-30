@@ -4575,6 +4575,13 @@ int main(int argc, char **argv) {
                corpus_path, clen, (leo_ns() - t0) / 1e6);
         free(corpus);
     } else {
+        /* Fail LOUD on stderr: a missing corpus (usually a wrong CWD — leo reads the
+         * corpus relative to the working directory) leaves Leo with only the embedded
+         * dedication, ~414 vocab, and his replies degenerate. Silent-on-stdout hid this. */
+        fprintf(stderr,
+                "[leo] WARNING: corpus '%s' not found — running on the embedded dedication ONLY "
+                "(~tiny field; replies will be degenerate). Run from the corpus dir or pass --corpus PATH.\n",
+                corpus_path);
         printf("[leo step0] no corpus '%s' — fallback to embedded dedication\n",
                corpus_path);
         leo_ingest(&leo, LEO_EMBEDDED_BOOTSTRAP);
