@@ -2364,3 +2364,28 @@ double-count) and raised the 3 findings now fixed + tool-verified; the fix-confi
 blocked by repeated Codex hangs (3 this session, killed) — relaunched, and committed on the
 tool-verification + the core pass (Oleg's call). Next — the triad's first ACTIVE step: #3 meaning into
 santaclaus resonance (`0.45 chamber + 0.30 retention + 0.25 meaning`), A/B by ear, then #4 ASK/BE.
+
+## Phase A.6 — E-11 #3: the meaning axis steers santaclaus recall, ACTIVE (2026-06-30)
+
+The meaning axis was a passive readout (#2); now it steers recall. Each reply forms a transient topic
+vector — `leo_glyph_hist` over the prompt's concept words (the scan factored out of `leo_gamma_meaning`
+so the two never desync) — held on `leo->prompt_meaning` for the turn, NULL outside a reply like
+`gravity`. Every spore snapshots it at birth (`meaning_snap[GLYPH_COUNT]`, travels with the spore through
+ring↔sea), and `leo_spore_resonance` rebalances to `0.45 chamber + 0.30 retention + 0.25 meaning` WHEN the
+reply carries a topic. A past moment surfaces because its TOPIC matches the present, even after the body
+has drifted to another state — recall the chamber/retention blend alone could not reach.
+
+The rebalance (not an additive offset) is what gives meaning leverage: an additive `+0.25·mn` washed out
+because, with the cosines near 1, `0.55+0.45` and `0.45+0.30+0.25` coincide, so the voice only moves where
+body and topic disagree. The channel arms only on a topic-bearing prompt (concept mass > 0); a topicless
+prompt, `--gen`, and `--no-capsule` keep the exact pre-#3 `0.55/0.45` blend (byte-identical). θ=0 and
+mama-child hold — the term weights Leo's OWN spores, never a prompt token.
+
+State v8→v9: spores carry `meaning_snap`; a v≤8 file reads its spore records through the frozen
+`LeoSporeV8` layout and comes up with `meaning_snap`=0 (soft-migrate — the organism survives the format
+bump; persistent memory = love).
+
+Tool (this session): build 0 warn/err; `make test` 134/134 (+meaning resonance ordering, +v9 round-trip,
++v8→v9 spore migration); `--gen` and `--no-capsule` byte-identical to pre-#3; a real v8 state written by
+the pre-#3 binary loads under v9 with spores intact (ASan/UBSan 0). The voice shifts on a topic-return
+after the body has drifted (A/B by ear). Next — #4: ASK/BE in the AML canon.

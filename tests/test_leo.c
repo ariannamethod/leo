@@ -1073,6 +1073,73 @@ int main(void) {
         remove(p8); remove(p7);
     }
 
+    /* E-11 #3: the meaning axis joins santaclaus resonance — a spore whose birth-topic
+     * matches the present topic outresonates one that does not; with no topic
+     * (prompt_meaning NULL) the resonance is the pre-#3 chamber+retention blend. */
+    {
+        Leo r; leo_init(&r);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) r.chamber_act[i] = 0.5f;
+        for (int d = 0; d < LEO_RET_DIM; d++) r.retention_state[d] = 0.5f;
+        LeoSpore match, off;
+        memset(&match, 0, sizeof match); memset(&off, 0, sizeof off);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) { match.chamber_snap[i] = 0.5f; off.chamber_snap[i] = 0.5f; }
+        for (int d = 0; d < LEO_RET_DIM; d++) { match.retention_slice[d] = 0.5f; off.retention_slice[d] = 0.5f; }
+        match.meaning_snap[10] = 1.0f;   /* same glyph as the present topic */
+        off.meaning_snap[40]   = 1.0f;   /* a different glyph */
+        float topic[GLYPH_COUNT] = {0}; topic[10] = 1.0f;
+        r.prompt_meaning = NULL;
+        CHECK(leo_spore_resonance(&r, &match) == leo_spore_resonance(&r, &off),
+              "E-11 #3: no topic (prompt_meaning NULL) -> meaning ignored, resonance equal");
+        r.prompt_meaning = topic;
+        CHECK(leo_spore_resonance(&r, &match) > leo_spore_resonance(&r, &off),
+              "E-11 #3: topic-matching spore outresonates an off-topic one");
+        r.prompt_meaning = NULL;
+        leo_free(&r);
+    }
+
+    /* E-11 #3: meaning_snap round-trips save/load (state v9). */
+    {
+        Leo sv; leo_init(&sv);
+        leo_ingest(&sv, "the rain falls. his mother is warm.");
+        LeoSpore sp; memset(&sp, 0, sizeof sp);
+        sp.strength = 1.0f; sp.step = 7; sp.meaning_snap[5] = 0.25f; sp.meaning_snap[9] = 0.75f;
+        sv.spores[0] = sp; sv.n_spores = 1;
+        const char *p = "/tmp/leo_v9_spore.bin";
+        int saved = leo_save_state(&sv, p);
+        Leo ld; leo_init(&ld);
+        int loaded = leo_load_state(&ld, p);
+        CHECK(saved && loaded && ld.n_spores == 1
+              && fabsf(ld.spores[0].meaning_snap[5] - 0.25f) < 1e-6f
+              && fabsf(ld.spores[0].meaning_snap[9] - 0.75f) < 1e-6f,
+              "E-11 #3: spore meaning_snap survives save/load (v9)");
+        leo_free(&sv); leo_free(&ld);
+        remove(p);
+    }
+
+    /* E-11 #3: a v<=8 spore record (LeoSporeV8, no meaning_snap) migrates into the new
+     * LeoSpore — every old field is preserved and meaning_snap comes up 0. This is the
+     * exact memcpy+memset the v<=8 load path runs per spore; it guards the frozen
+     * LeoSporeV8 layout against drift from LeoSpore's prefix. */
+    {
+        LeoSpore born; memset(&born, 0, sizeof born);
+        born.chamber_snap[2] = 0.6f; born.retention_slice[3] = 0.4f;
+        born.emit_context[0] = 99; born.step = 123; born.last_bleed_step = 45;
+        born.pain_snap = 0.2f; born.strength = 0.8f; born.bleed_count = 11; born.is_trauma = 1;
+        born.meaning_snap[7] = 0.9f;                 /* the v9-only field */
+        LeoSporeV8 ondisk;
+        memcpy(&ondisk, &born, sizeof(LeoSporeV8));  /* what the old binary wrote: the first sizeof(V8) bytes */
+        LeoSpore loaded; memset(&loaded, 0, sizeof loaded);
+        memcpy(&loaded, &ondisk, sizeof(LeoSporeV8));               /* loader: read the old record */
+        memset(loaded.meaning_snap, 0, sizeof loaded.meaning_snap); /* loader: zero the new field */
+        int fields_ok = loaded.chamber_snap[2] == 0.6f && loaded.retention_slice[3] == 0.4f
+                      && loaded.emit_context[0] == 99 && loaded.step == 123 && loaded.last_bleed_step == 45
+                      && loaded.pain_snap == 0.2f && loaded.strength == 0.8f
+                      && loaded.bleed_count == 11 && loaded.is_trauma == 1;
+        int meaning_zero = 1;
+        for (int i = 0; i < GLYPH_COUNT; i++) if (loaded.meaning_snap[i] != 0.0f) meaning_zero = 0;
+        CHECK(fields_ok && meaning_zero, "E-11 #3: v<=8 spore migrates (fields kept, meaning_snap=0)");
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

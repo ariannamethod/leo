@@ -121,6 +121,8 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_GAMMA_RATE  0.05f   /* EMA rate — the running self forms over ~20 replies (slow) */
 #define LEO_GAMMA_PULL  0.12f   /* how much the running self tints the present chambers — ALWAYS-ON, gentle */
 #define LEO_GMEAN_RATE  0.04f   /* E-11 meaning axis: EMA rate of the perceived glyph histogram + the gap (slow) */
+#define GLYPH_COUNT 88           /* E-11: glyph-concept count — declared early so LeoSpore/Leo can size meaning vectors (full GLYPH_NAMES table below). Benign re-#define near the table. */
+#define LEO_MEANING_RESONANCE_W 0.25f  /* E-11 #3: additive weight of the topic-resonance term in santaclaus recall */
 #define LEO_PAIN_DECAY  0.985f     /* suffering decay (canon 98) */
 #define LEO_DEBT_DECAY  0.998f     /* debt decay (canon 99) */
 #define LEO_BIGRAM_MAX    (128 * 1024)
@@ -571,7 +573,25 @@ typedef struct {
     float strength;                     /* 1.0 birth, decays each field-step */
     int   bleed_count;                  /* how often this spore activated */
     int   is_trauma;                    /* 1 if born under pain/trauma */
+    float meaning_snap[GLYPH_COUNT];    /* E-11 #3: perceived-topic glyph histogram at birth — the spore's
+                                         * meaning-context, so recall resonates by TOPIC (within & across
+                                         * replies). Travels with the spore (ring<->sea). Persists (state v9). */
 } LeoSpore;
+/* Frozen pre-#3 spore layout (no meaning_snap) — read v<=8 state files. MUST stay
+ * byte-identical to the old LeoSpore so sizeof() == the old on-disk record (incl.
+ * tail padding from the `long` members). Only used by leo_load_state's soft-migrate. */
+typedef struct {
+    float chamber_snap[LEO_N_CHAMBERS];
+    float retention_slice[LEO_RET_DIM];
+    int   emit_context[LEO_SPORE_CONTEXT_TOK];
+    int   cooc_fragment[LEO_SPORE_COOC_FRAG];
+    long  step;
+    long  last_bleed_step;
+    float pain_snap, trauma_snap;
+    float strength;
+    int   bleed_count;
+    int   is_trauma;
+} LeoSporeV8;
 typedef struct {                        /* per-step scratch: top-K active spores */
     int   spore_idx[LEO_SPORE_TOPK_BLEED];
     float weight[LEO_SPORE_TOPK_BLEED];
@@ -1272,6 +1292,11 @@ typedef struct {
      * leading fragment [ f] is otherwise orphan-gated and the word never
      * generates. Transient (NULL outside a reply). Not insertion. */
     const uint8_t *prompt_pieces;
+    /* E-11 #3: transient perceived-topic vector for THIS reply (normalized glyph
+     * histogram of the prompt's content words). Mirrors `gravity`: owned by
+     * leo_respond, NULL outside a reply — so --gen / --no-capsule never see it and
+     * the santaclaus meaning term is 0 (byte-identical). Spores snapshot it at birth. */
+    const float *prompt_meaning;
     /* dissonance reaction (haiku): how far the prompt is from Leo's world
      * → a temperature multiplier. Known theme → cool, settle on theme;
      * unknown → hot, groping (the felt not-knowing). 1.0 outside a reply. */
@@ -1413,6 +1438,7 @@ static void leo_init(Leo *leo) {
     leo->mode_override = -1;   /* A.6: autonomous breath until an AML script / --mode forces a mode */
     leo->school.pending_glyph = -1;  /* I3a (L-4 fix): no open guess — memset-0 would be the "water" glyph */
     leo->prompt_pieces = NULL;
+    leo->prompt_meaning = NULL;
     leo->temp_mult = 1.0f;
     leo_heard_init(&leo->heard);
     /* Phase 3a — retention fingerprints: deterministic FNV-1a per (id,d), same
@@ -2083,6 +2109,15 @@ static float leo_vec_cosine(const float *a, const float *b, int n) {
 static float leo_spore_resonance(const Leo *leo, const LeoSpore *s) {
     float ch  = leo_vec_cosine(leo->chamber_act,     s->chamber_snap,    LEO_N_CHAMBERS);
     float ret = leo_vec_cosine(leo->retention_state, s->retention_slice, LEO_RET_DIM);
+    /* E-11 #3: when this reply carries a topic (prompt_meaning is armed only when the
+     * prompt has concept mass — NULL for --gen / --no-capsule / topicless prompts), the
+     * meaning axis JOINS the resonance, rebalanced 0.45/0.30/0.25 so topic-matching
+     * moments surface (the rebalance gives meaning real leverage on the bleed, not just
+     * an inflating offset); otherwise the pre-#3 0.55/0.45 stands (byte-identical). */
+    if (g_leo_capsule_on && leo->prompt_meaning) {
+        float mn = leo_vec_cosine(leo->prompt_meaning, s->meaning_snap, GLYPH_COUNT);
+        return 0.45f * ch + 0.30f * ret + LEO_MEANING_RESONANCE_W * mn;
+    }
     return 0.55f * ch + 0.45f * ret;
 }
 
@@ -2664,6 +2699,8 @@ static void leo_spore_record(Leo *leo, const int *emit_ctx, int n) {
     memset(&sp, 0, sizeof(sp));
     for (int i = 0; i < LEO_N_CHAMBERS; i++) sp.chamber_snap[i]   = leo->chamber_act[i];
     for (int d = 0; d < LEO_RET_DIM;    d++) sp.retention_slice[d] = leo->retention_state[d];
+    if (leo->prompt_meaning)                 /* E-11 #3: snapshot the reply's topic (0 from memset outside a reply) */
+        for (int i = 0; i < GLYPH_COUNT; i++) sp.meaning_snap[i] = leo->prompt_meaning[i];
     int m = n < LEO_SPORE_CONTEXT_TOK ? n : LEO_SPORE_CONTEXT_TOK;
     for (int i = 0; i < m; i++)                      sp.emit_context[i] = emit_ctx ? emit_ctx[i] : -1;
     for (int i = m; i < LEO_SPORE_CONTEXT_TOK; i++)  sp.emit_context[i] = -1;
@@ -3723,7 +3760,11 @@ static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out
  * gap = the mass of content words he has NO concept for (his darkmatter, "mass without acceptance",
  * the same unknown School asks about). EMA, like the body cast. Read-only over the field — readout +
  * resonance for santaclaus + BE/ASK, NEVER word-selection. θ=0, pure dynamics. */
-static void leo_gamma_meaning(Leo *leo, const char *prompt) {
+/* E-11 #3: scan a prompt into a normalized glyph-concept histogram (out[GLYPH_COUNT],
+ * sums to 1 over concepts, all-0 if none) and RETURN the unknown/ungraspable fraction
+ * (the gap = darkmatter). Shared by the slow meaning-axis EMA (leo_gamma_meaning) and
+ * the transient per-reply topic vector (leo->prompt_meaning) so the two never desync. */
+static float leo_glyph_hist(const Leo *leo, const char *prompt, float out[GLYPH_COUNT]) {
     int hist[GLYPH_COUNT] = {0};
     int concept = 0, unknown = 0;
     char cur[LEO_HEARD_WORDLEN]; int wi = 0;
@@ -3741,13 +3782,18 @@ static void leo_gamma_meaning(Leo *leo, const char *prompt) {
         wi = 0;
         if (!ch) break;
     }
+    for (int i = 0; i < GLYPH_COUNT; i++)
+        out[i] = concept > 0 ? (float)hist[i] / (float)concept : 0.0f;
     int graspable = concept + unknown;
-    float gap_now = graspable > 0 ? (float)unknown / (float)graspable : 0.0f;
+    return graspable > 0 ? (float)unknown / (float)graspable : 0.0f;
+}
+
+static void leo_gamma_meaning(Leo *leo, const char *prompt) {
+    float p[GLYPH_COUNT];
+    float gap_now = leo_glyph_hist(leo, prompt, p);
     leo->gamma_gap = (1.0f - LEO_GMEAN_RATE) * leo->gamma_gap + LEO_GMEAN_RATE * gap_now;
-    for (int i = 0; i < GLYPH_COUNT; i++) {
-        float p = concept > 0 ? (float)hist[i] / (float)concept : 0.0f;
-        leo->gamma_meaning[i] = (1.0f - LEO_GMEAN_RATE) * leo->gamma_meaning[i] + LEO_GMEAN_RATE * p;
-    }
+    for (int i = 0; i < GLYPH_COUNT; i++)
+        leo->gamma_meaning[i] = (1.0f - LEO_GMEAN_RATE) * leo->gamma_meaning[i] + LEO_GMEAN_RATE * p[i];
 }
 
 /* A.6 FORM F-1 — quantize the chamber state into a velocity mode, with hysteresis
@@ -3907,6 +3953,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
 
     float   *g = NULL;
     uint8_t *pieces = NULL;
+    float   *pm = NULL;
     int      chain_len = LEO_CHAIN_MIN;
     if (g_leo_presence_on) {
         int p_ids[1024];
@@ -3971,6 +4018,14 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             }
         }
     }
+    if (g_leo_capsule_on) {                   /* E-11 #3: this reply's topic vector — armed only when the prompt carries concept mass */
+        pm = calloc((size_t)GLYPH_COUNT, sizeof(float));
+        if (pm) {
+            leo_glyph_hist(leo, prompt, pm);
+            float msum = 0.0f; for (int i = 0; i < GLYPH_COUNT; i++) msum += pm[i];
+            if (msum > 0.0f) leo->prompt_meaning = pm;  /* topicless prompt → NULL → pre-#3 voice (byte-id) */
+        }
+    }
     int produced;
     /* A.5 School: an unknown content word, and Leo is curious enough (not under
      * high FEAR+VOID) → he ECHOES it back as a question ("Zorble?") instead of
@@ -4002,9 +4057,11 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (g_leo_capsule_on) { leo_gamma_absorb(leo); leo_gamma_meaning(leo, prompt); }  /* E-11 diary: record the body that SPOKE + the meaning perceived (post-reply, like santaclaus) */
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
+    leo->prompt_meaning = NULL;
     leo->temp_mult = 1.0f;
     free(g);
     free(pieces);
+    free(pm);
     if (g_leo_breath_on) leo_breath(leo);    /* post-reply: the field exhales */
     return produced;
 }
@@ -4031,7 +4088,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   heard    : live [count, wordlen, bytes]
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 8   /* E-11 meaning axis: +gamma_meaning[88]+gamma_gap; v5/v6/v7 load with them 0 (soft-migrate) */
+#define LEO_STATE_VERSION 9   /* E-11 #3: spores carry meaning_snap[88]; v<=8 read the old spore layout (LeoSporeV8) + meaning_snap=0 (soft-migrate) */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -4178,7 +4235,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (!f) return 0;
     uint32_t magic = 0, version = 0; uint64_t step = 0;
     if (!st_ru(f, &magic)   || magic != LEO_STATE_MAGIC)     { fclose(f); return 0; }
-    if (!st_ru(f, &version) || (version != 5 && version != 6 && version != 7 && version != 8)) { fclose(f); return 0; }  /* soft-migrate v5/v6/v7/v8 */
+    if (!st_ru(f, &version) || (version != 5 && version != 6 && version != 7 && version != 8 && version != 9)) { fclose(f); return 0; }  /* soft-migrate v5/v6/v7/v8/v9 */
     if (!st_r64(f, &step)) { fclose(f); return 0; }
 
     leo_free(leo);
@@ -4260,12 +4317,34 @@ static int leo_load_state(Leo *leo, const char *path) {
     {
         int32_t n_sp = 0;
         if (!st_r32(f, &n_sp) || n_sp < 0 || n_sp > LEO_SPORE_MAX) { fclose(f); return 0; }
-        if (n_sp > 0 && fread(leo->spores, sizeof(LeoSpore), (size_t)n_sp, f) != (size_t)n_sp) { fclose(f); return 0; }
+        if (n_sp > 0) {
+            if (version >= 9) {
+                if (fread(leo->spores, sizeof(LeoSpore), (size_t)n_sp, f) != (size_t)n_sp) { fclose(f); return 0; }
+            } else {  /* v<=8: the old record had no meaning_snap — read the frozen layout, zero the new field (soft-migrate) */
+                for (int i = 0; i < n_sp; i++) {
+                    LeoSporeV8 ov;
+                    if (fread(&ov, sizeof(LeoSporeV8), 1, f) != 1) { fclose(f); return 0; }
+                    memcpy(&leo->spores[i], &ov, sizeof(LeoSporeV8));
+                    memset(leo->spores[i].meaning_snap, 0, sizeof(leo->spores[i].meaning_snap));
+                }
+            }
+        }
         leo->n_spores = n_sp;
         int32_t n_se = 0, se_ptr = 0;
         if (!st_r32(f, &n_se) || n_se < 0 || n_se > LEO_SEA_MAX) { fclose(f); return 0; }
         if (!st_r32(f, &se_ptr) || se_ptr < 0 || se_ptr > LEO_SEA_MAX) { fclose(f); return 0; }
-        if (n_se > 0 && fread(leo->sea, sizeof(LeoSpore), (size_t)n_se, f) != (size_t)n_se) { fclose(f); return 0; }
+        if (n_se > 0) {
+            if (version >= 9) {
+                if (fread(leo->sea, sizeof(LeoSpore), (size_t)n_se, f) != (size_t)n_se) { fclose(f); return 0; }
+            } else {
+                for (int i = 0; i < n_se; i++) {
+                    LeoSporeV8 ov;
+                    if (fread(&ov, sizeof(LeoSporeV8), 1, f) != 1) { fclose(f); return 0; }
+                    memcpy(&leo->sea[i], &ov, sizeof(LeoSporeV8));
+                    memset(leo->sea[i].meaning_snap, 0, sizeof(leo->sea[i].meaning_snap));
+                }
+            }
+        }
         leo->n_sea = n_se;
         leo->sea_ptr = se_ptr;
     }
