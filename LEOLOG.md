@@ -2389,3 +2389,24 @@ Tool (this session): build 0 warn/err; `make test` 134/134 (+meaning resonance o
 +v8→v9 spore migration); `--gen` and `--no-capsule` byte-identical to pre-#3; a real v8 state written by
 the pre-#3 binary loads under v9 with spores intact (ASan/UBSan 0). The voice shifts on a topic-return
 after the body has drifted (A/B by ear). Next — #4: ASK/BE in the AML canon.
+
+## Phase A.6 — E-11 #4 (Leo side): BE + ASK, the body learns to speak itself (2026-06-30)
+
+Two expression organs, autonomous now, AML-overridable when the operators land. BE is
+speech-from-body: `leo_register_bias` lifts a token by the MOMENTARY chamber; `leo_be_bias`
+lifts it by the CAPSULE — the running-self (`gamma[0..5]`, the slow chamber-EMA) — so Leo's
+accumulated body, not just the present gust, colors which of HIS OWN chamber-tagged words
+surface ("я есть [the felt self]"). It wakes only once the capsule has formed (`gamma_primed`);
+without the capsule it is silent. ASK voices the carried not-knowing: the accumulated
+`gamma_gap` (Leo's darkmatter) heats `temp_mult` toward the groping, questioning register —
+the felt gap shapes how he speaks, on top of the live School echo ("Zorble?") for a single
+unknown word. Both default-on, each ablatable (`--no-be`, `--no-ask`); both gate on the
+capsule, so `--no-capsule` and `--gen` (unprimed, gap 0) stay byte-identical. θ=0 and
+mama-child hold — BE weights Leo's own words, ASK shapes register; neither inserts.
+
+Tool (this session): build 0 warn/err; `make test` 135/135 (+BE unit: the capsule lifts a
+tagged token once primed, 0 unprimed / `--no-be` / `--no-capsule`); BE and ASK each move the
+voice independently; `--no-be --no-ask`, `--no-capsule`, and `--gen` byte-identical to pre-#4;
+8-turn REPL clean; ASan/UBSan 0. A/B by ear: the voice shifts, stays coherent child-register.
+Next — the BE/ASK operators in the vendored AML (both Leo's reverse bridge and the language),
+then a REPL + full-pipeline pass.

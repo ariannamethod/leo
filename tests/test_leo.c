@@ -1140,6 +1140,25 @@ int main(void) {
         CHECK(fields_ok && meaning_zero, "E-11 #3: v<=8 spore migrates (fields kept, meaning_snap=0)");
     }
 
+    /* E-11 #4 BE: the capsule (running-self) lifts a token tagged to its chamber once primed;
+     * 0 when unprimed, --no-be, or --no-capsule (so the ablations stay byte-identical). */
+    {
+        Leo b; leo_init(&b);
+        b.chamber_tag = (uint8_t *)calloc(LEO_MAX_VOCAB, sizeof(uint8_t));
+        for (int i = 0; i < (int)LEO_MAX_VOCAB; i++) b.chamber_tag[i] = 0xFF;  /* untagged */
+        int tok = 100;                       /* a base byte token (< vocab_size 256 after init) */
+        b.chamber_tag[tok] = (uint8_t)LEO_CH_LOVE;
+        b.gamma_primed = 1;
+        b.gamma[LEO_CH_LOVE] = 0.5f;         /* the capsule carries love */
+        float on = leo_be_bias(&b, tok);
+        b.gamma_primed = 0;  float unprimed = leo_be_bias(&b, tok);  b.gamma_primed = 1;
+        g_leo_be_on = 0;     float be_off   = leo_be_bias(&b, tok);  g_leo_be_on = 1;
+        g_leo_capsule_on = 0; float cap_off  = leo_be_bias(&b, tok); g_leo_capsule_on = 1;
+        CHECK(on > 0.0f && unprimed == 0.0f && be_off == 0.0f && cap_off == 0.0f,
+              "E-11 #4 BE: capsule lifts a tagged token once primed; 0 unprimed / --no-be / --no-capsule");
+        leo_free(&b);   /* frees chamber_tag */
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

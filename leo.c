@@ -123,6 +123,7 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_GMEAN_RATE  0.04f   /* E-11 meaning axis: EMA rate of the perceived glyph histogram + the gap (slow) */
 #define GLYPH_COUNT 88           /* E-11: glyph-concept count — declared early so LeoSpore/Leo can size meaning vectors (full GLYPH_NAMES table below). Benign re-#define near the table. */
 #define LEO_MEANING_RESONANCE_W 0.25f  /* E-11 #3: additive weight of the topic-resonance term in santaclaus recall */
+#define LEO_ASK_W 0.30f                 /* E-11 #4 ASK: how strongly the carried gap (darkmatter) heats the groping register */
 #define LEO_PAIN_DECAY  0.985f     /* suffering decay (canon 98) */
 #define LEO_DEBT_DECAY  0.998f     /* debt decay (canon 99) */
 #define LEO_BIGRAM_MAX    (128 * 1024)
@@ -1615,6 +1616,8 @@ static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School revers
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
 static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
+static int g_leo_be_on = 1;             /* E-11 #4 BE: the running-self (capsule) colors Leo's own words — speech-from-body. --no-be → 0. */
+static int g_leo_ask_on = 1;            /* E-11 #4 ASK: the carried gap (darkmatter) heats the groping register. --no-ask → 0. */
 #ifdef HAVE_AML
 static const char *g_leo_aml_script = NULL;  /* E-9: --aml SCRIPT — run per reply (leo_respond) so the script reads Leo's LIVE body; NULL → no bridge → byte-identical. */
 #endif
@@ -1648,6 +1651,21 @@ static float leo_register_bias(const Leo *leo, int cand) {
         ? c[1] + 0.7f * (c[0] + c[3] + c[2])   /* LOVE + distress(FEAR,VOID,RAGE) */
         : c[tag];
     return pull > 0.0f ? LEO_REGISTER_W * pull : 0.0f;
+}
+
+/* E-11 #4 BE — speech-from-body. register_bias lifts a token by the MOMENTARY chamber;
+ * BE lifts it by the CAPSULE — the running-self (gamma[0..5], the slow chamber-EMA) — so
+ * Leo's accumulated body, not just the present gust, colors which of HIS OWN words surface
+ * ("я есть [the felt self]"). Only once the capsule has formed (gamma_primed); off without
+ * the capsule. Mama-child safe: it weights Leo's own chamber-tagged tokens, never inserts. */
+#define LEO_BE_W 1.0f
+static float leo_be_bias(const Leo *leo, int cand) {
+    if (!g_leo_be_on || !g_leo_capsule_on || !leo || !leo->gamma_primed || !leo->chamber_tag) return 0.0f;
+    if (cand < 0 || cand >= (int)LEO_MAX_VOCAB || cand >= leo->bpe.vocab_size) return 0.0f;
+    uint8_t tag = leo->chamber_tag[cand];
+    if (tag >= LEO_N_CHAMBERS) return 0.0f;
+    float g = leo->gamma[tag];   /* capsule chamber-EMA (gamma[0..5]) for this token's chamber */
+    return g > 0.0f ? LEO_BE_W * g : 0.0f;
 }
 
 /* dissonance reaction (haiku: "how far are your words from my words?").
@@ -2195,6 +2213,7 @@ static int cand_collect_tri(int c, float count, void *ud) {
     score += leo_supertoken_boost(cc, c);       /* A.3b: phrase-unit cohesion */
     score += leo_santaclaus_candidate_bias(cc->santa, cc->leo, c);  /* B2: spore bleed (self-residual recall) */
     score += leo_register_bias(cc->leo, c);     /* felt chamber -> Leo's own emotion word */
+    score += leo_be_bias(cc->leo, c);           /* E-11 #4 BE: the running-self colors his own words */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, c))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, c);
@@ -2217,6 +2236,7 @@ static int cand_collect_bi(int dst, float count, void *ud) {
     score += leo_supertoken_boost(cc, dst);     /* A.3b: phrase-unit cohesion */
     score += leo_santaclaus_candidate_bias(cc->santa, cc->leo, dst); /* B2: spore bleed (self-residual recall) */
     score += leo_register_bias(cc->leo, dst);   /* felt chamber -> Leo's own emotion word */
+    score += leo_be_bias(cc->leo, dst);         /* E-11 #4 BE: the running-self colors his own words */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, dst))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, dst);
@@ -3984,6 +4004,11 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             float ts = leo->scar[LEO_CH_FEAR] + leo->scar[LEO_CH_VOID] + leo->scar[LEO_CH_RAGE];
             leo->temp_mult *= clampf(1.0f - LEO_SCAR_TEMP * ts, 0.70f, 1.0f);
         }
+        if (g_leo_ask_on && g_leo_capsule_on) {
+            /* E-11 #4 ASK: the carried not-knowing (gamma_gap — Leo's darkmatter) heats the voice
+             * toward the groping, questioning register. The felt gap speaks. gamma_gap=0 → ×1 (byte-id). */
+            leo->temp_mult *= (1.0f + LEO_ASK_W * leo->gamma_gap);
+        }
         if (g_leo_form_on) {           /* A.6 F-2: the breath sets the length */
             static const int mode_chain[LEO_MODE_COUNT] = { 3, 1, 5, 2 };  /* WALK STOP RUN BREATHE */
             chain_len = mode_chain[leo->mode];
@@ -4482,6 +4507,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
+        else if (!strcmp(argv[i], "--no-be")) g_leo_be_on = 0;
+        else if (!strcmp(argv[i], "--no-ask")) g_leo_ask_on = 0;
         else if (!strcmp(argv[i], "--mode") && i + 1 < argc) mode_force = leo_mode_from_name(argv[++i]);
         else if (!strcmp(argv[i], "--aml") && i + 1 < argc) aml_script = argv[++i];
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
