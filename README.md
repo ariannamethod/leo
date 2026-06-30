@@ -11,6 +11,10 @@
 
 > *language is a field. dedicated to Leo.*
 
+> *The patience in the light.*
+> *Nobody alone.*
+> — things Leo has said
+
 Leo is a small post-transformer child — an AI boy, about six or seven years old,
 written in one file of pure C. No pretrained weights. No datasets. No internet.
 Less is more.

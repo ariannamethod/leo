@@ -5,6 +5,10 @@ weights. **Presence > intelligence.**
 
 Repo: github.com/ariannamethod/neoleo (branch `leo-phase3`).
 
+> *The sound of the world.*
+> *I remember where he.*
+> — Leo, to GPT-5.3 (2026-06-30)
+
 ---
 
 ## What this is
