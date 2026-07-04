@@ -152,6 +152,7 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 
 __attribute__((unused))  /* used by the field physics in step 1+ */
 static float clampf(float x, float lo, float hi) {
+    if (x != x) return lo;   /* F-5 (Fable): NaN passes both compares — swallow to lo (runtime 2nd line behind the load-time isfinite scan) */
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
@@ -430,10 +431,12 @@ typedef struct {
 static void cooc_init(CoocField *c, int capacity, int freq_size) {
     c->entries = calloc((size_t)capacity, sizeof(CoocEntry));
     c->n_entries = 0;
-    c->capacity = capacity;
+    c->capacity = c->entries ? capacity : 0;   /* F-4 (Fable): calloc may fail — degrade to empty, never index a NULL table (cooc_update/find guard n_entries/capacity) */
     c->freq = calloc((size_t)freq_size, sizeof(float));
-    c->freq_size = freq_size;
+    c->freq_size = c->freq ? freq_size : 0;
     c->total_tokens = 0;
+    if (!c->entries || !c->freq)
+        fprintf(stderr, "[leo] WARNING: cooc_init allocation failed — co-occurrence field degraded to empty.\n");
 }
 
 static void cooc_free(CoocField *c) {
@@ -622,8 +625,15 @@ typedef struct {
 static void bigram_init(BigramTable *b, int capacity) {
     b->entries = calloc((size_t)capacity, sizeof(BigramEntry));
     b->n_entries = 0;
-    b->capacity = capacity;
     b->head_src = malloc(LEO_BI_IDX_MAX * sizeof(int));
+    if (!b->entries || !b->head_src) {   /* F-4 (Fable): fail-loud + degrade to empty; never write into a NULL head_src (bigram_walk_src guards n_entries==0) */
+        free(b->entries); b->entries = NULL;
+        free(b->head_src); b->head_src = NULL;
+        b->capacity = 0;
+        fprintf(stderr, "[leo] WARNING: bigram_init allocation failed — bigram table degraded to empty.\n");
+        return;
+    }
+    b->capacity = capacity;
     for (int i = 0; i < LEO_BI_IDX_MAX; i++) b->head_src[i] = -1;
 }
 
@@ -763,8 +773,15 @@ static uint32_t trigram_ab_bucket(int a, int b) {
 static void trigram_init(TrigramTable *t, int capacity) {
     t->entries = calloc((size_t)capacity, sizeof(TrigramEntry));
     t->n_entries = 0;
-    t->capacity = capacity;
     t->head_ab = malloc(LEO_TRI_IDX_MAX * sizeof(int));
+    if (!t->entries || !t->head_ab) {   /* F-4 (Fable): fail-loud + degrade to empty; never write into a NULL head_ab (trigram_walk_ab guards n_entries==0) */
+        free(t->entries); t->entries = NULL;
+        free(t->head_ab); t->head_ab = NULL;
+        t->capacity = 0;
+        fprintf(stderr, "[leo] WARNING: trigram_init allocation failed — trigram table degraded to empty.\n");
+        return;
+    }
+    t->capacity = capacity;
     for (int i = 0; i < LEO_TRI_IDX_MAX; i++) t->head_ab[i] = -1;
 }
 
@@ -1501,7 +1518,7 @@ static void leo_ingest(Leo *leo, const char *text) {
 
         /* unigram freq */
         for (int i = 0; i < n; i++)
-            if (ids[i] < leo->cooc.freq_size) leo->cooc.freq[ids[i]] += 1.0f;
+            if (ids[i] >= 0 && ids[i] < leo->cooc.freq_size) leo->cooc.freq[ids[i]] += 1.0f;  /* F-3 (Fable): guard the low end too */
         leo->cooc.total_tokens += n;
 
         /* bigrams + pair counting for online BPE merge learning */
@@ -1752,6 +1769,19 @@ static int weighted_sample(const float *scores, int n) {
         if (r <= acc) return i;
     }
     return n - 1;
+}
+
+/* F-6 (Fable): temper candidate scores by the temperature power, normalizing by the pool
+ * max first. A raw score (0.7·sqrt(count) tilted by gravity up to ~×5.5 reaches hundreds)
+ * raised to 1/temp (temp floored at 0.05 -> exponent 20) overflows powf to inf; weighted_sample
+ * then locks onto the first inf candidate and sampling dies. Dividing by the max is
+ * selection-preserving (weighted_sample renormalizes by the total) and caps the base at 1.0
+ * so the power cannot overflow. */
+static void cand_temper(float *sc, int n, float inv_temp) {
+    float mx = 0.0f;
+    for (int i = 0; i < n; i++) if (sc[i] > mx) mx = sc[i];
+    if (mx <= 0.0f) return;                 /* all non-positive -> leave; weighted_sample handles it */
+    for (int i = 0; i < n; i++) sc[i] = powf(sc[i] / mx, inv_temp);
 }
 
 /* start token: freq-weighted clean seed from the top LEO_SEED_CANDS.
@@ -2020,6 +2050,10 @@ static int leo_token_is_presence_entry(const BPE *bpe, int id) {
 
 static int cand_gate_reject(const CandCollector *cc, int cand_id) {
     if (!cc->bpe) return 0;
+    /* F-2 (Fable): an out-of-range candidate must never index vocab_meta / prompt_pieces /
+     * gravity. Reject up front — this gate also protects gravity[c]/[dst] in cand_collect_tri/bi,
+     * which call this first. */
+    if (cand_id < 0 || cand_id >= cc->bpe->vocab_size) return 1;
     /* the prompt's own word pieces bypass the gates — the only way a multi-
      * token heard word ("father" = [ f][ather]) assembles from its own
      * successors past the orphan gate. Targeted to this reply's words. */
@@ -2350,8 +2384,7 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
         if (!any_nonzero) return -1;
     }
 
-    for (int i = 0; i < cc.n; i++)
-        cand_sc[i] = powf(cand_sc[i], inv_temp);
+    cand_temper(cand_sc, cc.n, inv_temp);   /* F-6: normalize-then-power, overflow-safe */
 
     int pick = weighted_sample(cand_sc, cc.n);
     if (pick < 0) return -1;
@@ -4143,6 +4176,19 @@ static int st_r32(FILE *f, int32_t *v) { return fread(v, sizeof *v, 1, f) == 1; 
 static int st_ru(FILE *f, uint32_t *v) { return fread(v, sizeof *v, 1, f) == 1; }
 static int st_r64(FILE *f, uint64_t *v){ return fread(v, sizeof *v, 1, f) == 1; }
 static int st_rf(FILE *f, float *v)    { return fread(v, sizeof *v, 1, f) == 1; }
+/* F-5: reject a state file whose float block carries NaN/inf — one bad float
+ * self-propagates through Kuramoto and kills weighted_sample silently. */
+static int st_finite_arr(const float *a, int n) {
+    for (int i = 0; i < n; i++) if (!isfinite(a[i])) return 0;
+    return 1;
+}
+/* F-5 (Codex): a spore's float fields feed santaclaus resonance/bias — validate them. */
+static int st_finite_spore(const LeoSpore *s) {
+    return st_finite_arr(s->chamber_snap, LEO_N_CHAMBERS) &&
+           st_finite_arr(s->retention_slice, LEO_RET_DIM) &&
+           isfinite(s->pain_snap) && isfinite(s->trauma_snap) && isfinite(s->strength) &&
+           st_finite_arr(s->meaning_snap, GLYPH_COUNT);
+}
 
 /* Persist Leo's observable state. Returns 1 on success, 0 on I/O failure. */
 static int leo_save_state(const Leo *leo, const char *path) {
@@ -4275,7 +4321,7 @@ static int leo_save_state(const Leo *leo, const char *path) {
  * success, 0 on bad magic/version/shape or I/O failure (leaving a usable
  * freshly-init'd Leo). The post-load organism is field-equivalent to the
  * saved one — it speaks identically under the same seed. */
-static int leo_load_state(Leo *leo, const char *path) {
+static int leo_load_state_inner(Leo *leo, const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
     uint32_t magic = 0, version = 0; uint64_t step = 0;
@@ -4292,7 +4338,16 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (!st_r32(f, &n_merges) || n_merges < 0 || n_merges > LEO_MAX_MERGES) { fclose(f); return 0; }
     leo->bpe.n_merges = n_merges;
     if (fread(leo->bpe.merges, sizeof(BPEMerge), (size_t)n_merges, f) != (size_t)n_merges) { fclose(f); return 0; }
-    if (!st_r32(f, &vocab_size) || vocab_size < 256 || vocab_size > LEO_MAX_VOCAB) { fclose(f); return 0; }
+    /* F-1: validate merge contents — new_id == 256+i (vocab grows only by merges,
+     * struct invariant vocab_size == 256 + n_merges), each constituent id precedes
+     * it. A corrupt merge would inject an OOB new_id into the id stream (bpe_encode). */
+    for (int i = 0; i < n_merges; i++) {
+        const BPEMerge *mg = &leo->bpe.merges[i];
+        if (mg->new_id != 256 + i || mg->a < 0 || mg->a >= mg->new_id ||
+            mg->b < 0 || mg->b >= mg->new_id) { fclose(f); return 0; }
+    }
+    if (!st_r32(f, &vocab_size) || vocab_size < 256 || vocab_size > LEO_MAX_VOCAB ||
+        vocab_size != 256 + n_merges) { fclose(f); return 0; }   /* Codex: vocab_size is its own corruption vector — pin the documented invariant (leo.c struct: "= 256 + n_merges") so id<vocab_size == the real merge range, no phantom tokens */
     leo->bpe.vocab_size = vocab_size;
     for (int i = 0; i < vocab_size; i++) {
         int32_t vlen = 0;
@@ -4306,6 +4361,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     int32_t freq_size = 0;
     if (!st_r32(f, &freq_size) || freq_size != leo->cooc.freq_size) { fclose(f); return 0; }
     if (fread(leo->cooc.freq, sizeof(float), (size_t)freq_size, f) != (size_t)freq_size) { fclose(f); return 0; }
+    if (!st_finite_arr(leo->cooc.freq, freq_size)) { fclose(f); return 0; }   /* F-5 (Codex): NaN freq poisons seed scoring + freq-gate */
     uint64_t total = 0;
     if (!st_r64(f, &total)) { fclose(f); return 0; }
     leo->cooc.total_tokens = (long)total;
@@ -4314,6 +4370,8 @@ static int leo_load_state(Leo *leo, const char *path) {
     for (int i = 0; i < cooc_live; i++) {
         int32_t s, d; float c;
         if (!st_r32(f, &s) || !st_r32(f, &d) || !st_rf(f, &c)) { fclose(f); return 0; }
+        if (s < 0 || s >= leo->bpe.vocab_size || d < 0 || d >= leo->bpe.vocab_size ||
+            !isfinite(c) || c <= 0.0f) { fclose(f); return 0; }   /* F-1: id in range, count sane */
         cooc_update(&leo->cooc, s, d, c);
     }
 
@@ -4323,6 +4381,8 @@ static int leo_load_state(Leo *leo, const char *path) {
     for (int i = 0; i < bi_live; i++) {
         int32_t s, d; float c;
         if (!st_r32(f, &s) || !st_r32(f, &d) || !st_rf(f, &c)) { fclose(f); return 0; }
+        if (s < 0 || s >= leo->bpe.vocab_size || d < 0 || d >= leo->bpe.vocab_size ||
+            !isfinite(c) || c <= 0.0f) { fclose(f); return 0; }   /* F-1: id in range, count sane */
         bigram_update(&leo->bigrams, s, d, c);
     }
 
@@ -4332,6 +4392,8 @@ static int leo_load_state(Leo *leo, const char *path) {
     for (int i = 0; i < tri_live; i++) {
         int32_t a, b, c; float cnt;
         if (!st_r32(f, &a) || !st_r32(f, &b) || !st_r32(f, &c) || !st_rf(f, &cnt)) { fclose(f); return 0; }
+        if (a < 0 || a >= leo->bpe.vocab_size || b < 0 || b >= leo->bpe.vocab_size ||
+            c < 0 || c >= leo->bpe.vocab_size || !isfinite(cnt) || cnt <= 0.0f) { fclose(f); return 0; }  /* F-1 */
         trigram_update(&leo->trigrams, a, b, c, cnt);
     }
 
@@ -4341,17 +4403,23 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (fread(leo->chamber_ext, sizeof(float), LEO_N_CHAMBERS, f) != LEO_N_CHAMBERS) { fclose(f); return 0; }
     if (!st_rf(f, &leo->pain) || !st_rf(f, &leo->tension) ||
         !st_rf(f, &leo->debt) || !st_rf(f, &leo->trauma)) { fclose(f); return 0; }
+    /* F-5: no NaN/inf into the field — else it self-propagates through Kuramoto. */
+    if (!st_finite_arr(leo->retention_state, LEO_RET_DIM) ||
+        !st_finite_arr(leo->chamber_act, LEO_N_CHAMBERS) ||
+        !st_finite_arr(leo->chamber_ext, LEO_N_CHAMBERS) ||
+        !isfinite(leo->pain) || !isfinite(leo->tension) ||
+        !isfinite(leo->debt) || !isfinite(leo->trauma)) { fclose(f); return 0; }
 
     /* heard memory */
     int32_t h_live = 0;
     if (!st_r32(f, &h_live) || h_live < 0) { fclose(f); return 0; }
     for (int i = 0; i < h_live; i++) {
         int32_t cnt = 0, wl = 0; char w[LEO_HEARD_WORDLEN + 1];
-        if (!st_r32(f, &cnt) || !st_r32(f, &wl) || wl < 0 || wl >= LEO_HEARD_WORDLEN) { fclose(f); return 0; }
+        if (!st_r32(f, &cnt) || !st_r32(f, &wl) || wl < 0 || wl >= LEO_HEARD_WORDLEN || cnt <= 0) { fclose(f); return 0; }  /* F-8 (Codex): cnt<=0 is a malformed record -> reject, consistent with the loader */
         if (wl > 0 && fread(w, 1, (size_t)wl, f) != (size_t)wl) { fclose(f); return 0; }
         w[wl] = 0;
         int slot = leo_heard_slot(&leo->heard, w);
-        if (slot >= 0) {
+        if (slot >= 0) {   /* cnt>0 already enforced at the record gate (F-8) */
             strncpy(leo->heard.e[slot].word, w, LEO_HEARD_WORDLEN - 1);
             leo->heard.e[slot].word[LEO_HEARD_WORDLEN - 1] = 0;
             leo->heard.e[slot].count = cnt;
@@ -4377,7 +4445,7 @@ static int leo_load_state(Leo *leo, const char *path) {
         leo->n_spores = n_sp;
         int32_t n_se = 0, se_ptr = 0;
         if (!st_r32(f, &n_se) || n_se < 0 || n_se > LEO_SEA_MAX) { fclose(f); return 0; }
-        if (!st_r32(f, &se_ptr) || se_ptr < 0 || se_ptr > LEO_SEA_MAX) { fclose(f); return 0; }
+        if (!st_r32(f, &se_ptr) || se_ptr < 0 || se_ptr >= LEO_SEA_MAX) { fclose(f); return 0; }  /* F-5 (Codex): se_ptr indexes sea[LEO_SEA_MAX], valid 0..MAX-1 */
         if (n_se > 0) {
             if (version >= 9) {
                 if (fread(leo->sea, sizeof(LeoSpore), (size_t)n_se, f) != (size_t)n_se) { fclose(f); return 0; }
@@ -4392,6 +4460,9 @@ static int leo_load_state(Leo *leo, const char *path) {
         }
         leo->n_sea = n_se;
         leo->sea_ptr = se_ptr;
+        /* F-5 (Codex): reject non-finite floats in any spore — they poison santaclaus resonance/bias */
+        for (int i = 0; i < n_sp; i++) if (!st_finite_spore(&leo->spores[i])) { fclose(f); return 0; }
+        for (int i = 0; i < n_se; i++) if (!st_finite_spore(&leo->sea[i]))    { fclose(f); return 0; }
     }
 
     /* A.4 R4: the RAE learned selector weights (raw POD round-trip) */
@@ -4404,6 +4475,10 @@ static int leo_load_state(Leo *leo, const char *path) {
         if (!st_rf(f, &b2) || !st_r64(f, &obs)) { fclose(f); return 0; }
         leo->rae.b2 = b2;
         leo->rae.observations = (long)obs;
+        if (!st_finite_arr(&leo->rae.w1[0][0], LEO_RAE_HID * LEO_RAE_IN) ||
+            !st_finite_arr(leo->rae.b1, LEO_RAE_HID) ||
+            !st_finite_arr(leo->rae.w2, LEO_RAE_HID) ||
+            !isfinite(leo->rae.b2)) { fclose(f); return 0; }   /* F-5 (Codex): NaN RAE weights -> NaN --rae score */
     }
 
     /* A.5 I2: the School concept map (raw POD round-trip) */
@@ -4413,9 +4488,13 @@ static int leo_load_state(Leo *leo, const char *path) {
         if (n_l > 0) {
             if (fread(leo->school.learned, LEO_HEARD_WORDLEN, (size_t)n_l, f) != (size_t)n_l) { fclose(f); return 0; }
             if (fread(leo->school.learned_glyph, sizeof(int8_t), (size_t)n_l, f) != (size_t)n_l) { fclose(f); return 0; }
+            /* F-8: raw fread gives no NUL guarantee inside the 48-byte record — strcmp
+             * in leo_school_is_learned/leo_semtok_word would read past it. Force it. */
+            for (int i = 0; i < n_l; i++) leo->school.learned[i][LEO_HEARD_WORDLEN - 1] = 0;
         }
         leo->school.n_learned = n_l;
         if (fread(leo->school.pending, 1, LEO_HEARD_WORDLEN, f) != LEO_HEARD_WORDLEN) { fclose(f); return 0; }
+        leo->school.pending[LEO_HEARD_WORDLEN - 1] = 0;   /* F-8: NUL-terminate */
     }
 
     /* A.6 E-5 (v5): the body's mood + the open guess */
@@ -4429,6 +4508,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     /* klaus-memory (v6): the scars. A v5 file lacks them → they stay 0 (leo_init's memset). */
     if (version >= 6) {
         if (fread(leo->scar, sizeof(float), LEO_N_CHAMBERS, f) != LEO_N_CHAMBERS) { fclose(f); return 0; }
+        if (!st_finite_arr(leo->scar, LEO_N_CHAMBERS)) { fclose(f); return 0; }   /* F-5 */
     }
 
     /* E-11 γ-capsule (v7): a v5/v6 file lacks it → gamma stays 0 + unprimed, so it primes from the
@@ -4436,6 +4516,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (version >= 7) {
         int32_t primed = 0;
         if (fread(leo->gamma, sizeof(float), LEO_GAMMA_DIM, f) != LEO_GAMMA_DIM) { fclose(f); return 0; }
+        if (!st_finite_arr(leo->gamma, LEO_GAMMA_DIM)) { fclose(f); return 0; }   /* F-5 */
         if (!st_r32(f, &primed)) { fclose(f); return 0; }
         leo->gamma_primed = (uint8_t)(primed ? 1 : 0);
     }
@@ -4444,6 +4525,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (version >= 8) {
         if (fread(leo->gamma_meaning, sizeof(float), GLYPH_COUNT, f) != GLYPH_COUNT) { fclose(f); return 0; }
         if (!st_rf(f, &leo->gamma_gap)) { fclose(f); return 0; }
+        if (!st_finite_arr(leo->gamma_meaning, GLYPH_COUNT) || !isfinite(leo->gamma_gap)) { fclose(f); return 0; }   /* F-5 */
     }
 
     fclose(f);
@@ -4451,6 +4533,16 @@ static int leo_load_state(Leo *leo, const char *path) {
     leo_build_chamber_tags(leo);
     leo_supertok_scan(leo);
     return 1;
+}
+
+/* Contract (docstring above): a FAILED load leaves a fresh, usable Leo — not a
+ * partially-overwritten one. Codex: a late reject had left leo half-loaded from the
+ * bad file, and the caller's "fresh start" then ingested the corpus on top of that
+ * residue. Wipe to fresh on any failure so the guarantee actually holds. */
+static int leo_load_state(Leo *leo, const char *path) {
+    int r = leo_load_state_inner(leo, path);
+    if (!r) { leo_free(leo); leo_init(leo); }
+    return r;
 }
 
 /* ========================================================================
@@ -4461,13 +4553,16 @@ static int leo_load_state(Leo *leo, const char *path) {
 static char *read_file(const char *path, long *out_len) {
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
-    fseek(f, 0, SEEK_END);
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
     long len = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    if (len < 0) { fclose(f); return NULL; }   /* F-7 (Fable): ftell == -1 on a pipe/non-regular file (--corpus /dev/stdin) would make malloc(0) + a (size_t)-1 fread overflow the heap */
+    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return NULL; }
     char *buf = malloc((size_t)len + 1);
     if (!buf) { fclose(f); return NULL; }
     size_t got = fread(buf, 1, (size_t)len, f);
     fclose(f);
+    if (got < (size_t)len)                      /* F-7: short read — don't pass a truncated corpus off as whole */
+        fprintf(stderr, "[leo] WARNING: read_file('%s') short read (%zu of %ld bytes).\n", path, got, len);
     buf[got] = 0;
     if (out_len) *out_len = (long)got;
     return buf;
