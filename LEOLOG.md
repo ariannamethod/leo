@@ -2440,3 +2440,63 @@ ASan/UBSan 0 on the `--aml` path; the documented `body.aml` demo, REPL, and a sa
 `body.aml`; also corrected a stale system-fallback line to match the vendor-only Makefile).
 The somatic triad — klaus scar → capsule → meaning → BE/ASK — is whole; next is Oleg's ear and
 whatever the tool says it is.
+
+## Phase A.7 — Fable audit: harden leo_load_state + field IO (2026-07-05)
+
+Fable 5 (Mythos-class), auditing `leo.c` read-only, filed eight correctness findings
+(F-1..F-8) against the state loader and the field IO. All eight are closed, plus six
+follow-ups Codex caught as an inline auditor across four rounds. The loader was already an
+exemplary skeleton — every fread checked, counts clamped — so the hole was record *contents*,
+not shape: a corrupt or foreign `leo.state` could push out-of-range ids into the tables, a
+NaN into the field, or silently degenerate sampling, with no message.
+
+`leo_load_state` now rejects out-of-range ids (merge `new_id==256+i`; cooc/bigram/trigram ids
+in `[0,vocab_size)`), non-finite floats in *every* block (retention, chambers,
+pain/tension/debt/trauma, scar, gamma, meaning — and freq, spores, RAE, which the initial list
+had missed), a `vocab_size` that breaks the `256+n_merges` struct invariant, an `se_ptr`
+outside `[0,SEA_MAX-1]`, and malformed heard/school records; and a failed load now leaves a
+truly fresh Leo (a late reject used to leave him half-loaded from the bad file, and the caller
+then ingested the corpus on top of that residue). Runtime defense-in-depth: `cand_gate_reject`
+bounds-gates every candidate before it indexes vocab_meta/pieces/gravity; `clampf` swallows NaN
+to lo; `cand_temper` normalizes candidate scores by the pool max before the temperature power,
+so a large score can't overflow `powf` to inf and freeze sampling — distribution-preserving,
+since weighted_sample renormalizes by the total. `cooc/bigram/trigram_init` fail loud and
+degrade to empty on OOM (the walks guard `n_entries==0`); `read_file` guards `ftell==-1` (a
+piped `--corpus /dev/stdin` used to `malloc(0)` + a `(size_t)-1` fread and overflow the heap).
+
+Tool (this session): build 0 warn/err; `make test` 135 → **149/149** (+14 targeted
+reject/overflow/gate tests — a corrupt-state slurp that pokes bad ids / NaN / inflated
+vocab_size and asserts reject, a fresh-on-fail check, clampf/cand_temper units); ASan/UBSan
+clean on the smoke run; a piped `/dev/stdin` corpus exits 0 (falls back, no crash);
+**byte-identical** generation on a healthy state (seed 42, 200 tokens) before/after every fix —
+the somatic field is untouched. Codex CLEAN after four rounds (load, Group-2 defense, Group-3
+IO, final holistic). Committed `3c77e6d`, pushed to `leo-phase3`; Fable's report kept local.
+θ=0, mama-child, and `--no-X`/`--gen` byte-identity all held.
+
+## Phase A.8 — optimization pass: six byte-identical hot-path + hygiene cuts (2026-07-06)
+
+Six optimizations to `leo.c`, each landed only after the full gate — the 149-test suite +
+byte-identity + an independent Codex audit — so Leo's voice is unchanged to the byte:
+
+  1. **cooc src reverse-index** (`head_src`/`next_src`): `compute_prompt_gravity` walks the index
+     instead of scanning all 524288 slots per prompt content-token. Each `(src,dst)` is a unique
+     slot, so every `dst` is visited exactly once — the gravity vector is identical, order-free.
+     ~1.5-2x faster on a reply-heavy workload; the only field table that lacked a reverse index
+     (bigram/trigram already had one) now has it too.
+  2. **presence-gated BPE merges** in `bpe_encode`: a merge whose parts aren't in the buffer is a
+     provable no-op (a monotone-superset presence bitset — never a false skip). ingest 177 -> 135 ms (~24%).
+  3. **super-token head bitset**: `leo_supertoken_boost` early-returns when `prev1` heads nothing —
+     an O(221)-scan becomes O(1) for the common case.
+  4. **cached function-word bit** (`is_function`): an O(1) mask vs ~64 strcmp per call, populated
+     alongside `vocab_meta` (init + per-merge + load rebuild), so it can never go stale.
+  5. **`leo_choose_start` + `leo_choose_continuation` merged** into one `leo_choose_seed` (an explicit
+     theme-gate flag, not a `tail==NULL` inference) — the two were character-identical bar two knobs.
+  6. **the two presence-hint V-scans fused** into one, and the twinned 64-word function list hoisted
+     to a single `LEO_FUNCTION_WORDS` (was duplicated verbatim in two places).
+
+Tool (this session): build 0 warn/err; `make test` 135 -> **149/149**; ASan/UBSan 0 on the smoke run
+AND the `--chat` REPL (6-turn, memory-clean); INGEST + GEN + CHAT generation byte-identical on a
+healthy state (seed-for-seed) — the child voice holds to the byte; Codex CLEAN per-item and on a final
+holistic pass. net **-26 lines** (108 insertions, 134 deletions) — faster AND shorter. The soul is
+untouched: θ=0, mama-child, and every `--no-X` ablation held. First commit under the new
+commit-quote decree (Saint-Exupéry: nothing left to take away).
