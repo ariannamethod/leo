@@ -126,6 +126,15 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_ASK_W 0.30f                 /* E-11 #4 ASK: how strongly the carried gap (darkmatter) heats the groping register */
 #define LEO_PAIN_DECAY  0.985f     /* suffering decay (canon 98) */
 #define LEO_DEBT_DECAY  0.998f     /* debt decay (canon 99) */
+/* conatus (Damasio): the carried not-knowing (gamma_gap) becomes a homeostatic DEBT — a
+ * defended setpoint. The gap raises it; a taught word (School) relieves it; the standing debt
+ * drives the groping ASK register, so the ask is chosen because it lowers the debt. Leo's first
+ * stakes: a good/bad-for-him. --no-conatus (g_leo_conatus_on=0) → debt inert, byte-identical. */
+#define LEO_DEBT_GAIN     0.40f    /* per-reply: gamma_gap -> debt accumulation */
+#define LEO_DEBT_RELIEF   0.06f    /* a taught word subtracts this from debt (partial relief, not a wipe) */
+#define LEO_DEBT_ASK_GATE 0.80f    /* #1 spine: standing debt widens the curiosity gate — hunger lets Leo ask through mild distress */
+#define LEO_DEBT_ASK_W    0.50f    /* #2 flesh: standing debt lightly warms the groping register (the carried ache) */
+#define LEO_DEBT_MAX      1.00f    /* debt clamp */
 #define LEO_BIGRAM_MAX    (128 * 1024)
 #define LEO_TRIGRAM_MAX   (256 * 1024)
 #define LEO_PAIR_HASH     (64 * 1024)
@@ -152,6 +161,7 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 
 __attribute__((unused))  /* used by the field physics in step 1+ */
 static float clampf(float x, float lo, float hi) {
+    if (x != x) return lo;   /* F-5 (Fable): NaN passes both compares — swallow to lo (runtime 2nd line behind the load-time isfinite scan) */
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
@@ -205,6 +215,7 @@ typedef struct {
     uint8_t  vocab_bytes[LEO_MAX_VOCAB][LEO_MAX_TOKEN_LEN];
     int      vocab_len[LEO_MAX_VOCAB];
     uint8_t  vocab_meta[LEO_MAX_VOCAB];          /* LEO_META_* flags */
+    uint8_t  is_function[LEO_MAX_VOCAB];         /* #6 (Karpathy): cached function-word-ness (bpe_fn_compute) — O(1) vs ~64 strcmp per call */
 
     /* pair counter for online learning: open hash by (left,right) */
     int      pair_left[LEO_PAIR_HASH];
@@ -214,6 +225,7 @@ typedef struct {
 
 /* forward decl — defined below, after the byte helpers it depends on. */
 static uint8_t bpe_compute_meta(const BPE *bpe, int id);
+static int     bpe_fn_compute(const BPE *bpe, int id);   /* #6 (Karpathy): heavy function-word predicate, cached into is_function[] */
 static void    bpe_populate_all_meta(BPE *bpe);
 
 static void bpe_init(BPE *bpe) {
@@ -317,6 +329,7 @@ static int bpe_promote_slot(BPE *bpe, int slot) {
     bpe->n_merges++;
     bpe->pair_count[slot] = 0;
     bpe->vocab_meta[new_id] = bpe_compute_meta(bpe, new_id);
+    bpe->is_function[new_id] = (uint8_t)bpe_fn_compute(bpe, new_id);   /* #6 (Karpathy): cache alongside meta */
     return 1;
 }
 
@@ -382,20 +395,33 @@ static int bpe_encode(const BPE *bpe, const uint8_t *text, int tlen,
     int n = 0;
     for (int i = 0; i < tlen && n < max_out; i++) out[n++] = text[i];
 
+    /* #3 (Karpathy): a merge (a,b)->new_id can only fire if BOTH a and b are in the
+     * buffer. Track presence in a bitset and skip merges that can't match. `present`
+     * is a monotone superset of the buffer (set on the initial fill and whenever a
+     * merge fires, never cleared), so a skip is a provable no-op — it can only ever
+     * fail to skip (a harmless empty sweep), never skip wrongly. Most of the ~4865
+     * merges reference ids absent from any given chunk, so this is a big ingest win. */
+    uint8_t present[LEO_MAX_VOCAB];
+    memset(present, 0, (size_t)bpe->vocab_size);
+    for (int i = 0; i < n; i++) present[out[i]] = 1;
+
     for (int m = 0; m < bpe->n_merges; m++) {
         int a = bpe->merges[m].a;
         int b = bpe->merges[m].b;
+        if (!present[a] || !present[b]) continue;   /* pair cannot be here — provable no-op */
         int new_id = bpe->merges[m].new_id;
-        int w = 0;
+        int w = 0, fired = 0;
         for (int i = 0; i < n; i++) {
             if (i < n - 1 && out[i] == a && out[i + 1] == b) {
                 out[w++] = new_id;
                 i++;
+                fired = 1;
             } else {
                 out[w++] = out[i];
             }
         }
         n = w;
+        if (fired) present[new_id] = 1;   /* its output can feed later merges */
     }
     return n;
 }
@@ -416,6 +442,7 @@ static int bpe_decode_token(const BPE *bpe, int id, char *buf, int sz) {
 typedef struct {
     int   src, dst;
     float count;
+    int   next_src;     /* #1 (Karpathy): reverse-index chain — next cooc entry with same src */
 } CoocEntry;
 
 typedef struct {
@@ -425,20 +452,26 @@ typedef struct {
     float     *freq;                 /* unigram counts per token id */
     int        freq_size;
     long       total_tokens;
+    int       *head_src;             /* #1 (Karpathy): [LEO_MAX_VOCAB] src -> first entry idx, -1 = empty (reverse index for compute_prompt_gravity) */
 } CoocField;
 
 static void cooc_init(CoocField *c, int capacity, int freq_size) {
     c->entries = calloc((size_t)capacity, sizeof(CoocEntry));
     c->n_entries = 0;
-    c->capacity = capacity;
+    c->capacity = c->entries ? capacity : 0;   /* F-4 (Fable): calloc may fail — degrade to empty, never index a NULL table (cooc_update/find guard n_entries/capacity) */
     c->freq = calloc((size_t)freq_size, sizeof(float));
-    c->freq_size = freq_size;
+    c->freq_size = c->freq ? freq_size : 0;
     c->total_tokens = 0;
+    c->head_src = malloc((size_t)LEO_MAX_VOCAB * sizeof(int));   /* #1 (Karpathy): src reverse index */
+    if (c->head_src) for (int i = 0; i < LEO_MAX_VOCAB; i++) c->head_src[i] = -1;
+    if (!c->entries || !c->freq || !c->head_src)
+        fprintf(stderr, "[leo] WARNING: cooc_init allocation failed — co-occurrence field degraded to empty.\n");
 }
 
 static void cooc_free(CoocField *c) {
     free(c->entries); c->entries = NULL;
     free(c->freq); c->freq = NULL;
+    free(c->head_src); c->head_src = NULL;
     c->n_entries = c->capacity = c->freq_size = 0;
     c->total_tokens = 0;
 }
@@ -472,6 +505,10 @@ static void cooc_update(CoocField *c, int src, int dst, float delta) {
             c->entries[idx].src = src;
             c->entries[idx].dst = dst;
             c->entries[idx].count = delta;
+            if (c->head_src && src >= 0 && src < LEO_MAX_VOCAB) {   /* #1 (Karpathy): link into the src reverse index */
+                c->entries[idx].next_src = c->head_src[src];
+                c->head_src[src] = idx;
+            }
             c->n_entries++;
             return;
         }
@@ -516,6 +553,7 @@ static int cooc_prune_rebuild(CoocField *c, float threshold) {
         else dropped++;
     }
     memset(c->entries, 0, (size_t)c->capacity * sizeof(CoocEntry));
+    if (c->head_src) for (int i = 0; i < LEO_MAX_VOCAB; i++) c->head_src[i] = -1;   /* #1: cooc_update below rebuilds the index */
     c->n_entries = 0;
     for (int i = 0; i < kept; i++)
         cooc_update(c, scratch[i].src, scratch[i].dst, scratch[i].count);
@@ -550,7 +588,7 @@ typedef struct {
  * "the candle" attractor cannot crystallize. Built once after corpus ingest. */
 #define LEO_SUPERTOK_MAX   512
 typedef struct { int head, tail; float pmi; } LeoSuperToken;
-typedef struct { LeoSuperToken e[LEO_SUPERTOK_MAX]; int n; } LeoSuperTokens;
+typedef struct { LeoSuperToken e[LEO_SUPERTOK_MAX]; int n; uint8_t is_head[LEO_MAX_VOCAB]; } LeoSuperTokens;   /* #4 (Karpathy): is_head[id]=1 iff id heads a super-token */
 
 /* ── Phase B — santaclaus: self-residual spore recall (canon neoleo leo.c:1206) ─
  * A spore = a snapshot of Leo's field at a reply moment. On a sentence boundary,
@@ -622,8 +660,15 @@ typedef struct {
 static void bigram_init(BigramTable *b, int capacity) {
     b->entries = calloc((size_t)capacity, sizeof(BigramEntry));
     b->n_entries = 0;
-    b->capacity = capacity;
     b->head_src = malloc(LEO_BI_IDX_MAX * sizeof(int));
+    if (!b->entries || !b->head_src) {   /* F-4 (Fable): fail-loud + degrade to empty; never write into a NULL head_src (bigram_walk_src guards n_entries==0) */
+        free(b->entries); b->entries = NULL;
+        free(b->head_src); b->head_src = NULL;
+        b->capacity = 0;
+        fprintf(stderr, "[leo] WARNING: bigram_init allocation failed — bigram table degraded to empty.\n");
+        return;
+    }
+    b->capacity = capacity;
     for (int i = 0; i < LEO_BI_IDX_MAX; i++) b->head_src[i] = -1;
 }
 
@@ -763,8 +808,15 @@ static uint32_t trigram_ab_bucket(int a, int b) {
 static void trigram_init(TrigramTable *t, int capacity) {
     t->entries = calloc((size_t)capacity, sizeof(TrigramEntry));
     t->n_entries = 0;
-    t->capacity = capacity;
     t->head_ab = malloc(LEO_TRI_IDX_MAX * sizeof(int));
+    if (!t->entries || !t->head_ab) {   /* F-4 (Fable): fail-loud + degrade to empty; never write into a NULL head_ab (trigram_walk_ab guards n_entries==0) */
+        free(t->entries); t->entries = NULL;
+        free(t->head_ab); t->head_ab = NULL;
+        t->capacity = 0;
+        fprintf(stderr, "[leo] WARNING: trigram_init allocation failed — trigram table degraded to empty.\n");
+        return;
+    }
+    t->capacity = capacity;
     for (int i = 0; i < LEO_TRI_IDX_MAX; i++) t->head_ab[i] = -1;
 }
 
@@ -1038,8 +1090,10 @@ static uint8_t bpe_compute_meta(const BPE *bpe, int id) {
 }
 
 static void bpe_populate_all_meta(BPE *bpe) {
-    for (int i = 0; i < bpe->vocab_size; i++)
+    for (int i = 0; i < bpe->vocab_size; i++) {
         bpe->vocab_meta[i] = bpe_compute_meta(bpe, i);
+        bpe->is_function[i] = (uint8_t)bpe_fn_compute(bpe, i);   /* #6 (Karpathy): cache alongside meta */
+    }
 }
 
 /* ── LeoHeard — the surface-words Leo has truly heard ──────────────────────
@@ -1501,7 +1555,7 @@ static void leo_ingest(Leo *leo, const char *text) {
 
         /* unigram freq */
         for (int i = 0; i < n; i++)
-            if (ids[i] < leo->cooc.freq_size) leo->cooc.freq[ids[i]] += 1.0f;
+            if (ids[i] >= 0 && ids[i] < leo->cooc.freq_size) leo->cooc.freq[ids[i]] += 1.0f;  /* F-3 (Fable): guard the low end too */
         leo->cooc.total_tokens += n;
 
         /* bigrams + pair counting for online BPE merge learning */
@@ -1625,6 +1679,7 @@ static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/p
 static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
 static int g_leo_be_on = 1;             /* E-11 #4 BE: the running-self (capsule) colors Leo's own words — speech-from-body. --no-be → 0. */
 static int g_leo_ask_on = 1;            /* E-11 #4 ASK: the carried gap (darkmatter) heats the groping register. --no-ask → 0. */
+static int g_leo_conatus_on = 1;        /* Damasio conatus: gamma_gap -> homeostatic debt -> drives ASK -> relieved by a teach. --no-conatus → 0 (debt inert, byte-identical to pre-conatus). */
 #ifdef HAVE_AML
 static const char *g_leo_aml_script = NULL;  /* E-9: --aml SCRIPT — run per reply (leo_respond) so the script reads Leo's LIVE body; NULL → no bridge → byte-identical. */
 #endif
@@ -1754,89 +1809,36 @@ static int weighted_sample(const float *scores, int n) {
     return n - 1;
 }
 
-/* start token: freq-weighted clean seed from the top LEO_SEED_CANDS.
- * "Leo speaks from his field, not from the prompt" invariant. */
-static int leo_choose_start(const Leo *leo) {
-    int   cand_ids[LEO_SEED_CANDS];
-    float cand_sc[LEO_SEED_CANDS];
-    int   n = 0;
-
-    /* resonance-primary opener: with a prompt, first admit the strongest
-     * theme clean-seeds (selected by gravity, NOT frequency), so a low-
-     * frequency theme opener still enters the pool and can open the reply.
-     * The freq-ranked pool would never admit it — that was the wall: a
-     * multiplicative tilt can't lift a low-freq seed past the generic
-     * high-freq starters. Here theme picks the openers directly. */
-    if (leo->gravity) {
-        for (int slot = 0; slot < LEO_SEED_CANDS / 2; slot++) {
-            int   best = -1;
-            float bestg = 1e-6f;
-            for (int i = 0; i < leo->cooc.freq_size; i++) {
-                if (leo->cooc.freq[i] <= 0) continue;
-                if (leo->gravity[i] <= bestg) continue;
-                if (!is_clean_seed_token(&leo->bpe, i)) continue;
-                int dup = 0;
-                for (int k = 0; k < n; k++) if (cand_ids[k] == i) { dup = 1; break; }
-                if (dup) continue;
-                best = i; bestg = leo->gravity[i];
-            }
-            if (best < 0) break;
-            cand_ids[n] = best;
-            cand_sc[n]  = leo->cooc.freq[best] *
-                          (1.0f + LEO_START_GRAVITY_W * leo->gravity[best]);
-            n++;
-        }
-    }
-
-    /* fill the rest of the pool with the top-frequency clean seeds (Leo's
-     * own habitual openers), theme-tilted when a prompt is present. */
-    float min_kept = 0;
-    for (int j = 0; j < n; j++) if (j == 0 || cand_sc[j] < min_kept) min_kept = cand_sc[j];
-    for (int i = 0; i < leo->cooc.freq_size; i++) {
-        float f = leo->cooc.freq[i];
-        if (f <= 0) continue;
-        if (!is_clean_seed_token(&leo->bpe, i)) continue;
-        int dup = 0;
-        for (int k = 0; k < n; k++) if (cand_ids[k] == i) { dup = 1; break; }
-        if (dup) continue;
-        float fe = leo->gravity
-                 ? f * (1.0f + LEO_START_GRAVITY_W * leo->gravity[i]) : f;
-        if (n < LEO_SEED_CANDS) {
-            cand_ids[n] = i; cand_sc[n] = fe;
-            if (n == 0 || fe < min_kept) min_kept = fe;
-            n++;
-        } else if (fe > min_kept) {
-            int min_idx = 0;
-            for (int k = 1; k < LEO_SEED_CANDS; k++)
-                if (cand_sc[k] < cand_sc[min_idx]) min_idx = k;
-            cand_ids[min_idx] = i; cand_sc[min_idx] = fe;
-            min_kept = cand_sc[0];
-            for (int k = 1; k < LEO_SEED_CANDS; k++)
-                if (cand_sc[k] < min_kept) min_kept = cand_sc[k];
-        }
-    }
-    if (n == 0) return -1;
-    int pick = weighted_sample(cand_sc, n);
-    return pick < 0 ? -1 : cand_ids[pick];
+/* F-6 (Fable): temper candidate scores by the temperature power, normalizing by the pool
+ * max first. A raw score (0.7·sqrt(count) tilted by gravity up to ~×5.5 reaches hundreds)
+ * raised to 1/temp (temp floored at 0.05 -> exponent 20) overflows powf to inf; weighted_sample
+ * then locks onto the first inf candidate and sampling dies. Dividing by the max is
+ * selection-preserving (weighted_sample renormalizes by the total) and caps the base at 1.0
+ * so the power cannot overflow. */
+static void cand_temper(float *sc, int n, float inv_temp) {
+    float mx = 0.0f;
+    for (int i = 0; i < n; i++) if (sc[i] > mx) mx = sc[i];
+    if (mx <= 0.0f) return;                 /* all non-positive -> leave; weighted_sample handles it */
+    for (int i = 0; i < n; i++) sc[i] = powf(sc[i] / mx, inv_temp);
 }
 
-/* continuation start: like choose_start, biased by cooc resonance with
- * the previous sentence's tail so a chain stays on one theme. Admission
- * mirrors leo_choose_start (audit П-2): when a prompt theme is active,
- * FIRST admit the strongest theme clean-seeds by gravity (the resonance-
- * primary block), THEN fill by frequency. Without this, a continuation
- * (sentence 2+) admitted by frequency alone could never OPEN on a low-freq
- * theme seed (730 clean seeds vs a 64-slot pool — a rank>64 theme word was
- * excluded even at max gravity); the v3 root-fix lived only in the opener. */
-static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) {
+/* start token: freq-weighted clean seed from the top LEO_SEED_CANDS.
+ * "Leo speaks from his field, not from the prompt" invariant. */
+/* #2 (Karpathy): seed selection — shared by the opener (leo_choose_start) and the
+ * continuation opener (leo_choose_continuation), which were character-identical bar
+ * two knobs. resonance-primary: with a prompt, first admit the strongest theme
+ * clean-seeds by gravity (NOT frequency), so a low-frequency theme opener still
+ * enters the pool — a multiplicative freq tilt could never lift a rank>64 theme seed
+ * past the generic high-freq starters. Then fill by frequency. `theme_primary_on`
+ * gates that block (always on for the opener; g_leo_cont_theme_on for a continuation).
+ * `tail` (the previous sentence's tail, continuation only) multiplies each seed by its
+ * cooc resonance so a chain stays on one theme. */
+static int leo_choose_seed(const Leo *leo, const int *tail, int n_tail, int theme_primary_on) {
     int   cand_ids[LEO_SEED_CANDS];
     float cand_sc[LEO_SEED_CANDS];
     int   n = 0;
 
-    /* resonance-primary admission (mirror of leo_choose_start): with a prompt,
-     * admit the strongest theme clean-seeds by gravity into the first half of
-     * the pool, so a low-frequency theme opener can still open a continuation. */
-    if (leo->gravity && g_leo_cont_theme_on) {
+    if (leo->gravity && theme_primary_on) {
         for (int slot = 0; slot < LEO_SEED_CANDS / 2; slot++) {
             int   best = -1;
             float bestg = 1e-6f;
@@ -1857,9 +1859,8 @@ static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) 
         }
     }
 
-    /* fill the rest with the top-frequency clean seeds (Leo's habitual
-     * openers), theme-tilted when a prompt is present; skip gravity-admitted
-     * dups so a theme seed is not double-counted. */
+    /* fill the rest with the top-frequency clean seeds (Leo's habitual openers),
+     * theme-tilted when a prompt is present; skip gravity-admitted dups. */
     float min_kept = 0;
     for (int j = 0; j < n; j++) if (j == 0 || cand_sc[j] < min_kept) min_kept = cand_sc[j];
     for (int i = 0; i < leo->cooc.freq_size; i++) {
@@ -1886,7 +1887,7 @@ static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) 
         }
     }
     if (n == 0) return -1;
-    if (tail && n_tail > 0) {                /* resonance with previous tail */
+    if (tail && n_tail > 0) {                /* resonance with the previous tail */
         for (int i = 0; i < n; i++) {
             float res = 0;
             for (int t = 0; t < n_tail; t++) {
@@ -1900,6 +1901,15 @@ static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) 
     }
     int pick = weighted_sample(cand_sc, n);
     return pick < 0 ? -1 : cand_ids[pick];
+}
+
+/* opener: theme-primary always on, no previous tail. */
+static int leo_choose_start(const Leo *leo) { return leo_choose_seed(leo, NULL, 0, 1); }
+
+/* continuation opener (sentence 2+): theme-primary gated by g_leo_cont_theme_on, biased
+ * by cooc resonance with the previous sentence's tail so a chain stays on one theme. */
+static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) {
+    return leo_choose_seed(leo, tail, n_tail, g_leo_cont_theme_on);
 }
 
 /* within-reply bigram repeat guard: was (prev1, c) emitted in ctx_tail? */
@@ -1946,7 +1956,20 @@ static float word_gate_penalty(const CandCollector *cc, int cand_id) {
 /* hot-path gate via the precomputed meta cache. 1 = reject. */
 /* function words carry no theme (they co-occur with everything); only
  * CONTENT words tilt the field. Stripped, lowercased byte compare. */
-static int leo_token_is_function(const BPE *bpe, int id) {
+/* #5 (Karpathy): one shared function-word list — was duplicated verbatim in
+ * bpe_fn_compute and leo_word_is_function. */
+static const char *const LEO_FUNCTION_WORDS[] = {
+    "the","a","an","is","are","was","were","be","been","am","do","does",
+    "did","have","has","had","of","to","in","on","at","by","for","from",
+    "with","as","and","or","but","if","so","you","your","i","my","me",
+    "he","she","it","we","they","him","her","his","its","our","this",
+    "that","what","which","who","why","how","when","where","not","no",
+    "yes","about","tell", NULL
+};
+
+/* #6 (Karpathy): the heavy predicate — strip/lowercase/strcmp ~64 function words.
+ * Computed ONCE per token into bpe->is_function[]; leo_token_is_function reads the cache. */
+static int bpe_fn_compute(const BPE *bpe, int id) {
     if (id < 0 || id >= bpe->vocab_size) return 1;
     int len = bpe->vocab_len[id];
     const uint8_t *b = bpe->vocab_bytes[id];
@@ -1964,30 +1987,21 @@ static int leo_token_is_function(const BPE *bpe, int id) {
         w[i] = (char)c;
     }
     w[nn] = 0;
-    static const char *fw[] = {
-        "the","a","an","is","are","was","were","be","been","am","do","does",
-        "did","have","has","had","of","to","in","on","at","by","for","from",
-        "with","as","and","or","but","if","so","you","your","i","my","me",
-        "he","she","it","we","they","him","her","his","its","our","this",
-        "that","what","which","who","why","how","when","where","not","no",
-        "yes","about","tell", NULL
-    };
-    for (int i = 0; fw[i]; i++) if (!strcmp(w, fw[i])) return 1;
+    for (int i = 0; LEO_FUNCTION_WORDS[i]; i++) if (!strcmp(w, LEO_FUNCTION_WORDS[i])) return 1;
     return 0;
+}
+
+/* #6 (Karpathy): O(1) read of the cached function-word bit (populated alongside
+ * vocab_meta in bpe_populate_all_meta + apply_merge). */
+static int leo_token_is_function(const BPE *bpe, int id) {
+    if (id < 0 || id >= bpe->vocab_size) return 1;
+    return bpe->is_function[id];
 }
 
 /* the same function-word check on a lowercase STRING — used to pick the
  * prompt's primary content word for the remembered-trace. */
 static int leo_word_is_function(const char *w) {
-    static const char *fw[] = {
-        "the","a","an","is","are","was","were","be","been","am","do","does",
-        "did","have","has","had","of","to","in","on","at","by","for","from",
-        "with","as","and","or","but","if","so","you","your","i","my","me",
-        "he","she","it","we","they","him","her","his","its","our","this",
-        "that","what","which","who","why","how","when","where","not","no",
-        "yes","about","tell", NULL
-    };
-    for (int i = 0; fw[i]; i++) if (!strcmp(w, fw[i])) return 1;
+    for (int i = 0; LEO_FUNCTION_WORDS[i]; i++) if (!strcmp(w, LEO_FUNCTION_WORDS[i])) return 1;
     return 0;
 }
 
@@ -2020,6 +2034,10 @@ static int leo_token_is_presence_entry(const BPE *bpe, int id) {
 
 static int cand_gate_reject(const CandCollector *cc, int cand_id) {
     if (!cc->bpe) return 0;
+    /* F-2 (Fable): an out-of-range candidate must never index vocab_meta / prompt_pieces /
+     * gravity. Reject up front — this gate also protects gravity[c]/[dst] in cand_collect_tri/bi,
+     * which call this first. */
+    if (cand_id < 0 || cand_id >= cc->bpe->vocab_size) return 1;
     /* the prompt's own word pieces bypass the gates — the only way a multi-
      * token heard word ("father" = [ f][ather]) assembles from its own
      * successors past the orphan gate. Targeted to this reply's words. */
@@ -2070,6 +2088,7 @@ static float leo_presence_entry_latch_boost(const CandCollector *cc, int cand_id
  * are refused. Built once after corpus ingest; PASSIVE (nothing reads it yet). */
 static void leo_supertok_scan(Leo *leo) {
     leo->supers.n = 0;
+    memset(leo->supers.is_head, 0, sizeof leo->supers.is_head);   /* #4 (Karpathy): rebuild the head bitset (all-0 also matches the total_tokens<100 early return) */
     const BigramTable *bg = &leo->bigrams;
     const CoocField   *co = &leo->cooc;
     if (co->total_tokens < 100) return;
@@ -2096,6 +2115,7 @@ static void leo_supertok_scan(Leo *leo) {
         leo->supers.e[leo->supers.n].tail = b;
         leo->supers.e[leo->supers.n].pmi  = pmi;
         leo->supers.n++;
+        if (a >= 0 && a < LEO_MAX_VOCAB) leo->supers.is_head[a] = 1;   /* #4: mark the head */
     }
 }
 
@@ -2106,6 +2126,7 @@ static void leo_supertok_scan(Leo *leo) {
 static float leo_supertoken_boost(const CandCollector *cc, int cand) {
     if (!g_leo_supertok_on || !cc->leo) return 0.0f;
     const LeoSuperTokens *st = &cc->leo->supers;
+    if (cc->prev1 < 0 || cc->prev1 >= LEO_MAX_VOCAB || !st->is_head[cc->prev1]) return 0.0f;   /* #4 (Karpathy): prev1 heads no super-token -> the scan below would find nothing */
     for (int i = 0; i < st->n; i++)
         if (st->e[i].head == cc->prev1 && st->e[i].tail == cand) {
             float b = LEO_SUPERTOK_W * leo_squash(st->e[i].pmi);
@@ -2350,8 +2371,7 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
         if (!any_nonzero) return -1;
     }
 
-    for (int i = 0; i < cc.n; i++)
-        cand_sc[i] = powf(cand_sc[i], inv_temp);
+    cand_temper(cand_sc, cc.n, inv_temp);   /* F-6: normalize-then-power, overflow-safe */
 
     int pick = weighted_sample(cand_sc, cc.n);
     if (pick < 0) return -1;
@@ -2812,7 +2832,7 @@ static void leo_field_step(Leo *leo, int emitted, float coherence_hint) {
     leo->pain    = clampf(leo->pain * LEO_PAIN_DECAY + 0.04f * pain_signal,
                           0.0f, 1.0f);
     leo->tension = clampf(leo->tension * 0.995f, 0.0f, 1.0f);
-    leo->debt    = leo->debt * LEO_DEBT_DECAY;
+    leo->debt    = leo->debt * LEO_DEBT_DECAY;   /* per-token bleed — pre-conatus behavior; under --no-conatus debt lives and decays exactly here (inert, byte-identical) */
     leo->trauma  = leo->pain * leo->pain;
 
     /* santaclaus: spores decay on the field-step cadence; weak ones sleep (B1) */
@@ -3173,12 +3193,17 @@ static int leo_generate(Leo *leo, char *out, int max_len) {
  * weighted sample (why "candle" gave no reaction before). Still his own
  * learned clean seed — the prompt contributes only gravity, no insertion.
  * Returns -1 (→ choose_start) when there is no prompt or no theme seed. */
-static int leo_presence_start_hint(const Leo *leo) {
-    if (!leo || !leo->gravity) return -1;
+/* #5 (Karpathy): the bare-word opener and the theme-neighbour opener were two
+ * identical V-scans bar the gravity predicate (word: g>0; neighbour: 0<g<SELF_ATTRACTOR).
+ * Compute both argmaxes in ONE pass — same iteration order and strict-greater tie-break,
+ * so word_hint == the old leo_presence_start_hint and nbr_hint == the old neighbour_hint. */
+static void leo_presence_hints(const Leo *leo, int *word_hint, int *nbr_hint) {
+    *word_hint = -1; *nbr_hint = -1;
+    if (!leo || !leo->gravity) return;
     int V = leo->bpe.vocab_size;
     if (leo->cooc.freq_size < V) V = leo->cooc.freq_size;
-    int best = -1;
-    float best_sc = 0.0f;
+    int wb = -1, nb = -1;
+    float wsc = 0.0f, nsc = 0.0f;
     for (int id = 0; id < V; id++) {
         float g = leo->gravity[id];
         if (g <= 0.0f) continue;
@@ -3186,9 +3211,10 @@ static int leo_presence_start_hint(const Leo *leo) {
         if (f <= 0.0f) continue;
         if (!is_clean_seed_token(&leo->bpe, id)) continue;
         float sc = 100.0f * g + leo_squash(f);
-        if (sc > best_sc) { best_sc = sc; best = id; }
+        if (sc > wsc) { wsc = sc; wb = id; }                            /* word: g>0 */
+        if (g < LEO_SELF_ATTRACTOR_G && sc > nsc) { nsc = sc; nb = id; } /* neighbour: 0<g<SELF_ATTRACTOR */
     }
-    return best;
+    *word_hint = wb; *nbr_hint = nb;
 }
 
 /* open on a DOOR ("The", "His") whose latch pulls the heard word as a real
@@ -3218,23 +3244,7 @@ static int leo_presence_door_hint(const Leo *leo) {
 /* the best theme NEIGHBOUR clean-seed (gravity-raised but NOT the heard word
  * itself) — opens a reply theme-adjacent without barking the word, so the word
  * can surface deeper in the flow (via the deferred door-latch). */
-static int leo_presence_neighbour_hint(const Leo *leo) {
-    if (!leo || !leo->gravity) return -1;
-    int V = leo->bpe.vocab_size;
-    if (leo->cooc.freq_size < V) V = leo->cooc.freq_size;
-    int   best = -1;
-    float best_sc = 0.0f;
-    for (int id = 0; id < V; id++) {
-        float g = leo->gravity[id];
-        if (g <= 0.0f || g >= LEO_SELF_ATTRACTOR_G) continue;  /* a neighbour, not the word */
-        float f = leo->cooc.freq[id];
-        if (f <= 0.0f) continue;
-        if (!is_clean_seed_token(&leo->bpe, id)) continue;
-        float sc = 100.0f * g + leo_squash(f);
-        if (sc > best_sc) { best_sc = sc; best = id; }
-    }
-    return best;
-}
+/* leo_presence_neighbour_hint folded into leo_presence_hints (#5, one V-scan). */
 
 /* Dario boundary-injection (field-free): between sentences, deepen the top-K
  * NON-DIRECT theme associations (gravity-raised neighbours, NOT the heard word)
@@ -3361,8 +3371,7 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
      * the bare word-opener only when no door latches into it. */
     int  nbr_hint = -1, door_hint = -1, word_hint = -1;
     if (leo->gravity) {
-        word_hint = leo_presence_start_hint(leo);      /* the BARE word — always carries the heard word (g=2.0) */
-        nbr_hint  = leo_presence_neighbour_hint(leo);  /* theme neighbour, not the word */
+        leo_presence_hints(leo, &word_hint, &nbr_hint); /* #5: bare word + theme neighbour in one V-scan */
         door_hint = leo_presence_door_hint(leo);       /* a door → the word ("The love") */
         if (door_hint < 0) door_hint = word_hint;
     }
@@ -3566,11 +3575,19 @@ static float *compute_prompt_gravity(const Leo *leo, const int *p_ids, int p_n) 
         int pid = p_ids[i];
         if (pid < 0 || pid >= V) continue;
         if (leo_token_is_function(&leo->bpe, pid)) continue;
-        for (int e = 0; e < leo->cooc.capacity; e++) {
-            const CoocEntry *en = &leo->cooc.entries[e];
-            if (en->count <= 0) continue;
-            if (en->src != pid) continue;
-            if (en->dst >= 0 && en->dst < V) g[en->dst] += en->count;
+        if (leo->cooc.head_src) {           /* #1 (Karpathy): walk the src reverse index, not all 524K slots */
+            for (int e = leo->cooc.head_src[pid]; e >= 0; e = leo->cooc.entries[e].next_src) {
+                const CoocEntry *en = &leo->cooc.entries[e];
+                if (en->count <= 0) continue;
+                if (en->dst >= 0 && en->dst < V) g[en->dst] += en->count;
+            }
+        } else {
+            for (int e = 0; e < leo->cooc.capacity; e++) {
+                const CoocEntry *en = &leo->cooc.entries[e];
+                if (en->count <= 0) continue;
+                if (en->src != pid) continue;
+                if (en->dst >= 0 && en->dst < V) g[en->dst] += en->count;
+            }
         }
     }
     float mx = 0;
@@ -3754,6 +3771,8 @@ static void leo_school_learn(Leo *leo, const char *w, int glyph) {
     leo->school.learned[leo->school.n_learned][LEO_HEARD_WORDLEN - 1] = 0;
     leo->school.learned_glyph[leo->school.n_learned] = (int8_t)glyph;
     leo->school.n_learned++;
+    if (g_leo_conatus_on)   /* Damasio: a satisfied need — the first good-for-him event; relieve the debt */
+        leo->debt = clampf(leo->debt - LEO_DEBT_RELIEF, 0.0f, LEO_DEBT_MAX);
 }
 static int leo_school_unknown(const Leo *leo, const char *w) {
     return leo_semtok_word(leo, w) < 0;   /* grown map subsumes the learned-set */
@@ -3823,6 +3842,15 @@ static void leo_gamma_meaning(Leo *leo, const char *prompt) {
     leo->gamma_gap = (1.0f - LEO_GMEAN_RATE) * leo->gamma_gap + LEO_GMEAN_RATE * gap_now;
     for (int i = 0; i < GLYPH_COUNT; i++)
         leo->gamma_meaning[i] = (1.0f - LEO_GMEAN_RATE) * leo->gamma_meaning[i] + LEO_GMEAN_RATE * p[i];
+}
+
+/* Damasio conatus: once per reply, the carried not-knowing (gamma_gap) raises the standing
+ * DEBT (a defended homeostatic setpoint) as it slowly decays. A taught word relieves it
+ * (leo_school_learn), and the standing debt drives the groping ASK register — so the ask is
+ * chosen because it lowers the debt. --no-conatus (g_leo_conatus_on=0) → debt inert. */
+static void leo_conatus_debt(Leo *leo) {
+    if (!g_leo_conatus_on) return;   /* debt already decays per-token in leo_field_step; here it only ACCUMULATES the reply's carried gap */
+    leo->debt = clampf(leo->debt + LEO_DEBT_GAIN * leo->gamma_gap, 0.0f, LEO_DEBT_MAX);
 }
 
 /* A.6 FORM F-1 — quantize the chamber state into a velocity mode, with hysteresis
@@ -4027,7 +4055,12 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
              * toward the groping, questioning register. The felt gap speaks. gamma_gap=0 → ×1 (byte-id).
              * A bound AML ASK operator scales it (ask_override>=0); else autonomous (×1). */
             float askgain = (leo->ask_override >= 0.0f) ? leo->ask_override : 1.0f;
-            leo->temp_mult *= (1.0f + LEO_ASK_W * askgain * leo->gamma_gap);
+            /* Damasio conatus: the drive is the momentary gap PLUS the standing debt (carried
+             * hunger), so an unpaid not-knowing gropes harder and the ask that earns a teach
+             * relieves it. --no-conatus → drive = gamma_gap (byte-identical). */
+            float ask_drive = leo->gamma_gap;
+            if (g_leo_conatus_on) ask_drive += LEO_DEBT_ASK_W * leo->debt;
+            leo->temp_mult *= (1.0f + LEO_ASK_W * askgain * ask_drive);
         }
         if (g_leo_form_on) {           /* A.6 F-2: the breath sets the length */
             static const int mode_chain[LEO_MODE_COUNT] = { 3, 1, 5, 2 };  /* WALK STOP RUN BREATHE */
@@ -4080,8 +4113,13 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
      * REPLIES (what he builds from the field), and a question is not a reply. Else
      * he speaks from the field. */
     char unk[LEO_HEARD_WORDLEN];
+    /* Damasio #1: the standing debt widens the curiosity gate — a hungry Leo asks even through
+     * mild distress (the need to know overrides caution); the ask is the act that pays his debt.
+     * --no-conatus → the base gate (byte-identical). */
+    float ask_gate = LEO_QUIET_DISTRESS;
+    if (g_leo_conatus_on) ask_gate += LEO_DEBT_ASK_GATE * leo->debt;
     if (g_leo_school_on && !was_answer &&
-        (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS &&
+        (leo->chamber_act[0] + leo->chamber_act[3]) < ask_gate &&
         leo_school_find_unknown(leo, prompt, unk)) {
         /* I3a: hazard a guess from the prompt's context — "Zorble? Animal?" — the
          * guess (a glyph name) is Leo's OWN word, mama-child safe. No confident
@@ -4100,6 +4138,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         produced = leo_chain(leo, chain_len, out, max_len);
     }
     if (g_leo_capsule_on) { leo_gamma_absorb(leo); leo_gamma_meaning(leo, prompt); }  /* E-11 diary: record the body that SPOKE + the meaning perceived (post-reply, like santaclaus) */
+    leo_conatus_debt(leo);   /* Damasio: the reply's carried gap raises the standing debt */
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
@@ -4143,6 +4182,19 @@ static int st_r32(FILE *f, int32_t *v) { return fread(v, sizeof *v, 1, f) == 1; 
 static int st_ru(FILE *f, uint32_t *v) { return fread(v, sizeof *v, 1, f) == 1; }
 static int st_r64(FILE *f, uint64_t *v){ return fread(v, sizeof *v, 1, f) == 1; }
 static int st_rf(FILE *f, float *v)    { return fread(v, sizeof *v, 1, f) == 1; }
+/* F-5: reject a state file whose float block carries NaN/inf — one bad float
+ * self-propagates through Kuramoto and kills weighted_sample silently. */
+static int st_finite_arr(const float *a, int n) {
+    for (int i = 0; i < n; i++) if (!isfinite(a[i])) return 0;
+    return 1;
+}
+/* F-5 (Codex): a spore's float fields feed santaclaus resonance/bias — validate them. */
+static int st_finite_spore(const LeoSpore *s) {
+    return st_finite_arr(s->chamber_snap, LEO_N_CHAMBERS) &&
+           st_finite_arr(s->retention_slice, LEO_RET_DIM) &&
+           isfinite(s->pain_snap) && isfinite(s->trauma_snap) && isfinite(s->strength) &&
+           st_finite_arr(s->meaning_snap, GLYPH_COUNT);
+}
 
 /* Persist Leo's observable state. Returns 1 on success, 0 on I/O failure. */
 static int leo_save_state(const Leo *leo, const char *path) {
@@ -4275,7 +4327,7 @@ static int leo_save_state(const Leo *leo, const char *path) {
  * success, 0 on bad magic/version/shape or I/O failure (leaving a usable
  * freshly-init'd Leo). The post-load organism is field-equivalent to the
  * saved one — it speaks identically under the same seed. */
-static int leo_load_state(Leo *leo, const char *path) {
+static int leo_load_state_inner(Leo *leo, const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
     uint32_t magic = 0, version = 0; uint64_t step = 0;
@@ -4292,7 +4344,16 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (!st_r32(f, &n_merges) || n_merges < 0 || n_merges > LEO_MAX_MERGES) { fclose(f); return 0; }
     leo->bpe.n_merges = n_merges;
     if (fread(leo->bpe.merges, sizeof(BPEMerge), (size_t)n_merges, f) != (size_t)n_merges) { fclose(f); return 0; }
-    if (!st_r32(f, &vocab_size) || vocab_size < 256 || vocab_size > LEO_MAX_VOCAB) { fclose(f); return 0; }
+    /* F-1: validate merge contents — new_id == 256+i (vocab grows only by merges,
+     * struct invariant vocab_size == 256 + n_merges), each constituent id precedes
+     * it. A corrupt merge would inject an OOB new_id into the id stream (bpe_encode). */
+    for (int i = 0; i < n_merges; i++) {
+        const BPEMerge *mg = &leo->bpe.merges[i];
+        if (mg->new_id != 256 + i || mg->a < 0 || mg->a >= mg->new_id ||
+            mg->b < 0 || mg->b >= mg->new_id) { fclose(f); return 0; }
+    }
+    if (!st_r32(f, &vocab_size) || vocab_size < 256 || vocab_size > LEO_MAX_VOCAB ||
+        vocab_size != 256 + n_merges) { fclose(f); return 0; }   /* Codex: vocab_size is its own corruption vector — pin the documented invariant (leo.c struct: "= 256 + n_merges") so id<vocab_size == the real merge range, no phantom tokens */
     leo->bpe.vocab_size = vocab_size;
     for (int i = 0; i < vocab_size; i++) {
         int32_t vlen = 0;
@@ -4306,6 +4367,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     int32_t freq_size = 0;
     if (!st_r32(f, &freq_size) || freq_size != leo->cooc.freq_size) { fclose(f); return 0; }
     if (fread(leo->cooc.freq, sizeof(float), (size_t)freq_size, f) != (size_t)freq_size) { fclose(f); return 0; }
+    if (!st_finite_arr(leo->cooc.freq, freq_size)) { fclose(f); return 0; }   /* F-5 (Codex): NaN freq poisons seed scoring + freq-gate */
     uint64_t total = 0;
     if (!st_r64(f, &total)) { fclose(f); return 0; }
     leo->cooc.total_tokens = (long)total;
@@ -4314,6 +4376,8 @@ static int leo_load_state(Leo *leo, const char *path) {
     for (int i = 0; i < cooc_live; i++) {
         int32_t s, d; float c;
         if (!st_r32(f, &s) || !st_r32(f, &d) || !st_rf(f, &c)) { fclose(f); return 0; }
+        if (s < 0 || s >= leo->bpe.vocab_size || d < 0 || d >= leo->bpe.vocab_size ||
+            !isfinite(c) || c <= 0.0f) { fclose(f); return 0; }   /* F-1: id in range, count sane */
         cooc_update(&leo->cooc, s, d, c);
     }
 
@@ -4323,6 +4387,8 @@ static int leo_load_state(Leo *leo, const char *path) {
     for (int i = 0; i < bi_live; i++) {
         int32_t s, d; float c;
         if (!st_r32(f, &s) || !st_r32(f, &d) || !st_rf(f, &c)) { fclose(f); return 0; }
+        if (s < 0 || s >= leo->bpe.vocab_size || d < 0 || d >= leo->bpe.vocab_size ||
+            !isfinite(c) || c <= 0.0f) { fclose(f); return 0; }   /* F-1: id in range, count sane */
         bigram_update(&leo->bigrams, s, d, c);
     }
 
@@ -4332,6 +4398,8 @@ static int leo_load_state(Leo *leo, const char *path) {
     for (int i = 0; i < tri_live; i++) {
         int32_t a, b, c; float cnt;
         if (!st_r32(f, &a) || !st_r32(f, &b) || !st_r32(f, &c) || !st_rf(f, &cnt)) { fclose(f); return 0; }
+        if (a < 0 || a >= leo->bpe.vocab_size || b < 0 || b >= leo->bpe.vocab_size ||
+            c < 0 || c >= leo->bpe.vocab_size || !isfinite(cnt) || cnt <= 0.0f) { fclose(f); return 0; }  /* F-1 */
         trigram_update(&leo->trigrams, a, b, c, cnt);
     }
 
@@ -4341,17 +4409,24 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (fread(leo->chamber_ext, sizeof(float), LEO_N_CHAMBERS, f) != LEO_N_CHAMBERS) { fclose(f); return 0; }
     if (!st_rf(f, &leo->pain) || !st_rf(f, &leo->tension) ||
         !st_rf(f, &leo->debt) || !st_rf(f, &leo->trauma)) { fclose(f); return 0; }
+    /* F-5: no NaN/inf into the field — else it self-propagates through Kuramoto. */
+    if (!st_finite_arr(leo->retention_state, LEO_RET_DIM) ||
+        !st_finite_arr(leo->chamber_act, LEO_N_CHAMBERS) ||
+        !st_finite_arr(leo->chamber_ext, LEO_N_CHAMBERS) ||
+        !isfinite(leo->pain) || !isfinite(leo->tension) ||
+        !isfinite(leo->debt) || !isfinite(leo->trauma)) { fclose(f); return 0; }
+    leo->debt = clampf(leo->debt, 0.0f, LEO_DEBT_MAX);   /* Codex: clamp a finite-but-out-of-range loaded debt before it reaches the ASK gate/temp */
 
     /* heard memory */
     int32_t h_live = 0;
     if (!st_r32(f, &h_live) || h_live < 0) { fclose(f); return 0; }
     for (int i = 0; i < h_live; i++) {
         int32_t cnt = 0, wl = 0; char w[LEO_HEARD_WORDLEN + 1];
-        if (!st_r32(f, &cnt) || !st_r32(f, &wl) || wl < 0 || wl >= LEO_HEARD_WORDLEN) { fclose(f); return 0; }
+        if (!st_r32(f, &cnt) || !st_r32(f, &wl) || wl < 0 || wl >= LEO_HEARD_WORDLEN || cnt <= 0) { fclose(f); return 0; }  /* F-8 (Codex): cnt<=0 is a malformed record -> reject, consistent with the loader */
         if (wl > 0 && fread(w, 1, (size_t)wl, f) != (size_t)wl) { fclose(f); return 0; }
         w[wl] = 0;
         int slot = leo_heard_slot(&leo->heard, w);
-        if (slot >= 0) {
+        if (slot >= 0) {   /* cnt>0 already enforced at the record gate (F-8) */
             strncpy(leo->heard.e[slot].word, w, LEO_HEARD_WORDLEN - 1);
             leo->heard.e[slot].word[LEO_HEARD_WORDLEN - 1] = 0;
             leo->heard.e[slot].count = cnt;
@@ -4377,7 +4452,7 @@ static int leo_load_state(Leo *leo, const char *path) {
         leo->n_spores = n_sp;
         int32_t n_se = 0, se_ptr = 0;
         if (!st_r32(f, &n_se) || n_se < 0 || n_se > LEO_SEA_MAX) { fclose(f); return 0; }
-        if (!st_r32(f, &se_ptr) || se_ptr < 0 || se_ptr > LEO_SEA_MAX) { fclose(f); return 0; }
+        if (!st_r32(f, &se_ptr) || se_ptr < 0 || se_ptr >= LEO_SEA_MAX) { fclose(f); return 0; }  /* F-5 (Codex): se_ptr indexes sea[LEO_SEA_MAX], valid 0..MAX-1 */
         if (n_se > 0) {
             if (version >= 9) {
                 if (fread(leo->sea, sizeof(LeoSpore), (size_t)n_se, f) != (size_t)n_se) { fclose(f); return 0; }
@@ -4392,6 +4467,9 @@ static int leo_load_state(Leo *leo, const char *path) {
         }
         leo->n_sea = n_se;
         leo->sea_ptr = se_ptr;
+        /* F-5 (Codex): reject non-finite floats in any spore — they poison santaclaus resonance/bias */
+        for (int i = 0; i < n_sp; i++) if (!st_finite_spore(&leo->spores[i])) { fclose(f); return 0; }
+        for (int i = 0; i < n_se; i++) if (!st_finite_spore(&leo->sea[i]))    { fclose(f); return 0; }
     }
 
     /* A.4 R4: the RAE learned selector weights (raw POD round-trip) */
@@ -4404,6 +4482,10 @@ static int leo_load_state(Leo *leo, const char *path) {
         if (!st_rf(f, &b2) || !st_r64(f, &obs)) { fclose(f); return 0; }
         leo->rae.b2 = b2;
         leo->rae.observations = (long)obs;
+        if (!st_finite_arr(&leo->rae.w1[0][0], LEO_RAE_HID * LEO_RAE_IN) ||
+            !st_finite_arr(leo->rae.b1, LEO_RAE_HID) ||
+            !st_finite_arr(leo->rae.w2, LEO_RAE_HID) ||
+            !isfinite(leo->rae.b2)) { fclose(f); return 0; }   /* F-5 (Codex): NaN RAE weights -> NaN --rae score */
     }
 
     /* A.5 I2: the School concept map (raw POD round-trip) */
@@ -4413,9 +4495,13 @@ static int leo_load_state(Leo *leo, const char *path) {
         if (n_l > 0) {
             if (fread(leo->school.learned, LEO_HEARD_WORDLEN, (size_t)n_l, f) != (size_t)n_l) { fclose(f); return 0; }
             if (fread(leo->school.learned_glyph, sizeof(int8_t), (size_t)n_l, f) != (size_t)n_l) { fclose(f); return 0; }
+            /* F-8: raw fread gives no NUL guarantee inside the 48-byte record — strcmp
+             * in leo_school_is_learned/leo_semtok_word would read past it. Force it. */
+            for (int i = 0; i < n_l; i++) leo->school.learned[i][LEO_HEARD_WORDLEN - 1] = 0;
         }
         leo->school.n_learned = n_l;
         if (fread(leo->school.pending, 1, LEO_HEARD_WORDLEN, f) != LEO_HEARD_WORDLEN) { fclose(f); return 0; }
+        leo->school.pending[LEO_HEARD_WORDLEN - 1] = 0;   /* F-8: NUL-terminate */
     }
 
     /* A.6 E-5 (v5): the body's mood + the open guess */
@@ -4429,6 +4515,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     /* klaus-memory (v6): the scars. A v5 file lacks them → they stay 0 (leo_init's memset). */
     if (version >= 6) {
         if (fread(leo->scar, sizeof(float), LEO_N_CHAMBERS, f) != LEO_N_CHAMBERS) { fclose(f); return 0; }
+        if (!st_finite_arr(leo->scar, LEO_N_CHAMBERS)) { fclose(f); return 0; }   /* F-5 */
     }
 
     /* E-11 γ-capsule (v7): a v5/v6 file lacks it → gamma stays 0 + unprimed, so it primes from the
@@ -4436,6 +4523,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (version >= 7) {
         int32_t primed = 0;
         if (fread(leo->gamma, sizeof(float), LEO_GAMMA_DIM, f) != LEO_GAMMA_DIM) { fclose(f); return 0; }
+        if (!st_finite_arr(leo->gamma, LEO_GAMMA_DIM)) { fclose(f); return 0; }   /* F-5 */
         if (!st_r32(f, &primed)) { fclose(f); return 0; }
         leo->gamma_primed = (uint8_t)(primed ? 1 : 0);
     }
@@ -4444,6 +4532,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     if (version >= 8) {
         if (fread(leo->gamma_meaning, sizeof(float), GLYPH_COUNT, f) != GLYPH_COUNT) { fclose(f); return 0; }
         if (!st_rf(f, &leo->gamma_gap)) { fclose(f); return 0; }
+        if (!st_finite_arr(leo->gamma_meaning, GLYPH_COUNT) || !isfinite(leo->gamma_gap)) { fclose(f); return 0; }   /* F-5 */
     }
 
     fclose(f);
@@ -4451,6 +4540,16 @@ static int leo_load_state(Leo *leo, const char *path) {
     leo_build_chamber_tags(leo);
     leo_supertok_scan(leo);
     return 1;
+}
+
+/* Contract (docstring above): a FAILED load leaves a fresh, usable Leo — not a
+ * partially-overwritten one. Codex: a late reject had left leo half-loaded from the
+ * bad file, and the caller's "fresh start" then ingested the corpus on top of that
+ * residue. Wipe to fresh on any failure so the guarantee actually holds. */
+static int leo_load_state(Leo *leo, const char *path) {
+    int r = leo_load_state_inner(leo, path);
+    if (!r) { leo_free(leo); leo_init(leo); }
+    return r;
 }
 
 /* ========================================================================
@@ -4461,13 +4560,16 @@ static int leo_load_state(Leo *leo, const char *path) {
 static char *read_file(const char *path, long *out_len) {
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
-    fseek(f, 0, SEEK_END);
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
     long len = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    if (len < 0) { fclose(f); return NULL; }   /* F-7 (Fable): ftell == -1 on a pipe/non-regular file (--corpus /dev/stdin) would make malloc(0) + a (size_t)-1 fread overflow the heap */
+    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return NULL; }
     char *buf = malloc((size_t)len + 1);
     if (!buf) { fclose(f); return NULL; }
     size_t got = fread(buf, 1, (size_t)len, f);
     fclose(f);
+    if (got < (size_t)len)                      /* F-7: short read — don't pass a truncated corpus off as whole */
+        fprintf(stderr, "[leo] WARNING: read_file('%s') short read (%zu of %ld bytes).\n", path, got, len);
     buf[got] = 0;
     if (out_len) *out_len = (long)got;
     return buf;
@@ -4529,6 +4631,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
         else if (!strcmp(argv[i], "--no-be")) g_leo_be_on = 0;
         else if (!strcmp(argv[i], "--no-ask")) g_leo_ask_on = 0;
+        else if (!strcmp(argv[i], "--no-conatus")) g_leo_conatus_on = 0;
         else if (!strcmp(argv[i], "--mode") && i + 1 < argc) mode_force = leo_mode_from_name(argv[++i]);
         else if (!strcmp(argv[i], "--aml") && i + 1 < argc) aml_script = argv[++i];
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;

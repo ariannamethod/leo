@@ -263,6 +263,169 @@ int main(void) {
         leo_free(&a); leo_free(&b); leo_free(&c);
     }
 
+    /* 13b. corrupt state -> load REJECTS (Fable F-1/F-5 hardening). A bad id or a
+     *      NaN float in leo.state used to flow OOB into the tables or self-propagate
+     *      through Kuramoto. The loader must reject the file (return 0); a clean file
+     *      must still load. Robust offsets: merges[0].new_id at fixed head offset 28,
+     *      gamma_gap is the final float (size-4) in a v9 state. */
+    {
+        const char *corpus =
+            "The warm light fell on his mother's hands. Leo loves the warm light. "
+            "His mother holds him close. The rain comes at night on the window.";
+        Leo a; leo_init(&a);
+        for (int r = 0; r < 4; r++) leo_ingest(&a, corpus);
+        leo_build_chamber_tags(&a); leo_supertok_scan(&a);
+        const char *good = "/tmp/leo_state_good.bin";
+        CHECK(leo_save_state(&a, good) == 1 && a.bpe.n_merges >= 1,
+              "corrupt: baseline save ok, >=1 merge");
+
+        long sz = 0; unsigned char *buf = NULL;
+        FILE *rf = fopen(good, "rb");
+        if (rf) {
+            fseek(rf, 0, SEEK_END); sz = ftell(rf); fseek(rf, 0, SEEK_SET);
+            if (sz > 0) { buf = malloc((size_t)sz);
+                if (buf && fread(buf, 1, (size_t)sz, rf) != (size_t)sz) { free(buf); buf = NULL; } }
+            fclose(rf);
+        }
+
+        Leo b; leo_init(&b);
+        CHECK(buf != NULL && leo_load_state(&b, good) == 1,
+              "corrupt: clean file still loads (return 1)");
+        leo_free(&b);
+
+        /* F-1: OOB merge new_id at head offset 28 -> reject */
+        if (buf && sz > 32) {
+            unsigned char *bad = malloc((size_t)sz);
+            if (bad) {
+                memcpy(bad, buf, (size_t)sz);
+                uint32_t junk = 0x0F0F0F0Fu; memcpy(bad + 28, &junk, sizeof junk);
+                const char *bp = "/tmp/leo_state_bad_id.bin";
+                FILE *wf = fopen(bp, "wb");
+                if (wf) { size_t wn = fwrite(bad, 1, (size_t)sz, wf); (void)wn; fclose(wf); }
+                Leo c; leo_init(&c);
+                CHECK(leo_load_state(&c, bp) == 0, "corrupt F-1: OOB merge new_id -> load rejects");
+                leo_free(&c); free(bad);
+            }
+        }
+
+        /* F-5: NaN in the final float (gamma_gap, offset size-4) -> reject */
+        if (buf && sz >= 4) {
+            unsigned char *bad = malloc((size_t)sz);
+            if (bad) {
+                memcpy(bad, buf, (size_t)sz);
+                uint32_t qnan = 0x7FC00000u; memcpy(bad + (size_t)(sz - 4), &qnan, sizeof qnan);
+                const char *bp = "/tmp/leo_state_bad_nan.bin";
+                FILE *wf = fopen(bp, "wb");
+                if (wf) { size_t wn = fwrite(bad, 1, (size_t)sz, wf); (void)wn; fclose(wf); }
+                Leo c; leo_init(&c);
+                CHECK(leo_load_state(&c, bp) == 0, "corrupt F-5: NaN gamma_gap -> load rejects");
+                leo_free(&c); free(bad);
+            }
+        }
+
+        /* Codex: inflate vocab_size (offset 20 + 12*n_merges) past 256+n_merges -> reject */
+        if (buf && sz > 20) {
+            int32_t nm = 0; memcpy(&nm, buf + 16, sizeof nm);
+            long voff = 20 + 12L * nm;
+            if (nm >= 0 && voff + 4 <= sz) {
+                unsigned char *bad = malloc((size_t)sz);
+                if (bad) {
+                    memcpy(bad, buf, (size_t)sz);
+                    int32_t vs = 0; memcpy(&vs, bad + voff, sizeof vs);
+                    vs += 100; memcpy(bad + voff, &vs, sizeof vs);   /* vocab_size != 256+n_merges */
+                    const char *bp = "/tmp/leo_state_bad_vocab.bin";
+                    FILE *wf = fopen(bp, "wb");
+                    if (wf) { size_t wn = fwrite(bad, 1, (size_t)sz, wf); (void)wn; fclose(wf); }
+                    Leo c; leo_init(&c);
+                    CHECK(leo_load_state(&c, bp) == 0, "corrupt (Codex): inflated vocab_size -> load rejects");
+                    leo_free(&c); free(bad);
+                }
+            }
+        }
+
+        /* F-5 (Codex): NaN poked into freq / a spore / RAE weight -> save -> load rejects.
+         * Robust (no byte offsets): save writes the field, load must reject it. */
+        { Leo sv; leo_init(&sv);
+          if (leo_load_state(&sv, good) == 1) {
+              sv.cooc.freq[0] = (float)NAN; leo_save_state(&sv, "/tmp/leo_nan_freq.bin");
+              Leo c; leo_init(&c);
+              CHECK(leo_load_state(&c, "/tmp/leo_nan_freq.bin") == 0, "corrupt (Codex): NaN in freq -> load rejects");
+              leo_free(&c); }
+          leo_free(&sv); }
+        { Leo sv; leo_init(&sv);
+          if (leo_load_state(&sv, good) == 1) {
+              sv.n_spores = 1; sv.spores[0].strength = (float)NAN; leo_save_state(&sv, "/tmp/leo_nan_spore.bin");
+              Leo c; leo_init(&c);
+              CHECK(leo_load_state(&c, "/tmp/leo_nan_spore.bin") == 0, "corrupt (Codex): NaN in spore -> load rejects");
+              leo_free(&c); }
+          leo_free(&sv); }
+        { Leo sv; leo_init(&sv);
+          if (leo_load_state(&sv, good) == 1) {
+              sv.rae.b2 = (float)NAN; leo_save_state(&sv, "/tmp/leo_nan_rae.bin");
+              Leo c; leo_init(&c);
+              CHECK(leo_load_state(&c, "/tmp/leo_nan_rae.bin") == 0, "corrupt (Codex): NaN in RAE weight -> load rejects");
+              leo_free(&c); }
+          leo_free(&sv); }
+
+        /* #1 (Codex): a FAILED load must leave a FRESH leo, not a half-overwritten one.
+         * leo_state_bad_nan.bin rejects LATE (valid until the final gamma_gap), so without
+         * the wrapper the organism would keep the bad file's bpe/cooc prefix. */
+        { Leo sv; leo_init(&sv);
+          for (int r = 0; r < 4; r++) leo_ingest(&sv, corpus);   /* make it non-fresh (vocab > 256) */
+          int rej = (leo_load_state(&sv, "/tmp/leo_state_bad_nan.bin") == 0);
+          CHECK(rej && sv.bpe.vocab_size == 256 && sv.bpe.n_merges == 0 && sv.cooc.n_entries == 0,
+                "corrupt (Codex): failed load leaves a FRESH leo");
+          leo_free(&sv); }
+        free(buf); leo_free(&a);
+    }
+
+    /* 13c. Fable F-2/F-5 hardening units: out-of-range candidate is gated; clampf
+     *      swallows NaN to lo (runtime 2nd-line defense behind the load-time scan). */
+    {
+        CHECK(clampf((float)NAN, 0.0f, 1.0f) == 0.0f, "F-5: clampf(NaN) -> lo");
+        CHECK(clampf(5.0f, 0.0f, 1.0f) == 1.0f && clampf(-5.0f, 0.0f, 1.0f) == 0.0f &&
+              clampf(0.5f, 0.0f, 1.0f) == 0.5f, "F-5: clampf finite unchanged");
+        Leo lg; leo_init(&lg);
+        for (int r = 0; r < 2; r++) leo_ingest(&lg, "the warm light and his mother");
+        CandCollector cc; memset(&cc, 0, sizeof cc); cc.bpe = &lg.bpe;
+        CHECK(cand_gate_reject(&cc, lg.bpe.vocab_size + 5) == 1 &&
+              cand_gate_reject(&cc, -1) == 1, "F-2: out-of-range candidate is gated");
+        /* F-6: unnormalized powf overflows; cand_temper stays finite, max -> 1, order kept. */
+        CHECK(!isfinite(powf(400.0f, 20.0f)), "F-6: raw powf(400,20) overflows to inf (the bug)");
+        float tsc[3] = { 400.0f, 50.0f, 1.0f };
+        cand_temper(tsc, 3, 20.0f);
+        CHECK(isfinite(tsc[0]) && isfinite(tsc[1]) && isfinite(tsc[2]) && tsc[0] == 1.0f &&
+              tsc[1] < tsc[0] && tsc[2] < tsc[1], "F-6: cand_temper finite, normalized (max->1, order kept)");
+        leo_free(&lg);
+    }
+
+    /* 13d. Damasio conatus: the not-knowing (gamma_gap) becomes a homeostatic debt —
+     *      it accumulates across breaths, a taught word relieves it, and --no-conatus
+     *      (g_leo_conatus_on=0) leaves debt inert (the byte-identical pre-conatus path). */
+    {
+        Leo cv; leo_init(&cv);
+        for (int r = 0; r < 3; r++) leo_ingest(&cv, "the warm light and his mother and the rain");
+
+        /* conatus ON: a carried gap accumulates into debt across breaths */
+        g_leo_conatus_on = 1;
+        cv.debt = 0.0f; cv.gamma_gap = 0.5f;   /* a real, standing not-knowing */
+        for (int t = 0; t < 5; t++) leo_conatus_debt(&cv);
+        CHECK(cv.debt > 0.0f, "conatus: a standing gamma_gap accumulates into debt");
+
+        /* a taught word relieves it — the first good-for-him event */
+        float before = cv.debt;
+        leo_school_learn(&cv, "serendipity", 5);
+        CHECK(cv.debt < before, "conatus: a taught word relieves the debt");
+
+        /* --no-conatus: debt only decays, never accumulates from the gap (inert) */
+        g_leo_conatus_on = 0;
+        cv.debt = 0.0f; cv.gamma_gap = 0.5f;
+        for (int t = 0; t < 5; t++) leo_conatus_debt(&cv);
+        CHECK(cv.debt == 0.0f, "conatus: --no-conatus leaves debt inert (byte-identical path)");
+        g_leo_conatus_on = 1;   /* restore default */
+        leo_free(&cv);
+    }
+
     /* 14. multi-turn continuity (the --chat engine path): the field LIVES across
      *     turns. Repeating a word makes Leo HOLD it (heard-count climbs past the
      *     trace threshold), and step advances each turn — the dedication's
