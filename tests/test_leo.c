@@ -399,6 +399,33 @@ int main(void) {
         leo_free(&lg);
     }
 
+    /* 13d. Damasio conatus: the not-knowing (gamma_gap) becomes a homeostatic debt —
+     *      it accumulates across breaths, a taught word relieves it, and --no-conatus
+     *      (g_leo_conatus_on=0) leaves debt inert (the byte-identical pre-conatus path). */
+    {
+        Leo cv; leo_init(&cv);
+        for (int r = 0; r < 3; r++) leo_ingest(&cv, "the warm light and his mother and the rain");
+
+        /* conatus ON: a carried gap accumulates into debt across breaths */
+        g_leo_conatus_on = 1;
+        cv.debt = 0.0f; cv.gamma_gap = 0.5f;   /* a real, standing not-knowing */
+        for (int t = 0; t < 5; t++) leo_conatus_debt(&cv);
+        CHECK(cv.debt > 0.0f, "conatus: a standing gamma_gap accumulates into debt");
+
+        /* a taught word relieves it — the first good-for-him event */
+        float before = cv.debt;
+        leo_school_learn(&cv, "serendipity", 5);
+        CHECK(cv.debt < before, "conatus: a taught word relieves the debt");
+
+        /* --no-conatus: debt only decays, never accumulates from the gap (inert) */
+        g_leo_conatus_on = 0;
+        cv.debt = 0.0f; cv.gamma_gap = 0.5f;
+        for (int t = 0; t < 5; t++) leo_conatus_debt(&cv);
+        CHECK(cv.debt == 0.0f, "conatus: --no-conatus leaves debt inert (byte-identical path)");
+        g_leo_conatus_on = 1;   /* restore default */
+        leo_free(&cv);
+    }
+
     /* 14. multi-turn continuity (the --chat engine path): the field LIVES across
      *     turns. Repeating a word makes Leo HOLD it (heard-count climbs past the
      *     trace threshold), and step advances each turn — the dedication's

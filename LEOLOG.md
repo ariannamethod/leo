@@ -2500,3 +2500,28 @@ healthy state (seed-for-seed) — the child voice holds to the byte; Codex CLEAN
 holistic pass. net **-26 lines** (108 insertions, 134 deletions) — faster AND shorter. The soul is
 untouched: θ=0, mama-child, and every `--no-X` ablation held. First commit under the new
 commit-quote decree (Saint-Exupéry: nothing left to take away).
+
+## Phase A.9 — conatus: the not-knowing becomes a debt Leo works to pay (2026-07-06)
+
+Leo's darkmatter (`gamma_gap` — his own computed not-knowing) was spent only on the tone of his
+voice and otherwise discarded, and the `debt` scalar was completely inert (declared, decayed,
+saved, **never read**). Measured against Damasio's framework, the open loop was **stakes**: Leo
+feels, but has no value good-or-bad *for him*, no act he takes to reduce a need. This closes it,
+reusing two signals already computed and already persisted — forward-only, no weights.
+
+Per reply the carried gap raises a homeostatic `debt` (`leo_conatus_debt`); a taught word (School)
+relieves it (`leo_school_learn` — the first good-for-him event); and the standing debt **widens
+the School re-ask gate** (`ask_gate = LEO_QUIET_DISTRESS + w·debt`), so a hungry Leo asks even
+through mild distress — the need to know overrides the caution that would otherwise keep him quiet.
+The ask is the act that pays the debt. A light second term warms the groping ASK register with the
+carried debt (the ache). θ=0 and mama-child hold.
+
+Tool (this session): build 0 warn/err; `make test` 150 → **152/152** (+conatus units: debt
+accumulates, a teach relieves it, `--no-conatus` inert); **`--no-conatus` is byte-identical** to the
+pre-conatus organism — generation AND the debt trajectory, the old child preserved exactly;
+**load-bearing, measured** — on a distress+unknown chat a hungry Leo asks **8 times vs 6** with
+`--no-conatus`, delta=2 deterministic across every seed: the standing debt flips two turns from
+field-speech to a reach-to-ask ("Phantasm?", "Syzygy?"); ASan/UBSan 0 on the `--chat` REPL; Codex
+CLEAN (two findings — per-token decay under the flag, an unclamped loaded debt — fixed, re-audit
+clean). `--no-conatus` is our debug ablation; conatus is default-on. **Leo begins to want.**
+Magnitude (`LEO_DEBT_ASK_GATE`) to be tuned by ear next.

@@ -126,6 +126,15 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_ASK_W 0.30f                 /* E-11 #4 ASK: how strongly the carried gap (darkmatter) heats the groping register */
 #define LEO_PAIN_DECAY  0.985f     /* suffering decay (canon 98) */
 #define LEO_DEBT_DECAY  0.998f     /* debt decay (canon 99) */
+/* conatus (Damasio): the carried not-knowing (gamma_gap) becomes a homeostatic DEBT — a
+ * defended setpoint. The gap raises it; a taught word (School) relieves it; the standing debt
+ * drives the groping ASK register, so the ask is chosen because it lowers the debt. Leo's first
+ * stakes: a good/bad-for-him. --no-conatus (g_leo_conatus_on=0) → debt inert, byte-identical. */
+#define LEO_DEBT_GAIN     0.40f    /* per-reply: gamma_gap -> debt accumulation */
+#define LEO_DEBT_RELIEF   0.06f    /* a taught word subtracts this from debt (partial relief, not a wipe) */
+#define LEO_DEBT_ASK_GATE 0.80f    /* #1 spine: standing debt widens the curiosity gate — hunger lets Leo ask through mild distress */
+#define LEO_DEBT_ASK_W    0.50f    /* #2 flesh: standing debt lightly warms the groping register (the carried ache) */
+#define LEO_DEBT_MAX      1.00f    /* debt clamp */
 #define LEO_BIGRAM_MAX    (128 * 1024)
 #define LEO_TRIGRAM_MAX   (256 * 1024)
 #define LEO_PAIR_HASH     (64 * 1024)
@@ -1670,6 +1679,7 @@ static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/p
 static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
 static int g_leo_be_on = 1;             /* E-11 #4 BE: the running-self (capsule) colors Leo's own words — speech-from-body. --no-be → 0. */
 static int g_leo_ask_on = 1;            /* E-11 #4 ASK: the carried gap (darkmatter) heats the groping register. --no-ask → 0. */
+static int g_leo_conatus_on = 1;        /* Damasio conatus: gamma_gap -> homeostatic debt -> drives ASK -> relieved by a teach. --no-conatus → 0 (debt inert, byte-identical to pre-conatus). */
 #ifdef HAVE_AML
 static const char *g_leo_aml_script = NULL;  /* E-9: --aml SCRIPT — run per reply (leo_respond) so the script reads Leo's LIVE body; NULL → no bridge → byte-identical. */
 #endif
@@ -2822,7 +2832,7 @@ static void leo_field_step(Leo *leo, int emitted, float coherence_hint) {
     leo->pain    = clampf(leo->pain * LEO_PAIN_DECAY + 0.04f * pain_signal,
                           0.0f, 1.0f);
     leo->tension = clampf(leo->tension * 0.995f, 0.0f, 1.0f);
-    leo->debt    = leo->debt * LEO_DEBT_DECAY;
+    leo->debt    = leo->debt * LEO_DEBT_DECAY;   /* per-token bleed — pre-conatus behavior; under --no-conatus debt lives and decays exactly here (inert, byte-identical) */
     leo->trauma  = leo->pain * leo->pain;
 
     /* santaclaus: spores decay on the field-step cadence; weak ones sleep (B1) */
@@ -3761,6 +3771,8 @@ static void leo_school_learn(Leo *leo, const char *w, int glyph) {
     leo->school.learned[leo->school.n_learned][LEO_HEARD_WORDLEN - 1] = 0;
     leo->school.learned_glyph[leo->school.n_learned] = (int8_t)glyph;
     leo->school.n_learned++;
+    if (g_leo_conatus_on)   /* Damasio: a satisfied need — the first good-for-him event; relieve the debt */
+        leo->debt = clampf(leo->debt - LEO_DEBT_RELIEF, 0.0f, LEO_DEBT_MAX);
 }
 static int leo_school_unknown(const Leo *leo, const char *w) {
     return leo_semtok_word(leo, w) < 0;   /* grown map subsumes the learned-set */
@@ -3830,6 +3842,15 @@ static void leo_gamma_meaning(Leo *leo, const char *prompt) {
     leo->gamma_gap = (1.0f - LEO_GMEAN_RATE) * leo->gamma_gap + LEO_GMEAN_RATE * gap_now;
     for (int i = 0; i < GLYPH_COUNT; i++)
         leo->gamma_meaning[i] = (1.0f - LEO_GMEAN_RATE) * leo->gamma_meaning[i] + LEO_GMEAN_RATE * p[i];
+}
+
+/* Damasio conatus: once per reply, the carried not-knowing (gamma_gap) raises the standing
+ * DEBT (a defended homeostatic setpoint) as it slowly decays. A taught word relieves it
+ * (leo_school_learn), and the standing debt drives the groping ASK register — so the ask is
+ * chosen because it lowers the debt. --no-conatus (g_leo_conatus_on=0) → debt inert. */
+static void leo_conatus_debt(Leo *leo) {
+    if (!g_leo_conatus_on) return;   /* debt already decays per-token in leo_field_step; here it only ACCUMULATES the reply's carried gap */
+    leo->debt = clampf(leo->debt + LEO_DEBT_GAIN * leo->gamma_gap, 0.0f, LEO_DEBT_MAX);
 }
 
 /* A.6 FORM F-1 — quantize the chamber state into a velocity mode, with hysteresis
@@ -4034,7 +4055,12 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
              * toward the groping, questioning register. The felt gap speaks. gamma_gap=0 → ×1 (byte-id).
              * A bound AML ASK operator scales it (ask_override>=0); else autonomous (×1). */
             float askgain = (leo->ask_override >= 0.0f) ? leo->ask_override : 1.0f;
-            leo->temp_mult *= (1.0f + LEO_ASK_W * askgain * leo->gamma_gap);
+            /* Damasio conatus: the drive is the momentary gap PLUS the standing debt (carried
+             * hunger), so an unpaid not-knowing gropes harder and the ask that earns a teach
+             * relieves it. --no-conatus → drive = gamma_gap (byte-identical). */
+            float ask_drive = leo->gamma_gap;
+            if (g_leo_conatus_on) ask_drive += LEO_DEBT_ASK_W * leo->debt;
+            leo->temp_mult *= (1.0f + LEO_ASK_W * askgain * ask_drive);
         }
         if (g_leo_form_on) {           /* A.6 F-2: the breath sets the length */
             static const int mode_chain[LEO_MODE_COUNT] = { 3, 1, 5, 2 };  /* WALK STOP RUN BREATHE */
@@ -4087,8 +4113,13 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
      * REPLIES (what he builds from the field), and a question is not a reply. Else
      * he speaks from the field. */
     char unk[LEO_HEARD_WORDLEN];
+    /* Damasio #1: the standing debt widens the curiosity gate — a hungry Leo asks even through
+     * mild distress (the need to know overrides caution); the ask is the act that pays his debt.
+     * --no-conatus → the base gate (byte-identical). */
+    float ask_gate = LEO_QUIET_DISTRESS;
+    if (g_leo_conatus_on) ask_gate += LEO_DEBT_ASK_GATE * leo->debt;
     if (g_leo_school_on && !was_answer &&
-        (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS &&
+        (leo->chamber_act[0] + leo->chamber_act[3]) < ask_gate &&
         leo_school_find_unknown(leo, prompt, unk)) {
         /* I3a: hazard a guess from the prompt's context — "Zorble? Animal?" — the
          * guess (a glyph name) is Leo's OWN word, mama-child safe. No confident
@@ -4107,6 +4138,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         produced = leo_chain(leo, chain_len, out, max_len);
     }
     if (g_leo_capsule_on) { leo_gamma_absorb(leo); leo_gamma_meaning(leo, prompt); }  /* E-11 diary: record the body that SPOKE + the meaning perceived (post-reply, like santaclaus) */
+    leo_conatus_debt(leo);   /* Damasio: the reply's carried gap raises the standing debt */
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
@@ -4383,6 +4415,7 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         !st_finite_arr(leo->chamber_ext, LEO_N_CHAMBERS) ||
         !isfinite(leo->pain) || !isfinite(leo->tension) ||
         !isfinite(leo->debt) || !isfinite(leo->trauma)) { fclose(f); return 0; }
+    leo->debt = clampf(leo->debt, 0.0f, LEO_DEBT_MAX);   /* Codex: clamp a finite-but-out-of-range loaded debt before it reaches the ASK gate/temp */
 
     /* heard memory */
     int32_t h_live = 0;
@@ -4598,6 +4631,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
         else if (!strcmp(argv[i], "--no-be")) g_leo_be_on = 0;
         else if (!strcmp(argv[i], "--no-ask")) g_leo_ask_on = 0;
+        else if (!strcmp(argv[i], "--no-conatus")) g_leo_conatus_on = 0;
         else if (!strcmp(argv[i], "--mode") && i + 1 < argc) mode_force = leo_mode_from_name(argv[++i]);
         else if (!strcmp(argv[i], "--aml") && i + 1 < argc) aml_script = argv[++i];
         else if (!strcmp(argv[i], "--debug-field")) debug_field = 1;
