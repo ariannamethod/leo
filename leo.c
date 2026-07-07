@@ -154,6 +154,7 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_LEX_DECAY_RATE       0.9985f
 #define LEO_LEX_PRUNE_THRESHOLD  0.10f
 #define LEO_LEX_PRUNE_LOAD       0.80f
+#define LEO_RETAG_INTERVAL       8       /* L-3 (Fable): rebuild chamber_tag + supers at most every N replies, when the vocab has grown */
 
 /* ========================================================================
  * MATH UTILITIES
@@ -1412,6 +1413,8 @@ typedef struct {
      * token by chamber_act[tag] — Leo's felt state surfaces his OWN emotion
      * words. All in leo.c; silent fallback when unbuilt/untagged. */
     uint8_t     *chamber_tag;
+    int          tagged_vocab;   /* L-3 (Fable): vocab_size at the last chamber_tag/supers rebuild — words learned in --chat become felt once re-tagged */
+    int          retag_tick;     /* L-3: per-reply throttle for that rebuild */
     /* suffering scalars (canon 1293-1296,1312). pain/trauma decay per step;
      * NOT field-dissonance (our presence dissonance is separate, leo.c:2142). */
     float        pain, tension, debt, trauma;
@@ -2585,6 +2588,7 @@ static void leo_build_chamber_tags(Leo *leo) {
             }
         }
     }
+    leo->tagged_vocab = V;   /* L-3 (Fable): watermark — leo_breath re-tags only when vocab grows past this */
 }
 
 /* One Kuramoto step across all chambers, clamped to [0,1]. Called from
@@ -3700,6 +3704,17 @@ static void leo_breath(Leo *leo) {
     if (leo->trigrams.capacity > 0 &&
         (float)leo->trigrams.n_entries / (float)leo->trigrams.capacity > LEO_LEX_PRUNE_LOAD)
         trigram_prune_rebuild(&leo->trigrams, LEO_LEX_PRUNE_THRESHOLD);
+    /* L-3 (Fable): the body is blind to words learned in --chat unless the derived tables are
+     * rebuilt. When the online merges have grown the vocab, re-tag emotion words + re-crystallize
+     * super-tokens (throttled to every LEO_RETAG_INTERVAL replies), so a word first heard in
+     * conversation becomes felt (register/BE) and phrase-able. Gated on vocab GROWTH, so --gen
+     * (no ingest, no growth) never triggers it — byte-identical there. */
+    leo->retag_tick++;
+    if (leo->bpe.vocab_size > leo->tagged_vocab && leo->retag_tick >= LEO_RETAG_INTERVAL) {
+        leo_build_chamber_tags(leo);   /* re-tags all + updates tagged_vocab */
+        leo_supertok_scan(leo);
+        leo->retag_tick = 0;
+    }
 }
 
 /* A.5 School helpers — the reversed role. A content word with no glyph

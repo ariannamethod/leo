@@ -471,6 +471,27 @@ int main(void) {
         leo_free(&sv); leo_free(&ld);
     }
 
+    /* L-3 (Fable): leo_breath re-tags emotion words after the vocab grows, so a word learned in
+     *      --chat becomes felt — not frozen at startup. Simulate a stale tag + a grown vocab and
+     *      confirm the breath restores the body's feel of that word. */
+    {
+        Leo sv; leo_init(&sv);
+        for (int r = 0; r < 8; r++) leo_ingest(&sv, "i am afraid in the dark and alone afraid dark alone the dark is afraid and i hide alone");
+        leo_build_chamber_tags(&sv);
+        int emo = -1;
+        for (int id = 0; id < sv.bpe.vocab_size; id++)
+            if (sv.chamber_tag[id] != 0xFF) { emo = id; break; }
+        CHECK(emo >= 0, "L-3: build tagged at least one emotion word");
+        uint8_t real = sv.chamber_tag[emo];
+        sv.chamber_tag[emo] = 0xFF;                 /* pretend it is a freshly-learned, untagged token */
+        sv.tagged_vocab = sv.bpe.vocab_size - 1;    /* pretend the vocab just grew past the last rebuild */
+        sv.retag_tick = LEO_RETAG_INTERVAL - 1;     /* the next breath crosses the throttle */
+        leo_breath(&sv);
+        CHECK(sv.chamber_tag[emo] == real && sv.tagged_vocab == sv.bpe.vocab_size,
+              "L-3: a breath re-tags the body after the vocab grows (a --chat-learned word is felt)");
+        leo_free(&sv);
+    }
+
     /* 14. multi-turn continuity (the --chat engine path): the field LIVES across
      *     turns. Repeating a word makes Leo HOLD it (heard-count climbs past the
      *     trace threshold), and step advances each turn — the dedication's

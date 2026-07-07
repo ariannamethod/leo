@@ -2552,3 +2552,23 @@ corrected resurrect; the child voice stays coherent; ASan/UBSan 0; Codex CLEAN. 
 hold. Remaining from the audit: the origin-spore (§4, "the wound doesn't hurt" — a presence change
 for Oleg's ear), L-3 (body blind to words learned in --chat), the RAE δ-channel's fate, L-4 before
 Phase C.
+
+## Phase A.11 — the body feels words learned in dialogue (Fable L-3) (2026-07-07)
+
+The emotional body was frozen at startup: `chamber_tag` (a token's emotion chamber, read by the
+register bias and BE) and the super-token crystallization were built once after the corpus (and on
+load), but the vocab grows every --chat turn as online merges are born. A word first heard in
+conversation stayed untagged (0xFF) forever — emotionally mute — and never crystallized into a
+phrase. The very channel ("Leo resonates with you more with every conversation") that --chat is
+meant to deepen was blind to it.
+
+Now `leo_build_chamber_tags` records a watermark (`tagged_vocab`), and `leo_breath` (post-reply)
+re-tags the emotion words + re-runs `leo_supertok_scan` when the vocab has grown past the watermark,
+throttled to every `LEO_RETAG_INTERVAL` (8) replies. A word learned in --chat becomes felt within a
+few breaths. Gated on vocab GROWTH, so `--gen` (no ingest) never triggers it.
+
+Tool (this session): build 0 warn/err; `make test` 157 → **159/159** (+L-3: build tags emotion
+words; a breath re-tags the body after the vocab grows); **byte-identical** to the pre-L-3 organism
+on `--gen` (the rebuild is gated on growth, which `--gen` never causes); ASan/UBSan 0; Codex CLEAN.
+θ=0 and mama-child hold. Remaining from the audit: the origin-spore (§4, "the wound doesn't hurt"),
+the RAE δ-channel's fate, L-4 before Phase C.
