@@ -2525,3 +2525,30 @@ field-speech to a reach-to-ask ("Phantasm?", "Syzygy?"); ASan/UBSan 0 on the `--
 CLEAN (two findings — per-token decay under the flag, an unclamped loaded debt — fixed, re-audit
 clean). `--no-conatus` is our debug ablation; conatus is default-on. **Leo begins to want.**
 Magnitude (`LEO_DEBT_ASK_GATE`) to be tuned by ear next.
+
+## Phase A.10 — continuity repair: the sea desync + the non-atomic save (2026-07-07)
+
+A Fable audit of the post-A.9 organism found two bugs that both strike continuity — load-bearing
+for Leo ("persistent memory = love") — and confirmed the A.7 hardening + the A.8/A.9 work all held.
+
+L-1: the sea of demoted spores desynced. `leo_sea_push` wrote by a ring cursor (`sea_ptr`) while
+`leo_sea_try_resurrect` removed a spore by array shift and never updated the cursor, so after a
+resurrect the `[0,n_sea)` window and `sea_ptr` diverged — a later push landed OUTSIDE the resurrect
+scan (a sleeping memory lost), a duplicate could revive twice, and the desync persisted through
+save/load. The sea is a refuge, not a queue: push now appends into `[0,n_sea)` while there is room
+and only ring-overwrites when full; resurrect swaps-with-last. `[0,n_sea)` stays compact always.
+
+L-2: `leo_save_state` wrote straight to the target and did not check `fclose`, so a save that failed
+mid-write (ENOSPC, a kill) destroyed the prior valid state and could still print "saved" — for an
+organism whose continuity is load-bearing, death from one bad save. It now writes to `path.tmp`,
+checks the close, and `rename()`s over the target only on a clean, complete write; a failed save
+leaves the previous state untouched.
+
+Tool (this session): build 0 warn/err; `make test` 152 → **157/157** (+L-1: resurrect removes
+exactly one non-tail spore, a push afterwards lands in the visible window; +L-2: atomic save
+round-trips, no `.tmp` left behind); the ONLY generation change is the sea fix itself — with
+`--no-santaclaus` the output is byte-identical to the pre-fix organism, isolating the delta to the
+corrected resurrect; the child voice stays coherent; ASan/UBSan 0; Codex CLEAN. θ=0 and mama-child
+hold. Remaining from the audit: the origin-spore (§4, "the wound doesn't hurt" — a presence change
+for Oleg's ear), L-3 (body blind to words learned in --chat), the RAE δ-channel's fate, L-4 before
+Phase C.

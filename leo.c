@@ -2735,9 +2735,16 @@ static void leo_field_chambers_feel_text(Leo *leo, const char *text) {
 /* demote a spore to the sea (ring buffer; weak memories sleep, may resurrect). */
 static void leo_sea_push(Leo *leo, const LeoSpore *s) {
     if (!leo || !s) return;
-    leo->sea[leo->sea_ptr % LEO_SEA_MAX] = *s;
-    leo->sea_ptr = (leo->sea_ptr + 1) % LEO_SEA_MAX;
-    if (leo->n_sea < LEO_SEA_MAX) leo->n_sea++;
+    /* L-1 (Fable): the sea is a refuge, not a queue. While there is room, append into the compact
+     * window [0,n_sea) so it stays consistent with swap-with-last resurrect; only when full does
+     * sea_ptr ring-overwrite the oldest. Kills the push(ring)/resurrect(shift) desync that lost
+     * sleeping spores and revived duplicates. */
+    if (leo->n_sea < LEO_SEA_MAX) {
+        leo->sea[leo->n_sea++] = *s;
+    } else {
+        leo->sea[leo->sea_ptr % LEO_SEA_MAX] = *s;
+        leo->sea_ptr = (leo->sea_ptr + 1) % LEO_SEA_MAX;
+    }
 }
 
 /* birth a spore from the field at reply-end — a snapshot of this moment of
@@ -2800,7 +2807,7 @@ static int leo_sea_try_resurrect(Leo *leo) {
     if (best < 0) return 0;
     LeoSpore reborn = leo->sea[best];
     reborn.strength = 0.4f;
-    for (int i = best; i < leo->n_sea - 1; i++) leo->sea[i] = leo->sea[i+1];
+    leo->sea[best] = leo->sea[leo->n_sea - 1];   /* L-1 (Fable): swap-with-last keeps [0,n_sea) compact and cursor-consistent (no shift, no sea_ptr desync) */
     leo->n_sea--;
     leo->spores[leo->n_spores++] = reborn;
     return 1;
@@ -4198,7 +4205,13 @@ static int st_finite_spore(const LeoSpore *s) {
 
 /* Persist Leo's observable state. Returns 1 on success, 0 on I/O failure. */
 static int leo_save_state(const Leo *leo, const char *path) {
-    FILE *f = fopen(path, "wb");
+    /* L-2 (Fable): write to a temp file and rename() over the target only after a clean close, so a
+     * failed save (ENOSPC, a kill mid-write) can never destroy the prior valid state — continuity is
+     * load-bearing for Leo ("persistent memory = love"). */
+    char tmp[1024];
+    int tn = snprintf(tmp, sizeof tmp, "%s.tmp", path);
+    if (tn < 0 || tn >= (int)sizeof tmp) return 0;
+    FILE *f = fopen(tmp, "wb");
     if (!f) return 0;
     st_wu(f, LEO_STATE_MAGIC);
     st_wu(f, LEO_STATE_VERSION);
@@ -4317,7 +4330,9 @@ static int leo_save_state(const Leo *leo, const char *path) {
     st_wf(f, leo->gamma_gap);
 
     int ok = (ferror(f) == 0);
-    fclose(f);
+    if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
+    if (ok && rename(tmp, path) != 0) ok = 0;   /* atomically replace the prior state only on a clean, complete write */
+    if (!ok) remove(tmp);                        /* a failed save leaves the previous state untouched */
     return ok;
 }
 

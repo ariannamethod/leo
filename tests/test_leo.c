@@ -426,6 +426,51 @@ int main(void) {
         leo_free(&cv);
     }
 
+    /* L-1 (Fable): the sea is a refuge — resurrect removes exactly one (swap-with-last), and a
+     *      push afterwards lands in the visible window [0,n_sea). The old shift + stale sea_ptr
+     *      wrote it OUTSIDE the resurrect scan, losing sleeping memory. */
+    {
+        Leo sv; leo_init(&sv);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) sv.chamber_act[i]     = 0.5f;
+        for (int i = 0; i < LEO_RET_DIM; i++)    sv.retention_state[i] = 0.3f;
+        LeoSpore target; memset(&target, 0, sizeof target);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) target.chamber_snap[i]   = 0.5f;   /* resonance 0.55+0.45 = 1.0 > 0.85 */
+        for (int i = 0; i < LEO_RET_DIM; i++)    target.retention_slice[i] = 0.3f;
+        target.strength = 1.0f; target.step = 1;
+        LeoSpore inert; memset(&inert, 0, sizeof inert); inert.strength = 1.0f; inert.step = 2; /* zero snapshot -> resonance 0 */
+        sv.n_sea = 0; sv.sea_ptr = 0; sv.n_spores = 0;
+        leo_sea_push(&sv, &target);   /* sea[0] = the resonant one (NON-tail) */
+        leo_sea_push(&sv, &inert);
+        leo_sea_push(&sv, &inert);
+        leo_sea_push(&sv, &inert);    /* n_sea = 4 */
+        int r = leo_sea_try_resurrect(&sv);
+        CHECK(r == 1 && sv.n_sea == 3 && sv.n_spores == 1, "L-1: resurrect removes exactly one non-tail sea spore");
+        LeoSpore fresh; memset(&fresh, 0, sizeof fresh);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) fresh.chamber_snap[i]   = 0.5f;
+        for (int i = 0; i < LEO_RET_DIM; i++)    fresh.retention_slice[i] = 0.3f;
+        fresh.strength = 1.0f; fresh.step = 99;
+        int before = sv.n_sea;
+        leo_sea_push(&sv, &fresh);
+        CHECK(sv.n_sea == before + 1 && sv.sea[before].step == 99,
+              "L-1: a push after resurrect lands in the visible window (no lost memory)");
+        leo_free(&sv);
+    }
+
+    /* L-2 (Fable): save is atomic (tmp + rename) — round-trips and leaves no .tmp behind; a failed
+     *      save can never truncate the prior state (rename replaces only after a clean close). */
+    {
+        Leo sv; leo_init(&sv);
+        for (int r = 0; r < 2; r++) leo_ingest(&sv, "the warm light and his mother");
+        const char *p = "/tmp/leo_l2_save.bin";
+        CHECK(leo_save_state(&sv, p) == 1, "L-2: atomic save returns 1");
+        Leo ld; leo_init(&ld);
+        CHECK(leo_load_state(&ld, p) == 1, "L-2: the atomically-saved state loads back");
+        FILE *tf = fopen("/tmp/leo_l2_save.bin.tmp", "rb");
+        CHECK(tf == NULL, "L-2: no .tmp file left after a successful save");
+        if (tf) fclose(tf);
+        leo_free(&sv); leo_free(&ld);
+    }
+
     /* 14. multi-turn continuity (the --chat engine path): the field LIVES across
      *     turns. Repeating a word makes Leo HOLD it (heard-count climbs past the
      *     trace threshold), and step advances each turn — the dedication's
