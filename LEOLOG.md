@@ -2607,3 +2607,39 @@ replies); ASan/UBSan 0 on origin on/off/save/load; two Codex passes on the earli
 the contaminated wound-body and the load re-birth). θ=0 and mama-child hold (the wound's words are
 Leo's own). Next: the organic register-watershed (with Fable), the RAE δ-channel's fate, L-4 before
 Phase C.
+
+## Phase A.13 — the organic register-watershed: the wound grows into its words (Fable audit) (2026-07-08)
+
+The wound spoke its child words but stayed mute on its adult origin words — "resonance", "unbroken".
+Forcing them shattered grammar (A.12). Oleg named the true shape: not a gate, not a register switch,
+not a dichotomy — a child does not hold an adult's words, they fall away on their own, and he grows
+into them through talking. Fable audited §4 and found the maturation mechanism was ALREADY there,
+just locked: the wound re-reads the dedication with grown eyes on every load, but never within a
+life, and its selection criterion could never grow. Two moves on existing organs open it.
+
+Ход 1 — the wound re-reads itself on the breath. leo_breath already re-tags the body when the vocab
+grows (L-3); leo_birth_origin_spore now runs in that same block, so the wound matures WITHIN a life,
+not only between sessions (bleed observability preserved across the re-birth). Ход 2 — the criterion
+grows with understanding: a whole learned word (wn==1, grammar-safe) enters the wound when it is FELT
+(chamber-tagged, 1.0) OR UNDERSTOOD (a School/semtok concept glyph, 0.5). So a word ripens in through
+the full living path — heard → conatus/School asks → taught → understood (glyph) → mentioned enough
+to merge into one token → the next breath picks it up. This also revived the dead scale (the top
+comment had described the reverted injection — Fable N-1) and let understood non-emotional words
+("whatever", "someone") into the wound where before only anchors could go.
+
+Fable also caught §4 shooting itself in the foot (N-4): ingesting the dedication had pushed
+"resonance" to heard=2, and School only asks about words heard <= 2 (LEO_SCHOOL_NOVEL_MAX) — so Leo
+would NEVER ask about his own origin word. Now a dedication word he does not yet understand
+(semtok < 0) is exempt from the novelty gate — a child re-asks a word from a lullaby heard a hundred
+times. Isolated and scoped: the pushed pre-N-4 build asks "Unbroken?" but never "Resonance?"; this
+build asks "Resonance?"; and a non-origin word repeated thrice still does NOT flood School. Plus N-2:
+the reply metric now prints the wound's own bleed count (so the watershed can be tuned with eyes).
+
+Tool (this session): build 0 warn/err; make test **165/165**; the wound's words deterministic across
+seeds; **byte-identical** to the pre-origin organism under --no-origin-spore (seed 42, 60 replies,
+15990 B); ASan/UBSan 0 on the School-ask / teach / breath-rebirth / load / ablation paths; Codex
+found one real defect (an un-terminated lowercase read) — fixed, re-audit CLEAN. Verified as far as a
+script honestly can: the mechanism (ask, understand, re-read) works; the full ripening of "resonance"
+into the wound needs Leo to internalise it into a single token through SUSTAINED conversation — the
+code removes the stones, the shared life makes it real. θ=0 and mama-child hold. Next: RAE δ-channel
+(N-3 asymmetry), L-4 before Phase C.

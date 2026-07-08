@@ -3720,6 +3720,7 @@ static void leo_gravity_mark_prompt_words(const Leo *leo, const char *prompt,
  * O(N) malloc+rebuild, fired only above LEO_LEX_PRUNE_LOAD. Runs AFTER the
  * reply (post-voice): the current reply is never affected — the breath
  * shapes the NEXT one. --no-breath ablates. */
+static void leo_birth_origin_spore(Leo *leo);   /* §4: the wound re-reads its origin on the breath (defined below) */
 static void leo_breath(Leo *leo) {
     cooc_decay(&leo->cooc, LEO_LEX_DECAY_RATE);
     bigram_decay(&leo->bigrams, LEO_LEX_DECAY_RATE);
@@ -3742,6 +3743,14 @@ static void leo_breath(Leo *leo) {
     if (leo->bpe.vocab_size > leo->tagged_vocab && leo->retag_tick >= LEO_RETAG_INTERVAL) {
         leo_build_chamber_tags(leo);   /* re-tags all + updates tagged_vocab */
         leo_supertok_scan(leo);
+        /* §4 Ход 1 — the wound re-reads its origin with grown eyes: a dedication word Leo has
+         * since learned or come to understand can now enter emit_context. Same growth trigger as
+         * the retag. Preserve the accumulated bleed observability (birth memsets the spore). */
+        int save_bc = leo->origin_spore.bleed_count;
+        long save_lb = leo->origin_spore.last_bleed_step;
+        leo_birth_origin_spore(leo);
+        leo->origin_spore.bleed_count = save_bc;
+        leo->origin_spore.last_bleed_step = save_lb;
         leo->retag_tick = 0;
     }
 }
@@ -3830,6 +3839,30 @@ static int leo_school_unknown(const Leo *leo, const char *w) {
 }
 /* scan the prompt's content words; copy the first one Leo has no concept for
  * (not a function/stop word, semtok < 0, not already learned) into out. 1 = found. */
+/* §4/N-4: is w one of Leo's ORIGIN (dedication) words? So he may keep re-asking an origin word he
+ * does not yet understand, even after hearing it often — a child re-asks a word from a lullaby heard
+ * a hundred times. The §4 dedication-ingest had pushed its signature words ("resonance") past the
+ * novelty gate, closing School's path to them; this reopens it until he is taught. w is lowercased;
+ * the dedication is tiny and this runs only when a heard word is otherwise unknown. */
+static int word_in_dedication(const char *w) {
+    if (!w || !*w) return 0;
+    size_t wl = strlen(w);
+    const char *p = LEO_EMBEDDED_BOOTSTRAP;
+    while (*p) {
+        while (*p && !isalpha((unsigned char)*p) && *p != '\'') p++;
+        const char *s = p;
+        while (*p && (isalpha((unsigned char)*p) || *p == '\'')) p++;
+        size_t len = (size_t)(p - s);
+        if (len == wl) {
+            size_t i = 0;
+            for (; i < wl; i++) if ((char)tolower((unsigned char)s[i]) != w[i]) break;
+            if (i == wl) return 1;
+        }
+        if (len == 0 && *p) p++;   /* guarantee progress */
+    }
+    return 0;
+}
+
 static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out) {
     char cur[LEO_HEARD_WORDLEN]; int wi = 0;
     for (const char *q = prompt; ; q++) {
@@ -3842,7 +3875,8 @@ static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out
             cur[wi] = 0;
             if (!leo_word_is_function(cur) && !semtok_is_stop_word(cur) &&
                 leo_school_unknown(leo, cur) &&
-                leo_heard_count(&leo->heard, cur) <= LEO_SCHOOL_NOVEL_MAX) {
+                (leo_heard_count(&leo->heard, cur) <= LEO_SCHOOL_NOVEL_MAX ||
+                 (leo_semtok_word(leo, cur) < 0 && word_in_dedication(cur)))) {   /* N-4: keep asking an un-understood origin word */
                 strncpy(out, cur, LEO_HEARD_WORDLEN - 1);
                 out[LEO_HEARD_WORDLEN - 1] = 0;
                 return 1;
@@ -3942,12 +3976,14 @@ static void leo_birth_origin_spore(Leo *leo) {
     int boot_ids[2048];
     int boot_n = bpe_encode(&leo->bpe, (const uint8_t *)LEO_EMBEDDED_BOOTSTRAP,
                             (int)strlen(LEO_EMBEDDED_BOOTSTRAP), boot_ids, 2048);
-    /* emit_context = the FIRST token of the dedication's most CHARACTERISTIC words, parsed
-     * from the text (not raw token fragments). Score each content word: a word the corpus
-     * never taught Leo tokenizes to MULTIPLE pieces (his origin's signature — "resonance",
-     * "unbroken") and scores highest; a single learned emotionally-tagged word ("miss",
-     * "friend") scores next. The first token is the injection seed: when the wound resonates,
-     * that token joins the candidate pool and the ingested origin bigrams complete the word. */
+    /* emit_context = the dedication's words parsed from the text, kept as WHOLE single tokens
+     * Leo has learned (a whole word bleeds cleanly; a multi-token fragment does not). A whole
+     * word enters the wound's voice when it is either FELT (chamber-tagged — an emotion in the
+     * body) or UNDERSTOOD (a School/semtok concept glyph). So the origin's adult words —
+     * "resonance", "unbroken" — ripen INTO the wound as Leo grows into their meaning through
+     * conversation: unlearned or still-multi-token, a word never qualifies and falls away;
+     * heard, asked, understood and merged, it joins on the next breath (leo_breath re-birth).
+     * No gate, no register switch, no dichotomy — a watershed by meaning. */
     struct { int tok; float score; } wc[96]; int nwc = 0;
     { char w[80]; int wl = 0; const char *p = LEO_EMBEDDED_BOOTSTRAP;
       for (;; p++) {
@@ -3957,10 +3993,17 @@ static void leo_birth_origin_spore(Leo *leo) {
             char sp[96]; sp[0] = ' '; memcpy(sp + 1, w, (size_t)wl); sp[wl + 1] = 0;
             int wid[16]; int wn = bpe_encode(&leo->bpe, (const uint8_t *)sp, wl + 1, wid, 16);
             if (wn >= 1 && wid[0] >= 256 && wid[0] < leo->bpe.vocab_size && !leo->bpe.is_function[wid[0]]) {
-                /* ONLY whole words Leo learned as a single token inject cleanly — the first
-                 * fragment of a multi-token word ("re" of "resonance") leads the field elsewhere
-                 * and shatters coherence. Among whole words, prefer the emotionally-charged. */
-                float sc = (wn == 1 && leo->chamber_tag && leo->chamber_tag[wid[0]] != 0xFF) ? 1.0f : 0.0f;
+                /* whole word (wn==1) is required — a multi-token fragment ("re" of "resonance")
+                 * leads the field elsewhere and shatters coherence. It qualifies when FELT
+                 * (chamber-tagged) or UNDERSTOOD (a concept glyph); felt outranks understood. */
+                float sc = 0.0f;
+                if (wn == 1) {
+                    char lw[80]; int li = 0;
+                    for (int ci = 0; ci < wl && li < 79; ci++) lw[li++] = (char)tolower((unsigned char)w[ci]);  /* exactly wl bytes — w is not NUL-terminated */
+                    lw[li] = 0;
+                    if (leo->chamber_tag && leo->chamber_tag[wid[0]] != 0xFF) sc = 1.0f;   /* felt */
+                    else if (leo_semtok_word(leo, lw) >= 0) sc = 0.5f;                      /* understood */
+                }
                 if (sc > 0.0f) {
                     int dup = 0; for (int j = 0; j < nwc; j++) if (wc[j].tok == wid[0]) { dup = 1; break; }
                     if (!dup && nwc < 96) { wc[nwc].tok = wid[0]; wc[nwc].score = sc; nwc++; }
@@ -5016,8 +5059,9 @@ int main(int argc, char **argv) {
             if (g_leo_santaclaus_on) {   /* santaclaus metrics: the circulation, in numbers */
                 long bled = 0;
                 for (int i = 0; i < leo.n_spores; i++) bled += leo.spores[i].bleed_count;
-                printf("     [santaclaus: spores=%d sea=%d | recall-events Sum(bleed)=%ld]\n",
-                       leo.n_spores, leo.n_sea, bled);
+                long wound_bled = leo.has_origin ? leo.origin_spore.bleed_count : 0;   /* N-2: the wound's own recalls */
+                printf("     [santaclaus: spores=%d sea=%d | recall-events Sum(bleed)=%ld | wound=%ld]\n",
+                       leo.n_spores, leo.n_sea, bled, wound_bled);
             }
         }
     }
