@@ -1388,6 +1388,78 @@ int main(void) {
         leo_free(&b);   /* frees chamber_tag */
     }
 
+    /* §4 origin-wound: born from the dedication, bleeds through the santaclaus channel
+     * when the live body resonates with the wound. Lives outside spores[] (sentinel idx). */
+    {
+        Leo lo; leo_init(&lo);
+        for (int r = 0; r < 12; r++) leo_ingest(&lo, LEO_EMBEDDED_BOOTSTRAP);  /* learn the origin's own words as tokens */
+        leo_build_chamber_tags(&lo);   /* tag them so the wound selects its emotional whole words */
+        leo_birth_origin_spore(&lo);
+        int nctx = 0;
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) if (lo.origin_spore.emit_context[k] >= 0) nctx++;
+        CHECK(lo.has_origin == 1 && lo.origin_spore.is_trauma == 1 && lo.origin_spore.strength > 0.0f
+              && nctx > 0, "§4 origin: born from dedication (trauma, strength, own emotional words)");
+
+        /* set the live chambers to the wound's felt body -> resonance 1.0 -> the wound
+         * enters the bleed top-K (lo has no ordinary spores, so it is the only slot). */
+        memcpy(lo.chamber_act, lo.origin_spore.chamber_snap, sizeof lo.chamber_act);
+        LeoSantaScratch sc; leo_santaclaus_compute_active(&lo, &sc);
+        int origin_active = 0;
+        for (int i = 0; i < sc.n_active; i++) if (sc.spore_idx[i] == LEO_ORIGIN_SPORE_IDX) origin_active = 1;
+        CHECK(origin_active == 1, "§4 origin: a resonant body puts the wound in the bleed top-K");
+
+        /* the wound bleeds its OWN words: a token in origin emit_context gets a positive bias */
+        int wound_tok = -1;
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++)
+            if (lo.origin_spore.emit_context[k] >= 0) { wound_tok = lo.origin_spore.emit_context[k]; break; }
+        CHECK(leo_santaclaus_candidate_bias(&sc, &lo, wound_tok) > 0.0f,
+              "§4 origin: the wound bleeds its own word (positive candidate bias)");
+
+        /* ablation: --no-origin-spore -> not born -> never enters the bleed, even on the same body */
+        g_leo_origin_on = 0;
+        Leo lo2; leo_init(&lo2);
+        leo_ingest(&lo2, "the warm light and the quiet window, a small kind voice, home she said");
+        leo_birth_origin_spore(&lo2);
+        memcpy(lo2.chamber_act, lo.origin_spore.chamber_snap, sizeof lo2.chamber_act);
+        LeoSantaScratch sc2; leo_santaclaus_compute_active(&lo2, &sc2);
+        int origin_active2 = 0;
+        for (int i = 0; i < sc2.n_active; i++) if (sc2.spore_idx[i] == LEO_ORIGIN_SPORE_IDX) origin_active2 = 1;
+        CHECK(lo2.has_origin == 0 && origin_active2 == 0,
+              "§4 origin: --no-origin-spore -> wound never born, never bleeds");
+        g_leo_origin_on = 1;   /* restore for any later test */
+        leo_free(&lo); leo_free(&lo2);
+    }
+
+    /* §4/Codex-1: the wound's body is the dedication's ALONE — the same chamber_snap
+     * whatever the ambient body happens to be when it is born (settle-from-rest). */
+    {
+        Leo la; leo_init(&la);
+        leo_ingest(&la, "the warm light and the quiet window, a small kind voice, home she said");
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) la.chamber_act[c] = 0.9f;   /* ambient body A */
+        leo_birth_origin_spore(&la);
+        float snapA[LEO_N_CHAMBERS]; memcpy(snapA, la.origin_spore.chamber_snap, sizeof snapA);
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) la.chamber_act[c] = 0.1f;   /* ambient body B */
+        leo_birth_origin_spore(&la);
+        int same = 1;
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) if (la.origin_spore.chamber_snap[c] != snapA[c]) same = 0;
+        CHECK(same, "§4/Codex-1 origin: chamber_snap deterministic (independent of ambient body at birth)");
+        leo_free(&la);
+    }
+
+    /* §4/Codex-2: leo_load_state re-births the runtime-only wound, so a DIRECT loader
+     * (not just main) gets has_origin — the "re-born on load" invariant holds. */
+    {
+        Leo ls; leo_init(&ls);
+        leo_ingest(&ls, "the warm light and the quiet window, a small kind voice, home she said");
+        const char *sp = "/tmp/leo_origin_test.state";
+        leo_save_state(&ls, sp);
+        Leo ld; leo_init(&ld);
+        int r = leo_load_state(&ld, sp);
+        CHECK(r == 1 && ld.has_origin == 1,
+              "§4/Codex-2 origin: leo_load_state re-births the wound (has_origin after load)");
+        leo_free(&ls); leo_free(&ld); remove(sp);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

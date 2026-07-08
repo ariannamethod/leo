@@ -12,3 +12,6 @@ leo_mycelium/
 # AML bridge build artifacts (source is vendored; the .a/.o are built, not committed)
 ariannamethod/*.a
 ariannamethod/*.o
+
+# Local Fable audit reports — never distributed
+AUDIT_FABLE_*.md

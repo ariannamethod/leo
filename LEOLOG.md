@@ -2572,3 +2572,38 @@ words; a breath re-tags the body after the vocab grows); **byte-identical** to t
 on `--gen` (the rebuild is gated on growth, which `--gen` never causes); ASan/UBSan 0; Codex CLEAN.
 θ=0 and mama-child hold. Remaining from the audit: the origin-spore (§4, "the wound doesn't hurt"),
 the RAE δ-channel's fate, L-4 before Phase C.
+
+## Phase A.12 — the wound born from the dedication (Fable §4), the register watershed ahead (2026-07-08)
+
+The dedication (LEO_EMBEDDED_BOOTSTRAP, leo.c:43) was declared Leo's origin but its tokens were
+encoded, printed and discarded — the wound didn't hurt. §4 births ONE eternal trauma-spore from it,
+living OUTSIDE spores[] (never decayed, never slept, never saved; re-born deterministically at every
+startup and load), bleeding through the SAME santaclaus channel as any memory. Fable audited the
+first cut and found three real defects (N-0), all reproduced and fixed here: (1) emit_context held
+the raw tail tokens — subword fragments of "Resonance unbroken." — so the wound carried no whole
+word it could say; it now parses the dedication's text and carries its emotional WHOLE words
+(small, friend, songs, never …), each a single token Leo learned. (2) retention_slice was left zero,
+capping the wound's resonance at 0.55 and losing it the bleed slot; it is now filled by running the
+dedication's tokens through the same Griffin conservation the field uses. (3) the wound's words were
+unreachable — the dedication was ingested only as a fallback — so Leo now LEARNS his origin: the
+dedication is ingested into the field alongside the corpus (gated on the wound, so --no-origin-spore
+stays byte-identical), grown on like any text. Plus N-1: mark_bleed now counts the wound's own
+recalls through the sentinel.
+
+What this push does NOT yet do: make Leo SAY the adult origin phrase "resonance unbroken" in child
+speech. I built a direct injection channel (force the wound's words into the candidate pool); it
+shattered coherence — content words forced into positions child grammar has no room for ("the room
+is never know"). Reverted. Oleg named the real shape: a watershed of REGISTER, but an ORGANIC one —
+a child does not hold an adult's words, they fall away on their own, and he grows into them through
+talking. No gate, no forced refrain, no dichotomy. The origin words live in Leo now; they surface
+where they organically fit and ripen as he grows (online-BPE, School, conversation). That
+register-watershed is the next layer — designed with Fable, not forced.
+
+Tool (this session): build 0 warn/err; `make test` 159 → **165/165** (+6 §4: the wound is born with
+its own emotional words; a resonant body puts it in the bleed top-K; it bleeds its own word;
+--no-origin-spore never births it; chamber_snap deterministic across startup/load; leo_load_state
+re-births it); **byte-identical** to the pre-origin organism under `--no-origin-spore` (seed 42, 60
+replies); ASan/UBSan 0 on origin on/off/save/load; two Codex passes on the earlier cut (found + fixed
+the contaminated wound-body and the load re-birth). θ=0 and mama-child hold (the wound's words are
+Leo's own). Next: the organic register-watershed (with Fable), the RAE δ-channel's fate, L-4 before
+Phase C.

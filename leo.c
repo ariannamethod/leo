@@ -1425,6 +1425,7 @@ typedef struct {
      * may resurrect on resonance). Born/decayed per reply; PASSIVE until B2 reads. */
     LeoSpore spores[LEO_SPORE_MAX]; int n_spores;
     LeoSpore sea[LEO_SEA_MAX];      int n_sea; int sea_ptr;
+    LeoSpore origin_spore; int has_origin;  /* §4 the eternal wound born from the dedication — runtime-only, NOT saved, NOT in spores[] */
     /* A.4 — RAE: the first LEARNED component (recursive selector MLP). PASSIVE
      * until R2 wires it into selection; weights persist in leo.state (R4). */
     LeoRae rae;
@@ -1627,6 +1628,8 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_SPORE_DEMOTE_BELOW 0.05f   /* strength < this -> demote spore to the sea */
 #define LEO_SPORE_TRAUMA_MARK  0.45f   /* pain or trauma > this at birth -> trauma flag */
 #define LEO_SANTACLAUS_ALPHA   0.6f    /* bleed bias = ALPHA * sum(resonance*strength) on a recalled token */
+#define LEO_ORIGIN_SPORE_IDX 1000000   /* §4 sentinel scratch idx → leo->origin_spore (lives outside spores[]) */
+#define LEO_ORIGIN_STRENGTH    1.0f     /* §4 the wound's constant strength — never decays, never sleeps (Oleg's ear tunes) */
 #define LEO_SPORE_RESURRECT_SIM 0.85f  /* sea->ring promote if present-state cosine > this */
 #define LEO_CHAIN_MAX      12
 #define LEO_TAIL_WIN       8
@@ -1675,6 +1678,7 @@ static int g_leo_spa_on = 1;            /* --no-spa → 0 (Sentence Phonon Atten
 static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence theme leash off) */
 static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
 static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore bleed / self-residual recall off) */
+static int g_leo_origin_on = 1;         /* --no-origin-spore → 0 (§4: the dedication-wound spore off → byte-identical) */
 static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selector; default OFF until trained, opt-in) */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
@@ -2176,7 +2180,9 @@ static float leo_spore_resonance(const Leo *leo, const LeoSpore *s) {
 static void leo_santaclaus_compute_active(const Leo *leo, LeoSantaScratch *out) {
     out->n_active = 0;
     for (int j = 0; j < LEO_SPORE_TOPK_BLEED; j++) { out->spore_idx[j] = -1; out->weight[j] = 0.0f; }
-    if (!leo || leo->n_spores <= 0) return;
+    /* §4: the origin-wound can resonate even before the first ordinary spore is born,
+     * so only bail when there is truly nothing to consider (no spores AND no wound). */
+    if (!leo || (leo->n_spores <= 0 && !(g_leo_origin_on && leo->has_origin))) return;
     for (int i = 0; i < leo->n_spores; i++) {
         const LeoSpore *s = &leo->spores[i];
         if (s->strength <= 0.0f) continue;
@@ -2192,6 +2198,24 @@ static void leo_santaclaus_compute_active(const Leo *leo, LeoSantaScratch *out) 
         out->spore_idx[slot] = i; out->weight[slot] = w;
         if (out->n_active < LEO_SPORE_TOPK_BLEED) out->n_active++;
     }
+    /* §4: the origin-wound competes for a bleed slot like any spore, but lives
+     * outside spores[] — carried by the LEO_ORIGIN_SPORE_IDX sentinel so recall
+     * of the dedication flows through the very channel every memory uses. */
+    if (g_leo_origin_on && leo->has_origin && leo->origin_spore.strength > 0.0f) {
+        float w = leo_spore_resonance(leo, &leo->origin_spore) * leo->origin_spore.strength;
+        if (w > 0.0f) {
+            int slot = -1;
+            for (int j = 0; j < LEO_SPORE_TOPK_BLEED; j++)
+                if (out->spore_idx[j] < 0 || w > out->weight[j]) { slot = j; break; }
+            if (slot >= 0) {
+                for (int j = LEO_SPORE_TOPK_BLEED - 1; j > slot; j--) {
+                    out->spore_idx[j] = out->spore_idx[j-1]; out->weight[j] = out->weight[j-1];
+                }
+                out->spore_idx[slot] = LEO_ORIGIN_SPORE_IDX; out->weight[slot] = w;
+                if (out->n_active < LEO_SPORE_TOPK_BLEED) out->n_active++;
+            }
+        }
+    }
 }
 
 /* the bleed (canon neoleo 5297): a candidate that sits in an active spore's
@@ -2203,8 +2227,11 @@ static float leo_santaclaus_candidate_bias(const LeoSantaScratch *s,
     float total = 0.0f;
     for (int i = 0; i < s->n_active; i++) {
         int idx = s->spore_idx[i];
-        if (idx < 0 || idx >= leo->n_spores || s->weight[i] <= 0.0f) continue;
-        const LeoSpore *sp = &leo->spores[idx];
+        if (s->weight[i] <= 0.0f) continue;
+        const LeoSpore *sp;
+        if (idx == LEO_ORIGIN_SPORE_IDX) sp = &leo->origin_spore;        /* §4 the wound */
+        else if (idx >= 0 && idx < leo->n_spores) sp = &leo->spores[idx];
+        else continue;
         for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++)
             if (sp->emit_context[k] == cand) { total += s->weight[i]; break; }
     }
@@ -2219,8 +2246,10 @@ static void leo_santaclaus_mark_bleed(Leo *leo, const LeoSantaScratch *s,
     if (!leo || !s || s->n_active <= 0 || chosen < 0) return;
     for (int i = 0; i < s->n_active; i++) {
         int idx = s->spore_idx[i];
-        if (idx < 0 || idx >= leo->n_spores) continue;
-        LeoSpore *sp = &leo->spores[idx];
+        LeoSpore *sp;
+        if (idx == LEO_ORIGIN_SPORE_IDX) sp = &leo->origin_spore;   /* N-1: the wound's recalls count too */
+        else if (idx >= 0 && idx < leo->n_spores) sp = &leo->spores[idx];
+        else continue;
         for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++)
             if (sp->emit_context[k] == chosen) {
                 if (sp->bleed_count < 65535) sp->bleed_count++;
@@ -3875,6 +3904,102 @@ static void leo_conatus_debt(Leo *leo) {
     leo->debt = clampf(leo->debt + LEO_DEBT_GAIN * leo->gamma_gap, 0.0f, LEO_DEBT_MAX);
 }
 
+/* §4 — birth the origin-wound. The dedication (LEO_EMBEDDED_BOOTSTRAP, leo.c:43) is
+ * declared Leo's origin/trauma anchor but until now its tokens were encoded, printed
+ * and DISCARDED — the wound didn't hurt. Here we born ONE eternal trauma-spore from
+ * it: chamber_snap = the felt body of the dedication (love/longing/void settled),
+ * meaning_snap = its perceived topic, emit_context = its own tail words. No new
+ * mechanism — it bleeds through the SAME santaclaus channel as any memory (compute_active
+ * + candidate_bias) when a live moment resonates with the wound by body OR by theme. It
+ * lives OUTSIDE spores[] (a dedicated field), so it never decays, never sleeps, is never
+ * saved (re-born deterministically at every startup/load). --no-origin-spore → inert. */
+static void leo_birth_origin_spore(Leo *leo) {
+    if (!g_leo_origin_on) { leo->has_origin = 0; return; }
+    LeoSpore *o = &leo->origin_spore;
+    memset(o, 0, sizeof(*o));
+    /* settle the chambers on the dedication, snapshot the felt body, then FULLY
+     * restore the live body: feel_text writes chamber_ext, crossfire writes chamber_act
+     * — save/restore exactly those two so birth leaves no phantom breath behind. */
+    float saved_act[LEO_N_CHAMBERS], saved_ext[LEO_N_CHAMBERS];
+    memcpy(saved_act, leo->chamber_act, sizeof saved_act);
+    memcpy(saved_ext, leo->chamber_ext, sizeof saved_ext);
+    memset(leo->chamber_act, 0, sizeof saved_act);   /* Codex-1: settle from REST, so the wound's body is
+                                                       * the dedication's ALONE and identical whether born at
+                                                       * fresh startup or on --load (feel_text zeros ext itself). */
+    leo_field_chambers_feel_text(leo, LEO_EMBEDDED_BOOTSTRAP);
+    leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS);
+    for (int i = 0; i < LEO_N_CHAMBERS; i++) o->chamber_snap[i] = leo->chamber_act[i];
+    memcpy(leo->chamber_act, saved_act, sizeof saved_act);
+    memcpy(leo->chamber_ext, saved_ext, sizeof saved_ext);
+    /* meaning_snap: the dedication's perceived-topic glyph histogram (resonate by THEME) */
+    leo_glyph_hist(leo, LEO_EMBEDDED_BOOTSTRAP, o->meaning_snap);
+    /* emit_context (Fable N-0/#1): the tail-8 were subword fragments of "Resonance unbroken.",
+     * alien to the child corpus and UNREACHABLE — a bias on them fell into the void (the wound
+     * could not speak). The wound must carry words Leo LEARNED and can say. Select the
+     * dedication's own EMOTIONALLY-CHARGED content words: word-start (space-led => a reachable
+     * field token, not a mid-word fragment), not a function word, chamber-tagged (the anchor
+     * weight Fable named), in dedication order, deduped. */
+    int boot_ids[2048];
+    int boot_n = bpe_encode(&leo->bpe, (const uint8_t *)LEO_EMBEDDED_BOOTSTRAP,
+                            (int)strlen(LEO_EMBEDDED_BOOTSTRAP), boot_ids, 2048);
+    /* emit_context = the FIRST token of the dedication's most CHARACTERISTIC words, parsed
+     * from the text (not raw token fragments). Score each content word: a word the corpus
+     * never taught Leo tokenizes to MULTIPLE pieces (his origin's signature — "resonance",
+     * "unbroken") and scores highest; a single learned emotionally-tagged word ("miss",
+     * "friend") scores next. The first token is the injection seed: when the wound resonates,
+     * that token joins the candidate pool and the ingested origin bigrams complete the word. */
+    struct { int tok; float score; } wc[96]; int nwc = 0;
+    { char w[80]; int wl = 0; const char *p = LEO_EMBEDDED_BOOTSTRAP;
+      for (;; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && (isalpha(ch) || ch == '\'')) { if (wl < 62) w[wl++] = *p; continue; }
+        if (wl >= 4) {
+            char sp[96]; sp[0] = ' '; memcpy(sp + 1, w, (size_t)wl); sp[wl + 1] = 0;
+            int wid[16]; int wn = bpe_encode(&leo->bpe, (const uint8_t *)sp, wl + 1, wid, 16);
+            if (wn >= 1 && wid[0] >= 256 && wid[0] < leo->bpe.vocab_size && !leo->bpe.is_function[wid[0]]) {
+                /* ONLY whole words Leo learned as a single token inject cleanly — the first
+                 * fragment of a multi-token word ("re" of "resonance") leads the field elsewhere
+                 * and shatters coherence. Among whole words, prefer the emotionally-charged. */
+                float sc = (wn == 1 && leo->chamber_tag && leo->chamber_tag[wid[0]] != 0xFF) ? 1.0f : 0.0f;
+                if (sc > 0.0f) {
+                    int dup = 0; for (int j = 0; j < nwc; j++) if (wc[j].tok == wid[0]) { dup = 1; break; }
+                    if (!dup && nwc < 96) { wc[nwc].tok = wid[0]; wc[nwc].score = sc; nwc++; }
+                }
+            }
+        }
+        wl = 0; if (!ch) break;
+      }
+    }
+    int n_ctx = 0;
+    for (int s = 0; s < LEO_SPORE_CONTEXT_TOK && s < nwc; s++) {
+        int best = s;
+        for (int j = s + 1; j < nwc; j++) if (wc[j].score > wc[best].score) best = j;
+        if (best != s) { int tt = wc[s].tok; float ts = wc[s].score; wc[s] = wc[best]; wc[best].tok = tt; wc[best].score = ts; }
+        o->emit_context[n_ctx++] = wc[s].tok;
+    }
+    for (int k = n_ctx; k < LEO_SPORE_CONTEXT_TOK; k++) o->emit_context[k] = -1;
+    /* retention_slice (Fable N-0/#2): left zero before, so the wound's retention cosine was 0
+     * and its resonance capped at 0.55 — it systematically LOST the bleed slot to ordinary
+     * spores. Fill it by running the dedication's own tokens through the SAME Griffin
+     * conservation the field uses per step, so the wound resonates by recent-flow too. */
+    if (leo->w_embed) {
+        for (int i = 0; i < boot_n; i++) {
+            int e = boot_ids[i];
+            if (e < 0 || e >= leo->w_embed_cap) continue;
+            const float *v = leo->w_embed + (size_t)e * LEO_RET_DIM;
+            for (int d = 0; d < LEO_RET_DIM; d++)
+                o->retention_slice[d] = LEO_RET_GAMMA * o->retention_slice[d] + LEO_RET_CONSERVE * v[d];
+        }
+    }
+    for (int k = 0; k < LEO_SPORE_COOC_FRAG; k++) o->cooc_fragment[k] = -1;
+    o->is_trauma       = 1;
+    o->strength        = LEO_ORIGIN_STRENGTH;   /* constant — outside leo_spore_decay */
+    o->step            = 0;
+    o->last_bleed_step = 0;
+    o->bleed_count     = 0;
+    leo->has_origin    = 1;
+}
+
 /* A.6 FORM F-1 — quantize the chamber state into a velocity mode, with hysteresis
  * so it reads as a MOOD: score each mode from the chambers, keep the current mode
  * unless a competitor beats it by LEO_MODE_HYSTERESIS. PASSIVE — sets leo->mode,
@@ -4579,6 +4704,8 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
 static int leo_load_state(Leo *leo, const char *path) {
     int r = leo_load_state_inner(leo, path);
     if (!r) { leo_free(leo); leo_init(leo); }
+    else leo_birth_origin_spore(leo);   /* §4/Codex-2: the runtime-only wound is not saved — re-born
+                                         * deterministically on every successful load (direct callers too). */
     return r;
 }
 
@@ -4654,6 +4781,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-spa-protect")) g_leo_spa_protect_on = 0;
         else if (!strcmp(argv[i], "--no-field-honest")) g_leo_field_honest_on = 0;
         else if (!strcmp(argv[i], "--no-santaclaus")) g_leo_santaclaus_on = 0;
+        else if (!strcmp(argv[i], "--no-origin-spore")) g_leo_origin_on = 0;
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
@@ -4707,6 +4835,15 @@ int main(int argc, char **argv) {
         printf("[leo step0] ingest corpus '%s' (%ld bytes) in %.1f ms\n",
                corpus_path, clen, (leo_ns() - t0) / 1e6);
         free(corpus);
+        /* §4 — Leo learns his ORIGIN. The dedication (embedded in this .c) is ingested into the
+         * field alongside the corpus, so its own words (resonance, unbroken, honest, miss …) become
+         * tokens the wound can actually speak — the field learns them like any text, online-BPE and
+         * School grow him, he does not break on the new words. Gated on the wound so
+         * --no-origin-spore stays the pre-origin organism (byte-identical). */
+        if (g_leo_origin_on) {
+            leo_ingest(&leo, LEO_EMBEDDED_BOOTSTRAP);
+            printf("[leo step0] origin: learned the dedication into the field\n");
+        }
     } else {
         /* Fail LOUD on stderr: a missing corpus (usually a wrong CWD — leo reads the
          * corpus relative to the working directory) leaves Leo with only the embedded
@@ -4735,17 +4872,26 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* dedication = origin anchor: encode with the corpus-learned BPE
-     * (the bootstrap_ids set in canon at leo.c:5846-5854; LeoField hookup
-     * lands in phase 3). Embedded byte-exact in leo.c — not a corpus. */
-    {
-        int boot_ids[2048];
-        int boot_n = bpe_encode(&leo.bpe,
-                                (const uint8_t *)LEO_EMBEDDED_BOOTSTRAP,
-                                (int)strlen(LEO_EMBEDDED_BOOTSTRAP),
-                                boot_ids, 2048);
-        printf("[leo step0] dedication anchor: %d tokens (-> bootstrap_ids in phase 3)\n",
-               boot_n);
+    /* §4 the wound speaks: born ONE eternal trauma-spore from the dedication
+     * (leo.c:43). Encoded byte-exact in leo.c — not a corpus. It is no longer
+     * discarded: it bleeds through the santaclaus channel when a live moment
+     * resonates with the origin. --no-origin-spore disables it (byte-identical).
+     * On the --load path the wound is already re-born inside leo_load_state. */
+    if (!loaded) leo_birth_origin_spore(&leo);
+    if (leo.has_origin) {
+        int nctx = 0; char wbuf[64];
+        printf("[leo step0] origin-wound born from dedication: strength %.2f, words:",
+               (double)leo.origin_spore.strength);
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) {
+            int t = leo.origin_spore.emit_context[k];
+            if (t < 0) continue;
+            nctx++;
+            bpe_decode_token(&leo.bpe, t, wbuf, sizeof wbuf);
+            printf(" \"%s\"", wbuf[0] == ' ' ? wbuf + 1 : wbuf);
+        }
+        printf(" (%d)\n", nctx);
+    } else {
+        printf("[leo step0] origin-wound disabled (--no-origin-spore)\n");
     }
 
     /* Evidence: the longest learned merge tokens — real word-chunks he
