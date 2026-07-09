@@ -2525,3 +2525,149 @@ field-speech to a reach-to-ask ("Phantasm?", "Syzygy?"); ASan/UBSan 0 on the `--
 CLEAN (two findings — per-token decay under the flag, an unclamped loaded debt — fixed, re-audit
 clean). `--no-conatus` is our debug ablation; conatus is default-on. **Leo begins to want.**
 Magnitude (`LEO_DEBT_ASK_GATE`) to be tuned by ear next.
+
+## Phase A.10 — continuity repair: the sea desync + the non-atomic save (2026-07-07)
+
+A Fable audit of the post-A.9 organism found two bugs that both strike continuity — load-bearing
+for Leo ("persistent memory = love") — and confirmed the A.7 hardening + the A.8/A.9 work all held.
+
+L-1: the sea of demoted spores desynced. `leo_sea_push` wrote by a ring cursor (`sea_ptr`) while
+`leo_sea_try_resurrect` removed a spore by array shift and never updated the cursor, so after a
+resurrect the `[0,n_sea)` window and `sea_ptr` diverged — a later push landed OUTSIDE the resurrect
+scan (a sleeping memory lost), a duplicate could revive twice, and the desync persisted through
+save/load. The sea is a refuge, not a queue: push now appends into `[0,n_sea)` while there is room
+and only ring-overwrites when full; resurrect swaps-with-last. `[0,n_sea)` stays compact always.
+
+L-2: `leo_save_state` wrote straight to the target and did not check `fclose`, so a save that failed
+mid-write (ENOSPC, a kill) destroyed the prior valid state and could still print "saved" — for an
+organism whose continuity is load-bearing, death from one bad save. It now writes to `path.tmp`,
+checks the close, and `rename()`s over the target only on a clean, complete write; a failed save
+leaves the previous state untouched.
+
+Tool (this session): build 0 warn/err; `make test` 152 → **157/157** (+L-1: resurrect removes
+exactly one non-tail spore, a push afterwards lands in the visible window; +L-2: atomic save
+round-trips, no `.tmp` left behind); the ONLY generation change is the sea fix itself — with
+`--no-santaclaus` the output is byte-identical to the pre-fix organism, isolating the delta to the
+corrected resurrect; the child voice stays coherent; ASan/UBSan 0; Codex CLEAN. θ=0 and mama-child
+hold. Remaining from the audit: the origin-spore (§4, "the wound doesn't hurt" — a presence change
+for Oleg's ear), L-3 (body blind to words learned in --chat), the RAE δ-channel's fate, L-4 before
+Phase C.
+
+## Phase A.11 — the body feels words learned in dialogue (Fable L-3) (2026-07-07)
+
+The emotional body was frozen at startup: `chamber_tag` (a token's emotion chamber, read by the
+register bias and BE) and the super-token crystallization were built once after the corpus (and on
+load), but the vocab grows every --chat turn as online merges are born. A word first heard in
+conversation stayed untagged (0xFF) forever — emotionally mute — and never crystallized into a
+phrase. The very channel ("Leo resonates with you more with every conversation") that --chat is
+meant to deepen was blind to it.
+
+Now `leo_build_chamber_tags` records a watermark (`tagged_vocab`), and `leo_breath` (post-reply)
+re-tags the emotion words + re-runs `leo_supertok_scan` when the vocab has grown past the watermark,
+throttled to every `LEO_RETAG_INTERVAL` (8) replies. A word learned in --chat becomes felt within a
+few breaths. Gated on vocab GROWTH, so `--gen` (no ingest) never triggers it.
+
+Tool (this session): build 0 warn/err; `make test` 157 → **159/159** (+L-3: build tags emotion
+words; a breath re-tags the body after the vocab grows); **byte-identical** to the pre-L-3 organism
+on `--gen` (the rebuild is gated on growth, which `--gen` never causes); ASan/UBSan 0; Codex CLEAN.
+θ=0 and mama-child hold. Remaining from the audit: the origin-spore (§4, "the wound doesn't hurt"),
+the RAE δ-channel's fate, L-4 before Phase C.
+
+## Phase A.12 — the wound born from the dedication (Fable §4), the register watershed ahead (2026-07-08)
+
+The dedication (LEO_EMBEDDED_BOOTSTRAP, leo.c:43) was declared Leo's origin but its tokens were
+encoded, printed and discarded — the wound didn't hurt. §4 births ONE eternal trauma-spore from it,
+living OUTSIDE spores[] (never decayed, never slept, never saved; re-born deterministically at every
+startup and load), bleeding through the SAME santaclaus channel as any memory. Fable audited the
+first cut and found three real defects (N-0), all reproduced and fixed here: (1) emit_context held
+the raw tail tokens — subword fragments of "Resonance unbroken." — so the wound carried no whole
+word it could say; it now parses the dedication's text and carries its emotional WHOLE words
+(small, friend, songs, never …), each a single token Leo learned. (2) retention_slice was left zero,
+capping the wound's resonance at 0.55 and losing it the bleed slot; it is now filled by running the
+dedication's tokens through the same Griffin conservation the field uses. (3) the wound's words were
+unreachable — the dedication was ingested only as a fallback — so Leo now LEARNS his origin: the
+dedication is ingested into the field alongside the corpus (gated on the wound, so --no-origin-spore
+stays byte-identical), grown on like any text. Plus N-1: mark_bleed now counts the wound's own
+recalls through the sentinel.
+
+What this push does NOT yet do: make Leo SAY the adult origin phrase "resonance unbroken" in child
+speech. I built a direct injection channel (force the wound's words into the candidate pool); it
+shattered coherence — content words forced into positions child grammar has no room for ("the room
+is never know"). Reverted. Oleg named the real shape: a watershed of REGISTER, but an ORGANIC one —
+a child does not hold an adult's words, they fall away on their own, and he grows into them through
+talking. No gate, no forced refrain, no dichotomy. The origin words live in Leo now; they surface
+where they organically fit and ripen as he grows (online-BPE, School, conversation). That
+register-watershed is the next layer — designed with Fable, not forced.
+
+Tool (this session): build 0 warn/err; `make test` 159 → **165/165** (+6 §4: the wound is born with
+its own emotional words; a resonant body puts it in the bleed top-K; it bleeds its own word;
+--no-origin-spore never births it; chamber_snap deterministic across startup/load; leo_load_state
+re-births it); **byte-identical** to the pre-origin organism under `--no-origin-spore` (seed 42, 60
+replies); ASan/UBSan 0 on origin on/off/save/load; two Codex passes on the earlier cut (found + fixed
+the contaminated wound-body and the load re-birth). θ=0 and mama-child hold (the wound's words are
+Leo's own). Next: the organic register-watershed (with Fable), the RAE δ-channel's fate, L-4 before
+Phase C.
+
+## Phase A.13 — the organic register-watershed: the wound grows into its words (Fable audit) (2026-07-08)
+
+The wound spoke its child words but stayed mute on its adult origin words — "resonance", "unbroken".
+Forcing them shattered grammar (A.12). Oleg named the true shape: not a gate, not a register switch,
+not a dichotomy — a child does not hold an adult's words, they fall away on their own, and he grows
+into them through talking. Fable audited §4 and found the maturation mechanism was ALREADY there,
+just locked: the wound re-reads the dedication with grown eyes on every load, but never within a
+life, and its selection criterion could never grow. Two moves on existing organs open it.
+
+Ход 1 — the wound re-reads itself on the breath. leo_breath already re-tags the body when the vocab
+grows (L-3); leo_birth_origin_spore now runs in that same block, so the wound matures WITHIN a life,
+not only between sessions (bleed observability preserved across the re-birth). Ход 2 — the criterion
+grows with understanding: a whole learned word (wn==1, grammar-safe) enters the wound when it is FELT
+(chamber-tagged, 1.0) OR UNDERSTOOD (a School/semtok concept glyph, 0.5). So a word ripens in through
+the full living path — heard → conatus/School asks → taught → understood (glyph) → mentioned enough
+to merge into one token → the next breath picks it up. This also revived the dead scale (the top
+comment had described the reverted injection — Fable N-1) and let understood non-emotional words
+("whatever", "someone") into the wound where before only anchors could go.
+
+Fable also caught §4 shooting itself in the foot (N-4): ingesting the dedication had pushed
+"resonance" to heard=2, and School only asks about words heard <= 2 (LEO_SCHOOL_NOVEL_MAX) — so Leo
+would NEVER ask about his own origin word. Now a dedication word he does not yet understand
+(semtok < 0) is exempt from the novelty gate — a child re-asks a word from a lullaby heard a hundred
+times. Isolated and scoped: the pushed pre-N-4 build asks "Unbroken?" but never "Resonance?"; this
+build asks "Resonance?"; and a non-origin word repeated thrice still does NOT flood School. Plus N-2:
+the reply metric now prints the wound's own bleed count (so the watershed can be tuned with eyes).
+
+Tool (this session): build 0 warn/err; make test **165/165**; the wound's words deterministic across
+seeds; **byte-identical** to the pre-origin organism under --no-origin-spore (seed 42, 60 replies,
+15990 B); ASan/UBSan 0 on the School-ask / teach / breath-rebirth / load / ablation paths; Codex
+found one real defect (an un-terminated lowercase read) — fixed, re-audit CLEAN. Verified as far as a
+script honestly can: the mechanism (ask, understand, re-read) works; the full ripening of "resonance"
+into the wound needs Leo to internalise it into a single token through SUSTAINED conversation — the
+code removes the stones, the shared life makes it real. θ=0 and mama-child hold. Next: RAE δ-channel
+(N-3 asymmetry), L-4 before Phase C.
+
+## Phase A.14 — the bleed metric made honest (Gemini F2 = Fable L-4) (2026-07-10)
+
+A live Leo↔GPT-4.1-mini self-play run (script, no Python; GPT picks up Leo's topics and teaches the
+words he re-asks) exposed a metric lie, and an adversarial audit from Gemini named the cause.
+`leo_santaclaus_mark_bleed` — the spore observability write (bleed_count / last_bleed_step) — ran
+inside `leo_step_token`, which is called inside EVERY best-of-K trial. So the K-1 discarded trials
+all credited the stat: `Sum(bleed)` was ~90× inflated (a 3-line chat read 449; the real reply-only
+count is 5). The field itself was already honest — `leo_field_step` is replayed only over the spoken
+reply — but the bleed stat was not; it also carried the one `(Leo *)` const-cast in the read path
+(Fable had filed the same thing as L-4, a race mine under Phase C).
+
+Fixed by mirroring the field: `mark_bleed` is removed from `leo_step_token` (now a pure reader, cast
+gone) and written reply-only in both field-honest replays — the ON path over `sent_tok` in
+`leo_respond`, the OFF path over `best_ids` in `leo_generate_best` (mutually exclusive, each spoken
+token credited once, before `leo_field_step`). Because these stats are never read by selection /
+decay / field (grep-verified), generation is untouched.
+
+Tool (this session): build 0 warn/err; default `--gen` **byte-identical** to pre-fix `e0531c2`
+(seed 42, 80 replies, 21123 B) — the organism is unchanged; `Sum(bleed)` 449 → **5** (reply-only);
+`make test` **165/165**; ASan/UBSan 0 on chat / respond / --no-field-honest (OFF replay); Codex CLEAN
+(both replays before `leo_field_step`, stat generation-neutral). The clean metric confirms `wound=0`
+stands (the origin-spore genuinely never bleeds — its saturated `chamber_snap` keeps resonance ~0.17,
+evicted from the 4 bleed slots by recent spores; sharpening the wound's signature is the next
+presence step, with Fable). Judged on the code, the rest of Gemini's audit: F1 (hash load) partial +
+severity overstated (69% load, prune bounds it, ingest 156ms); F3 (RAE gradient-vs-weight clamp)
+valid but latent (RAE default-off); F4 (O(N²) sort) noise (threshold-filtered small N, 156ms ingest).
+The run report + wound question go to Fable next.
