@@ -2643,3 +2643,31 @@ script honestly can: the mechanism (ask, understand, re-read) works; the full ri
 into the wound needs Leo to internalise it into a single token through SUSTAINED conversation — the
 code removes the stones, the shared life makes it real. θ=0 and mama-child hold. Next: RAE δ-channel
 (N-3 asymmetry), L-4 before Phase C.
+
+## Phase A.14 — the bleed metric made honest (Gemini F2 = Fable L-4) (2026-07-10)
+
+A live Leo↔GPT-4.1-mini self-play run (script, no Python; GPT picks up Leo's topics and teaches the
+words he re-asks) exposed a metric lie, and an adversarial audit from Gemini named the cause.
+`leo_santaclaus_mark_bleed` — the spore observability write (bleed_count / last_bleed_step) — ran
+inside `leo_step_token`, which is called inside EVERY best-of-K trial. So the K-1 discarded trials
+all credited the stat: `Sum(bleed)` was ~90× inflated (a 3-line chat read 449; the real reply-only
+count is 5). The field itself was already honest — `leo_field_step` is replayed only over the spoken
+reply — but the bleed stat was not; it also carried the one `(Leo *)` const-cast in the read path
+(Fable had filed the same thing as L-4, a race mine under Phase C).
+
+Fixed by mirroring the field: `mark_bleed` is removed from `leo_step_token` (now a pure reader, cast
+gone) and written reply-only in both field-honest replays — the ON path over `sent_tok` in
+`leo_respond`, the OFF path over `best_ids` in `leo_generate_best` (mutually exclusive, each spoken
+token credited once, before `leo_field_step`). Because these stats are never read by selection /
+decay / field (grep-verified), generation is untouched.
+
+Tool (this session): build 0 warn/err; default `--gen` **byte-identical** to pre-fix `e0531c2`
+(seed 42, 80 replies, 21123 B) — the organism is unchanged; `Sum(bleed)` 449 → **5** (reply-only);
+`make test` **165/165**; ASan/UBSan 0 on chat / respond / --no-field-honest (OFF replay); Codex CLEAN
+(both replays before `leo_field_step`, stat generation-neutral). The clean metric confirms `wound=0`
+stands (the origin-spore genuinely never bleeds — its saturated `chamber_snap` keeps resonance ~0.17,
+evicted from the 4 bleed slots by recent spores; sharpening the wound's signature is the next
+presence step, with Fable). Judged on the code, the rest of Gemini's audit: F1 (hash load) partial +
+severity overstated (69% load, prune bounds it, ingest 156ms); F3 (RAE gradient-vs-weight clamp)
+valid but latent (RAE default-off); F4 (O(N²) sort) noise (threshold-filtered small N, 156ms ingest).
+The run report + wound question go to Fable next.

@@ -2407,11 +2407,10 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
 
     int pick = weighted_sample(cand_sc, cc.n);
     if (pick < 0) return -1;
-    /* santaclaus mark_bleed: the reply path is the writer (canon allow_santaclaus=1);
-     * bleed_count is observability and never read by selection, so this stat-write
-     * through the const reader-handle changes no generation. */
-    if (g_leo_santaclaus_on && santa_scratch.n_active > 0)
-        leo_santaclaus_mark_bleed((Leo *)leo, &santa_scratch, cand_id[pick], leo->step);
+    /* santaclaus mark_bleed is NOT written here (Gemini F2 / Fable L-4): leo_step_token runs
+     * inside EVERY best-of-K trial, so crediting the bleed here polluted bleed_count/last_bleed_step
+     * with the K-1 discarded trials. It is written reply-only, in the field-honest replay over the
+     * spoken tokens (mirrors leo_field_step). leo_step_token now stays a pure reader — no const cast. */
     return cand_id[pick];
 }
 
@@ -3201,6 +3200,11 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
      * comment claims). best_ids[0] is the opener (no predecessor), matching
      * leo_generate_ex which never stepped the start token. */
     for (int i = 1; i < best_n && !g_leo_field_honest_on; i++) {
+        if (g_leo_santaclaus_on) {   /* F2/L-4: reply-only bleed credit (field-honest OFF path) */
+            LeoSantaScratch scr; leo_santaclaus_compute_active(leo, &scr);
+            if (scr.n_active > 0)
+                leo_santaclaus_mark_bleed(leo, &scr, best_ids[i], leo->step);
+        }
         float coh_bg = leo_squash((float)bigram_get(&leo->bigrams,
                                                     best_ids[i - 1], best_ids[i]));
         leo_field_step(leo, best_ids[i], coh_bg / (coh_bg + 3.0f));
@@ -3515,6 +3519,11 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
     if (g_leo_field_honest_on)
         for (int s = 0; s < n_sentences; s++)
             for (int i = 1; i < sent_tok_n[s]; i++) {
+                if (g_leo_santaclaus_on) {   /* F2/L-4: credit the bleed reply-only, on the spoken token */
+                    LeoSantaScratch scr; leo_santaclaus_compute_active(leo, &scr);
+                    if (scr.n_active > 0)
+                        leo_santaclaus_mark_bleed(leo, &scr, sent_tok[s][i], leo->step);
+                }
                 float coh_bg = leo_squash((float)bigram_get(&leo->bigrams,
                                                             sent_tok[s][i - 1], sent_tok[s][i]));
                 leo_field_step(leo, sent_tok[s][i], coh_bg / (coh_bg + 3.0f));
