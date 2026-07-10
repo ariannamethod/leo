@@ -677,6 +677,7 @@ typedef struct {                        /* per-step scratch: top-K active spores
 #define LEO_RAE_REFINE 3
 #define LEO_RAE_W_RESONANCE 0.7f   /* R3 target = this·self-resonance + (1-this)·coherence (Oleg's ear, 2026-06-12) */
 #define LEO_RAE_W_CURIOSITY 0.15f  /* E-2c: how strongly the guess hit-rate pulls the quality target (curiosity as a learned policy) */
+#define LEO_RAE_MIN_OBS     20     /* Codex: rule-based fallback until the selector has this many observations — a fresh RAE has random weights, so it must not steer selection until it has learned (harmonix rae.py: "falls back to rule-based if selector not trained") */
 typedef struct {
     float w1[LEO_RAE_HID][LEO_RAE_IN];
     float b1[LEO_RAE_HID];
@@ -1708,7 +1709,9 @@ static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence the
 static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
 static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore bleed / self-residual recall off) */
 static int g_leo_origin_on = 1;         /* --no-origin-spore → 0 (§4: the dedication-wound spore off → byte-identical) */
-static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selector; default OFF until trained, opt-in) */
+static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE recursive selector trains ONLINE
+                                         * like MathBrain (rule-based fallback until it has observations) — Leo's
+                                         * θ=0 paradigm, learns by living, not by an offline marathon. --no-rae → 0. */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
@@ -3200,11 +3203,12 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
         int  produced = leo_generate_ex(leo, buf, sizeof(buf),
                                         start_hint, tail, n_tail, ids, &cap);
         float sc;
-        if (g_leo_rae_on) {                 /* A.4 R2: the learned selector scores the candidate */
+        int rae_active = g_leo_rae_on && leo->rae.observations >= LEO_RAE_MIN_OBS;  /* Codex: no steering by an untrained (random-weight) selector */
+        if (rae_active) {                   /* A.4 R2: the learned selector scores the candidate */
             float feat[LEO_RAE_IN];
             leo_rae_features(leo, ids, cap, feat);
             sc = leo_rae_forward(&leo->rae, feat, NULL);
-        } else {
+        } else {                            /* rule-based path — RAE off, or on-but-not-yet-trained */
             sc = leo_coherence_score(leo, ids, cap);
             if (leo->gravity)
                 sc += LEO_SELECT_GRAVITY_W * leo_sentence_gravity_score(leo, ids, cap);
@@ -3218,7 +3222,7 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
             best_tokens = produced;
         }
         /* coherence-scale early-exit only on the coherence path (RAE output isn't on that scale) */
-        if (!g_leo_rae_on && !leo->gravity && sc > 1.0f && cap > 12) break;  /* presence: no early-exit */
+        if (!rae_active && !leo->gravity && sc > 1.0f && cap > 12) break;  /* presence: no early-exit under a trained RAE */
     }
 
     /* field evolves over the WINNING sentence only (not the K-1 discarded
@@ -4896,6 +4900,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-santaclaus")) g_leo_santaclaus_on = 0;
         else if (!strcmp(argv[i], "--no-origin-spore")) g_leo_origin_on = 0;
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
+        else if (!strcmp(argv[i], "--no-rae")) g_leo_rae_on = 0;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;

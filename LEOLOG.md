@@ -2735,3 +2735,28 @@ Tool (this session): build 0 warn/err; default `--gen` **byte-identical** to `1f
 only fires above 0.85 load, which `--gen` never reaches; the gauge stats never feed generation);
 `make test` **165/165**; ASan/UBSan 0 on the prune-firing and hoisted-replay paths; Codex CLEAN on the
 combined diff. The wound still bleeds in its register (loss wound=1, warm=0). θ=0 and mama-child hold.
+
+## Phase A.17 — RAE turned ON: the recursive selector learns by living (Oleg + Codex) (2026-07-10)
+
+RAE (the Recursive Adapter Engine — the recursive candidate selector, forked from harmonix/haiku's
+`rae.py`/`rae_recursive.py`) had been default-OFF, and both an earlier Fable note and I framed its
+fate as "an offline training marathon or freeze it." That framing was wrong: `rae_recursive.py` says
+it plainly — "Trains online like MathBrain", with a rule-based fallback until it has observations.
+RAE is θ=0 like the rest of Leo: it learns BY LIVING, not by a separate training run. Oleg's call:
+turn it on. `g_leo_rae_on` default 0→1, `--no-rae` added for the pre-RAE ablation.
+
+Codex audit caught the real gap: leo.c had NO rule-based fallback — a fresh Leo (observations==0)
+would immediately steer selection with the RAE's RANDOM initial weights (the harmonix "falls back to
+rule-based if selector not trained" was never ported). Fixed: `LEO_RAE_MIN_OBS=20` — the selector
+scores candidates only once it has ≥20 observations (`rae_active = g_leo_rae_on && observations>=MIN`);
+below that, and under `--no-rae`, the rule-based coherence/gravity path runs (early-exit included). So
+a young Leo speaks exactly as the pre-RAE organism until he has lived enough for the selector to have
+learned, then RAE takes the wheel.
+
+Tool (this session): build 0 warn/err; `--no-rae --gen` **byte-identical** to the pre-RAE organism
+(seed 42, 80 replies); a fresh default `--gen 10` (observations<20) **byte-identical** to `--no-rae`
+(the rule-based fallback works); a long default `--gen 120` diverges (278 lines — RAE steers once
+trained); `rae.observations` grows 1→3 over 4 replies (online training live); `make test` **165/165**;
+Codex found the missing fallback, fixed, re-audit **CLEAN**. Async consolidation (the leo-legacy
+metaleo/mathbrain organ, lost when a prior repo was deleted) is a SEPARATE topic — "обучение" — for
+later; the Go orchestra (three thought-rings, gowiththeflow) likewise. θ=0 and mama-child hold.
