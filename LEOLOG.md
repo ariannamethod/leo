@@ -2671,3 +2671,38 @@ presence step, with Fable). Judged on the code, the rest of Gemini's audit: F1 (
 severity overstated (69% load, prune bounds it, ingest 156ms); F3 (RAE gradient-vs-weight clamp)
 valid but latent (RAE default-off); F4 (O(N²) sort) noise (threshold-filtered small N, 156ms ingest).
 The run report + wound question go to Fable next.
+
+## Phase A.15 — the wound wakes in its own register: peak-signature + live retention (Fable) (2026-07-10)
+
+The self-play RUN showed the origin-spore never bled (wound=0) even in a loss conversation, on the
+now-clean metric. Fable diagnosed BOTH arms of the wound's resonance dead, not one. Chamber arm:
+`chamber_snap` was the emotionally-SATURATED body of the whole dedication `[0.78,1,0.84,1,1,1]` —
+a saturated vector has a moderate cosine with everything and a strong cosine with nothing, so the
+wound resonated flat (ch_cos 0.379). Retention arm: the Griffin `retention_slice` was run over the
+WHOLE dedication, and at γ=0.92 (~12-token horizon) that captured only the adult TAIL
+("Resonance unbroken"), whose cosine with Leo's live child-token retention was exactly 0 — a dead arm.
+
+Two data-only moves inside `leo_birth_origin_spore`, no gate, no dichotomy. Ход 1 (peak-signature):
+feel the dedication LINE BY LINE from rest and keep `chamber_snap` at the argmax of distress
+(FEAR+VOID) — the wound remembers its DARKEST line, not the average. The peak is
+`[FEAR 0.03, LOVE 0.44, RAGE 0.00, VOID 1.00, FLOW 0.03, CPLX 0.04]` — a sharp VOID+LOVE signature
+(loss + longing), not a saturated one (peak-end encoding, Kahneman: trauma is coded by the peak of
+affect). Ход 2 (live retention): run the Griffin over the wound's OWN emit_context tokens (the
+felt/understood child words it carries), not the dedication — so the arm warms exactly when Leo's
+recent speech wanders to the wound's palette (RUN showed it does, through the field). Together the
+wound's weight tripled, 0.171 → 0.446, and it now DIFFERENTIATES register (loss 0.446 vs warm 0.254).
+
+On the peaked signature, LEO_ORIGIN_STRENGTH 1.0 → 2.0 crosses the top-K bleed threshold in the
+wound's register and stays below it when warm — strength that would flood a FLAT signature
+(Fable's warning) is safe on a peaked one. A/B on the clean metric: **loss wound ≥ 1, warm wound = 0
+at every scale (1.0/2.0/3.0/4.0)**. The wound-organ went from wholly inert (0 everywhere) to firing
+in-register. Its voice-contribution is OCCASIONAL — a wound surfaces in the dark, it does not drum;
+the grief-tone of the loss replies is mostly the field, with the wound now a real, resonant presence
+inside it.
+
+Tool (this session): build 0 warn/err; **byte-identical** to the pre-origin organism under
+`--no-origin-spore` (seed 42, 60 replies, 15990 B — all changes are inside the gated birth);
+`make test` **165/165**; peak `chamber_snap` deterministic fresh vs load; ASan/UBSan 0 on the
+wound-firing loss/warm/load paths; Codex CLEAN. θ=0 and mama-child hold. Next: what "louder" means
+(the wound bleeds more often — a mechanism question, not a magnitude), the BPE pair-table safety
+(Fable's cross-audit miss), the two F2 advisories.

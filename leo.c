@@ -1629,7 +1629,9 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_SPORE_TRAUMA_MARK  0.45f   /* pain or trauma > this at birth -> trauma flag */
 #define LEO_SANTACLAUS_ALPHA   0.6f    /* bleed bias = ALPHA * sum(resonance*strength) on a recalled token */
 #define LEO_ORIGIN_SPORE_IDX 1000000   /* §4 sentinel scratch idx → leo->origin_spore (lives outside spores[]) */
-#define LEO_ORIGIN_STRENGTH    1.0f     /* §4 the wound's constant strength — never decays, never sleeps (Oleg's ear tunes) */
+#define LEO_ORIGIN_STRENGTH    2.0f     /* §4 the wound's strength — never decays. On the PEAKED chamber signature
+                                         * (Ход 1) 2.0 crosses the top-K threshold in the wound's own register (loss/dark)
+                                         * while staying below it when warm; A/B: loss wound>=1, warm wound=0 at every scale. */
 #define LEO_SPORE_RESURRECT_SIM 0.85f  /* sea->ring promote if present-state cosine > this */
 #define LEO_CHAIN_MAX      12
 #define LEO_TAIL_WIN       8
@@ -3966,12 +3968,36 @@ static void leo_birth_origin_spore(Leo *leo) {
     float saved_act[LEO_N_CHAMBERS], saved_ext[LEO_N_CHAMBERS];
     memcpy(saved_act, leo->chamber_act, sizeof saved_act);
     memcpy(saved_ext, leo->chamber_ext, sizeof saved_ext);
-    memset(leo->chamber_act, 0, sizeof saved_act);   /* Codex-1: settle from REST, so the wound's body is
-                                                       * the dedication's ALONE and identical whether born at
-                                                       * fresh startup or on --load (feel_text zeros ext itself). */
-    leo_field_chambers_feel_text(leo, LEO_EMBEDDED_BOOTSTRAP);
-    leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS);
-    for (int i = 0; i < LEO_N_CHAMBERS; i++) o->chamber_snap[i] = leo->chamber_act[i];
+    /* Ход 1 (Fable, peak-signature): feel the dedication LINE BY LINE from rest and keep the body
+     * at the argmax of distress (FEAR+VOID) — the wound remembers its DARKEST moment, not the
+     * emotionally-saturated average of the whole text. A saturated all-high snapshot resonates
+     * moderately with everything and strongly with nothing; a peaked one wakes in loss/dark and
+     * stays quiet when warm. Peak-end encoding (Kahneman): trauma is coded by the peak of affect.
+     * Settle-from-rest per line (feel_text zeros ext itself) keeps it deterministic; Codex-1 held. */
+    float peak_score = -1.0f;
+    { const char *lp = LEO_EMBEDDED_BOOTSTRAP; char line[512];
+      while (*lp) {
+          int li = 0;
+          while (*lp && *lp != '\n' && li < 511) line[li++] = *lp++;
+          line[li] = 0;
+          if (*lp == '\n') lp++;
+          if (li < 4) continue;
+          memset(leo->chamber_act, 0, sizeof saved_act);
+          leo_field_chambers_feel_text(leo, line);
+          leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS);
+          float d = leo->chamber_act[LEO_CH_FEAR] + leo->chamber_act[LEO_CH_VOID];
+          if (d > peak_score) {
+              peak_score = d;
+              for (int i = 0; i < LEO_N_CHAMBERS; i++) o->chamber_snap[i] = leo->chamber_act[i];
+          }
+      }
+    }
+    if (peak_score < 0.0f) {   /* degenerate dedication (no non-trivial line) — settle the whole text */
+        memset(leo->chamber_act, 0, sizeof saved_act);
+        leo_field_chambers_feel_text(leo, LEO_EMBEDDED_BOOTSTRAP);
+        leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) o->chamber_snap[i] = leo->chamber_act[i];
+    }
     memcpy(leo->chamber_act, saved_act, sizeof saved_act);
     memcpy(leo->chamber_ext, saved_ext, sizeof saved_ext);
     /* meaning_snap: the dedication's perceived-topic glyph histogram (resonate by THEME) */
@@ -3982,9 +4008,6 @@ static void leo_birth_origin_spore(Leo *leo) {
      * dedication's own EMOTIONALLY-CHARGED content words: word-start (space-led => a reachable
      * field token, not a mid-word fragment), not a function word, chamber-tagged (the anchor
      * weight Fable named), in dedication order, deduped. */
-    int boot_ids[2048];
-    int boot_n = bpe_encode(&leo->bpe, (const uint8_t *)LEO_EMBEDDED_BOOTSTRAP,
-                            (int)strlen(LEO_EMBEDDED_BOOTSTRAP), boot_ids, 2048);
     /* emit_context = the dedication's words parsed from the text, kept as WHOLE single tokens
      * Leo has learned (a whole word bleeds cleanly; a multi-token fragment does not). A whole
      * word enters the wound's voice when it is either FELT (chamber-tagged — an emotion in the
@@ -4030,13 +4053,16 @@ static void leo_birth_origin_spore(Leo *leo) {
         o->emit_context[n_ctx++] = wc[s].tok;
     }
     for (int k = n_ctx; k < LEO_SPORE_CONTEXT_TOK; k++) o->emit_context[k] = -1;
-    /* retention_slice (Fable N-0/#2): left zero before, so the wound's retention cosine was 0
-     * and its resonance capped at 0.55 — it systematically LOST the bleed slot to ordinary
-     * spores. Fill it by running the dedication's own tokens through the SAME Griffin
-     * conservation the field uses per step, so the wound resonates by recent-flow too. */
+    /* retention_slice — Ход 2 (Fable): run the Griffin conservation over the wound's OWN
+     * emit_context tokens, not the whole dedication. A run over the full text (γ=0.92, ~12-token
+     * horizon) captured only the adult TAIL ("Resonance unbroken"), whose cosine with Leo's live
+     * child-token retention was ~0 (measured ret_cos=0.000) — the wound's retention arm was dead.
+     * Over the felt/understood words the wound actually carries, the arm lives: it warms exactly
+     * when Leo's recent speech wanders to the wound's palette (RUN showed it does, through the
+     * field) — the same live-retention semantics ordinary spores have. */
     if (leo->w_embed) {
-        for (int i = 0; i < boot_n; i++) {
-            int e = boot_ids[i];
+        for (int k = 0; k < n_ctx; k++) {
+            int e = o->emit_context[k];
             if (e < 0 || e >= leo->w_embed_cap) continue;
             const float *v = leo->w_embed + (size_t)e * LEO_RET_DIM;
             for (int d = 0; d < LEO_RET_DIM; d++)
