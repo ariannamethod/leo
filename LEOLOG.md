@@ -2760,3 +2760,30 @@ trained); `rae.observations` grows 1→3 over 4 replies (online training live); 
 Codex found the missing fallback, fixed, re-audit **CLEAN**. Async consolidation (the leo-legacy
 metaleo/mathbrain organ, lost when a prior repo was deleted) is a SEPARATE topic — "обучение" — for
 later; the Go orchestra (three thought-rings, gowiththeflow) likewise. θ=0 and mama-child hold.
+
+## SESSION HANDOFF — 2026-07-10 (continuation state)
+
+Full handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_2026-07-10.md` (read it first after a
+context reset — it carries the archive inventory, file:line map, gotchas, and the memory-lesson list).
+
+**Repo:** branch `leo-phase3` HEAD `189a35c`, pushed. `main` at `4241b44` (PR#4). leo-phase3 is +4
+ahead of main (`1fc3ced` wound-register, `8a5d47a` pair-table+advisories, `9502408` comment, `189a35c`
+RAE). **PR leo-phase3→main is pending Oleg's word.** Verification bar unchanged: build 0 · `make test`
+**165/165** · byte-id ablations (`--no-origin-spore`, `--no-rae`) via `git show <ref>:leo.c` fresh build
+· ASan 0 · Codex CLEAN.
+
+**DONE this session:** the whole Fable audit (L-1..L-4, §4 wound made to hurt + wake in its loss
+register, BPE pair-table prune, F2 metric, advisories, comment) + Gemini adversarial audit judged on
+code (F2 real=L-4, F1 overstated, F3 latent, F4 noise) + RAE turned ON (online selector, rule-based
+until obs≥20).
+
+**OPEN / NEXT — "обучение" (Oleg: separate, later, WITH a brief, NOT from memory):** (1) restore the
+lost **async consolidation** (leo-legacy `metaleo.py`/`mathbrain.py`/`phase4_bridges.py` "hebbian
+consolidator" — was in C, lost when a prior repo was deleted; find a backup or re-port explicitly, never
+reconstruct-from-memory); (2) the **Go orchestra** (three thought-rings, gowiththeflow — started:
+`neoleo-archive/leogo/leo_bridge.c`); (3) PR to main; (4) RAE F3 gradient-clamp if the math ever spikes.
+
+**Wound presence** is Oleg's ear, settled this session: "occasional-in-register" accepted (loss wound=1,
+warm=0); "louder" is mechanism-bounded, not a knob. **Sources to READ before any learning-architecture
+claim:** `harmonix/haiku/` (rae.py, rae_recursive.py, metahaiku.py), `~/arianna/leo-legacy/` (Python
+original), the `_notes/` handoffs, the archives. Fresh git history HIDES deleted features.
