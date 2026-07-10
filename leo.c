@@ -139,6 +139,8 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_TRIGRAM_MAX   (256 * 1024)
 #define LEO_PAIR_HASH     (64 * 1024)
 #define LEO_MERGE_THRESH  2   /* online BPE: promote pairs seen >=2x */
+#define LEO_PAIR_PRUNE_LOAD 0.85f  /* Fable: prune the pair-count table above this load — it has no other relief */
+#define LEO_PAIR_PRUNE_MIN  2      /* on prune drop pairs at/below this count (noise) + promoted (count==0) + tombstones */
 #define LEO_TRI_IDX_MAX   (256 * 1024) /* (a,b) -> {c,count} reverse index */
 #define LEO_BI_IDX_MAX    (128 * 1024) /* src -> {dst,count} reverse index */
 
@@ -306,6 +308,31 @@ static int pair_creates_word_gap(const BPE *bpe, int left, int right) {
         if (c == ' ' || c == '\n' || c == '\r' || c == '\t') return 1;
     }
     return 0;
+}
+
+/* Fable: the pair-count table (LEO_PAIR_HASH) has no decay or prune of its own — promoted slots
+ * (count==0, pair_left kept), noise (count<=MIN), and tombstones (-2) are never freed, so it fills
+ * monotonically; once bpe_pair_slot returns -1 online merge-learning STOPS SILENTLY, freezing the
+ * vocabulary and every organ keyed to its growth (L-3 re-tag, the §4 wound re-birth). Rebuild
+ * keeping only live above-noise pairs. Encoding is unaffected — it reads bpe->merges, not this table. */
+static void bpe_pair_prune(BPE *bpe, int min_count) {
+    int *L = malloc((size_t)LEO_PAIR_HASH * sizeof(int));
+    int *R = malloc((size_t)LEO_PAIR_HASH * sizeof(int));
+    int *C = malloc((size_t)LEO_PAIR_HASH * sizeof(int));
+    if (!L || !R || !C) { free(L); free(R); free(C); return; }   /* skip on OOM — harmless, table just stays full */
+    int n = 0;
+    for (int i = 0; i < LEO_PAIR_HASH; i++)
+        if (bpe->pair_left[i] >= 0 && bpe->pair_count[i] > min_count) {
+            L[n] = bpe->pair_left[i]; R[n] = bpe->pair_right[i]; C[n] = bpe->pair_count[i]; n++;
+        }
+    for (int i = 0; i < LEO_PAIR_HASH; i++) {
+        bpe->pair_left[i] = -1; bpe->pair_right[i] = -1; bpe->pair_count[i] = 0;
+    }
+    for (int k = 0; k < n; k++) {
+        int idx = bpe_pair_slot(bpe, L[k], R[k]);
+        if (idx >= 0) { bpe->pair_left[idx] = L[k]; bpe->pair_right[idx] = R[k]; bpe->pair_count[idx] = C[k]; }
+    }
+    free(L); free(R); free(C);
 }
 
 static int bpe_promote_slot(BPE *bpe, int slot) {
@@ -3201,12 +3228,14 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
      * transition (canon passes 1.0/0.0; we thread the real signal the field
      * comment claims). best_ids[0] is the opener (no predecessor), matching
      * leo_generate_ex which never stepped the start token. */
+    /* F2/L-4 + Fable advisory: one scratch computed BEFORE the replay (the frozen field selection
+     * saw), reused for every token, not a per-token recompute over the replay's drifting field. */
+    LeoSantaScratch off_scr; int off_has = 0;
+    if (g_leo_santaclaus_on && !g_leo_field_honest_on) {
+        leo_santaclaus_compute_active(leo, &off_scr); off_has = (off_scr.n_active > 0);
+    }
     for (int i = 1; i < best_n && !g_leo_field_honest_on; i++) {
-        if (g_leo_santaclaus_on) {   /* F2/L-4: reply-only bleed credit (field-honest OFF path) */
-            LeoSantaScratch scr; leo_santaclaus_compute_active(leo, &scr);
-            if (scr.n_active > 0)
-                leo_santaclaus_mark_bleed(leo, &scr, best_ids[i], leo->step);
-        }
+        if (off_has) leo_santaclaus_mark_bleed(leo, &off_scr, best_ids[i], leo->step);
         float coh_bg = leo_squash((float)bigram_get(&leo->bigrams,
                                                     best_ids[i - 1], best_ids[i]));
         leo_field_step(leo, best_ids[i], coh_bg / (coh_bg + 3.0f));
@@ -3518,19 +3547,21 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
      * retention / suffering reflect exactly what Leo said (what santaclaus 3b reads). */
     if (g_leo_spa_on)                        /* SPA: reconnect weakly-linked sentences (#3) */
         leo_spa_pass(leo, sent_text, sent_tok, sent_tok_n, n_sentences, surfaced_idx);
-    if (g_leo_field_honest_on)
+    if (g_leo_field_honest_on) {
+        /* F2/L-4 + Fable advisory: credit the bleed reply-only, and from ONE scratch computed
+         * BEFORE the replay — the frozen post-settle field selection actually saw — not a per-token
+         * recompute over the replay's drifting retention. The stat then mirrors what pulled the tokens. */
+        LeoSantaScratch on_scr; int on_has = 0;
+        if (g_leo_santaclaus_on) { leo_santaclaus_compute_active(leo, &on_scr); on_has = (on_scr.n_active > 0); }
         for (int s = 0; s < n_sentences; s++)
             for (int i = 1; i < sent_tok_n[s]; i++) {
-                if (g_leo_santaclaus_on) {   /* F2/L-4: credit the bleed reply-only, on the spoken token */
-                    LeoSantaScratch scr; leo_santaclaus_compute_active(leo, &scr);
-                    if (scr.n_active > 0)
-                        leo_santaclaus_mark_bleed(leo, &scr, sent_tok[s][i], leo->step);
-                }
+                if (on_has) leo_santaclaus_mark_bleed(leo, &on_scr, sent_tok[s][i], leo->step);
                 float coh_bg = leo_squash((float)bigram_get(&leo->bigrams,
                                                             sent_tok[s][i - 1], sent_tok[s][i]));
                 leo_field_step(leo, sent_tok[s][i], coh_bg / (coh_bg + 3.0f));
                 leo_field_self_voice(leo, sent_tok[s][i]);
             }
+    }
 
     int pos = 0;
     out[0] = 0;
@@ -3745,6 +3776,10 @@ static void leo_breath(Leo *leo) {
     if (leo->trigrams.capacity > 0 &&
         (float)leo->trigrams.n_entries / (float)leo->trigrams.capacity > LEO_LEX_PRUNE_LOAD)
         trigram_prune_rebuild(&leo->trigrams, LEO_LEX_PRUNE_THRESHOLD);
+    /* BPE pair-table has no relief of its own (Fable) — free it before saturation stalls merge-
+     * learning and freezes the vocabulary (with it the re-tag above and the §4 wound re-birth below). */
+    { int occ = 0; for (int i = 0; i < LEO_PAIR_HASH; i++) if (leo->bpe.pair_left[i] != -1) occ++;
+      if (occ > (int)(LEO_PAIR_PRUNE_LOAD * LEO_PAIR_HASH)) bpe_pair_prune(&leo->bpe, LEO_PAIR_PRUNE_MIN); }
     /* L-3 (Fable): the body is blind to words learned in --chat unless the derived tables are
      * rebuilt. When the online merges have grown the vocab, re-tag emotion words + re-crystallize
      * super-tokens (throttled to every LEO_RETAG_INTERVAL replies), so a word first heard in

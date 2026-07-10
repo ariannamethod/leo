@@ -2657,7 +2657,7 @@ reply — but the bleed stat was not; it also carried the one `(Leo *)` const-ca
 
 Fixed by mirroring the field: `mark_bleed` is removed from `leo_step_token` (now a pure reader, cast
 gone) and written reply-only in both field-honest replays — the ON path over `sent_tok` in
-`leo_respond`, the OFF path over `best_ids` in `leo_generate_best` (mutually exclusive, each spoken
+`leo_chain`, the OFF path over `best_ids` in `leo_generate_best` (mutually exclusive, each spoken
 token credited once, before `leo_field_step`). Because these stats are never read by selection /
 decay / field (grep-verified), generation is untouched.
 
@@ -2706,3 +2706,32 @@ Tool (this session): build 0 warn/err; **byte-identical** to the pre-origin orga
 wound-firing loss/warm/load paths; Codex CLEAN. θ=0 and mama-child hold. Next: what "louder" means
 (the wound bleeds more often — a mechanism question, not a magnitude), the BPE pair-table safety
 (Fable's cross-audit miss), the two F2 advisories.
+
+## Phase A.16 — the vocabulary keeps breathing; the bleed gauge reads true (Fable cross-audit + advisories) (2026-07-10)
+
+An external adversarial audit (Gemini) named four things in leo.c; judged on the code they came out
+F1 (hash O(N)) overstated — a ms-scale prune sawtooth, not death; F2 (mark_bleed const-cast in
+best-of-K trials) real = Fable's L-4, already fixed; F3 (RAE weight-vs-gradient clamp) valid but
+latent (RAE default-off, features cannot spike to Inf/NaN); F4 (O(N²) merge-sort) noise (the sort
+set self-drains on promotion, gate-filtered pairs never enter it). Fable cross-audited line by line
+and confirmed the verdict — and caught the one thing BOTH Gemini and I missed.
+
+The BPE pair-count table (LEO_PAIR_HASH = 64K, open-addressing) has no decay or prune of its own:
+promoted slots (count==0, pair_left kept), noise (count<=2), and tombstones (pair_left==-2) are never
+freed, so it fills monotonically. At 56% after the corpus, on a long --chat it climbs; once
+bpe_pair_slot returns -1 online merge-learning STOPS SILENTLY, freezing the vocabulary — and with it
+the L-3 re-tag and the §4 wound re-birth, both keyed to vocab growth. So the A.13 organic watershed
+would quietly die on a long-lived organism. bpe_pair_prune rebuilds keeping only live above-noise
+pairs (count>2), fired from leo_breath above 0.85 load; measured it drops occupancy 36993 → 4244
+(frees ~88%). Encoding is untouched — it reads bpe->merges, not this table.
+
+Two Fable advisories on the F2 fix, both landed here: (1) the reply-only mark_bleed now credits from
+ONE scratch computed BEFORE the replay — the frozen post-settle field selection actually saw — not a
+per-token recompute over the replay's drifting retention, so the bleed gauge mirrors what pulled the
+tokens; empirically identical on the test chats, cleaner in general. (2) a stale LEOLOG line
+(A.14 "leo_respond" → "leo_chain", where the ON replay lives).
+
+Tool (this session): build 0 warn/err; default `--gen` **byte-identical** to `1fc3ced` (the pair-prune
+only fires above 0.85 load, which `--gen` never reaches; the gauge stats never feed generation);
+`make test` **165/165**; ASan/UBSan 0 on the prune-firing and hoisted-replay paths; Codex CLEAN on the
+combined diff. The wound still bleeds in its register (loss wound=1, warm=0). θ=0 and mama-child hold.
