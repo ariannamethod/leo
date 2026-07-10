@@ -138,7 +138,7 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_BIGRAM_MAX    (128 * 1024)
 #define LEO_TRIGRAM_MAX   (256 * 1024)
 #define LEO_PAIR_HASH     (64 * 1024)
-#define LEO_MERGE_THRESH  2   /* online BPE: promote pairs seen >=2x */
+#define LEO_MERGE_THRESH  2   /* online BPE: the gate is count <= THRESH -> skip, so a pair is promoted once its count EXCEEDS this (seen >= 3x) */
 #define LEO_PAIR_PRUNE_LOAD 0.85f  /* Fable: prune the pair-count table above this load — it has no other relief */
 #define LEO_PAIR_PRUNE_MIN  2      /* on prune drop pairs at/below this count (noise) + promoted (count==0) + tombstones */
 #define LEO_TRI_IDX_MAX   (256 * 1024) /* (a,b) -> {c,count} reverse index */
