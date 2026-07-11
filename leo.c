@@ -2918,10 +2918,13 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
                            int start_hint,
                            const int *tail, int n_tail,
                            int *emitted_tail, int *n_emit) {
-    /* F-2: const over Leo — the compiler proves generation mutates nothing on the
-     * organism, so an async ring may call this under a shared rlock without
-     * corrupting the reply path (theme_boost is a local; step is applied by the
-     * caller; every field/candidate helper here already takes const Leo). */
+    /* F-2: const over Leo — the compiler proves generation writes nothing to the
+     * Leo STRUCT (theme_boost is a local; step is applied by the caller; every
+     * field/candidate helper here already takes const Leo). This is necessary but
+     * NOT sufficient for a concurrent ring: rand() (target jitter below,
+     * weighted_sample) is a shared global stream the const cannot see, so F-3 (a
+     * per-context PRNG threaded like theme_boost, seeded from (seed, cycle#)) is a
+     * blocking prerequisite before the first ring runs under an rlock. (Fable #1) */
     if (!out || max_len < 2) { if (emitted_tail && n_emit) *n_emit = 0; return 0; }
     out[0] = 0;
 
@@ -4414,6 +4417,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
     leo->temp_mult = 1.0f;
+    leo->heard_word[0] = 0;         /* F-2 (Fable #4): the heard word is a reply-transient — cleared at reply END too, so a background ring never arms the remembered-trace for the human's last word */
+    g_leo_last_dissonance = 0.0f;   /* F-2 (Fable #2): the dissonance global is a reply-transient — reset so a ring reads the OFF (known-theme) state, not whoever spoke last */
     free(g);
     free(pieces);
     free(pm);
@@ -4840,9 +4845,10 @@ static int leo_load_state(Leo *leo, const char *path) {
  * field is echoing the observer instead of resonating from itself. This is the
  * instrument that will prove the coming async organs (rings, dream) do not
  * corrupt the field into echo. Pure read-only over the two strings — never
- * touches Leo. Content word = lowercase alpha (+'), len >= 3, not a stop-word
- * (the School find_unknown notion, leo.c:3962); word split mirrors
- * leo_heard_ingest. Returns echo_words / reply_content_words, 0.0 if none. */
+ * touches Leo. Content word = lowercase alpha (+'), len >= 3, not a function word
+ * AND not a stop-word (matching School's find_unknown gate, leo.c:3933 — Fable
+ * re-audit #3: the stop-list alone lets you/was/and/what… count as content and
+ * inflates the ratio); word split mirrors leo_heard_ingest. Returns echo/reply_content, 0.0 if none. */
 #define LEO_ECHO_MAX_PROMPT_WORDS 128
 static float leo_echo_ratio(const char *prompt, const char *reply) {
     if (!prompt || !reply) return 0.0f;
@@ -4858,7 +4864,7 @@ static float leo_echo_ratio(const char *prompt, const char *reply) {
           }
           if (wi >= 3) {
               cur[wi] = 0;
-              if (!semtok_is_stop_word(cur) && npw < LEO_ECHO_MAX_PROMPT_WORDS) {
+              if (!leo_word_is_function(cur) && !semtok_is_stop_word(cur) && npw < LEO_ECHO_MAX_PROMPT_WORDS) {
                   int seen = 0;
                   for (int k = 0; k < npw; k++) if (!strcmp(pw[k], cur)) { seen = 1; break; }
                   if (!seen) { strncpy(pw[npw], cur, LEO_HEARD_WORDLEN - 1); pw[npw][LEO_HEARD_WORDLEN - 1] = 0; npw++; }
@@ -4879,7 +4885,7 @@ static float leo_echo_ratio(const char *prompt, const char *reply) {
           }
           if (wi >= 3) {
               cur[wi] = 0;
-              if (!semtok_is_stop_word(cur)) {
+              if (!leo_word_is_function(cur) && !semtok_is_stop_word(cur)) {
                   total++;
                   for (int k = 0; k < npw; k++) if (!strcmp(pw[k], cur)) { echo++; break; }
               }

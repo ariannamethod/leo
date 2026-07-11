@@ -1474,6 +1474,11 @@ int main(void) {
               "echo: shared stop-word 'the' is not counted (content disjoint == 0.0)");
         CHECK(leo_echo_ratio("hello castle", "") == 0.0f,
               "echo: empty reply == 0.0 (no divide-by-zero)");
+        /* Fable re-audit #3: function words (you/what/are) are excluded like School's
+         * gate, not just the stop-list — a fully field-grown reply no longer reads as
+         * high echo (without the leo_word_is_function gate this returns 0.6). */
+        CHECK(leo_echo_ratio("what do you see", "you know what you are") == 0.0f,
+              "echo: function-word overlap counts 0 (School gate, not just stop-list)");
     }
 
     printf("\n%d/%d passed\n", g_pass, g_total);

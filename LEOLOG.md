@@ -2789,8 +2789,9 @@ theorizing: I chased uninitialized memory for six probes when one diff localized
 off stdout, byte-id ablation is now a clean `diff` on raw stdout.
 
 Tool (this session, neo): build 0 warn/err; `make test` **170/170** (165 + 5 echo); ASan/UBSan clean;
-`--gen 40 --seed 42` raw stdout deterministic run-to-run and **byte-identical** to the pre-echo organism
-(the metric only measures); live `--chat` reads external_vocab=0.000 on a non-echoing reply. The instrument
+`--gen 40 --seed 42` **generation byte-identical** to the pre-echo organism (diff excluding the ingest-timing
+line, which this same change moved to stderr — so raw-stdout byte-id holds from B.1 forward, not across the
+B.1 boundary itself; Fable re-audit #5); the metric only measures. The instrument
 stands; generation is untouched. θ=0 and mama-child hold. Next — the substrate: the `LeoReplyCtx` hoist
 (Fable F-2) that makes generation `const Leo *`, so a ring can generate under an rlock without corrupting
 the reply path.
@@ -2810,9 +2811,12 @@ Leo had to move:
    leo_generate wrapper), so the same K increments still land before the field replay — byte-id (`298303b`).
 3. With both gone, **leo_generate_ex was declared `const Leo *`** — and it compiles, because every
    field/candidate helper it calls (leo_choose_seed/start/continuation, leo_presence_latched_successor,
-   leo_step_token, leo_form_elaborates) already takes const Leo. A clean build IS the proof: generation
-   mutates nothing on the organism, so a ring may call it under a shared rlock — ring-safety by
-   construction, not by discipline. leo_generate_best stays mutable — it owns the field replay over the
+   leo_step_token, leo_form_elaborates) already takes const Leo. A clean build IS the proof of
+   STRUCT-purity: generation writes nothing to the Leo struct. That is necessary but NOT sufficient for a
+   concurrent ring — rand() (target jitter, weighted_sample) is a shared global stream the const cannot
+   see, so F-3 (a per-context ring-PRNG seeded from (seed, cycle#)) is the blocking prerequisite before the
+   first ring runs under an rlock (Fable re-audit #1: the const proves struct-writes, not the rand channel;
+   the next pour). leo_generate_best stays mutable — it owns the field replay over the
    spoken sentence (a legitimate reply-path write).
 
 Not done here, deliberately: **F-1 step-HONESTY** (only the spoken reply should count, not the K-1
