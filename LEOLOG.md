@@ -2789,8 +2789,9 @@ theorizing: I chased uninitialized memory for six probes when one diff localized
 off stdout, byte-id ablation is now a clean `diff` on raw stdout.
 
 Tool (this session, neo): build 0 warn/err; `make test` **170/170** (165 + 5 echo); ASan/UBSan clean;
-`--gen 40 --seed 42` raw stdout deterministic run-to-run and **byte-identical** to the pre-echo organism
-(the metric only measures); live `--chat` reads external_vocab=0.000 on a non-echoing reply. The instrument
+`--gen 40 --seed 42` **generation byte-identical** to the pre-echo organism (diff excluding the ingest-timing
+line, which this same change moved to stderr — so raw-stdout byte-id holds from B.1 forward, not across the
+B.1 boundary itself; Fable re-audit #5); the metric only measures. The instrument
 stands; generation is untouched. θ=0 and mama-child hold. Next — the substrate: the `LeoReplyCtx` hoist
 (Fable F-2) that makes generation `const Leo *`, so a ring can generate under an rlock without corrupting
 the reply path.
@@ -2810,9 +2811,12 @@ Leo had to move:
    leo_generate wrapper), so the same K increments still land before the field replay — byte-id (`298303b`).
 3. With both gone, **leo_generate_ex was declared `const Leo *`** — and it compiles, because every
    field/candidate helper it calls (leo_choose_seed/start/continuation, leo_presence_latched_successor,
-   leo_step_token, leo_form_elaborates) already takes const Leo. A clean build IS the proof: generation
-   mutates nothing on the organism, so a ring may call it under a shared rlock — ring-safety by
-   construction, not by discipline. leo_generate_best stays mutable — it owns the field replay over the
+   leo_step_token, leo_form_elaborates) already takes const Leo. A clean build IS the proof of
+   STRUCT-purity: generation writes nothing to the Leo struct. That is necessary but NOT sufficient for a
+   concurrent ring — rand() (target jitter, weighted_sample) is a shared global stream the const cannot
+   see, so F-3 (a per-context ring-PRNG seeded from (seed, cycle#)) is the blocking prerequisite before the
+   first ring runs under an rlock (Fable re-audit #1: the const proves struct-writes, not the rand channel;
+   the next pour). leo_generate_best stays mutable — it owns the field replay over the
    spoken sentence (a legitimate reply-path write).
 
 Not done here, deliberately: **F-1 step-HONESTY** (only the spoken reply should count, not the K-1
@@ -2824,6 +2828,19 @@ Tool (neo, bricks `bb54a6f` / `298303b` / this): build 0 warn/err; make test **1
 concurrency scaffold: pthread rwlock + one worker + bounded queue + non-blocking dispatch + drain-on-exit
 (Fable §5). Load-bearing for that: the worker must hold `Leo *` on the heap, never a stack `Leo`
 (sizeof(Leo)=2.17 MB, larger than a default thread stack). θ=0 and mama-child hold.
+
+**Re-audit + F-3 (2026-07-11, same day).** Fable re-audited the substrate (read-only subagent): the three
+bricks byte-id sound; five findings where the CLAIM outran the code, all fixed + tool-reproduced (`81b2908`)
+— the "ring-safe by construction" overclaim corrected to struct-purity (rand() is a shared global the const
+cannot see), `g_leo_last_dissonance` + `heard_word` reset in the reply cleanup (the "off between replies"
+claim made true), the echo gate raised to School's spec (`+leo_word_is_function`; a field-grown reply that
+read 0.600 now reads 0.500). Then F-3: a per-context PRNG (`LeoRng`) threaded through weighted_sample +
+choose_seed/start/continuation + step_token + generate_ex. The reply passes `use_global=1` (wraps rand()
+exactly — `--gen` byte-identical); a ring passes an xorshift seeded from (seed, cycle#). Proven (rng_probe):
+1000 ring draws leave the global rand() stream untouched (r1==r2=16807), reply-rng == rand() (byte-id),
+seeds deterministic + distinct. The substrate now holds BOTH struct-purity (const) AND rand-isolation (F-3);
+the last piece for a concurrent ring is the lock discipline (Chunk 4). Tool: build 0; make test 171/171
+(+function-word test); `--gen 40 --seed 42` byte-id at every step; ASan/UBSan clean.
 
 ## SESSION HANDOFF — 2026-07-10 (continuation state)
 
