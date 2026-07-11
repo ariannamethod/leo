@@ -2914,10 +2914,14 @@ static void leo_field_step(Leo *leo, int emitted, float coherence_hint) {
 /* sentence generator: assemble tokens, then clean the shape (capital
  * start, period end, strip leading ws). emitted_tail returns the last
  * *n_emit tokens for chain continuity. */
-static int leo_generate_ex(Leo *leo, char *out, int max_len,
+static int leo_generate_ex(const Leo *leo, char *out, int max_len,
                            int start_hint,
                            const int *tail, int n_tail,
                            int *emitted_tail, int *n_emit) {
+    /* F-2: const over Leo — the compiler proves generation mutates nothing on the
+     * organism, so an async ring may call this under a shared rlock without
+     * corrupting the reply path (theme_boost is a local; step is applied by the
+     * caller; every field/candidate helper here already takes const Leo). */
     if (!out || max_len < 2) { if (emitted_tail && n_emit) *n_emit = 0; return 0; }
     out[0] = 0;
 
@@ -3086,8 +3090,7 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
         *n_emit = 0;
     }
 
-    leo->step += n;
-    return n;
+    return n;   /* F-2: step increment hoisted to the caller — generation writes nothing to Leo (const-safe for async rings) */
 }
 
 /* coherence score: avg bigram + 0.8 trigram + 0.5 cooc density + length. */
@@ -3203,6 +3206,7 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
         int  cap = LEO_GEN_MAX;
         int  produced = leo_generate_ex(leo, buf, sizeof(buf),
                                         start_hint, tail, n_tail, ids, &cap);
+        leo->step += produced;   /* F-2: was inside leo_generate_ex; here per trial (same K increments = byte-id), so generate_ex stays const */
         float sc;
         int rae_active = g_leo_rae_on && leo->rae.observations >= LEO_RAE_MIN_OBS;  /* Codex: no steering by an untrained (random-weight) selector */
         if (rae_active) {                   /* A.4 R2: the learned selector scores the candidate */
@@ -3263,7 +3267,9 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
 /* one sentence, no hints. */
 __attribute__((unused))  /* convenience wrapper; used by tests / phase 1 */
 static int leo_generate(Leo *leo, char *out, int max_len) {
-    return leo_generate_ex(leo, out, max_len, -1, NULL, 0, NULL, NULL);
+    int n = leo_generate_ex(leo, out, max_len, -1, NULL, 0, NULL, NULL);
+    leo->step += n;   /* F-2: step increment hoisted out of leo_generate_ex */
+    return n;
 }
 
 /* presence opener (Codex's find — github.com/ariannamethod, neoleo-presence;
