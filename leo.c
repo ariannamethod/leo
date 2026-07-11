@@ -3226,7 +3226,9 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
         int  cap = LEO_GEN_MAX;
         int  produced = leo_generate_ex(leo, buf, sizeof(buf),
                                         start_hint, tail, n_tail, ids, &cap, &rng);
-        leo->step += produced;   /* F-2: was inside leo_generate_ex; here per trial (same K increments = byte-id), so generate_ex stays const */
+        /* F-1 (Fable): generate_best does NOT advance leo->step — the spoken reply's token count is
+         * applied once in leo_chain, so discarded best-of-K trials / elaborate-retries / SPA-rejected
+         * reseeds never age the clock. generate_ex stays const (F-2); the ring never applies a count either. */
         float sc;
         int rae_active = g_leo_rae_on && leo->rae.observations >= LEO_RAE_MIN_OBS;  /* Codex: no steering by an untrained (random-weight) selector */
         if (rae_active) {                   /* A.4 R2: the learned selector scores the candidate */
@@ -3607,6 +3609,13 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
                 leo_field_self_voice(leo, sent_tok[s][i]);
             }
     }
+    /* F-1 (Fable): step counts ONLY the spoken reply — the final sent_tok (post-SPA, post-elaborate),
+     * never the best-of-K discards / elaborate-retries / SPA-rejected reseeds that all called
+     * generate_best. Applied once here, after the replay and before spore birth: the new spore is born
+     * at the post-reply step (age 0), while existing spores' mark_bleed used the reply's start-step. */
+    long spoken = 0;
+    for (int s = 0; s < n_sentences; s++) spoken += sent_tok_n[s];
+    leo->step += spoken;
 
     int pos = 0;
     out[0] = 0;
