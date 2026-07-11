@@ -2829,6 +2829,19 @@ concurrency scaffold: pthread rwlock + one worker + bounded queue + non-blocking
 (Fable §5). Load-bearing for that: the worker must hold `Leo *` on the heap, never a stack `Leo`
 (sizeof(Leo)=2.17 MB, larger than a default thread stack). θ=0 and mama-child hold.
 
+**Re-audit + F-3 (2026-07-11, same day).** Fable re-audited the substrate (read-only subagent): the three
+bricks byte-id sound; five findings where the CLAIM outran the code, all fixed + tool-reproduced (`81b2908`)
+— the "ring-safe by construction" overclaim corrected to struct-purity (rand() is a shared global the const
+cannot see), `g_leo_last_dissonance` + `heard_word` reset in the reply cleanup (the "off between replies"
+claim made true), the echo gate raised to School's spec (`+leo_word_is_function`; a field-grown reply that
+read 0.600 now reads 0.500). Then F-3: a per-context PRNG (`LeoRng`) threaded through weighted_sample +
+choose_seed/start/continuation + step_token + generate_ex. The reply passes `use_global=1` (wraps rand()
+exactly — `--gen` byte-identical); a ring passes an xorshift seeded from (seed, cycle#). Proven (rng_probe):
+1000 ring draws leave the global rand() stream untouched (r1==r2=16807), reply-rng == rand() (byte-id),
+seeds deterministic + distinct. The substrate now holds BOTH struct-purity (const) AND rand-isolation (F-3);
+the last piece for a concurrent ring is the lock discipline (Chunk 4). Tool: build 0; make test 171/171
+(+function-word test); `--gen 40 --seed 42` byte-id at every step; ASan/UBSan clean.
+
 ## SESSION HANDOFF — 2026-07-10 (continuation state)
 
 Full handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_2026-07-10.md` (read it first after a

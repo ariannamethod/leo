@@ -1833,12 +1833,28 @@ static int is_boundary_token(const BPE *bpe, int id) {
     return 0;
 }
 
-/* weighted sample from an array of non-negative scores. */
-static int weighted_sample(const float *scores, int n) {
+/* F-3 (Fable re-audit #1): a per-context PRNG so a background ring draws from its
+ * OWN stream, never the global rand() the reply path uses — else a ring perturbs
+ * the reply's --seed determinism and two rings race. use_global=1 wraps rand()
+ * EXACTLY (byte-identical to the pre-F-3 organism, on the reply/--gen path); a ring
+ * passes an xorshift context seeded from (--seed, cycle#, ring#). */
+typedef struct { uint32_t s; int use_global; } LeoRng;
+static inline uint32_t leo_rng_next(LeoRng *r) {
+    if (!r || r->use_global) return (uint32_t)rand();
+    uint32_t x = r->s ? r->s : 0x9e3779b9u;
+    x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+    r->s = x;
+    return x;
+}
+static inline int   leo_rng_mod(LeoRng *r, int n) { return n > 0 ? (int)(leo_rng_next(r) % (uint32_t)n) : -1; }
+static inline float leo_rng_unit(LeoRng *r) { return (float)leo_rng_next(r) / (float)RAND_MAX; }
+
+/* weighted sample from an array of non-negative scores (rng: reply=global-wrapped, ring=own stream). */
+static int weighted_sample(const float *scores, int n, LeoRng *rng) {
     float total = 0;
     for (int i = 0; i < n; i++) total += scores[i];
-    if (total <= 0) return n > 0 ? rand() % n : -1;
-    float r = ((float)rand() / (float)RAND_MAX) * total;
+    if (total <= 0) return leo_rng_mod(rng, n);
+    float r = leo_rng_unit(rng) * total;
     float acc = 0;
     for (int i = 0; i < n; i++) {
         acc += scores[i];
@@ -1871,7 +1887,7 @@ static void cand_temper(float *sc, int n, float inv_temp) {
  * gates that block (always on for the opener; g_leo_cont_theme_on for a continuation).
  * `tail` (the previous sentence's tail, continuation only) multiplies each seed by its
  * cooc resonance so a chain stays on one theme. */
-static int leo_choose_seed(const Leo *leo, const int *tail, int n_tail, int theme_primary_on) {
+static int leo_choose_seed(const Leo *leo, const int *tail, int n_tail, int theme_primary_on, LeoRng *rng) {
     int   cand_ids[LEO_SEED_CANDS];
     float cand_sc[LEO_SEED_CANDS];
     int   n = 0;
@@ -1937,17 +1953,17 @@ static int leo_choose_seed(const Leo *leo, const int *tail, int n_tail, int them
             cand_sc[i] *= mult;
         }
     }
-    int pick = weighted_sample(cand_sc, n);
+    int pick = weighted_sample(cand_sc, n, rng);
     return pick < 0 ? -1 : cand_ids[pick];
 }
 
 /* opener: theme-primary always on, no previous tail. */
-static int leo_choose_start(const Leo *leo) { return leo_choose_seed(leo, NULL, 0, 1); }
+static int leo_choose_start(const Leo *leo, LeoRng *rng) { return leo_choose_seed(leo, NULL, 0, 1, rng); }
 
 /* continuation opener (sentence 2+): theme-primary gated by g_leo_cont_theme_on, biased
  * by cooc resonance with the previous sentence's tail so a chain stays on one theme. */
-static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail) {
-    return leo_choose_seed(leo, tail, n_tail, g_leo_cont_theme_on);
+static int leo_choose_continuation(const Leo *leo, const int *tail, int n_tail, LeoRng *rng) {
+    return leo_choose_seed(leo, tail, n_tail, g_leo_cont_theme_on, rng);
 }
 
 /* within-reply bigram repeat guard: was (prev1, c) emitted in ctx_tail? */
@@ -2383,8 +2399,8 @@ static float temp_for_step(int step) {
  * gated, anti-chain-guarded, powf(1/temp), weighted-sampled. */
 static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
                           const int *emit_ctx_tail, int emit_ctx_tail_n,
-                          float theme_boost) {
-    if (prev1 < 0) return leo_choose_start(leo);
+                          float theme_boost, LeoRng *rng) {
+    if (prev1 < 0) return leo_choose_start(leo, rng);
     temp = clampf(temp, 0.05f, 10.0f);
     float inv_temp = 1.0f / temp;
 
@@ -2407,7 +2423,7 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
         bigram_walk_src(&leo->bigrams, prev1, cand_collect_bi, &cc);
     if (cc.n == 0) {
         if (prev_ends_alpha) return 32;          /* close the word with a space */
-        return leo_choose_start(leo);
+        return leo_choose_start(leo, rng);
     }
 
     /* anti-chain guard: after a space fallback, block re-emitting prev2
@@ -2438,7 +2454,7 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
 
     cand_temper(cand_sc, cc.n, inv_temp);   /* F-6: normalize-then-power, overflow-safe */
 
-    int pick = weighted_sample(cand_sc, cc.n);
+    int pick = weighted_sample(cand_sc, cc.n, rng);
     if (pick < 0) return -1;
     /* santaclaus mark_bleed is NOT written here (Gemini F2 / Fable L-4): leo_step_token runs
      * inside EVERY best-of-K trial, so crediting the bleed here polluted bleed_count/last_bleed_step
@@ -2917,7 +2933,7 @@ static void leo_field_step(Leo *leo, int emitted, float coherence_hint) {
 static int leo_generate_ex(const Leo *leo, char *out, int max_len,
                            int start_hint,
                            const int *tail, int n_tail,
-                           int *emitted_tail, int *n_emit) {
+                           int *emitted_tail, int *n_emit, LeoRng *rng) {
     /* F-2: const over Leo — the compiler proves generation writes nothing to the
      * Leo STRUCT (theme_boost is a local; step is applied by the caller; every
      * field/candidate helper here already takes const Leo). This is necessary but
@@ -2939,8 +2955,8 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
     } else {
         int start;
         if (start_hint >= 0) start = start_hint;
-        else if (tail && n_tail > 0) start = leo_choose_continuation(leo, tail, n_tail);
-        else start = leo_choose_start(leo);
+        else if (tail && n_tail > 0) start = leo_choose_continuation(leo, tail, n_tail, rng);
+        else start = leo_choose_start(leo, rng);
         if (start < 0) {
             snprintf(out, (size_t)max_len, "...");
             if (emitted_tail && n_emit) *n_emit = 0;
@@ -2956,7 +2972,7 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
         }
     }
 
-    int target = LEO_GEN_TARGET + (rand() % 10) - 5;
+    int target = LEO_GEN_TARGET + leo_rng_mod(rng, 10) - 5;
     int target_floor = LEO_GEN_MIN;
     if (g_leo_form_on && leo->gravity) {   /* A.6 F-3: in a reply, the velocity mode sets the word budget —
                                             * the breath lands the utterance hard, like a syllable counter.
@@ -3001,7 +3017,7 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
         float tau = temp_for_step(t) * leo->temp_mult;
         int tail_n = n < LEO_REPEAT_WINDOW ? n : LEO_REPEAT_WINDOW;
         const int *tl = ctx + (n - tail_n);
-        int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n, theme_boost);
+        int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n, theme_boost, rng);
         if (nxt < 0) break;
 
         /* deferred door-latch (my design): the heard word surfaces DEEPER in
@@ -3196,6 +3212,7 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
                              int *emitted_tail, int *n_emit) {
     if (k < 1) k = 1;
     if (k > LEO_BEST_OF_K) k = LEO_BEST_OF_K;
+    LeoRng rng = { 0, 1 };   /* F-3: reply path wraps the global rand() stream (byte-id); a ring passes its own xorshift */
 
     char  best_text[1024]; best_text[0] = 0;
     int   best_ids[LEO_GEN_MAX];
@@ -3208,7 +3225,7 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
         int  ids[LEO_GEN_MAX];
         int  cap = LEO_GEN_MAX;
         int  produced = leo_generate_ex(leo, buf, sizeof(buf),
-                                        start_hint, tail, n_tail, ids, &cap);
+                                        start_hint, tail, n_tail, ids, &cap, &rng);
         leo->step += produced;   /* F-2: was inside leo_generate_ex; here per trial (same K increments = byte-id), so generate_ex stays const */
         float sc;
         int rae_active = g_leo_rae_on && leo->rae.observations >= LEO_RAE_MIN_OBS;  /* Codex: no steering by an untrained (random-weight) selector */
@@ -3270,7 +3287,8 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
 /* one sentence, no hints. */
 __attribute__((unused))  /* convenience wrapper; used by tests / phase 1 */
 static int leo_generate(Leo *leo, char *out, int max_len) {
-    int n = leo_generate_ex(leo, out, max_len, -1, NULL, 0, NULL, NULL);
+    LeoRng rng = { 0, 1 };   /* F-3: reply path wraps global rand() (byte-id) */
+    int n = leo_generate_ex(leo, out, max_len, -1, NULL, 0, NULL, NULL, &rng);
     leo->step += n;   /* F-2: step increment hoisted out of leo_generate_ex */
     return n;
 }

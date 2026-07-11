@@ -556,11 +556,12 @@ int main(void) {
             g[theme] = 100.0f;   /* high enough that admission shows in sampling */
             g_leo_cont_theme_on = 1;
             int seen_on = 0;
-            for (int s = 0; s < 400 && !seen_on; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0) == theme) seen_on = 1; }
+            LeoRng trng = {0,1};   /* F-3: wraps rand() (byte-id) — srand(s) still drives the stream */
+            for (int s = 0; s < 400 && !seen_on; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0, &trng) == theme) seen_on = 1; }
             CHECK(seen_on == 1, "П-2: gravity-first ON -> excluded-rank theme seed is ADMITTED");
             g_leo_cont_theme_on = 0;
             int seen_off = 0;
-            for (int s = 0; s < 400; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0) == theme) seen_off = 1; }
+            for (int s = 0; s < 400; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0, &trng) == theme) seen_off = 1; }
             CHECK(seen_off == 0, "П-2: --no-cont-theme -> freq-only pool EXCLUDES it (flag gates the fix)");
             g_leo_cont_theme_on = 1;
             l.gravity = NULL; free(g);
