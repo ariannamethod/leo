@@ -1460,6 +1460,22 @@ int main(void) {
         leo_free(&ls); leo_free(&ld); remove(sp);
     }
 
+    /* echo metric (external_vocab) — the Phase-5 "became a chatbot" detector.
+     * Pure read-only over (prompt, reply); content word = alpha len>=3 non-stop. */
+    {
+        CHECK(leo_echo_ratio("castle dragon thunder", "castle dragon thunder") > 0.999f,
+              "echo: full parrot of content-words == 1.0");
+        CHECK(leo_echo_ratio("castle dragon", "sunshine laughter") == 0.0f,
+              "echo: disjoint content-words == 0.0");
+        float half = leo_echo_ratio("castle", "castle sunshine");
+        CHECK(half > 0.499f && half < 0.501f,
+              "echo: one of two reply content-words echoes -> 0.5");
+        CHECK(leo_echo_ratio("the castle", "the meadow") == 0.0f,
+              "echo: shared stop-word 'the' is not counted (content disjoint == 0.0)");
+        CHECK(leo_echo_ratio("hello castle", "") == 0.0f,
+              "echo: empty reply == 0.0 (no divide-by-zero)");
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }

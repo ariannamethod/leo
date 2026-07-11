@@ -1385,7 +1385,6 @@ typedef struct {
      * → a temperature multiplier. Known theme → cool, settle on theme;
      * unknown → hot, groping (the felt not-knowing). 1.0 outside a reply. */
     float        temp_mult;
-    float        theme_boost;   /* within-sentence leash: gravity tilt ×this, rises with off-theme drift */
     LeoHeard     heard;      /* whole surface-words Leo has heard (memory = love) */
     /* remembered-trace: the heard word's own token sequence, surfaced when it
      * is HELD in memory but its tokens are too rare to be picked normally
@@ -1976,6 +1975,7 @@ typedef struct {
     const uint8_t   *prompt_pieces;   /* prompt word pieces, gate-exempt (NULL=off) */
     const Leo       *leo;             /* chamber-register read (NULL = channel off) */
     const LeoSantaScratch *santa;     /* B2: top-K active spores for the bleed (NULL/empty = off) */
+    float            theme_boost;     /* within-sentence leash (F-2 hoist: was leo->theme_boost — kept off shared Leo so a ring can generate without clobbering the reply's leash) */
 } CandCollector;
 
 /* word-completion penalty: after an alpha-ended prev token, crush glue
@@ -2300,7 +2300,7 @@ static int cand_collect_tri(int c, float count, void *ud) {
     float score = 0.7f * leo_squash(count) + 0.3f * leo_squash(s);
     if (cc->gravity) {                      /* theme tilt toward the prompt */
         float g = cc->gravity[c];
-        float tb = cc->leo ? cc->leo->theme_boost : 1.0f;   /* within-sentence leash */
+        float tb = cc->theme_boost;   /* within-sentence leash (F-2: hoisted off shared Leo into the cand context) */
         score = score * (1.0f + LEO_GRAVITY_W * g * tb) + LEO_GRAVITY_ADD * g * tb;
     }
     score += leo_presence_entry_latch_boost(cc, c);
@@ -2323,7 +2323,7 @@ static int cand_collect_bi(int dst, float count, void *ud) {
     float score = leo_squash(count);
     if (cc->gravity) {
         float g = cc->gravity[dst];
-        float tb = cc->leo ? cc->leo->theme_boost : 1.0f;   /* within-sentence leash */
+        float tb = cc->theme_boost;   /* within-sentence leash (F-2: hoisted off shared Leo into the cand context) */
         score = score * (1.0f + LEO_GRAVITY_W * g * tb) + LEO_GRAVITY_ADD * g * tb;
     }
     score += leo_presence_entry_latch_boost(cc, dst);
@@ -2356,7 +2356,7 @@ static int leo_presence_latch_walk(int dst, float count, void *ud) {
     CandCollector gate = { NULL, NULL, 0, 0, pl->prev, &leo->cooc,
                            leo->gravity, &leo->bpe,
                            byte_is_word_cont((uint8_t)prev_last), NULL, 0,
-                           NULL, NULL, NULL };   /* +santa = NULL (latch gate: no bleed) */
+                           NULL, NULL, NULL, 1.0f };   /* +santa = NULL (latch gate: no bleed); theme_boost neutral (gate never reads it) */
     if (cand_gate_reject(&gate, dst)) return 0;
     float score = 100.0f * g + leo_squash(count);
     if (score > pl->best_score) { pl->best_score = score; pl->best = dst; }
@@ -2382,7 +2382,8 @@ static float temp_for_step(int step) {
  * Candidates: trigram (prev2,prev1) successors, bigram (prev1) fallback,
  * gated, anti-chain-guarded, powf(1/temp), weighted-sampled. */
 static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
-                          const int *emit_ctx_tail, int emit_ctx_tail_n) {
+                          const int *emit_ctx_tail, int emit_ctx_tail_n,
+                          float theme_boost) {
     if (prev1 < 0) return leo_choose_start(leo);
     temp = clampf(temp, 0.05f, 10.0f);
     float inv_temp = 1.0f / temp;
@@ -2398,7 +2399,7 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
     CandCollector cc = { cand_id, cand_sc, 0, LEO_MAX_CANDS,
                          prev1, &leo->cooc, leo->gravity, &leo->bpe,
                          prev_ends_alpha, emit_ctx_tail, emit_ctx_tail_n,
-                         leo->prompt_pieces, leo, &santa_scratch };
+                         leo->prompt_pieces, leo, &santa_scratch, theme_boost };
 
     if (prev2 >= 0)
         trigram_walk_ab(&leo->trigrams, prev2, prev1, cand_collect_tri, &cc);
@@ -2973,7 +2974,7 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
     int elab = g_leo_elaborate_on && leo_form_elaborates(leo) &&
                g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
                (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS;
-    leo->theme_boost = 1.0f;   /* within-sentence leash, reset per sentence */
+    float theme_boost = 1.0f;   /* within-sentence leash, reset per sentence (F-2: a local, no longer shared leo->theme_boost) */
     for (int t = 1; t < LEO_GEN_MAX; t++) {
         int prev1 = ctx[n - 1];
         int prev2 = n >= 2 ? ctx[n - 2] : -1;
@@ -2987,13 +2988,13 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
                 int id = ctx[k];
                 if (id >= 0 && id < V && leo->gravity[id] > 0.0f) break;
             }
-            leo->theme_boost = 1.0f + LEO_THEME_LEASH * ((float)since / (float)LEO_LEASH_WIN);
-            if (leo->theme_boost > LEO_LEASH_MAX) leo->theme_boost = LEO_LEASH_MAX;
+            theme_boost = 1.0f + LEO_THEME_LEASH * ((float)since / (float)LEO_LEASH_WIN);
+            if (theme_boost > LEO_LEASH_MAX) theme_boost = LEO_LEASH_MAX;
         }
         float tau = temp_for_step(t) * leo->temp_mult;
         int tail_n = n < LEO_REPEAT_WINDOW ? n : LEO_REPEAT_WINDOW;
         const int *tl = ctx + (n - tail_n);
-        int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n);
+        int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n, theme_boost);
         if (nxt < 0) break;
 
         /* deferred door-latch (my design): the heard word surfaces DEEPER in
@@ -4826,6 +4827,64 @@ static int leo_load_state(Leo *leo, const char *path) {
     return r;
 }
 
+/* ── echo metric — external_vocab, the Phase-5 "Leo became a chatbot" detector ──
+ * (leo-legacy LEOLOG.md:284/293-299, AGENTS.md:182). Of the content-words Leo
+ * just emitted, the fraction that came straight back from the human's prompt —
+ * parroting, not speaking from his own field. Healthy < 0.2; a spike means the
+ * field is echoing the observer instead of resonating from itself. This is the
+ * instrument that will prove the coming async organs (rings, dream) do not
+ * corrupt the field into echo. Pure read-only over the two strings — never
+ * touches Leo. Content word = lowercase alpha (+'), len >= 3, not a stop-word
+ * (the School find_unknown notion, leo.c:3962); word split mirrors
+ * leo_heard_ingest. Returns echo_words / reply_content_words, 0.0 if none. */
+#define LEO_ECHO_MAX_PROMPT_WORDS 128
+static float leo_echo_ratio(const char *prompt, const char *reply) {
+    if (!prompt || !reply) return 0.0f;
+    char pw[LEO_ECHO_MAX_PROMPT_WORDS][LEO_HEARD_WORDLEN];
+    int  npw = 0;
+    /* pass 1 — collect the prompt's content-words (deduped) */
+    { char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+      for (const char *p = prompt; ; p++) {
+          unsigned char ch = (unsigned char)*p;
+          if (ch && (isalpha(ch) || ch == '\'')) {
+              if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+              continue;
+          }
+          if (wi >= 3) {
+              cur[wi] = 0;
+              if (!semtok_is_stop_word(cur) && npw < LEO_ECHO_MAX_PROMPT_WORDS) {
+                  int seen = 0;
+                  for (int k = 0; k < npw; k++) if (!strcmp(pw[k], cur)) { seen = 1; break; }
+                  if (!seen) { strncpy(pw[npw], cur, LEO_HEARD_WORDLEN - 1); pw[npw][LEO_HEARD_WORDLEN - 1] = 0; npw++; }
+              }
+          }
+          wi = 0;
+          if (!ch) break;
+      }
+    }
+    /* pass 2 — scan the reply's content-words, count how many echo the prompt */
+    int total = 0, echo = 0;
+    { char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+      for (const char *p = reply; ; p++) {
+          unsigned char ch = (unsigned char)*p;
+          if (ch && (isalpha(ch) || ch == '\'')) {
+              if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+              continue;
+          }
+          if (wi >= 3) {
+              cur[wi] = 0;
+              if (!semtok_is_stop_word(cur)) {
+                  total++;
+                  for (int k = 0; k < npw; k++) if (!strcmp(pw[k], cur)) { echo++; break; }
+              }
+          }
+          wi = 0;
+          if (!ch) break;
+      }
+    }
+    return total ? (float)echo / (float)total : 0.0f;
+}
+
 /* ========================================================================
  * SMOKE / SPEAK HARNESS (step 0 field stats + step 1 voice + presence)
  * ======================================================================== */
@@ -4950,8 +5009,8 @@ int main(int argc, char **argv) {
     double t0 = leo_ns();
     if (corpus) {
         leo_ingest(&leo, corpus);
-        printf("[leo step0] ingest corpus '%s' (%ld bytes) in %.1f ms\n",
-               corpus_path, clen, (leo_ns() - t0) / 1e6);
+        fprintf(stderr, "[leo step0] ingest corpus '%s' (%ld bytes) in %.1f ms\n",
+                corpus_path, clen, (leo_ns() - t0) / 1e6);   /* stderr: wall-clock timing kept OFF stdout so byte-id ablations hash a deterministic stdout (2026-07-11) */
         free(corpus);
         /* §4 — Leo learns his ORIGIN. The dedication (embedded in this .c) is ingested into the
          * field alongside the corpus, so its own words (resonance, unbroken, honest, miss …) become
@@ -5138,6 +5197,8 @@ int main(int argc, char **argv) {
                 printf("     [santaclaus: spores=%d sea=%d | recall-events Sum(bleed)=%ld | wound=%ld]\n",
                        leo.n_spores, leo.n_sea, bled, wound_bled);
             }
+            printf("     [echo: external_vocab=%.3f (<0.2 = Leo speaks from his own field, not the prompt)]\n",
+                   leo_echo_ratio(line, reply));
         }
     }
 

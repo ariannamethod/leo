@@ -2761,6 +2761,40 @@ Codex found the missing fallback, fixed, re-audit **CLEAN**. Async consolidation
 metaleo/mathbrain organ, lost when a prior repo was deleted) is a SEPARATE topic — "обучение" — for
 later; the Go orchestra (three thought-rings, gowiththeflow) likewise. θ=0 and mama-child hold.
 
+## Phase B.1 — the echo instrument: external_vocab, the field-corruption detector (async consolidation opens; Oleg + Fable) (2026-07-11)
+
+A new arc: **asynchronous consolidation** — the organ Leo has always lacked. All his learning runs
+synchronously on the reply path (`leo_breath` :3770 and the decay/prune it drives, School, γ-capsule, RAE,
+scars). The async layer — the background digestion that dreams, replays, and tracks his own history while
+he is idle — was built across the lineage (Python `metaleo`/`dream`/`overthinking`/`gowiththeflow`; then
+the C `leo_dream`+`MemorySea` in the old `leo` repo, v2.5.0; then the `leogo` Go orchestra in an earlier
+neoleo snapshot, ~step 42a) and lost across repo resets. The restoration plan is Fable's
+(`~/arianna/_notes/FABLE_PLAN_leo_async_consolidation_2026-07-11.md`, on the brief of the same day); the
+mechanism is Oleg's call — **async discipline**: one lock per field ("discipline not information, crystals
+not oceans"). The legacy proved why (leo-legacy LEOLOG.md:293-299, "the Phase 5 Catastrophe"): a field
+mutated without that discipline echoes the observer — external_vocab spikes, "Leo becomes a chatbot." So
+the first brick is the instrument that will prove every async organ keeps that from happening.
+
+**`leo_echo_ratio(prompt, reply)`** (leo.c core, before the harness): of the content-words Leo just emitted
+(lowercase alpha, len≥3, non-stop via `semtok_is_stop_word`), the fraction that came straight back from the
+human's prompt. This is the legacy external_vocab, healthy < 0.2. Pure read-only over the two strings —
+never touches Leo. Wired into the `--chat` per-turn metrics (external_vocab printed each reply). Five unit
+tests (full-parrot=1.0, disjoint=0.0, half=0.5, stop-words excluded, empty-reply=0.0).
+
+A byte-id hygiene fix rode along: the ingest-timing print (leo.c:5011) moved to **stderr** — it carried a
+wall-clock value (145.1 ms vs 141.7 ms run-to-run) that polluted a whole-stdout hash and briefly *looked*
+like a generation-determinism bug. It was not: `diff` of two same-seed runs showed the timing line was the
+ONLY difference; generation is fully deterministic under `--seed`. Lesson relearned — diff two runs before
+theorizing: I chased uninitialized memory for six probes when one diff localized it instantly. With timing
+off stdout, byte-id ablation is now a clean `diff` on raw stdout.
+
+Tool (this session, neo): build 0 warn/err; `make test` **170/170** (165 + 5 echo); ASan/UBSan clean;
+`--gen 40 --seed 42` raw stdout deterministic run-to-run and **byte-identical** to the pre-echo organism
+(the metric only measures); live `--chat` reads external_vocab=0.000 on a non-echoing reply. The instrument
+stands; generation is untouched. θ=0 and mama-child hold. Next — the substrate: the `LeoReplyCtx` hoist
+(Fable F-2) that makes generation `const Leo *`, so a ring can generate under an rlock without corrupting
+the reply path.
+
 ## SESSION HANDOFF — 2026-07-10 (continuation state)
 
 Full handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_2026-07-10.md` (read it first after a
