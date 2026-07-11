@@ -3293,6 +3293,19 @@ static int leo_generate(Leo *leo, char *out, int max_len) {
     return n;
 }
 
+/* Chunk-4: the ring-input — a background ring generates from Leo READ-ONLY, drawing
+ * from its OWN xorshift stream (seeded from the ring cycle#), never the global rand()
+ * the reply uses (F-3). No step increment: generate_ex is const and the ring never
+ * applies the token count, so a background thought does not age the reply's clock. The
+ * transients it reads (gravity/temp_mult/dissonance/heard_word) are the OFF state
+ * between replies (leo_respond cleanup) — where a ring runs under an rlock. This is the
+ * entry the worker will call; the §3 somatic feedback (not lexical ingest) lands with the worker. */
+__attribute__((unused))  /* used by tests now; the Chunk-4 worker will call it next */
+static int leo_generate_ring(const Leo *leo, uint32_t cycle_seed, char *out, int max_len) {
+    LeoRng rng = { cycle_seed ? cycle_seed : 0x9e3779b9u, 0 };   /* use_global=0 → own stream, isolated from global rand() */
+    return leo_generate_ex(leo, out, max_len, -1, NULL, 0, NULL, NULL, &rng);
+}
+
 /* presence opener (Codex's find — github.com/ariannamethod, neoleo-presence;
  * field-free port). The first sentence opens on the single strongest theme
  * clean-seed: gravity DOMINATES (×100), frequency is only a tiebreak. So
