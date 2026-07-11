@@ -2914,10 +2914,14 @@ static void leo_field_step(Leo *leo, int emitted, float coherence_hint) {
 /* sentence generator: assemble tokens, then clean the shape (capital
  * start, period end, strip leading ws). emitted_tail returns the last
  * *n_emit tokens for chain continuity. */
-static int leo_generate_ex(Leo *leo, char *out, int max_len,
+static int leo_generate_ex(const Leo *leo, char *out, int max_len,
                            int start_hint,
                            const int *tail, int n_tail,
                            int *emitted_tail, int *n_emit) {
+    /* F-2: const over Leo — the compiler proves generation mutates nothing on the
+     * organism, so an async ring may call this under a shared rlock without
+     * corrupting the reply path (theme_boost is a local; step is applied by the
+     * caller; every field/candidate helper here already takes const Leo). */
     if (!out || max_len < 2) { if (emitted_tail && n_emit) *n_emit = 0; return 0; }
     out[0] = 0;
 

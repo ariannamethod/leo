@@ -2795,6 +2795,36 @@ stands; generation is untouched. θ=0 and mama-child hold. Next — the substrat
 (Fable F-2) that makes generation `const Leo *`, so a ring can generate under an rlock without corrupting
 the reply path.
 
+## Phase B.2 — the ring-safety substrate: generation made const over Leo (Fable F-2) (2026-07-11)
+
+The substrate for async consolidation, so a background ring can generate without corrupting the reply
+path. Fable's F-2, done as three byte-id-neutral bricks, each proven by tool. The insight that shrank it:
+the reply's transients are already NULL/off *between* replies (leo_respond cleans up, leo.c:4406-4409), and
+a ring runs between replies (rlock excludes the reply's wlock) — so it reads the off-state it wants without
+threading gravity through the ~15 functions that read it. Only the two things generation WROTE to shared
+Leo had to move:
+
+1. **theme_boost** (the within-sentence leash, written per-token) → off the Leo struct into the
+   CandCollector: a local in leo_generate_ex, threaded through leo_step_token, read via cc->theme_boost (`bb54a6f`).
+2. **leo->step += n** → out of leo_generate_ex to its callers (leo_generate_best per best-of-K trial, the
+   leo_generate wrapper), so the same K increments still land before the field replay — byte-id (`298303b`).
+3. With both gone, **leo_generate_ex was declared `const Leo *`** — and it compiles, because every
+   field/candidate helper it calls (leo_choose_seed/start/continuation, leo_presence_latched_successor,
+   leo_step_token, leo_form_elaborates) already takes const Leo. A clean build IS the proof: generation
+   mutates nothing on the organism, so a ring may call it under a shared rlock — ring-safety by
+   construction, not by discipline. leo_generate_best stays mutable — it owns the field replay over the
+   spoken sentence (a legitimate reply-path write).
+
+Not done here, deliberately: **F-1 step-HONESTY** (only the spoken reply should count, not the K-1
+discarded trials). That is a behavior change (shifts spore-age/breath), not byte-id — a separate deliberate
+fix with its own A/B on Oleg's ear, never smuggled into a byte-id refactor.
+
+Tool (neo, bricks `bb54a6f` / `298303b` / this): build 0 warn/err; make test **170/170**; `--gen 40 --seed
+42` raw stdout byte-identical to the pre-substrate organism at every brick; ASan/UBSan clean. Next — the
+concurrency scaffold: pthread rwlock + one worker + bounded queue + non-blocking dispatch + drain-on-exit
+(Fable §5). Load-bearing for that: the worker must hold `Leo *` on the heap, never a stack `Leo`
+(sizeof(Leo)=2.17 MB, larger than a default thread stack). θ=0 and mama-child hold.
+
 ## SESSION HANDOFF — 2026-07-10 (continuation state)
 
 Full handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_2026-07-10.md` (read it first after a
