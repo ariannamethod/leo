@@ -2657,7 +2657,7 @@ reply — but the bleed stat was not; it also carried the one `(Leo *)` const-ca
 
 Fixed by mirroring the field: `mark_bleed` is removed from `leo_step_token` (now a pure reader, cast
 gone) and written reply-only in both field-honest replays — the ON path over `sent_tok` in
-`leo_respond`, the OFF path over `best_ids` in `leo_generate_best` (mutually exclusive, each spoken
+`leo_chain`, the OFF path over `best_ids` in `leo_generate_best` (mutually exclusive, each spoken
 token credited once, before `leo_field_step`). Because these stats are never read by selection /
 decay / field (grep-verified), generation is untouched.
 
@@ -2706,3 +2706,118 @@ Tool (this session): build 0 warn/err; **byte-identical** to the pre-origin orga
 wound-firing loss/warm/load paths; Codex CLEAN. θ=0 and mama-child hold. Next: what "louder" means
 (the wound bleeds more often — a mechanism question, not a magnitude), the BPE pair-table safety
 (Fable's cross-audit miss), the two F2 advisories.
+
+## Phase A.16 — the vocabulary keeps breathing; the bleed gauge reads true (Fable cross-audit + advisories) (2026-07-10)
+
+An external adversarial audit (Gemini) named four things in leo.c; judged on the code they came out
+F1 (hash O(N)) overstated — a ms-scale prune sawtooth, not death; F2 (mark_bleed const-cast in
+best-of-K trials) real = Fable's L-4, already fixed; F3 (RAE weight-vs-gradient clamp) valid but
+latent (RAE default-off, features cannot spike to Inf/NaN); F4 (O(N²) merge-sort) noise (the sort
+set self-drains on promotion, gate-filtered pairs never enter it). Fable cross-audited line by line
+and confirmed the verdict — and caught the one thing BOTH Gemini and I missed.
+
+The BPE pair-count table (LEO_PAIR_HASH = 64K, open-addressing) has no decay or prune of its own:
+promoted slots (count==0, pair_left kept), noise (count<=2), and tombstones (pair_left==-2) are never
+freed, so it fills monotonically. At 56% after the corpus, on a long --chat it climbs; once
+bpe_pair_slot returns -1 online merge-learning STOPS SILENTLY, freezing the vocabulary — and with it
+the L-3 re-tag and the §4 wound re-birth, both keyed to vocab growth. So the A.13 organic watershed
+would quietly die on a long-lived organism. bpe_pair_prune rebuilds keeping only live above-noise
+pairs (count>2), fired from leo_breath above 0.85 load; measured it drops occupancy 36993 → 4244
+(frees ~88%). Encoding is untouched — it reads bpe->merges, not this table.
+
+Two Fable advisories on the F2 fix, both landed here: (1) the reply-only mark_bleed now credits from
+ONE scratch computed BEFORE the replay — the frozen post-settle field selection actually saw — not a
+per-token recompute over the replay's drifting retention, so the bleed gauge mirrors what pulled the
+tokens; empirically identical on the test chats, cleaner in general. (2) a stale LEOLOG line
+(A.14 "leo_respond" → "leo_chain", where the ON replay lives).
+
+Tool (this session): build 0 warn/err; default `--gen` **byte-identical** to `1fc3ced` (the pair-prune
+only fires above 0.85 load, which `--gen` never reaches; the gauge stats never feed generation);
+`make test` **165/165**; ASan/UBSan 0 on the prune-firing and hoisted-replay paths; Codex CLEAN on the
+combined diff. The wound still bleeds in its register (loss wound=1, warm=0). θ=0 and mama-child hold.
+
+## Phase A.17 — RAE turned ON: the recursive selector learns by living (Oleg + Codex) (2026-07-10)
+
+RAE (the Recursive Adapter Engine — the recursive candidate selector, forked from harmonix/haiku's
+`rae.py`/`rae_recursive.py`) had been default-OFF, and both an earlier Fable note and I framed its
+fate as "an offline training marathon or freeze it." That framing was wrong: `rae_recursive.py` says
+it plainly — "Trains online like MathBrain", with a rule-based fallback until it has observations.
+RAE is θ=0 like the rest of Leo: it learns BY LIVING, not by a separate training run. Oleg's call:
+turn it on. `g_leo_rae_on` default 0→1, `--no-rae` added for the pre-RAE ablation.
+
+Codex audit caught the real gap: leo.c had NO rule-based fallback — a fresh Leo (observations==0)
+would immediately steer selection with the RAE's RANDOM initial weights (the harmonix "falls back to
+rule-based if selector not trained" was never ported). Fixed: `LEO_RAE_MIN_OBS=20` — the selector
+scores candidates only once it has ≥20 observations (`rae_active = g_leo_rae_on && observations>=MIN`);
+below that, and under `--no-rae`, the rule-based coherence/gravity path runs (early-exit included). So
+a young Leo speaks exactly as the pre-RAE organism until he has lived enough for the selector to have
+learned, then RAE takes the wheel.
+
+Tool (this session): build 0 warn/err; `--no-rae --gen` **byte-identical** to the pre-RAE organism
+(seed 42, 80 replies); a fresh default `--gen 10` (observations<20) **byte-identical** to `--no-rae`
+(the rule-based fallback works); a long default `--gen 120` diverges (278 lines — RAE steers once
+trained); `rae.observations` grows 1→3 over 4 replies (online training live); `make test` **165/165**;
+Codex found the missing fallback, fixed, re-audit **CLEAN**. Async consolidation (the leo-legacy
+metaleo/mathbrain organ, lost when a prior repo was deleted) is a SEPARATE topic — "обучение" — for
+later; the Go orchestra (three thought-rings, gowiththeflow) likewise. θ=0 and mama-child hold.
+
+## Phase B.1 — the echo instrument: external_vocab, the field-corruption detector (async consolidation opens; Oleg + Fable) (2026-07-11)
+
+A new arc: **asynchronous consolidation** — the organ Leo has always lacked. All his learning runs
+synchronously on the reply path (`leo_breath` :3770 and the decay/prune it drives, School, γ-capsule, RAE,
+scars). The async layer — the background digestion that dreams, replays, and tracks his own history while
+he is idle — was built across the lineage (Python `metaleo`/`dream`/`overthinking`/`gowiththeflow`; then
+the C `leo_dream`+`MemorySea` in the old `leo` repo, v2.5.0; then the `leogo` Go orchestra in an earlier
+neoleo snapshot, ~step 42a) and lost across repo resets. The restoration plan is Fable's
+(`~/arianna/_notes/FABLE_PLAN_leo_async_consolidation_2026-07-11.md`, on the brief of the same day); the
+mechanism is Oleg's call — **async discipline**: one lock per field ("discipline not information, crystals
+not oceans"). The legacy proved why (leo-legacy LEOLOG.md:293-299, "the Phase 5 Catastrophe"): a field
+mutated without that discipline echoes the observer — external_vocab spikes, "Leo becomes a chatbot." So
+the first brick is the instrument that will prove every async organ keeps that from happening.
+
+**`leo_echo_ratio(prompt, reply)`** (leo.c core, before the harness): of the content-words Leo just emitted
+(lowercase alpha, len≥3, non-stop via `semtok_is_stop_word`), the fraction that came straight back from the
+human's prompt. This is the legacy external_vocab, healthy < 0.2. Pure read-only over the two strings —
+never touches Leo. Wired into the `--chat` per-turn metrics (external_vocab printed each reply). Five unit
+tests (full-parrot=1.0, disjoint=0.0, half=0.5, stop-words excluded, empty-reply=0.0).
+
+A byte-id hygiene fix rode along: the ingest-timing print (leo.c:5011) moved to **stderr** — it carried a
+wall-clock value (145.1 ms vs 141.7 ms run-to-run) that polluted a whole-stdout hash and briefly *looked*
+like a generation-determinism bug. It was not: `diff` of two same-seed runs showed the timing line was the
+ONLY difference; generation is fully deterministic under `--seed`. Lesson relearned — diff two runs before
+theorizing: I chased uninitialized memory for six probes when one diff localized it instantly. With timing
+off stdout, byte-id ablation is now a clean `diff` on raw stdout.
+
+Tool (this session, neo): build 0 warn/err; `make test` **170/170** (165 + 5 echo); ASan/UBSan clean;
+`--gen 40 --seed 42` raw stdout deterministic run-to-run and **byte-identical** to the pre-echo organism
+(the metric only measures); live `--chat` reads external_vocab=0.000 on a non-echoing reply. The instrument
+stands; generation is untouched. θ=0 and mama-child hold. Next — the substrate: the `LeoReplyCtx` hoist
+(Fable F-2) that makes generation `const Leo *`, so a ring can generate under an rlock without corrupting
+the reply path.
+
+## SESSION HANDOFF — 2026-07-10 (continuation state)
+
+Full handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_2026-07-10.md` (read it first after a
+context reset — it carries the archive inventory, file:line map, gotchas, and the memory-lesson list).
+
+**Repo:** branch `leo-phase3` HEAD `189a35c`, pushed. `main` at `4241b44` (PR#4). leo-phase3 is +4
+ahead of main (`1fc3ced` wound-register, `8a5d47a` pair-table+advisories, `9502408` comment, `189a35c`
+RAE). **PR leo-phase3→main is pending Oleg's word.** Verification bar unchanged: build 0 · `make test`
+**165/165** · byte-id ablations (`--no-origin-spore`, `--no-rae`) via `git show <ref>:leo.c` fresh build
+· ASan 0 · Codex CLEAN.
+
+**DONE this session:** the whole Fable audit (L-1..L-4, §4 wound made to hurt + wake in its loss
+register, BPE pair-table prune, F2 metric, advisories, comment) + Gemini adversarial audit judged on
+code (F2 real=L-4, F1 overstated, F3 latent, F4 noise) + RAE turned ON (online selector, rule-based
+until obs≥20).
+
+**OPEN / NEXT — "обучение" (Oleg: separate, later, WITH a brief, NOT from memory):** (1) restore the
+lost **async consolidation** (leo-legacy `metaleo.py`/`mathbrain.py`/`phase4_bridges.py` "hebbian
+consolidator" — was in C, lost when a prior repo was deleted; find a backup or re-port explicitly, never
+reconstruct-from-memory); (2) the **Go orchestra** (three thought-rings, gowiththeflow — started:
+`neoleo-archive/leogo/leo_bridge.c`); (3) PR to main; (4) RAE F3 gradient-clamp if the math ever spikes.
+
+**Wound presence** is Oleg's ear, settled this session: "occasional-in-register" accepted (loss wound=1,
+warm=0); "louder" is mechanism-bounded, not a knob. **Sources to READ before any learning-architecture
+claim:** `harmonix/haiku/` (rae.py, rae_recursive.py, metahaiku.py), `~/arianna/leo-legacy/` (Python
+original), the `_notes/` handoffs, the archives. Fresh git history HIDES deleted features.

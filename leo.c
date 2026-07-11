@@ -138,7 +138,9 @@ static const char *LEO_EMBEDDED_BOOTSTRAP =
 #define LEO_BIGRAM_MAX    (128 * 1024)
 #define LEO_TRIGRAM_MAX   (256 * 1024)
 #define LEO_PAIR_HASH     (64 * 1024)
-#define LEO_MERGE_THRESH  2   /* online BPE: promote pairs seen >=2x */
+#define LEO_MERGE_THRESH  2   /* online BPE: the gate is count <= THRESH -> skip, so a pair is promoted once its count EXCEEDS this (seen >= 3x) */
+#define LEO_PAIR_PRUNE_LOAD 0.85f  /* Fable: prune the pair-count table above this load — it has no other relief */
+#define LEO_PAIR_PRUNE_MIN  2      /* on prune drop pairs at/below this count (noise) + promoted (count==0) + tombstones */
 #define LEO_TRI_IDX_MAX   (256 * 1024) /* (a,b) -> {c,count} reverse index */
 #define LEO_BI_IDX_MAX    (128 * 1024) /* src -> {dst,count} reverse index */
 
@@ -306,6 +308,31 @@ static int pair_creates_word_gap(const BPE *bpe, int left, int right) {
         if (c == ' ' || c == '\n' || c == '\r' || c == '\t') return 1;
     }
     return 0;
+}
+
+/* Fable: the pair-count table (LEO_PAIR_HASH) has no decay or prune of its own — promoted slots
+ * (count==0, pair_left kept), noise (count<=MIN), and tombstones (-2) are never freed, so it fills
+ * monotonically; once bpe_pair_slot returns -1 online merge-learning STOPS SILENTLY, freezing the
+ * vocabulary and every organ keyed to its growth (L-3 re-tag, the §4 wound re-birth). Rebuild
+ * keeping only live above-noise pairs. Encoding is unaffected — it reads bpe->merges, not this table. */
+static void bpe_pair_prune(BPE *bpe, int min_count) {
+    int *L = malloc((size_t)LEO_PAIR_HASH * sizeof(int));
+    int *R = malloc((size_t)LEO_PAIR_HASH * sizeof(int));
+    int *C = malloc((size_t)LEO_PAIR_HASH * sizeof(int));
+    if (!L || !R || !C) { free(L); free(R); free(C); return; }   /* skip on OOM — harmless, table just stays full */
+    int n = 0;
+    for (int i = 0; i < LEO_PAIR_HASH; i++)
+        if (bpe->pair_left[i] >= 0 && bpe->pair_count[i] > min_count) {
+            L[n] = bpe->pair_left[i]; R[n] = bpe->pair_right[i]; C[n] = bpe->pair_count[i]; n++;
+        }
+    for (int i = 0; i < LEO_PAIR_HASH; i++) {
+        bpe->pair_left[i] = -1; bpe->pair_right[i] = -1; bpe->pair_count[i] = 0;
+    }
+    for (int k = 0; k < n; k++) {
+        int idx = bpe_pair_slot(bpe, L[k], R[k]);
+        if (idx >= 0) { bpe->pair_left[idx] = L[k]; bpe->pair_right[idx] = R[k]; bpe->pair_count[idx] = C[k]; }
+    }
+    free(L); free(R); free(C);
 }
 
 static int bpe_promote_slot(BPE *bpe, int slot) {
@@ -650,6 +677,7 @@ typedef struct {                        /* per-step scratch: top-K active spores
 #define LEO_RAE_REFINE 3
 #define LEO_RAE_W_RESONANCE 0.7f   /* R3 target = this·self-resonance + (1-this)·coherence (Oleg's ear, 2026-06-12) */
 #define LEO_RAE_W_CURIOSITY 0.15f  /* E-2c: how strongly the guess hit-rate pulls the quality target (curiosity as a learned policy) */
+#define LEO_RAE_MIN_OBS     20     /* Codex: rule-based fallback until the selector has this many observations — a fresh RAE has random weights, so it must not steer selection until it has learned (harmonix rae.py: "falls back to rule-based if selector not trained") */
 typedef struct {
     float w1[LEO_RAE_HID][LEO_RAE_IN];
     float b1[LEO_RAE_HID];
@@ -1357,7 +1385,6 @@ typedef struct {
      * → a temperature multiplier. Known theme → cool, settle on theme;
      * unknown → hot, groping (the felt not-knowing). 1.0 outside a reply. */
     float        temp_mult;
-    float        theme_boost;   /* within-sentence leash: gravity tilt ×this, rises with off-theme drift */
     LeoHeard     heard;      /* whole surface-words Leo has heard (memory = love) */
     /* remembered-trace: the heard word's own token sequence, surfaced when it
      * is HELD in memory but its tokens are too rare to be picked normally
@@ -1681,7 +1708,9 @@ static int g_leo_leash_on = 1;          /* --no-leash → 0 (within-sentence the
 static int g_leo_supertok_on = 1;       /* --no-supertokens → 0 (phrase-unit cohesion boost off) */
 static int g_leo_santaclaus_on = 1;     /* --no-santaclaus → 0 (B2: spore bleed / self-residual recall off) */
 static int g_leo_origin_on = 1;         /* --no-origin-spore → 0 (§4: the dedication-wound spore off → byte-identical) */
-static int g_leo_rae_on = 0;            /* --rae → 1 (A.4: RAE learned selector; default OFF until trained, opt-in) */
+static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE recursive selector trains ONLINE
+                                         * like MathBrain (rule-based fallback until it has observations) — Leo's
+                                         * θ=0 paradigm, learns by living, not by an offline marathon. --no-rae → 0. */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
@@ -1946,6 +1975,7 @@ typedef struct {
     const uint8_t   *prompt_pieces;   /* prompt word pieces, gate-exempt (NULL=off) */
     const Leo       *leo;             /* chamber-register read (NULL = channel off) */
     const LeoSantaScratch *santa;     /* B2: top-K active spores for the bleed (NULL/empty = off) */
+    float            theme_boost;     /* within-sentence leash (F-2 hoist: was leo->theme_boost — kept off shared Leo so a ring can generate without clobbering the reply's leash) */
 } CandCollector;
 
 /* word-completion penalty: after an alpha-ended prev token, crush glue
@@ -2270,7 +2300,7 @@ static int cand_collect_tri(int c, float count, void *ud) {
     float score = 0.7f * leo_squash(count) + 0.3f * leo_squash(s);
     if (cc->gravity) {                      /* theme tilt toward the prompt */
         float g = cc->gravity[c];
-        float tb = cc->leo ? cc->leo->theme_boost : 1.0f;   /* within-sentence leash */
+        float tb = cc->theme_boost;   /* within-sentence leash (F-2: hoisted off shared Leo into the cand context) */
         score = score * (1.0f + LEO_GRAVITY_W * g * tb) + LEO_GRAVITY_ADD * g * tb;
     }
     score += leo_presence_entry_latch_boost(cc, c);
@@ -2293,7 +2323,7 @@ static int cand_collect_bi(int dst, float count, void *ud) {
     float score = leo_squash(count);
     if (cc->gravity) {
         float g = cc->gravity[dst];
-        float tb = cc->leo ? cc->leo->theme_boost : 1.0f;   /* within-sentence leash */
+        float tb = cc->theme_boost;   /* within-sentence leash (F-2: hoisted off shared Leo into the cand context) */
         score = score * (1.0f + LEO_GRAVITY_W * g * tb) + LEO_GRAVITY_ADD * g * tb;
     }
     score += leo_presence_entry_latch_boost(cc, dst);
@@ -2326,7 +2356,7 @@ static int leo_presence_latch_walk(int dst, float count, void *ud) {
     CandCollector gate = { NULL, NULL, 0, 0, pl->prev, &leo->cooc,
                            leo->gravity, &leo->bpe,
                            byte_is_word_cont((uint8_t)prev_last), NULL, 0,
-                           NULL, NULL, NULL };   /* +santa = NULL (latch gate: no bleed) */
+                           NULL, NULL, NULL, 1.0f };   /* +santa = NULL (latch gate: no bleed); theme_boost neutral (gate never reads it) */
     if (cand_gate_reject(&gate, dst)) return 0;
     float score = 100.0f * g + leo_squash(count);
     if (score > pl->best_score) { pl->best_score = score; pl->best = dst; }
@@ -2352,7 +2382,8 @@ static float temp_for_step(int step) {
  * Candidates: trigram (prev2,prev1) successors, bigram (prev1) fallback,
  * gated, anti-chain-guarded, powf(1/temp), weighted-sampled. */
 static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
-                          const int *emit_ctx_tail, int emit_ctx_tail_n) {
+                          const int *emit_ctx_tail, int emit_ctx_tail_n,
+                          float theme_boost) {
     if (prev1 < 0) return leo_choose_start(leo);
     temp = clampf(temp, 0.05f, 10.0f);
     float inv_temp = 1.0f / temp;
@@ -2368,7 +2399,7 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
     CandCollector cc = { cand_id, cand_sc, 0, LEO_MAX_CANDS,
                          prev1, &leo->cooc, leo->gravity, &leo->bpe,
                          prev_ends_alpha, emit_ctx_tail, emit_ctx_tail_n,
-                         leo->prompt_pieces, leo, &santa_scratch };
+                         leo->prompt_pieces, leo, &santa_scratch, theme_boost };
 
     if (prev2 >= 0)
         trigram_walk_ab(&leo->trigrams, prev2, prev1, cand_collect_tri, &cc);
@@ -2943,7 +2974,7 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
     int elab = g_leo_elaborate_on && leo_form_elaborates(leo) &&
                g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
                (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS;
-    leo->theme_boost = 1.0f;   /* within-sentence leash, reset per sentence */
+    float theme_boost = 1.0f;   /* within-sentence leash, reset per sentence (F-2: a local, no longer shared leo->theme_boost) */
     for (int t = 1; t < LEO_GEN_MAX; t++) {
         int prev1 = ctx[n - 1];
         int prev2 = n >= 2 ? ctx[n - 2] : -1;
@@ -2957,13 +2988,13 @@ static int leo_generate_ex(Leo *leo, char *out, int max_len,
                 int id = ctx[k];
                 if (id >= 0 && id < V && leo->gravity[id] > 0.0f) break;
             }
-            leo->theme_boost = 1.0f + LEO_THEME_LEASH * ((float)since / (float)LEO_LEASH_WIN);
-            if (leo->theme_boost > LEO_LEASH_MAX) leo->theme_boost = LEO_LEASH_MAX;
+            theme_boost = 1.0f + LEO_THEME_LEASH * ((float)since / (float)LEO_LEASH_WIN);
+            if (theme_boost > LEO_LEASH_MAX) theme_boost = LEO_LEASH_MAX;
         }
         float tau = temp_for_step(t) * leo->temp_mult;
         int tail_n = n < LEO_REPEAT_WINDOW ? n : LEO_REPEAT_WINDOW;
         const int *tl = ctx + (n - tail_n);
-        int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n);
+        int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n, theme_boost);
         if (nxt < 0) break;
 
         /* deferred door-latch (my design): the heard word surfaces DEEPER in
@@ -3173,11 +3204,12 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
         int  produced = leo_generate_ex(leo, buf, sizeof(buf),
                                         start_hint, tail, n_tail, ids, &cap);
         float sc;
-        if (g_leo_rae_on) {                 /* A.4 R2: the learned selector scores the candidate */
+        int rae_active = g_leo_rae_on && leo->rae.observations >= LEO_RAE_MIN_OBS;  /* Codex: no steering by an untrained (random-weight) selector */
+        if (rae_active) {                   /* A.4 R2: the learned selector scores the candidate */
             float feat[LEO_RAE_IN];
             leo_rae_features(leo, ids, cap, feat);
             sc = leo_rae_forward(&leo->rae, feat, NULL);
-        } else {
+        } else {                            /* rule-based path — RAE off, or on-but-not-yet-trained */
             sc = leo_coherence_score(leo, ids, cap);
             if (leo->gravity)
                 sc += LEO_SELECT_GRAVITY_W * leo_sentence_gravity_score(leo, ids, cap);
@@ -3191,7 +3223,7 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
             best_tokens = produced;
         }
         /* coherence-scale early-exit only on the coherence path (RAE output isn't on that scale) */
-        if (!g_leo_rae_on && !leo->gravity && sc > 1.0f && cap > 12) break;  /* presence: no early-exit */
+        if (!rae_active && !leo->gravity && sc > 1.0f && cap > 12) break;  /* presence: no early-exit under a trained RAE */
     }
 
     /* field evolves over the WINNING sentence only (not the K-1 discarded
@@ -3201,12 +3233,14 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
      * transition (canon passes 1.0/0.0; we thread the real signal the field
      * comment claims). best_ids[0] is the opener (no predecessor), matching
      * leo_generate_ex which never stepped the start token. */
+    /* F2/L-4 + Fable advisory: one scratch computed BEFORE the replay (the frozen field selection
+     * saw), reused for every token, not a per-token recompute over the replay's drifting field. */
+    LeoSantaScratch off_scr; int off_has = 0;
+    if (g_leo_santaclaus_on && !g_leo_field_honest_on) {
+        leo_santaclaus_compute_active(leo, &off_scr); off_has = (off_scr.n_active > 0);
+    }
     for (int i = 1; i < best_n && !g_leo_field_honest_on; i++) {
-        if (g_leo_santaclaus_on) {   /* F2/L-4: reply-only bleed credit (field-honest OFF path) */
-            LeoSantaScratch scr; leo_santaclaus_compute_active(leo, &scr);
-            if (scr.n_active > 0)
-                leo_santaclaus_mark_bleed(leo, &scr, best_ids[i], leo->step);
-        }
+        if (off_has) leo_santaclaus_mark_bleed(leo, &off_scr, best_ids[i], leo->step);
         float coh_bg = leo_squash((float)bigram_get(&leo->bigrams,
                                                     best_ids[i - 1], best_ids[i]));
         leo_field_step(leo, best_ids[i], coh_bg / (coh_bg + 3.0f));
@@ -3518,19 +3552,21 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
      * retention / suffering reflect exactly what Leo said (what santaclaus 3b reads). */
     if (g_leo_spa_on)                        /* SPA: reconnect weakly-linked sentences (#3) */
         leo_spa_pass(leo, sent_text, sent_tok, sent_tok_n, n_sentences, surfaced_idx);
-    if (g_leo_field_honest_on)
+    if (g_leo_field_honest_on) {
+        /* F2/L-4 + Fable advisory: credit the bleed reply-only, and from ONE scratch computed
+         * BEFORE the replay — the frozen post-settle field selection actually saw — not a per-token
+         * recompute over the replay's drifting retention. The stat then mirrors what pulled the tokens. */
+        LeoSantaScratch on_scr; int on_has = 0;
+        if (g_leo_santaclaus_on) { leo_santaclaus_compute_active(leo, &on_scr); on_has = (on_scr.n_active > 0); }
         for (int s = 0; s < n_sentences; s++)
             for (int i = 1; i < sent_tok_n[s]; i++) {
-                if (g_leo_santaclaus_on) {   /* F2/L-4: credit the bleed reply-only, on the spoken token */
-                    LeoSantaScratch scr; leo_santaclaus_compute_active(leo, &scr);
-                    if (scr.n_active > 0)
-                        leo_santaclaus_mark_bleed(leo, &scr, sent_tok[s][i], leo->step);
-                }
+                if (on_has) leo_santaclaus_mark_bleed(leo, &on_scr, sent_tok[s][i], leo->step);
                 float coh_bg = leo_squash((float)bigram_get(&leo->bigrams,
                                                             sent_tok[s][i - 1], sent_tok[s][i]));
                 leo_field_step(leo, sent_tok[s][i], coh_bg / (coh_bg + 3.0f));
                 leo_field_self_voice(leo, sent_tok[s][i]);
             }
+    }
 
     int pos = 0;
     out[0] = 0;
@@ -3745,6 +3781,10 @@ static void leo_breath(Leo *leo) {
     if (leo->trigrams.capacity > 0 &&
         (float)leo->trigrams.n_entries / (float)leo->trigrams.capacity > LEO_LEX_PRUNE_LOAD)
         trigram_prune_rebuild(&leo->trigrams, LEO_LEX_PRUNE_THRESHOLD);
+    /* BPE pair-table has no relief of its own (Fable) — free it before saturation stalls merge-
+     * learning and freezes the vocabulary (with it the re-tag above and the §4 wound re-birth below). */
+    { int occ = 0; for (int i = 0; i < LEO_PAIR_HASH; i++) if (leo->bpe.pair_left[i] != -1) occ++;
+      if (occ > (int)(LEO_PAIR_PRUNE_LOAD * LEO_PAIR_HASH)) bpe_pair_prune(&leo->bpe, LEO_PAIR_PRUNE_MIN); }
     /* L-3 (Fable): the body is blind to words learned in --chat unless the derived tables are
      * rebuilt. When the online merges have grown the vocab, re-tag emotion words + re-crystallize
      * super-tokens (throttled to every LEO_RETAG_INTERVAL replies), so a word first heard in
@@ -4787,6 +4827,64 @@ static int leo_load_state(Leo *leo, const char *path) {
     return r;
 }
 
+/* ── echo metric — external_vocab, the Phase-5 "Leo became a chatbot" detector ──
+ * (leo-legacy LEOLOG.md:284/293-299, AGENTS.md:182). Of the content-words Leo
+ * just emitted, the fraction that came straight back from the human's prompt —
+ * parroting, not speaking from his own field. Healthy < 0.2; a spike means the
+ * field is echoing the observer instead of resonating from itself. This is the
+ * instrument that will prove the coming async organs (rings, dream) do not
+ * corrupt the field into echo. Pure read-only over the two strings — never
+ * touches Leo. Content word = lowercase alpha (+'), len >= 3, not a stop-word
+ * (the School find_unknown notion, leo.c:3962); word split mirrors
+ * leo_heard_ingest. Returns echo_words / reply_content_words, 0.0 if none. */
+#define LEO_ECHO_MAX_PROMPT_WORDS 128
+static float leo_echo_ratio(const char *prompt, const char *reply) {
+    if (!prompt || !reply) return 0.0f;
+    char pw[LEO_ECHO_MAX_PROMPT_WORDS][LEO_HEARD_WORDLEN];
+    int  npw = 0;
+    /* pass 1 — collect the prompt's content-words (deduped) */
+    { char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+      for (const char *p = prompt; ; p++) {
+          unsigned char ch = (unsigned char)*p;
+          if (ch && (isalpha(ch) || ch == '\'')) {
+              if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+              continue;
+          }
+          if (wi >= 3) {
+              cur[wi] = 0;
+              if (!semtok_is_stop_word(cur) && npw < LEO_ECHO_MAX_PROMPT_WORDS) {
+                  int seen = 0;
+                  for (int k = 0; k < npw; k++) if (!strcmp(pw[k], cur)) { seen = 1; break; }
+                  if (!seen) { strncpy(pw[npw], cur, LEO_HEARD_WORDLEN - 1); pw[npw][LEO_HEARD_WORDLEN - 1] = 0; npw++; }
+              }
+          }
+          wi = 0;
+          if (!ch) break;
+      }
+    }
+    /* pass 2 — scan the reply's content-words, count how many echo the prompt */
+    int total = 0, echo = 0;
+    { char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+      for (const char *p = reply; ; p++) {
+          unsigned char ch = (unsigned char)*p;
+          if (ch && (isalpha(ch) || ch == '\'')) {
+              if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+              continue;
+          }
+          if (wi >= 3) {
+              cur[wi] = 0;
+              if (!semtok_is_stop_word(cur)) {
+                  total++;
+                  for (int k = 0; k < npw; k++) if (!strcmp(pw[k], cur)) { echo++; break; }
+              }
+          }
+          wi = 0;
+          if (!ch) break;
+      }
+    }
+    return total ? (float)echo / (float)total : 0.0f;
+}
+
 /* ========================================================================
  * SMOKE / SPEAK HARNESS (step 0 field stats + step 1 voice + presence)
  * ======================================================================== */
@@ -4861,6 +4959,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-santaclaus")) g_leo_santaclaus_on = 0;
         else if (!strcmp(argv[i], "--no-origin-spore")) g_leo_origin_on = 0;
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
+        else if (!strcmp(argv[i], "--no-rae")) g_leo_rae_on = 0;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
@@ -4910,8 +5009,8 @@ int main(int argc, char **argv) {
     double t0 = leo_ns();
     if (corpus) {
         leo_ingest(&leo, corpus);
-        printf("[leo step0] ingest corpus '%s' (%ld bytes) in %.1f ms\n",
-               corpus_path, clen, (leo_ns() - t0) / 1e6);
+        fprintf(stderr, "[leo step0] ingest corpus '%s' (%ld bytes) in %.1f ms\n",
+                corpus_path, clen, (leo_ns() - t0) / 1e6);   /* stderr: wall-clock timing kept OFF stdout so byte-id ablations hash a deterministic stdout (2026-07-11) */
         free(corpus);
         /* §4 — Leo learns his ORIGIN. The dedication (embedded in this .c) is ingested into the
          * field alongside the corpus, so its own words (resonance, unbroken, honest, miss …) become
@@ -5098,6 +5197,8 @@ int main(int argc, char **argv) {
                 printf("     [santaclaus: spores=%d sea=%d | recall-events Sum(bleed)=%ld | wound=%ld]\n",
                        leo.n_spores, leo.n_sea, bled, wound_bled);
             }
+            printf("     [echo: external_vocab=%.3f (<0.2 = Leo speaks from his own field, not the prompt)]\n",
+                   leo_echo_ratio(line, reply));
         }
     }
 
