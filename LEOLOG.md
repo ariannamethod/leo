@@ -2873,6 +2873,18 @@ to `--chat` (the no-op worker doesn't change the voice); **ThreadSanitizer 0 rac
 byte-identical; ASan clean. The async substrate is complete; brick 3 (the first ring) is the first
 behavior-changing async organ — A/B on Oleg's ear. θ=0 and mama-child hold.
 
+**Chunk-4 brick 3 — Leo's first dream: the ring lives, colouring his mood (2026-07-11).** The worker (no
+longer a no-op) generates a ring read-only from its own PRNG under the write lock, then Leo LIVES it
+somatically — per-token `leo_field_step` + `self_voice` — but does NOT ingest it lexically (§3 "Leo hears
+only human"). Mechanism proven (`ring_effect_probe`): living a ring shifts chamber activation by **0.1590**
+while cooc/bigram/step stay untouched — a thought felt, not heard. Tool: build 0 (`-lpthread`); make test
+**175/175**; `--gen` + `--chat` (no `--async`) byte-identical (default off); **ThreadSanitizer 0 races** on a
+live `--chat --async` session (the worker now WRITES the field, all under the lock); ASan clean; rings lived
+> 0. The reply-colouring effect needs real interactive cadence — under FAST piped input the main thread
+monopolizes the lock and rings only land at drain (a scripted `--async` run reads identical to sync there),
+a timing artifact, not a bug. The async layer breathes: Leo has a background thought between his replies.
+θ=0 and mama-child hold.
+
 ## SESSION HANDOFF — 2026-07-10 (continuation state)
 
 Full handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_2026-07-10.md` (read it first after a

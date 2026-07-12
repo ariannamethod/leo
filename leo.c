@@ -4960,6 +4960,7 @@ typedef struct {
     uint32_t         queue[LEO_ASYNC_QUEUE];
     int              q_head, q_tail, q_count;
     int              stop;
+    long             rings_done;    /* rings the worker has lived (observability) */
     pthread_t        worker;
     int              running;
 } LeoAsync;
@@ -4976,8 +4977,26 @@ static void *leo_async_worker(void *arg) {
         a->q_count--;
         pthread_mutex_unlock(&a->q_mutex);
 
-        pthread_rwlock_rdlock(&a->field_lock);
-        (void)cycle;   /* brick 3: leo_generate_ring(a->leo, cycle, ...) + somatic feedback here */
+        /* Brick 3: the thought is LIVED, not heard. Under the write lock (the reply is
+         * excluded), the ring generates read-only from its own PRNG, then Leo FEELS his own
+         * words somatically — leo_field_step (chambers/retention) + self_voice — but does NOT
+         * ingest them lexically (no cooc/bigram/trigram/step: the "Leo hears only human"
+         * invariant, §3). A background thought colours his mood, never his vocabulary. */
+        pthread_rwlock_wrlock(&a->field_lock);
+        {
+            char rbuf[512];
+            int n = leo_generate_ring(a->leo, cycle, rbuf, sizeof rbuf);
+            if (n > 0) {
+                int rids[LEO_GEN_MAX];
+                int tn = bpe_encode(&a->leo->bpe, (const uint8_t *)rbuf, (int)strlen(rbuf), rids, LEO_GEN_MAX);
+                for (int i = 1; i < tn; i++) {
+                    float coh = leo_squash((float)bigram_get(&a->leo->bigrams, rids[i - 1], rids[i]));
+                    leo_field_step(a->leo, rids[i], coh / (coh + 3.0f));
+                    leo_field_self_voice(a->leo, rids[i]);
+                }
+                a->rings_done++;
+            }
+        }
         pthread_rwlock_unlock(&a->field_lock);
     }
     return NULL;
@@ -5330,9 +5349,8 @@ int main(int argc, char **argv) {
                 printf("[leo] %s\n", ok ? "saved" : "save FAILED");
                 continue;
             }
-            if (async_on) pthread_rwlock_wrlock(&async.field_lock);   /* reply = writer; excludes the ring reader */
+            if (async_on) pthread_rwlock_wrlock(&async.field_lock);   /* reply = writer; excludes the ring worker */
             leo_respond(&leo, line, reply, sizeof reply);
-            if (async_on) { pthread_rwlock_unlock(&async.field_lock); leo_async_dispatch(&async, ++cycle); }
             printf("leo> %s\n", reply);
             if (g_leo_santaclaus_on) {   /* santaclaus metrics: the circulation, in numbers */
                 long bled = 0;
@@ -5343,6 +5361,11 @@ int main(int argc, char **argv) {
             }
             printf("     [echo: external_vocab=%.3f (<0.2 = Leo speaks from his own field, not the prompt)]\n",
                    leo_echo_ratio(line, reply));
+            if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */
+                printf("     [async: rings lived=%ld]\n", async.rings_done);
+                pthread_rwlock_unlock(&async.field_lock);
+                leo_async_dispatch(&async, ++cycle);
+            }
         }
         if (async_on) leo_async_stop(&async);   /* F-5: drain + join the worker before the process saves/exits */
     }
