@@ -3226,7 +3226,9 @@ static int leo_generate_best(Leo *leo, int k, char *out, int max_len,
         int  cap = LEO_GEN_MAX;
         int  produced = leo_generate_ex(leo, buf, sizeof(buf),
                                         start_hint, tail, n_tail, ids, &cap, &rng);
-        leo->step += produced;   /* F-2: was inside leo_generate_ex; here per trial (same K increments = byte-id), so generate_ex stays const */
+        /* F-1 (Fable): generate_best does NOT advance leo->step — the spoken reply's token count is
+         * applied once in leo_chain, so discarded best-of-K trials / elaborate-retries / SPA-rejected
+         * reseeds never age the clock. generate_ex stays const (F-2); the ring never applies a count either. */
         float sc;
         int rae_active = g_leo_rae_on && leo->rae.observations >= LEO_RAE_MIN_OBS;  /* Codex: no steering by an untrained (random-weight) selector */
         if (rae_active) {                   /* A.4 R2: the learned selector scores the candidate */
@@ -3291,6 +3293,19 @@ static int leo_generate(Leo *leo, char *out, int max_len) {
     int n = leo_generate_ex(leo, out, max_len, -1, NULL, 0, NULL, NULL, &rng);
     leo->step += n;   /* F-2: step increment hoisted out of leo_generate_ex */
     return n;
+}
+
+/* Chunk-4: the ring-input — a background ring generates from Leo READ-ONLY, drawing
+ * from its OWN xorshift stream (seeded from the ring cycle#), never the global rand()
+ * the reply uses (F-3). No step increment: generate_ex is const and the ring never
+ * applies the token count, so a background thought does not age the reply's clock. The
+ * transients it reads (gravity/temp_mult/dissonance/heard_word) are the OFF state
+ * between replies (leo_respond cleanup) — where a ring runs under an rlock. This is the
+ * entry the worker will call; the §3 somatic feedback (not lexical ingest) lands with the worker. */
+__attribute__((unused))  /* used by tests now; the Chunk-4 worker will call it next */
+static int leo_generate_ring(const Leo *leo, uint32_t cycle_seed, char *out, int max_len) {
+    LeoRng rng = { cycle_seed ? cycle_seed : 0x9e3779b9u, 0 };   /* use_global=0 → own stream, isolated from global rand() */
+    return leo_generate_ex(leo, out, max_len, -1, NULL, 0, NULL, NULL, &rng);
 }
 
 /* presence opener (Codex's find — github.com/ariannamethod, neoleo-presence;
@@ -3594,6 +3609,13 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
                 leo_field_self_voice(leo, sent_tok[s][i]);
             }
     }
+    /* F-1 (Fable): step counts ONLY the spoken reply — the final sent_tok (post-SPA, post-elaborate),
+     * never the best-of-K discards / elaborate-retries / SPA-rejected reseeds that all called
+     * generate_best. Applied once here, after the replay and before spore birth: the new spore is born
+     * at the post-reply step (age 0), while existing spores' mark_bleed used the reply's start-step. */
+    long spoken = 0;
+    for (int s = 0; s < n_sentences; s++) spoken += sent_tok_n[s];
+    leo->step += spoken;
 
     int pos = 0;
     out[0] = 0;

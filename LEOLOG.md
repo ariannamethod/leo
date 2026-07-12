@@ -2842,6 +2842,24 @@ seeds deterministic + distinct. The substrate now holds BOTH struct-purity (cons
 the last piece for a concurrent ring is the lock discipline (Chunk 4). Tool: build 0; make test 171/171
 (+function-word test); `--gen 40 --seed 42` byte-id at every step; ASan/UBSan clean.
 
+**F-1 step-honesty — the pre-subagent FABLE_PLAN audit CLOSED (2026-07-11).** The last open FABLE_PLAN
+finding: `leo->step` counted every discarded best-of-K trial / elaborate-retry / SPA-reseed, not just the
+spoken reply — so a ring calling generate would age spore-clocks too fast. Fixed honestly everywhere
+(Oleg: "честность должна быть везде"): `leo_generate_best` no longer touches step; `leo_chain` applies
+`sum(sent_tok_n)` ONCE, after the field replay and before spore birth — existing spores' mark_bleed uses
+the reply's start-step, the newborn spore is age-zero at reply end. A deliberate behavior change (not
+byte-id — it shifts spore-age), but `--gen 40 --seed 42` stays byte-identical (spore-age doesn't move
+short-run selection; Leo's voice unchanged), and `leo->step` after `--gen` dropped **104381 → 100322** (the
+discards no longer age the clock). Tool: build 0; make test **175/175**; ASan clean; **Codex CLEAN** ("the
+F-1 change is sound" — exact post-SPA count, all generate_best callers accounted, timestamps coherent).
+
+**FABLE_PLAN F-1..F-6 — final status (pre-subagent audit closed):** F-1 done (this) · F-2 done (theme_boost
+hoist + const-flip) · F-3 done (per-context PRNG, isolation proven) · F-4 verified (the ring path
+generate_ring→generate_ex never touches `School.pending`; only `leo_respond` does) · **F-5** carried to the
+Chunk-4 scaffold (save must drain-and-join or hold the lock — the only remaining substrate obligation) ·
+**F-6** carried to Phase-3 (MathBrain: decide who it replaces in the 4-story temperature stack, not stack a
+5th). θ=0 and mama-child hold.
+
 ## SESSION HANDOFF — 2026-07-10 (continuation state)
 
 Full handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_2026-07-10.md` (read it first after a

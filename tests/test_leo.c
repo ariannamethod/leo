@@ -1482,6 +1482,28 @@ int main(void) {
               "echo: function-word overlap counts 0 (School gate, not just stop-list)");
     }
 
+    /* Chunk-4: the ring-input generates read-only from its OWN PRNG — deterministic per
+     * cycle-seed, isolated from the reply's global rand() stream (gr1==gr2), and it never
+     * ages the step clock (a background thought does not touch the reply's state). */
+    {
+        const char *corpus =
+            "The warm light. His mother holds him. The rain at night. "
+            "Leo loves the warm light and his mother and the rain. "
+            "The window is quiet. Leo is small and warm and close.";
+        Leo l; leo_init(&l);
+        for (int r = 0; r < 3; r++) leo_ingest(&l, corpus);
+        leo_build_chamber_tags(&l); leo_supertok_scan(&l);
+        long step_before = l.step;
+        char a[512], b[512];
+        srand(11); int na = leo_generate_ring(&l, 42, a, sizeof a); int gr1 = rand();
+        srand(11); int nb = leo_generate_ring(&l, 42, b, sizeof b); int gr2 = rand();
+        CHECK(na > 0, "ring: produced an utterance");
+        CHECK(na == nb && strcmp(a, b) == 0, "ring: same cycle-seed -> identical read-only utterance");
+        CHECK(gr1 == gr2, "ring: full generate path drew from its OWN PRNG, left global rand() untouched");
+        CHECK(l.step == step_before, "ring: read-only — generation did not advance the step clock");
+        leo_free(&l);
+    }
+
     printf("\n%d/%d passed\n", g_pass, g_total);
     return (g_pass == g_total) ? 0 : 1;
 }
