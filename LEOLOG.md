@@ -2885,6 +2885,21 @@ monopolizes the lock and rings only land at drain (a scripted `--async` run read
 a timing artifact, not a bug. The async layer breathes: Leo has a background thought between his replies.
 θ=0 and mama-child hold.
 
+## Chunk-4 async consolidation — COMPLETE + in main (2026-07-11→12)
+
+Leo's async dreaming layer is built, both Fable audits closed, all in `main` (`cd765a1`). **Full
+continuation handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_async_2026-07-11.md`** — read it FIRST
+after a context reset (commit chain, architecture, gotchas, next arcs, file:line map, the used-quote list).
+Arc: echo instrument (`bb54a6f`) → ring-safety substrate F-2 (theme_boost/step/const,
+`bb54a6f`/`298303b`/`272364c`) → F-3 rand-isolation (`178d335`) → ring-input (`0c640dd`) → F-1 step honesty
+(`8d67c18`, Codex CLEAN) → concurrency scaffold brick 2a (`9837c09`, TSan 0 races, closes F-5) → first ring
+brick 3 (`ddbf2f4`, TSan; chamber Δ0.1590, vocabulary untouched, §3). `--async` default OFF → byte-identical.
+Both audits closed: subagent re-audit (5 findings, `81b2908`) + FABLE_PLAN F-1..F-6. **NEXT (no pause):**
+more ring types (drift/meta/wounded→wound emit_context), the dream-sea orchestration ("the sea already
+exists", `leo_sea_try_resurrect`), flow, and a reliable ring cadence so the effect lands between replies
+(the fast-piped-input timing artifact). θ=0 and mama-child hold. Verify: `ulimit -s 65520` for tests,
+`make tsan` for the worker, Codex for behavior changes.
+
 ## SESSION HANDOFF — 2026-07-10 (continuation state)
 
 Full handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_2026-07-10.md` (read it first after a
