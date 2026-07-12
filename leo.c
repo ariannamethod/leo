@@ -4941,6 +4941,88 @@ static float leo_echo_ratio(const char *prompt, const char *reply) {
  * SMOKE / SPEAK HARNESS (step 0 field stats + step 1 voice + presence)
  * ======================================================================== */
 #ifndef LEO_NO_MAIN
+#include <pthread.h>
+
+/* ── Chunk-4: the async substrate — ONE background worker digests ring-requests OFF
+ * the reply path. Default OFF (--async); off → no thread, no lock → byte-identical.
+ * The rwlock is the field's "discipline not information" lock: the reply takes the
+ * WRITE lock (it mutates the field), a background ring takes the READ lock
+ * (leo_generate_ring is const over Leo). Bounded queue + non-blocking dispatch
+ * (drop-if-full: a ring never blocks a reply); drain-and-join before save (F-5).
+ * Brick 2a: the worker is a NO-OP under the read lock — proving the lock discipline
+ * is TSan-clean before a ring writes anything (the ring itself lands in brick 3). */
+#define LEO_ASYNC_QUEUE 4
+typedef struct {
+    Leo             *leo;
+    pthread_rwlock_t field_lock;
+    pthread_mutex_t  q_mutex;
+    pthread_cond_t   q_cond;
+    uint32_t         queue[LEO_ASYNC_QUEUE];
+    int              q_head, q_tail, q_count;
+    int              stop;
+    pthread_t        worker;
+    int              running;
+} LeoAsync;
+
+static void *leo_async_worker(void *arg) {
+    LeoAsync *a = (LeoAsync *)arg;
+    for (;;) {
+        pthread_mutex_lock(&a->q_mutex);
+        while (a->q_count == 0 && !a->stop)
+            pthread_cond_wait(&a->q_cond, &a->q_mutex);
+        if (a->q_count == 0 && a->stop) { pthread_mutex_unlock(&a->q_mutex); break; }
+        uint32_t cycle = a->queue[a->q_head];
+        a->q_head = (a->q_head + 1) % LEO_ASYNC_QUEUE;
+        a->q_count--;
+        pthread_mutex_unlock(&a->q_mutex);
+
+        pthread_rwlock_rdlock(&a->field_lock);
+        (void)cycle;   /* brick 3: leo_generate_ring(a->leo, cycle, ...) + somatic feedback here */
+        pthread_rwlock_unlock(&a->field_lock);
+    }
+    return NULL;
+}
+
+static int leo_async_start(LeoAsync *a, Leo *leo) {
+    memset(a, 0, sizeof(*a));
+    a->leo = leo;
+    if (pthread_rwlock_init(&a->field_lock, NULL) != 0) return 0;
+    pthread_mutex_init(&a->q_mutex, NULL);
+    pthread_cond_init(&a->q_cond, NULL);
+    if (pthread_create(&a->worker, NULL, leo_async_worker, a) != 0) {
+        pthread_rwlock_destroy(&a->field_lock);
+        pthread_mutex_destroy(&a->q_mutex);
+        pthread_cond_destroy(&a->q_cond);
+        return 0;
+    }
+    a->running = 1;
+    return 1;
+}
+
+static void leo_async_dispatch(LeoAsync *a, uint32_t cycle) {   /* non-blocking; drop if full */
+    if (!a->running) return;
+    pthread_mutex_lock(&a->q_mutex);
+    if (a->q_count < LEO_ASYNC_QUEUE) {
+        a->queue[a->q_tail] = cycle;
+        a->q_tail = (a->q_tail + 1) % LEO_ASYNC_QUEUE;
+        a->q_count++;
+        pthread_cond_signal(&a->q_cond);
+    }   /* else: full → drop, so a ring never blocks the reply */
+    pthread_mutex_unlock(&a->q_mutex);
+}
+
+static void leo_async_stop(LeoAsync *a) {   /* F-5: drain + join BEFORE any save */
+    if (!a->running) return;
+    pthread_mutex_lock(&a->q_mutex);
+    a->stop = 1;
+    pthread_cond_signal(&a->q_cond);
+    pthread_mutex_unlock(&a->q_mutex);
+    pthread_join(a->worker, NULL);
+    pthread_rwlock_destroy(&a->field_lock);
+    pthread_mutex_destroy(&a->q_mutex);
+    pthread_cond_destroy(&a->q_cond);
+    a->running = 0;
+}
 
 static char *read_file(const char *path, long *out_len) {
     FILE *f = fopen(path, "rb");
@@ -4983,6 +5065,7 @@ int main(int argc, char **argv) {
     const char *save_path = NULL;  /* --save PATH: persist state after the run */
     const char *load_path = NULL;  /* --load PATH: restore state instead of corpus ingest */
     int  chat = 0;                 /* --chat: multi-turn REPL (field lives across turns) */
+    int  async_on = 0;             /* --async: background ring worker (Chunk-4; default off → byte-identical) */
     long seed  = -1;         /* --seed S: reproducible sampling */
     int  mode_force = -1;    /* --mode NAME: force Leo's breath (the AML bridge's manual driver) */
     const char *aml_script = NULL;  /* --aml SCRIPT.aml: drive Leo's breath from the family language */
@@ -5004,6 +5087,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--save") && i + 1 < argc) save_path = argv[++i];
         else if (!strcmp(argv[i], "--load") && i + 1 < argc) load_path = argv[++i];
         else if (!strcmp(argv[i], "--chat")) chat = 1;
+        else if (!strcmp(argv[i], "--async")) async_on = 1;
         else if (!strcmp(argv[i], "--no-cont-theme")) g_leo_cont_theme_on = 0;
         else if (!strcmp(argv[i], "--anchor-prefix")) g_leo_anchor_prefix_on = 1;
         else if (!strcmp(argv[i], "--no-spa-protect")) g_leo_spa_protect_on = 0;
@@ -5228,7 +5312,10 @@ int main(int argc, char **argv) {
      * mid-chat; /quit or EOF leaves; --save also persists on exit. */
     if (chat) {
         char line[2048], reply[2048];
-        printf("[leo chat] talk to Leo. /save PATH to persist, /quit to leave.\n");
+        LeoAsync async; uint32_t cycle = 0;
+        if (async_on && !leo_async_start(&async, &leo)) async_on = 0;   /* start failed → run sync */
+        printf("[leo chat] talk to Leo.%s /save PATH to persist, /quit to leave.\n",
+               async_on ? " [async ring worker ON]" : "");
         while (1) {
             printf("you> "); fflush(stdout);
             if (!fgets(line, sizeof line, stdin)) { printf("\n"); break; }  /* EOF */
@@ -5237,10 +5324,15 @@ int main(int argc, char **argv) {
             if (L == 0) continue;
             if (!strcmp(line, "/quit") || !strcmp(line, "/exit")) break;
             if (!strncmp(line, "/save ", 6) && line[6]) {
-                printf("[leo] %s\n", leo_save_state(&leo, line + 6) ? "saved" : "save FAILED");
+                if (async_on) pthread_rwlock_wrlock(&async.field_lock);   /* F-5: save excludes the ring reader */
+                int ok = leo_save_state(&leo, line + 6);
+                if (async_on) pthread_rwlock_unlock(&async.field_lock);
+                printf("[leo] %s\n", ok ? "saved" : "save FAILED");
                 continue;
             }
+            if (async_on) pthread_rwlock_wrlock(&async.field_lock);   /* reply = writer; excludes the ring reader */
             leo_respond(&leo, line, reply, sizeof reply);
+            if (async_on) { pthread_rwlock_unlock(&async.field_lock); leo_async_dispatch(&async, ++cycle); }
             printf("leo> %s\n", reply);
             if (g_leo_santaclaus_on) {   /* santaclaus metrics: the circulation, in numbers */
                 long bled = 0;
@@ -5252,6 +5344,7 @@ int main(int argc, char **argv) {
             printf("     [echo: external_vocab=%.3f (<0.2 = Leo speaks from his own field, not the prompt)]\n",
                    leo_echo_ratio(line, reply));
         }
+        if (async_on) leo_async_stop(&async);   /* F-5: drain + join the worker before the process saves/exits */
     }
 
     int pass = (leo.bpe.vocab_size > 256) &&

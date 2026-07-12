@@ -14,7 +14,7 @@ ifneq ($(wildcard $(AML_SRC)),)   # the ONLY AML source is the vendored copy in 
   AML_FLAGS := -DHAVE_AML -Iariannamethod
 endif
 
-.PHONY: all test asan clean run
+.PHONY: all test asan tsan clean run
 
 all: leo
 
@@ -23,7 +23,7 @@ ariannamethod/libaml.a: $(AML_SRC) ariannamethod/ariannamethod.h
 	ar rcs $@ ariannamethod/ariannamethod.o
 
 leo: leo.c $(AML_LIB)
-	$(CC) leo.c $(CFLAGS) $(AML_FLAGS) -o leo $(AML_LIB)
+	$(CC) leo.c $(CFLAGS) $(AML_FLAGS) -o leo $(AML_LIB) -lpthread
 
 run: leo
 	./leo
@@ -35,8 +35,12 @@ test: tests/test_leo.c leo.c
 
 # address + undefined behaviour sanitizers on the smoke run
 asan: leo.c
-	$(CC) leo.c $(SANED) -o leo.asan
+	$(CC) leo.c $(SANED) -o leo.asan -lpthread
 	./leo.asan
 
+# thread sanitizer — the Chunk-4 async worker under a live --chat --async session
+tsan: leo.c
+	$(CC) leo.c -O1 -g -fsanitize=thread -lm -lpthread -Wall -Wextra -o leo.tsan
+
 clean:
-	rm -f leo leo.asan tests/test_leo *.state
+	rm -f leo leo.asan leo.tsan tests/test_leo *.state

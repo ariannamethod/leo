@@ -2860,6 +2860,19 @@ Chunk-4 scaffold (save must drain-and-join or hold the lock — the only remaini
 **F-6** carried to Phase-3 (MathBrain: decide who it replaces in the 4-story temperature stack, not stack a
 5th). θ=0 and mama-child hold.
 
+**Chunk-4 brick 2a — the concurrency substrate, Leo's first thread (2026-07-11).** One background worker
+(`LeoAsync`): bounded queue (4), `pthread_rwlock` (reply = write lock, ring = read lock), non-blocking
+dispatch (drop-if-full so a ring never blocks a reply), drain-and-join before save. Default OFF (`--async`)
+→ no thread, no lock → byte-identical. The worker is a NO-OP under the read lock on purpose — proving the
+lock discipline is TSan-clean BEFORE a ring writes anything (brick 3 wires `leo_generate_ring` + the §3
+somatic feedback inside it). **Closes FABLE_PLAN F-5** (the async-save obligation: the worker is drained +
+joined before any save, and mid-chat `/save` is wrlock-guarded). Tool (neo): build 0 warn/err (`-lpthread`);
+make test **175/175** (the test TU excludes the async region); `--chat --async` reply lines byte-identical
+to `--chat` (the no-op worker doesn't change the voice); **ThreadSanitizer 0 races** on a live `--chat
+--async` session (reply wrlock / worker rdlock / queue mutex+cond / drain-join); `--gen 40 --seed 42`
+byte-identical; ASan clean. The async substrate is complete; brick 3 (the first ring) is the first
+behavior-changing async organ — A/B on Oleg's ear. θ=0 and mama-child hold.
+
 ## SESSION HANDOFF — 2026-07-10 (continuation state)
 
 Full handoff on disk: `~/arianna/_notes/SESSION_HANDOFF_leo_2026-07-10.md` (read it first after a
