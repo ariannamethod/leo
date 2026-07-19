@@ -13,6 +13,10 @@ leo_mycelium/
 ariannamethod/*.a
 ariannamethod/*.o
 
-# Local Fable audit reports — never distributed
+# Local audit reports — never distributed
 AUDIT_FABLE_*.md
 RUN_*.md
+
+# Development log — operational memory, kept local, not published
+LEOLOG.md
+*.tsan
