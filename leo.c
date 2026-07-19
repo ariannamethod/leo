@@ -1633,6 +1633,8 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_MAX_CANDS      256
 #define LEO_SEED_CANDS     64
 #define LEO_GEN_MAX        256
+#define LEO_STEP_RETRACT   (-2)   /* D-1: step verdict — retract the stranded fragment, do not space-close it */
+#define LEO_RETRACT_MAX    3      /* D-1: retract budget per reply — after it, end the arc (no oscillation) */
 #define LEO_GEN_TARGET     20
 #define LEO_GEN_MIN        6
 #define LEO_CHAIN_MIN      5
@@ -1680,6 +1682,8 @@ static void leo_ingest(Leo *leo, const char *text) {
  * literal cut. Tunable; measured by --no-presence ablation. */
 #define LEO_GRAVITY_W        1.5f   /* multiplicative theme tilt on successors */
 #define LEO_GRAVITY_ADD      0.6f   /* additive pull — lets low-count neighbours surface */
+#define LEO_ARC_W            0.4f   /* reply-arc resonance bias: cosine(arc, w_embed[cand]) — the vector prop */
+#define LEO_ARC_ETA          0.3f   /* how much each spoken word deforms the arc (L2-normalized after — no saturation) */
 #define LEO_START_GRAVITY_W  3.0f   /* theme tilt on the start token */
 static int g_leo_presence_on = 1;   /* --no-presence → 0 (ablation baseline) */
 static int g_leo_dario_on    = 1;   /* --no-dario → 0 (Dario boundary-injection off) */
@@ -1715,6 +1719,9 @@ static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School revers
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
 static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
+static int g_leo_arc_on = 1;            /* reply-arc vector (Oleg 2026-07-19: «какой организм без вектора»): the living
+                                         * key of THIS utterance, deformed by every spoken word, pulls the next choice.
+                                         * --no-arc → 0 (ablation; replies byte-identical to the pre-arc organism). */
 static int g_leo_be_on = 1;             /* E-11 #4 BE: the running-self (capsule) colors Leo's own words — speech-from-body. --no-be → 0. */
 static int g_leo_ask_on = 1;            /* E-11 #4 ASK: the carried gap (darkmatter) heats the groping register. --no-ask → 0. */
 static int g_leo_conatus_on = 1;        /* Damasio conatus: gamma_gap -> homeostatic debt -> drives ASK -> relieved by a teach. --no-conatus → 0 (debt inert, byte-identical to pre-conatus). */
@@ -1986,12 +1993,14 @@ typedef struct {
     const float     *gravity;          /* prompt theme tilt (NULL = off) */
     const BPE       *bpe;
     int              prev_ends_alpha;
+    int              prev_is_frag;    /* D-2: prev1 is a field-proven mid-word fragment */
     const int       *emit_ctx_tail;   /* last K emitted (NULL = guard off) */
     int              emit_ctx_tail_n;
     const uint8_t   *prompt_pieces;   /* prompt word pieces, gate-exempt (NULL=off) */
     const Leo       *leo;             /* chamber-register read (NULL = channel off) */
     const LeoSantaScratch *santa;     /* B2: top-K active spores for the bleed (NULL/empty = off) */
     float            theme_boost;     /* within-sentence leash (F-2 hoist: was leo->theme_boost — kept off shared Leo so a ring can generate without clobbering the reply's leash) */
+    const float     *arc;             /* reply-arc vector [LEO_RET_DIM], local to THIS generation (NULL = off) */
 } CandCollector;
 
 /* word-completion penalty: after an alpha-ended prev token, crush glue
@@ -2093,6 +2102,11 @@ static int cand_gate_reject(const CandCollector *cc, int cand_id) {
      * gravity. Reject up front — this gate also protects gravity[c]/[dst] in cand_collect_tri/bi,
      * which call this first. */
     if (cand_id < 0 || cand_id >= cc->bpe->vocab_size) return 1;
+    /* D-2: prev is a mid-word fragment — the only legal candidate CONTINUES the
+     * word. Checked BEFORE the prompt-pieces bypass: a space-started piece after
+     * a fragment would still strand it ("impor" + " end"). */
+    if (cc->prev_is_frag &&
+        !byte_is_word_cont((uint8_t)bpe_token_first_byte(cc->bpe, cand_id))) return 1;
     /* the prompt's own word pieces bypass the gates — the only way a multi-
      * token heard word ("father" = [ f][ather]) assembles from its own
      * successors past the orphan gate. Targeted to this reply's words. */
@@ -2307,6 +2321,34 @@ static void leo_santaclaus_mark_bleed(Leo *leo, const LeoSantaScratch *s,
     }
 }
 
+/* reply-arc resonance (the vector prop, Oleg 2026-07-19). Scalar boosts steer
+ * intensity; only a vector can HOLD a direction across the utterance. The arc is
+ * the living key of THIS reply — born from the soul's now (retention_state) and
+ * the opener, deformed by every spoken word — and it pulls the next choice toward
+ * tokens that resonate with it, in the same FNV fingerprint space the retention
+ * and the spores already live in (w_embed). leo_vec_cosine clamps at 0: the arc
+ * attracts, it never repels (a sole dissonant survivor still speaks). */
+static float leo_arc_bias(const CandCollector *cc, int cand_id) {
+    if (!g_leo_arc_on || !cc->arc || !cc->leo || !cc->leo->w_embed) return 0.0f;
+    if (cand_id < 0 || cand_id >= cc->leo->w_embed_cap) return 0.0f;
+    return LEO_ARC_W * leo_vec_cosine(cc->arc,
+               cc->leo->w_embed + (size_t)cand_id * LEO_RET_DIM, LEO_RET_DIM);
+}
+
+/* deform the arc with a spoken word: arc += η·embed, then L2-normalize — the
+ * normalized-vector aggregation (the actually.life saturation lesson: no tanh,
+ * no runaway sum; direction lives, magnitude stays 1). */
+static void leo_arc_absorb(const Leo *leo, float *arc, int id) {
+    if (!leo->w_embed || id < 0 || id >= leo->w_embed_cap) return;
+    const float *e = leo->w_embed + (size_t)id * LEO_RET_DIM;
+    float nn = 0.0f;
+    for (int d = 0; d < LEO_RET_DIM; d++) { arc[d] += LEO_ARC_ETA * e[d]; nn += arc[d] * arc[d]; }
+    if (nn > 1e-12f) {
+        float inv = 1.0f / sqrtf(nn);
+        for (int d = 0; d < LEO_RET_DIM; d++) arc[d] *= inv;
+    }
+}
+
 static int cand_collect_tri(int c, float count, void *ud) {
     CandCollector *cc = (CandCollector *)ud;
     if (cand_gate_reject(cc, c)) return 0;
@@ -2324,6 +2366,7 @@ static int cand_collect_tri(int c, float count, void *ud) {
     score += leo_santaclaus_candidate_bias(cc->santa, cc->leo, c);  /* B2: spore bleed (self-residual recall) */
     score += leo_register_bias(cc->leo, c);     /* felt chamber -> Leo's own emotion word */
     score += leo_be_bias(cc->leo, c);           /* E-11 #4 BE: the running-self colors his own words */
+    score += leo_arc_bias(cc, c);               /* reply-arc vector: the utterance's living key */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, c))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, c);
@@ -2347,6 +2390,7 @@ static int cand_collect_bi(int dst, float count, void *ud) {
     score += leo_santaclaus_candidate_bias(cc->santa, cc->leo, dst); /* B2: spore bleed (self-residual recall) */
     score += leo_register_bias(cc->leo, dst);   /* felt chamber -> Leo's own emotion word */
     score += leo_be_bias(cc->leo, dst);         /* E-11 #4 BE: the running-self colors his own words */
+    score += leo_arc_bias(cc, dst);             /* reply-arc vector: the utterance's living key */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, dst))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, dst);
@@ -2371,8 +2415,8 @@ static int leo_presence_latch_walk(int dst, float count, void *ud) {
     int prev_last = bpe_token_last_byte(&leo->bpe, pl->prev);
     CandCollector gate = { NULL, NULL, 0, 0, pl->prev, &leo->cooc,
                            leo->gravity, &leo->bpe,
-                           byte_is_word_cont((uint8_t)prev_last), NULL, 0,
-                           NULL, NULL, NULL, 1.0f };   /* +santa = NULL (latch gate: no bleed); theme_boost neutral (gate never reads it) */
+                           byte_is_word_cont((uint8_t)prev_last), 0, NULL, 0,
+                           NULL, NULL, NULL, 1.0f, NULL };   /* +prev_is_frag = 0 (a door is a whole word); santa/arc = NULL (latch gate: no bleed, no arc); theme_boost neutral (gate never reads it) */
     if (cand_gate_reject(&gate, dst)) return 0;
     float score = 100.0f * g + leo_squash(count);
     if (score > pl->best_score) { pl->best_score = score; pl->best = dst; }
@@ -2387,6 +2431,75 @@ static int leo_presence_latched_successor(const Leo *leo, int prev) {
     return pl.best;
 }
 
+/* D-2 root — field-learned wordness. A token is a MID-WORD FRAGMENT when it ends
+ * on a word byte and EVERY bigram successor the field has ever seen continues the
+ * word (none starts with space/punct — the corpus never closed a word on it).
+ * "impor" (only ever "impor"+"tant") is a fragment; "an" (successors with leading
+ * space) is a word. Wordness is learned from Leo's own field, not hardcoded, and
+ * checked lazily: one bigram walk, aborted on the first boundary successor. */
+typedef struct { const BPE *bpe; int any; int boundary_succ; } LeoFragProbe;
+
+static int leo_frag_probe_walk(int dst, float count, void *ud) {
+    LeoFragProbe *fp = (LeoFragProbe *)ud; (void)count;
+    fp->any = 1;
+    if (!byte_is_word_cont((uint8_t)bpe_token_first_byte(fp->bpe, dst))) {
+        fp->boundary_succ = 1;
+        return 1;                       /* word-ness proven — abort the walk */
+    }
+    return 0;
+}
+
+static int leo_token_is_midword_fragment(const Leo *leo, int id) {
+    if (!leo || id < 0 || id >= leo->bpe.vocab_size) return 0;
+    if (!byte_is_word_cont((uint8_t)bpe_token_last_byte(&leo->bpe, id))) return 0;
+    /* nature over statistics: an apostrophe with NO alpha in the token ("'") is
+     * never a word — only a bridge into a contraction (you're). The field may
+     * hold a stray boundary successor for it (quote marks in the dedication);
+     * the token's nature outranks that noise. "grownups'" (alpha + ') closes. */
+    {
+        int has_alpha = 0, len = leo->bpe.vocab_len[id];
+        const uint8_t *b = leo->bpe.vocab_bytes[id];
+        for (int i = 0; i < len; i++) {
+            uint8_t c = b[i];
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) { has_alpha = 1; break; }
+        }
+        if (!has_alpha) return 1;
+    }
+    LeoFragProbe fp = { &leo->bpe, 0, 0 };
+    bigram_walk_src(&leo->bigrams, id, leo_frag_probe_walk, &fp);
+    return fp.any && !fp.boundary_succ;
+}
+
+/* D-3 — glue that cannot carry a sentence-final period ("...fills a."). Deliberately
+ * NARROWER than LEO_FUNCTION_WORDS: pronouns and auxiliaries CAN end a child's
+ * sentence ("I do.", "It is his."); determiners, conjunctions, prepositions and
+ * bare possessives cannot. */
+static const char *const LEO_DANGLE_WORDS[] = {
+    "a","an","the","and","or","but","of","to","in","on","at","by","for",
+    "from","with","as","my","your","its","our","their", NULL
+};
+
+static int leo_token_is_dangling_glue(const BPE *bpe, int id) {
+    if (id < 0 || id >= bpe->vocab_size) return 0;
+    int len = bpe->vocab_len[id];
+    const uint8_t *b = bpe->vocab_bytes[id];
+    int s = 0, e = len;
+    while (s < e && (b[s]==' '||b[s]=='\n'||b[s]=='\t'||b[s]=='\r')) s++;
+    while (e > s && (b[e-1]==' '||b[e-1]=='\n'||b[e-1]=='\t'||b[e-1]=='\r')) e--;
+    int nn = e - s;
+    if (nn <= 0 || nn > 5) return 0;
+    char w[8];
+    for (int i = 0; i < nn; i++) {
+        uint8_t c = b[s + i];
+        if (c >= 'A' && c <= 'Z') c = (uint8_t)(c - 'A' + 'a');
+        w[i] = (char)c;
+    }
+    w[nn] = 0;
+    for (int i = 0; LEO_DANGLE_WORDS[i]; i++)
+        if (!strcmp(w, LEO_DANGLE_WORDS[i])) return 1;
+    return 0;
+}
+
 /* temperature schedule: sharp early (grammar lock), relax into play. */
 static float temp_for_step(int step) {
     if (step < 2) return 0.40f;
@@ -2399,7 +2512,7 @@ static float temp_for_step(int step) {
  * gated, anti-chain-guarded, powf(1/temp), weighted-sampled. */
 static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
                           const int *emit_ctx_tail, int emit_ctx_tail_n,
-                          float theme_boost, LeoRng *rng) {
+                          float theme_boost, const float *arc, LeoRng *rng) {
     if (prev1 < 0) return leo_choose_start(leo, rng);
     temp = clampf(temp, 0.05f, 10.0f);
     float inv_temp = 1.0f / temp;
@@ -2408,20 +2521,23 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
     float cand_sc[LEO_MAX_CANDS];
     int   prev_last = bpe_token_last_byte(&leo->bpe, prev1);
     int   prev_ends_alpha = byte_is_word_cont((uint8_t)prev_last);
+    int   prev_is_frag = prev_ends_alpha &&
+                         leo_token_is_midword_fragment(leo, prev1);   /* D-2 */
 
     LeoSantaScratch santa_scratch;
     santa_scratch.n_active = 0;
     if (g_leo_santaclaus_on) leo_santaclaus_compute_active(leo, &santa_scratch);
     CandCollector cc = { cand_id, cand_sc, 0, LEO_MAX_CANDS,
                          prev1, &leo->cooc, leo->gravity, &leo->bpe,
-                         prev_ends_alpha, emit_ctx_tail, emit_ctx_tail_n,
-                         leo->prompt_pieces, leo, &santa_scratch, theme_boost };
+                         prev_ends_alpha, prev_is_frag, emit_ctx_tail, emit_ctx_tail_n,
+                         leo->prompt_pieces, leo, &santa_scratch, theme_boost, arc };
 
     if (prev2 >= 0)
         trigram_walk_ab(&leo->trigrams, prev2, prev1, cand_collect_tri, &cc);
     if (cc.n == 0)
         bigram_walk_src(&leo->bigrams, prev1, cand_collect_bi, &cc);
     if (cc.n == 0) {
+        if (prev_is_frag) return LEO_STEP_RETRACT;   /* D-1: no continuation exists — retract, not space-close */
         if (prev_ends_alpha) return 32;          /* close the word with a space */
         return leo_choose_start(leo, rng);
     }
@@ -2972,6 +3088,17 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
         }
     }
 
+    /* reply-arc vector: local like theme_boost (F-2) — trials never write the shared
+     * Leo. Born from the soul's now (retention_state) plus the opener's fingerprint;
+     * every accepted word below deforms it. NULL when off → zero bias, byte-identical. */
+    float arcbuf[LEO_RET_DIM];
+    const float *arc = NULL;
+    if (g_leo_arc_on && leo->w_embed) {
+        memcpy(arcbuf, leo->retention_state, sizeof arcbuf);
+        for (int i = 0; i < n; i++) leo_arc_absorb(leo, arcbuf, ctx[i]);
+        arc = arcbuf;
+    }
+
     int target = LEO_GEN_TARGET + leo_rng_mod(rng, 10) - 5;
     int target_floor = LEO_GEN_MIN;
     if (g_leo_form_on && leo->gravity) {   /* A.6 F-3: in a reply, the velocity mode sets the word budget —
@@ -2998,6 +3125,7 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
                g_leo_last_dissonance < LEO_UNKNOWN_DISS &&
                (leo->chamber_act[0] + leo->chamber_act[3]) < LEO_QUIET_DISTRESS;
     float theme_boost = 1.0f;   /* within-sentence leash, reset per sentence (F-2: a local, no longer shared leo->theme_boost) */
+    int retracts = 0;           /* D-1: stranded-fragment retracts spent in THIS reply */
     for (int t = 1; t < LEO_GEN_MAX; t++) {
         int prev1 = ctx[n - 1];
         int prev2 = n >= 2 ? ctx[n - 2] : -1;
@@ -3017,7 +3145,16 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
         float tau = temp_for_step(t) * leo->temp_mult;
         int tail_n = n < LEO_REPEAT_WINDOW ? n : LEO_REPEAT_WINDOW;
         const int *tl = ctx + (n - tail_n);
-        int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n, theme_boost, rng);
+        int nxt = leo_step_token(leo, prev2, prev1, tau, tl, tail_n, theme_boost, arc, rng);
+        if (nxt == LEO_STEP_RETRACT) {
+            /* D-1: drop the stranded fragment and CONTINUE — the next step re-seeds
+             * from the pre-fragment tail (the old space-close path also flowed on).
+             * A small budget ends the arc if the field keeps stranding. */
+            if (n > 1) n--;
+            if (clause_start > n) clause_start = n;
+            if (++retracts >= LEO_RETRACT_MAX) break;
+            continue;
+        }
         if (nxt < 0) break;
 
         /* deferred door-latch (my design): the heard word surfaces DEEPER in
@@ -3040,6 +3177,7 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
             n < LEO_GEN_MAX - 2 && is_boundary_token(&leo->bpe, nxt)) continue;
 
         ctx[n++] = nxt;
+        if (arc) leo_arc_absorb(leo, arcbuf, nxt);   /* the spoken word deforms the arc */
         if (is_boundary_token(&leo->bpe, nxt)) clause_start = n;  /* a new clause begins */
         /* Phase 3a field physics (chambers crossfire + retention Griffin +
          * suffering) is NOT stepped here: leo_generate_ex runs once per
@@ -3053,6 +3191,15 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
         if (n >= target && is_boundary_token(&leo->bpe, nxt)) break;
         if (n >= LEO_GEN_MAX) break;
     }
+
+    /* D-1/D-3 strand net: an arc that did not land on a boundary sheds its broken
+     * tail — mid-word fragments ("impor") and dangling glue ("a", "the", "of") —
+     * so the post-pass period lands on a word that can carry it. A clean STOP-mode
+     * fragment ends on a boundary token and is never touched. */
+    while (n > 1 && !is_boundary_token(&leo->bpe, ctx[n - 1]) &&
+           (leo_token_is_midword_fragment(leo, ctx[n - 1]) ||
+            leo_token_is_dangling_glue(&leo->bpe, ctx[n - 1])))
+        n--;
 
     /* decode */
     int pos = 0;
@@ -3097,6 +3244,10 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
         if (out[i] >= 'a' && out[i] <= 'z') { out[i] = out[i] - ('a' - 'A'); break; }
         if (out[i] >= 'A' && out[i] <= 'Z') break;
     }
+
+    /* degenerate net (mirrors the start<0 idiom above): the field said nothing
+     * decodable — a whitespace-only context retracted/shed to silence. */
+    if (!out[0]) snprintf(out, (size_t)max_len, "...");
 
     /* tail tokens for chain continuity */
     if (emitted_tail && n_emit && *n_emit > 0) {
@@ -5119,6 +5270,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
+        else if (!strcmp(argv[i], "--no-arc")) g_leo_arc_on = 0;
         else if (!strcmp(argv[i], "--no-be")) g_leo_be_on = 0;
         else if (!strcmp(argv[i], "--no-ask")) g_leo_ask_on = 0;
         else if (!strcmp(argv[i], "--no-conatus")) g_leo_conatus_on = 0;
