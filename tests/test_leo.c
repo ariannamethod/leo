@@ -1526,6 +1526,15 @@ int main(void) {
         /* held coherence enters phase-lock (EMA hysteresis) */
         for (int r = 0; r < 30; r++) leo_consol_observe(&l, ids, n);
         CHECK(l.consol_locked == 1, "consol: held coherence enters phase-lock (EMA hysteresis)");
+        /* habituation (margin gate, calibrated 07-19): the SAME moment repeated
+         * converges into the EMA (rate 0.16 → ~14 calls) and then STOPS birthing —
+         * further identical observes leave the ring unchanged. */
+        {
+            int ns_before = l.n_shards;
+            for (int r = 0; r < 10; r++) leo_consol_observe(&l, ids, n);
+            CHECK(l.n_shards == ns_before && ns_before < 31,
+                  "consol: habituation — a repeated moment stops birthing (margin over held EMA)");
+        }
         /* the weight law: log1p+clamp bounds a huge delta; a worse reliving cools */
         LeoShard wsh; memset(&wsh, 0, sizeof wsh); wsh.weight = LEO_CONSOL_W0; wsh.born_coh = 1.0f;
         for (int r = 0; r < 100; r++) leo_consol_absorb(&wsh, 1000.0f);

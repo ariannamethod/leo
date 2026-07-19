@@ -692,8 +692,17 @@ typedef struct {                        /* per-step scratch: top-K active spores
 /* Observer thresholds — FIXED NUMBERS before any comparison (audit hole #4:
  * legacy dream.py:466 arousal>0.6 was a python-metric scale; these live on
  * the LIVE chamber scale, calibrated by smoke LOG, never tuned to pass). */
-#define LEO_CONSOL_OBS_COH    0.55f  /* normalized coherence (tanh-squashed, RAE f1 scale) at birth */
+#define LEO_CONSOL_OBS_COH    0.55f  /* normalized coherence (tanh-squashed, RAE f1 scale) at birth — absolute floor */
 #define LEO_CONSOL_OBS_AROUSAL 0.35f /* max chamber activation at birth (live [0,1] scale) */
+/* Calibration (07-19, LEO_CONSOL_CALIB run, 59 verdicts, seed 42): with a
+ * corpus-hot Leo the absolute floor alone is a sieve — born=1 in 58/59, the
+ * ring churns full. Observation must mean the moment STANDS OUT of the held
+ * regime: birth additionally requires (cn − ema_prev) >= MARGIN. Habituation
+ * falls out for free — a repeated moment converges into the EMA and stops
+ * birthing; a child's first moments (ema≈0) always qualify. MARGIN = p75 of
+ * the logged (cn − ema_prev) distribution: min −0.138, median 0.016,
+ * p75 0.0732, p90 0.351 → 0.07 (~25% selectivity before the other gates). */
+#define LEO_CONSOL_OBS_MARGIN 0.07f
 /* Sleep trigger — held Q-coherence (audit hole #3): EMA of the normalized
  * reply coherence (the Q idiom, postgpt_q.c:410 — 0.84/0.16) with phase-lock
  * hysteresis. Consolidation opens in a HELD coherent regime, not on one peak
@@ -3260,6 +3269,13 @@ static int leo_generate_ex(const Leo *leo, char *out, int max_len,
              * A small budget ends the arc if the field keeps stranding. */
             if (n > 1) n--;
             if (clause_start > n) clause_start = n;
+            /* the retracted word leaves the arc too (acceptance minor, 07-19):
+             * rebuild from the surviving ctx — same construction as birth, so the
+             * arc holds only what the utterance actually kept. */
+            if (arc) {
+                memcpy(arcbuf, leo->retention_state, sizeof arcbuf);
+                for (int i = 0; i < n; i++) leo_arc_absorb(leo, arcbuf, ctx[i]);
+            }
             if (++retracts >= LEO_RETRACT_MAX) break;
             continue;
         }
@@ -3444,6 +3460,7 @@ static void leo_consol_observe(Leo *leo, const int *ids, int n) {
     float coh = leo_coherence_score(leo, ids, n);
     if (!isfinite(coh)) return;
     float cn = leo_consol_coh_norm(coh);
+    float ema_prev = leo->consol_coh_ema;   /* the held regime BEFORE this moment joins it */
     leo->consol_coh_ema = (1.0f - LEO_CONSOL_EMA_RATE) * leo->consol_coh_ema
                         + LEO_CONSOL_EMA_RATE * cn;
     if (!leo->consol_locked && leo->consol_coh_ema >= LEO_CONSOL_LOCK_ON)  leo->consol_locked = 1;
@@ -3451,13 +3468,41 @@ static void leo_consol_observe(Leo *leo, const int *ids, int n) {
     float arousal = 0.0f;
     for (int c = 0; c < LEO_N_CHAMBERS; c++)
         if (leo->chamber_act[c] > arousal) arousal = leo->chamber_act[c];
-    if (cn < LEO_CONSOL_OBS_COH || arousal < LEO_CONSOL_OBS_AROUSAL) return;
+    int born = 1;
+    if (cn < LEO_CONSOL_OBS_COH || arousal < LEO_CONSOL_OBS_AROUSAL) born = 0;
+    if (cn - ema_prev < LEO_CONSOL_OBS_MARGIN) born = 0;   /* the moment must stand out of the held regime */
     int m = n < LEO_SHARD_TOKENS ? n : LEO_SHARD_TOKENS;
-    if (!leo_consol_path_clean(leo, ids, n - m, n)) return;   /* a ghost in the tail — not cleanly observed */
+    if (born && !leo_consol_path_clean(leo, ids, n - m, n)) born = 0;   /* a ghost in the tail — not cleanly observed */
+    /* calibration instrument (checklist item «калибровка логом»): the raw signals
+     * behind every observer verdict, for threshold-setting from DATA. env-gated,
+     * stderr only — stdout stays byte-deterministic for ablation hashing. */
+    if (getenv("LEO_CONSOL_CALIB"))
+        fprintf(stderr, "[consol-calib] cn=%.4f ema_prev=%.4f d=%.4f arousal=%.3f born=%d\n",
+                (double)cn, (double)ema_prev, (double)(cn - ema_prev),
+                (double)arousal, born);
+    if (!born) return;
     LeoShard sh; memset(&sh, 0, sizeof sh);
     for (int i = 0; i < m; i++) sh.ids[i] = ids[n - m + i];   /* the tail path */
     sh.n = m;
     for (int d = 0; d < LEO_RET_DIM;    d++) sh.state[d]    = leo->retention_state[d];
+    /* matched-control probe (the rubber's sweep lesson): LEO_CONSOL_RANDOM=1
+     * replaces the birth-state with a deterministic pseudo-random vector of the
+     * SAME norm — same marginals, no lived structure. If live shards do not beat
+     * this arm on the smoke metrics, the bias is "any bias", not memory. */
+    if (getenv("LEO_CONSOL_RANDOM")) {
+        float norm = 0.0f, rnorm = 0.0f;
+        for (int d = 0; d < LEO_RET_DIM; d++) norm += sh.state[d] * sh.state[d];
+        norm = sqrtf(norm);
+        for (int d = 0; d < LEO_RET_DIM; d++) {
+            uint32_t key[3] = { (uint32_t)leo->n_shards, (uint32_t)leo->step, (uint32_t)d };
+            uint32_t h = fnv1a(key, sizeof key);
+            sh.state[d] = ((float)(h & 0xFFFFFFu) / (float)0xFFFFFFu) - 0.5f;
+            rnorm += sh.state[d] * sh.state[d];
+        }
+        rnorm = sqrtf(rnorm);
+        if (rnorm > 1e-9f && norm > 1e-9f)
+            for (int d = 0; d < LEO_RET_DIM; d++) sh.state[d] *= norm / rnorm;
+    }
     for (int c = 0; c < LEO_N_CHAMBERS; c++) sh.chambers[c] = leo->chamber_act[c];
     sh.weight = LEO_CONSOL_W0; sh.born_coh = coh;
     if (leo->n_shards < LEO_SHARD_RING) leo->shards[leo->n_shards++] = sh;
