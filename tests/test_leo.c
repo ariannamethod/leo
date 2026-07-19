@@ -308,20 +308,16 @@ int main(void) {
             }
         }
 
-        /* F-5: NaN in the final float (gamma_gap, offset size-4) -> reject */
-        if (buf && sz >= 4) {
-            unsigned char *bad = malloc((size_t)sz);
-            if (bad) {
-                memcpy(bad, buf, (size_t)sz);
-                uint32_t qnan = 0x7FC00000u; memcpy(bad + (size_t)(sz - 4), &qnan, sizeof qnan);
-                const char *bp = "/tmp/leo_state_bad_nan.bin";
-                FILE *wf = fopen(bp, "wb");
-                if (wf) { size_t wn = fwrite(bad, 1, (size_t)sz, wf); (void)wn; fclose(wf); }
-                Leo c; leo_init(&c);
-                CHECK(leo_load_state(&c, bp) == 0, "corrupt F-5: NaN gamma_gap -> load rejects");
-                leo_free(&c); free(bad);
-            }
-        }
+        /* F-5: NaN gamma_gap -> reject. Robust field-poke, no byte offsets — the
+         * v10 consolidation tail now sits AFTER gamma_gap, so "last 4 bytes" would
+         * hit the fail-soft shard tail instead of the hard-reject float block. */
+        { Leo sv; leo_init(&sv);
+          if (leo_load_state(&sv, good) == 1) {
+              sv.gamma_gap = (float)NAN; leo_save_state(&sv, "/tmp/leo_state_bad_nan.bin");
+              Leo c; leo_init(&c);
+              CHECK(leo_load_state(&c, "/tmp/leo_state_bad_nan.bin") == 0, "corrupt F-5: NaN gamma_gap -> load rejects");
+              leo_free(&c); }
+          leo_free(&sv); }
 
         /* Codex: inflate vocab_size (offset 20 + 12*n_merges) past 256+n_merges -> reject */
         if (buf && sz > 20) {
@@ -1501,6 +1497,79 @@ int main(void) {
         CHECK(na == nb && strcmp(a, b) == 0, "ring: same cycle-seed -> identical read-only utterance");
         CHECK(gr1 == gr2, "ring: full generate path drew from its OWN PRNG, left global rand() untouched");
         CHECK(l.step == step_before, "ring: read-only — generation did not advance the step clock");
+        leo_free(&l);
+    }
+
+    /* stage-1 consolidation: observer / weight law / selection / decay / persistence.
+     * Design: DESIGN_LEO_HEBBIAN_CONSOLIDATION_2026-07-19 (five audit holes closed). */
+    {
+        const char *corpus =
+            "The warm light. His mother holds him. The rain at night. "
+            "Leo loves the warm light and his mother and the rain. "
+            "The window is quiet. Leo is small and warm and close.";
+        Leo l; leo_init(&l);
+        for (int r = 0; r < 3; r++) leo_ingest(&l, corpus);
+        leo_build_chamber_tags(&l); leo_supertok_scan(&l);
+        int ids[32];
+        int n = bpe_encode(&l.bpe, (const uint8_t *)" the warm light and his mother",
+                           30, ids, 32);
+        /* observer refuses an unlit body (arousal gate) */
+        memset(l.chamber_act, 0, sizeof l.chamber_act);
+        leo_consol_observe(&l, ids, n);
+        CHECK(l.n_shards == 0, "consol: observer refuses an unlit body (arousal below threshold)");
+        /* observer births on a lit body + a coherent (thrice-heard) path */
+        l.chamber_act[LEO_CH_LOVE] = 0.8f;
+        leo_consol_observe(&l, ids, n);
+        CHECK(l.n_shards == 1, "consol: observer births a shard on lit body + coherent path");
+        CHECK(l.shards[0].weight == LEO_CONSOL_W0 && l.shards[0].born_coh > 0.0f,
+              "consol: shard born with W0 weight and a real born_coh");
+        /* held coherence enters phase-lock (EMA hysteresis) */
+        for (int r = 0; r < 30; r++) leo_consol_observe(&l, ids, n);
+        CHECK(l.consol_locked == 1, "consol: held coherence enters phase-lock (EMA hysteresis)");
+        /* the weight law: log1p+clamp bounds a huge delta; a worse reliving cools */
+        LeoShard wsh; memset(&wsh, 0, sizeof wsh); wsh.weight = LEO_CONSOL_W0; wsh.born_coh = 1.0f;
+        for (int r = 0; r < 100; r++) leo_consol_absorb(&wsh, 1000.0f);
+        CHECK(isfinite(wsh.weight) && wsh.weight <= LEO_CONSOL_WMAX + 1e-6f,
+              "consol: log1p+clamp bounds runaway growth (no NaN, hard ceiling)");
+        float w_before = wsh.weight;
+        leo_consol_absorb(&wsh, 0.0f);
+        CHECK(wsh.weight < w_before, "consol: a worse reliving cools the shard");
+        /* decay forgets a weight below the drop floor (compact) */
+        memset(&l.shards[0], 0, sizeof(LeoShard));
+        l.shards[0].weight = 0.01f; l.n_shards = 1;
+        leo_consol_decay(&l);
+        CHECK(l.n_shards == 0, "consol: decay forgets a weight below the drop floor");
+        /* replay selection follows RESONANCE, never weight (anti rich-get-richer) */
+        for (int d = 0; d < LEO_RET_DIM; d++) l.retention_state[d] = (d % 2) ? 0.5f : -0.5f;
+        LeoShard far_sh; memset(&far_sh, 0, sizeof far_sh);
+        far_sh.weight = 2.0f; far_sh.n = 1; far_sh.ids[0] = 301;
+        for (int d = 0; d < LEO_RET_DIM; d++) far_sh.state[d] = -l.retention_state[d];
+        LeoShard near_sh; memset(&near_sh, 0, sizeof near_sh);
+        near_sh.weight = 0.1f; near_sh.n = 1; near_sh.ids[0] = 300;
+        for (int d = 0; d < LEO_RET_DIM; d++) near_sh.state[d] = l.retention_state[d];
+        l.shards[0] = far_sh; l.shards[1] = near_sh; l.n_shards = 2;
+        CHECK(leo_consol_select(&l) == 1,
+              "consol: replay selection follows resonance, never weight (anti rich-get-richer)");
+        /* v10 persistence roundtrip */
+        const char *sp = "/tmp/leo_consol_test.state";
+        l.consol_coh_ema = 0.6f; l.consol_locked = 1;
+        CHECK(leo_save_state(&l, sp) == 1, "consol: v10 state saves");
+        Leo l2; leo_init(&l2);
+        CHECK(leo_load_state(&l2, sp) == 1 && l2.n_shards == 2 &&
+              l2.shards[1].ids[0] == 300 && l2.consol_locked == 1,
+              "consol: v10 save/load roundtrips the shard ring + sleep trigger");
+        /* half-write probe: truncate the v10 tail — the organism lives, shardless */
+        {
+            FILE *tf = fopen(sp, "rb");
+            fseek(tf, 0, SEEK_END); long fl = ftell(tf); fseek(tf, 0, SEEK_SET);
+            char *fb = malloc((size_t)fl); fread(fb, 1, (size_t)fl, tf); fclose(tf);
+            tf = fopen(sp, "wb"); fwrite(fb, 1, (size_t)(fl - 40), tf); fclose(tf);
+            free(fb);
+        }
+        Leo l3; leo_init(&l3);
+        CHECK(leo_load_state(&l3, sp) == 1 && l3.n_shards == 0,
+              "consol: a truncated v10 tail fails SOFT — organism lives, shards zero");
+        leo_free(&l2); leo_free(&l3); remove(sp);
         leo_free(&l);
     }
 

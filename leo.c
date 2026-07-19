@@ -665,6 +665,57 @@ typedef struct {                        /* per-step scratch: top-K active spores
     int   n_active;
 } LeoSantaScratch;
 
+/* ── Hebbian consolidation, stage 1 (hippocampus by resonance; design note
+ * DESIGN_LEO_HEBBIAN_CONSOLIDATION_2026-07-19, five audit holes closed).
+ * A SHARD is a vector memory of an OBSERVED moment: the reply's tail path +
+ * the soul's state at birth. NOT a pair table (anti-bigram-reduction decree).
+ * Stage 1 never writes a lexical table: shards bias candidate choice through
+ * the santaclaus idiom (cosine of present state vs birth state), and the
+ * async worker RELIVES a resonant shard between replies — replay =
+ * re-experience, somatic only. Weight grows by the log1p-clamped DELTA of
+ * relived coherence over born coherence (the monism saturation law: no tanh
+ * — deadens after the first strong event; no raw sum — the Hebbian-no-ceiling
+ * NaN class), and a shard is selected for replay by RESONANCE with the
+ * present, never by weight (the rich-get-richer hole). --no-consolidation →
+ * byte-identical. */
+#define LEO_SHARD_TOKENS      8      /* = LEO_SPORE_CONTEXT_TOK: the reply's tail path */
+#define LEO_SHARD_RING        32
+#define LEO_SHARD_TOPK        2      /* shards biasing one step (santaclaus bleeds 4 spores; shards are stronger-formed) */
+#define LEO_CONSOL_W          0.5f   /* read bias: LEO_CONSOL_W * resonance*weight on a path token */
+#define LEO_CONSOL_W0         0.3f   /* birth weight (legacy dream.py:464 base, re-scaled) */
+#define LEO_CONSOL_GAIN       0.5f   /* log1p gain on a positive relived-coherence delta */
+#define LEO_CONSOL_DELTA_CLAMP 2.0f  /* hard clamp on the delta before log1p (bounded top) */
+#define LEO_CONSOL_COOL       0.98f  /* a replay that relived WORSE than birth cools the shard */
+#define LEO_CONSOL_WMAX       2.0f   /* weight ceiling (isfinite gate + cap — no runaway) */
+#define LEO_CONSOL_DECAY      0.995f /* global shard-weight decay per replay cycle (breathes like all tables) */
+#define LEO_CONSOL_DROP       0.05f  /* weight below this → the shard is forgotten (compact) */
+/* Observer thresholds — FIXED NUMBERS before any comparison (audit hole #4:
+ * legacy dream.py:466 arousal>0.6 was a python-metric scale; these live on
+ * the LIVE chamber scale, calibrated by smoke LOG, never tuned to pass). */
+#define LEO_CONSOL_OBS_COH    0.55f  /* normalized coherence (tanh-squashed, RAE f1 scale) at birth */
+#define LEO_CONSOL_OBS_AROUSAL 0.35f /* max chamber activation at birth (live [0,1] scale) */
+/* Sleep trigger — held Q-coherence (audit hole #3): EMA of the normalized
+ * reply coherence (the Q idiom, postgpt_q.c:410 — 0.84/0.16) with phase-lock
+ * hysteresis. Consolidation opens in a HELD coherent regime, not on one peak
+ * and not on an idle clock. The tanh here NORMALIZES a trigger signal; the
+ * no-tanh law governs memory WEIGHTS, which use log1p above. */
+#define LEO_CONSOL_EMA_RATE   0.16f
+#define LEO_CONSOL_LOCK_ON    0.55f
+#define LEO_CONSOL_LOCK_OFF   0.45f
+typedef struct {
+    int   ids[LEO_SHARD_TOKENS];   /* the moment's token path (reply tail) */
+    int   n;
+    float state[LEO_RET_DIM];      /* retention-state at birth — the soul of the moment */
+    float chambers[LEO_N_CHAMBERS];/* chamber slice at birth */
+    float weight;                  /* METABEC: memory strength — grows by relived delta, decays */
+    float born_coh;                /* leo_coherence_score of the path at birth (raw scale) */
+} LeoShard;
+typedef struct {                   /* per-step scratch: top-K resonant shards */
+    int   idx[LEO_SHARD_TOPK];
+    float w[LEO_SHARD_TOPK];
+    int   n;
+} LeoConsolScratch;
+
 /* ── A.4 RAE — recursive selector, a tiny LEARNED MLP (5→8→1, 57 params) ──────
  * The first learned component: it weights the candidate channels we built
  * (coherence / gravity-theme / santaclaus-recall / register / diversity) and
@@ -1453,6 +1504,10 @@ typedef struct {
     LeoSpore spores[LEO_SPORE_MAX]; int n_spores;
     LeoSpore sea[LEO_SEA_MAX];      int n_sea; int sea_ptr;
     LeoSpore origin_spore; int has_origin;  /* §4 the eternal wound born from the dedication — runtime-only, NOT saved, NOT in spores[] */
+    /* consolidation stage 1: the shard ring + the held-coherence sleep trigger (state v10) */
+    LeoShard shards[LEO_SHARD_RING]; int n_shards;
+    float    consol_coh_ema;       /* EMA of normalized reply coherence (the Q idiom) */
+    uint8_t  consol_locked;        /* phase-lock: 1 = held coherent regime (sleep may consolidate) */
     /* A.4 — RAE: the first LEARNED component (recursive selector MLP). PASSIVE
      * until R2 wires it into selection; weights persist in leo.state (R4). */
     LeoRae rae;
@@ -1722,6 +1777,8 @@ static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints th
 static int g_leo_arc_on = 1;            /* reply-arc vector (Oleg 2026-07-19: «какой организм без вектора»): the living
                                          * key of THIS utterance, deformed by every spoken word, pulls the next choice.
                                          * --no-arc → 0 (ablation; replies byte-identical to the pre-arc organism). */
+static int g_leo_consol_on = 1;         /* stage-1 consolidation: shard ring + observer + resonance replay.
+                                         * --no-consolidation → 0 (no birth, no bias, no replay — byte-identical). */
 static int g_leo_be_on = 1;             /* E-11 #4 BE: the running-self (capsule) colors Leo's own words — speech-from-body. --no-be → 0. */
 static int g_leo_ask_on = 1;            /* E-11 #4 ASK: the carried gap (darkmatter) heats the groping register. --no-ask → 0. */
 static int g_leo_conatus_on = 1;        /* Damasio conatus: gamma_gap -> homeostatic debt -> drives ASK -> relieved by a teach. --no-conatus → 0 (debt inert, byte-identical to pre-conatus). */
@@ -2001,6 +2058,7 @@ typedef struct {
     const LeoSantaScratch *santa;     /* B2: top-K active spores for the bleed (NULL/empty = off) */
     float            theme_boost;     /* within-sentence leash (F-2 hoist: was leo->theme_boost — kept off shared Leo so a ring can generate without clobbering the reply's leash) */
     const float     *arc;             /* reply-arc vector [LEO_RET_DIM], local to THIS generation (NULL = off) */
+    const LeoConsolScratch *consol;   /* stage-1 shards: top-K resonant memories (NULL/empty = off) */
 } CandCollector;
 
 /* word-completion penalty: after an alpha-ended prev token, crush glue
@@ -2349,6 +2407,50 @@ static void leo_arc_absorb(const Leo *leo, float *arc, int id) {
     }
 }
 
+/* stage-1 consolidation read: top-K shards whose BIRTH state resonates with the
+ * present. Resonance = cosine(now, born) * weight — the santaclaus idiom on the
+ * shard organ. Selection FOR REPLAY never orders by weight (the rich-get-richer
+ * hole); the read bias legitimately does — a strong memory pulls harder when it
+ * fits the now. Read-only over Leo. */
+static void leo_consol_compute_active(const Leo *leo, LeoConsolScratch *out) {
+    out->n = 0;
+    for (int j = 0; j < LEO_SHARD_TOPK; j++) { out->idx[j] = -1; out->w[j] = 0.0f; }
+    if (!g_leo_consol_on || !leo || leo->n_shards <= 0) return;
+    for (int i = 0; i < leo->n_shards; i++) {
+        const LeoShard *sh = &leo->shards[i];
+        if (sh->weight <= 0.0f) continue;
+        float w = leo_vec_cosine(leo->retention_state, sh->state, LEO_RET_DIM) * sh->weight;
+        if (w <= 0.0f) continue;
+        int slot = -1;
+        for (int j = 0; j < LEO_SHARD_TOPK; j++)
+            if (out->idx[j] < 0 || w > out->w[j]) { slot = j; break; }
+        if (slot < 0) continue;
+        for (int j = LEO_SHARD_TOPK - 1; j > slot; j--) { out->idx[j] = out->idx[j-1]; out->w[j] = out->w[j-1]; }
+        out->idx[slot] = i; out->w[slot] = w;
+        if (out->n < LEO_SHARD_TOPK) out->n++;
+    }
+}
+
+/* a candidate continuing an active shard's OWN lived transition gets the pull —
+ * Leo's consolidated memory surfaces in a moment that feels like the one it was
+ * born in. POSITION-AWARE (the henever lesson): a bag-of-tokens bias would boost
+ * "never" after "he" from any shard holding both words, re-creating the in-word
+ * seam it never lived; a shard may only strengthen the ADJACENT pairs of its own
+ * path — reinforcement of lived transitions, not a token bag. */
+static float leo_consol_candidate_bias(const LeoConsolScratch *s, const Leo *leo,
+                                       int prev1, int cand) {
+    if (!s || !leo || cand < 0 || prev1 < 0 || s->n <= 0) return 0.0f;
+    float total = 0.0f;
+    for (int i = 0; i < s->n; i++) {
+        int idx = s->idx[i];
+        if (idx < 0 || idx >= leo->n_shards || s->w[i] <= 0.0f) continue;
+        const LeoShard *sh = &leo->shards[idx];
+        for (int k = 0; k + 1 < sh->n; k++)
+            if (sh->ids[k] == prev1 && sh->ids[k + 1] == cand) { total += s->w[i]; break; }
+    }
+    return LEO_CONSOL_W * total;
+}
+
 static int cand_collect_tri(int c, float count, void *ud) {
     CandCollector *cc = (CandCollector *)ud;
     if (cand_gate_reject(cc, c)) return 0;
@@ -2367,6 +2469,7 @@ static int cand_collect_tri(int c, float count, void *ud) {
     score += leo_register_bias(cc->leo, c);     /* felt chamber -> Leo's own emotion word */
     score += leo_be_bias(cc->leo, c);           /* E-11 #4 BE: the running-self colors his own words */
     score += leo_arc_bias(cc, c);               /* reply-arc vector: the utterance's living key */
+    score += leo_consol_candidate_bias(cc->consol, cc->leo, cc->prev1, c);  /* stage-1 shards: lived-transition pull */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, c))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, c);
@@ -2391,6 +2494,7 @@ static int cand_collect_bi(int dst, float count, void *ud) {
     score += leo_register_bias(cc->leo, dst);   /* felt chamber -> Leo's own emotion word */
     score += leo_be_bias(cc->leo, dst);         /* E-11 #4 BE: the running-self colors his own words */
     score += leo_arc_bias(cc, dst);             /* reply-arc vector: the utterance's living key */
+    score += leo_consol_candidate_bias(cc->consol, cc->leo, cc->prev1, dst); /* stage-1 shards: lived-transition pull */
     if (leo_is_recent_bigram(cc->emit_ctx_tail, cc->emit_ctx_tail_n, cc->prev1, dst))
         score *= LEO_REPEAT_PENALTY;
     score *= word_gate_penalty(cc, dst);
@@ -2416,7 +2520,7 @@ static int leo_presence_latch_walk(int dst, float count, void *ud) {
     CandCollector gate = { NULL, NULL, 0, 0, pl->prev, &leo->cooc,
                            leo->gravity, &leo->bpe,
                            byte_is_word_cont((uint8_t)prev_last), 0, NULL, 0,
-                           NULL, NULL, NULL, 1.0f, NULL };   /* +prev_is_frag = 0 (a door is a whole word); santa/arc = NULL (latch gate: no bleed, no arc); theme_boost neutral (gate never reads it) */
+                           NULL, NULL, NULL, 1.0f, NULL, NULL };   /* +prev_is_frag = 0 (a door is a whole word); santa/arc/consol = NULL (latch gate: no bleed, no arc, no shards); theme_boost neutral (gate never reads it) */
     if (cand_gate_reject(&gate, dst)) return 0;
     float score = 100.0f * g + leo_squash(count);
     if (score > pl->best_score) { pl->best_score = score; pl->best = dst; }
@@ -2527,10 +2631,14 @@ static int leo_step_token(const Leo *leo, int prev2, int prev1, float temp,
     LeoSantaScratch santa_scratch;
     santa_scratch.n_active = 0;
     if (g_leo_santaclaus_on) leo_santaclaus_compute_active(leo, &santa_scratch);
+    LeoConsolScratch consol_scratch;
+    consol_scratch.n = 0;
+    if (g_leo_consol_on) leo_consol_compute_active(leo, &consol_scratch);
     CandCollector cc = { cand_id, cand_sc, 0, LEO_MAX_CANDS,
                          prev1, &leo->cooc, leo->gravity, &leo->bpe,
                          prev_ends_alpha, prev_is_frag, emit_ctx_tail, emit_ctx_tail_n,
-                         leo->prompt_pieces, leo, &santa_scratch, theme_boost, arc };
+                         leo->prompt_pieces, leo, &santa_scratch, theme_boost, arc,
+                         &consol_scratch };
 
     if (prev2 >= 0)
         trigram_walk_ab(&leo->trigrams, prev2, prev1, cand_collect_tri, &cc);
@@ -3281,6 +3389,131 @@ static float leo_coherence_score(const Leo *leo, const int *ids, int n) {
          + len_bonus;
 }
 
+/* ── stage-1 consolidation organs (design note 2026-07-19, holes closed) ───── */
+
+/* trigger-signal normalization ONLY (the RAE f1 scale); memory weights use
+ * log1p below — the monism law separates the two. */
+static float leo_consol_coh_norm(float coh) { return 0.5f * (tanhf(coh * 0.2f) + 1.0f); }
+
+/* observer hygiene — the tail path is cleanly observed only when every word it
+ * carries is REAL: no mid-word fragment tokens ("impor"-class), and every word
+ * ASSEMBLED across a token seam must be one Leo has actually heard —
+ * "impor|tant" joins into "important" (heard, passes); "he|never" joins into
+ * "henever" (heard 0 — a sampler seam-ghost, refused). Nature over statistics,
+ * checked once at birth: a shard must never archive a ghost it could resurrect. */
+static int leo_consol_path_clean(const Leo *leo, const int *ids, int s, int n) {
+    /* NOTE: no per-token fragment check here — a mid-word token followed by its
+     * continuation is a LEGAL word assembly ("mot|her"); the seam-word heard
+     * check below judges the ASSEMBLED word, and the strand-net upstream (D-1/
+     * D-3) already sheds a stranded trailing fragment before these ids exist. */
+    char w[LEO_HEARD_WORDLEN]; int wi = 0, spans_seam = 0;
+    for (int i = s; i < n; i++) {
+        int id = ids[i];
+        if (id < 0 || id >= leo->bpe.vocab_size) return 0;
+        int len = leo->bpe.vocab_len[id];
+        const uint8_t *b = leo->bpe.vocab_bytes[id];
+        for (int j = 0; j < len; j++) {
+            uint8_t c = b[j];
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '\'') {
+                if (wi > 0 && j == 0) spans_seam = 1;   /* the word continues across a token seam */
+                if (wi < LEO_HEARD_WORDLEN - 1)
+                    w[wi++] = (char)((c >= 'A' && c <= 'Z') ? c - 'A' + 'a' : c);
+            } else {
+                if (wi >= 3 && spans_seam) {
+                    w[wi] = 0;
+                    if (leo_heard_count(&leo->heard, w) < 1) return 0;
+                }
+                wi = 0; spans_seam = 0;
+            }
+        }
+    }
+    if (wi >= 3 && spans_seam) {
+        w[wi] = 0;
+        if (leo_heard_count(&leo->heard, w) < 1) return 0;
+    }
+    return 1;
+}
+
+/* the OBSERVER — a reply becomes a shard ONLY when observed: coherent at birth
+ * AND a lit body AND a clean path (hygiene above). Observation collapses
+ * probability: an unobserved moment does not exist for memory; a ghost never
+ * enters — decay eats it in the field. Every reply also advances the sleep
+ * trigger: EMA + phase-lock hysteresis over coherence. */
+static void leo_consol_observe(Leo *leo, const int *ids, int n) {
+    if (!g_leo_consol_on || !leo || !ids || n < 2) return;
+    float coh = leo_coherence_score(leo, ids, n);
+    if (!isfinite(coh)) return;
+    float cn = leo_consol_coh_norm(coh);
+    leo->consol_coh_ema = (1.0f - LEO_CONSOL_EMA_RATE) * leo->consol_coh_ema
+                        + LEO_CONSOL_EMA_RATE * cn;
+    if (!leo->consol_locked && leo->consol_coh_ema >= LEO_CONSOL_LOCK_ON)  leo->consol_locked = 1;
+    if ( leo->consol_locked && leo->consol_coh_ema <  LEO_CONSOL_LOCK_OFF) leo->consol_locked = 0;
+    float arousal = 0.0f;
+    for (int c = 0; c < LEO_N_CHAMBERS; c++)
+        if (leo->chamber_act[c] > arousal) arousal = leo->chamber_act[c];
+    if (cn < LEO_CONSOL_OBS_COH || arousal < LEO_CONSOL_OBS_AROUSAL) return;
+    int m = n < LEO_SHARD_TOKENS ? n : LEO_SHARD_TOKENS;
+    if (!leo_consol_path_clean(leo, ids, n - m, n)) return;   /* a ghost in the tail — not cleanly observed */
+    LeoShard sh; memset(&sh, 0, sizeof sh);
+    for (int i = 0; i < m; i++) sh.ids[i] = ids[n - m + i];   /* the tail path */
+    sh.n = m;
+    for (int d = 0; d < LEO_RET_DIM;    d++) sh.state[d]    = leo->retention_state[d];
+    for (int c = 0; c < LEO_N_CHAMBERS; c++) sh.chambers[c] = leo->chamber_act[c];
+    sh.weight = LEO_CONSOL_W0; sh.born_coh = coh;
+    if (leo->n_shards < LEO_SHARD_RING) leo->shards[leo->n_shards++] = sh;
+    else {                                    /* ring full → replace the weakest */
+        int weak = 0;
+        for (int i = 1; i < leo->n_shards; i++)
+            if (leo->shards[i].weight < leo->shards[weak].weight) weak = i;
+        leo->shards[weak] = sh;
+    }
+}
+
+/* replay selection — by RESONANCE with the PRESENT, NEVER by weight (the
+ * rich-get-richer hole: a shard's own path is coherent by construction, so
+ * weight-selection would only strengthen the strong). Episodic retrieval:
+ * the memory that fits the now is the one worth reliving. */
+static int leo_consol_select(const Leo *leo) {
+    if (!g_leo_consol_on || !leo || leo->n_shards <= 0) return -1;
+    int best = -1; float best_r = 0.0f;
+    for (int i = 0; i < leo->n_shards; i++) {
+        if (leo->shards[i].weight <= 0.0f) continue;
+        float r = leo_vec_cosine(leo->retention_state, leo->shards[i].state, LEO_RET_DIM);
+        if (r > best_r) { best_r = r; best = i; }
+    }
+    return best;
+}
+
+/* the weight law (the monism lesson): grows by log1p of the CLAMPED positive
+ * delta of relived over born coherence — memory strengthens only when the
+ * moment relived BETTER than it was born, never by mere repetition; a worse
+ * reliving cools it. isfinite-gated, hard-capped. No tanh, no raw sum. */
+static void leo_consol_absorb(LeoShard *sh, float relived_coh) {
+    if (!sh || !isfinite(relived_coh)) return;
+    float d = relived_coh - sh->born_coh;
+    if (d > 0.0f) {
+        if (d > LEO_CONSOL_DELTA_CLAMP) d = LEO_CONSOL_DELTA_CLAMP;
+        sh->weight += LEO_CONSOL_GAIN * log1pf(d);
+    } else {
+        sh->weight *= LEO_CONSOL_COOL;
+    }
+    if (!isfinite(sh->weight) || sh->weight > LEO_CONSOL_WMAX) sh->weight = LEO_CONSOL_WMAX;
+}
+
+/* the shard breath: per replay cycle every weight decays; the forgotten
+ * compact away — forget-before-learn, the harvest law of the Method. */
+static void leo_consol_decay(Leo *leo) {
+    int w = 0;
+    for (int i = 0; i < leo->n_shards; i++) {
+        leo->shards[i].weight *= LEO_CONSOL_DECAY;
+        if (leo->shards[i].weight >= LEO_CONSOL_DROP) {
+            if (w != i) leo->shards[w] = leo->shards[i];
+            w++;
+        }
+    }
+    leo->n_shards = w;
+}
+
 /* how strongly a generated sentence sits in the prompt's gravity field —
  * its peak theme-resonance plus a quarter of its average (Codex's find,
  * neoleo-presence). best-of-K adds this to coherence so a prompt-aligned
@@ -3827,6 +4060,15 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
             int t = ectx[a]; ectx[a] = ectx[b]; ectx[b] = t;
         }
         leo_spore_record(leo, ectx, en);
+    }
+    /* stage-1 consolidation: the observer sees the SPOKEN reply — a coherent,
+     * felt moment becomes a shard; every reply advances the sleep trigger. */
+    if (g_leo_consol_on) {
+        int cids[LEO_GEN_MAX]; int cn = 0;
+        for (int s = 0; s < n_sentences && cn < LEO_GEN_MAX; s++)
+            for (int i = 0; i < sent_tok_n[s] && cn < LEO_GEN_MAX; i++)
+                cids[cn++] = sent_tok[s][i];
+        leo_consol_observe(leo, cids, cn);
     }
     return total;
 }
@@ -4639,7 +4881,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   heard    : live [count, wordlen, bytes]
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 9   /* E-11 #3: spores carry meaning_snap[88]; v<=8 read the old spore layout (LeoSporeV8) + meaning_snap=0 (soft-migrate) */
+#define LEO_STATE_VERSION 10  /* stage-1 consolidation: shard ring + sleep trigger appended (v9 file = clean prefix, truncated v10 tail fails SOFT); v<=8 read the old spore layout (LeoSporeV8) + meaning_snap=0 (soft-migrate) */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -4789,6 +5031,12 @@ static int leo_save_state(const Leo *leo, const char *path) {
     fwrite(leo->gamma_meaning, sizeof(float), GLYPH_COUNT, f);
     st_wf(f, leo->gamma_gap);
 
+    /* stage-1 consolidation (v10): the shard ring + the sleep trigger — appended after the meaning axis */
+    st_w32(f, leo->n_shards);
+    if (leo->n_shards > 0) fwrite(leo->shards, sizeof(LeoShard), (size_t)leo->n_shards, f);
+    st_wf(f, leo->consol_coh_ema);
+    st_w32(f, (int32_t)leo->consol_locked);
+
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
     if (ok && rename(tmp, path) != 0) ok = 0;   /* atomically replace the prior state only on a clean, complete write */
@@ -4807,7 +5055,7 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
     if (!f) return 0;
     uint32_t magic = 0, version = 0; uint64_t step = 0;
     if (!st_ru(f, &magic)   || magic != LEO_STATE_MAGIC)     { fclose(f); return 0; }
-    if (!st_ru(f, &version) || (version != 5 && version != 6 && version != 7 && version != 8 && version != 9)) { fclose(f); return 0; }  /* soft-migrate v5/v6/v7/v8/v9 */
+    if (!st_ru(f, &version) || (version != 5 && version != 6 && version != 7 && version != 8 && version != 9 && version != 10)) { fclose(f); return 0; }  /* soft-migrate v5..v10 */
     if (!st_r64(f, &step)) { fclose(f); return 0; }
 
     leo_free(leo);
@@ -5010,6 +5258,34 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         if (!st_finite_arr(leo->gamma_meaning, GLYPH_COUNT) || !isfinite(leo->gamma_gap)) { fclose(f); return 0; }   /* F-5 */
     }
 
+    /* stage-1 consolidation shards (v10). FAIL-SOFT on a truncated/corrupt tail
+     * (the half-write probe): the organism lives on WITHOUT its shards — warn
+     * loud, zero them, keep the loaded body. A v9 file is a clean prefix. */
+    if (version >= 10) {
+        int32_t n_sh = 0;
+        int tail_ok = st_r32(f, &n_sh) && n_sh >= 0 && n_sh <= LEO_SHARD_RING;
+        if (tail_ok && n_sh > 0 &&
+            fread(leo->shards, sizeof(LeoShard), (size_t)n_sh, f) != (size_t)n_sh) tail_ok = 0;
+        float ema = 0.0f; int32_t lk = 0;
+        if (tail_ok && (!st_rf(f, &ema) || !st_r32(f, &lk) || !isfinite(ema))) tail_ok = 0;
+        if (tail_ok)
+            for (int i = 0; i < n_sh; i++) {
+                const LeoShard *sh = &leo->shards[i];
+                if (!st_finite_arr(sh->state, LEO_RET_DIM) ||
+                    !st_finite_arr(sh->chambers, LEO_N_CHAMBERS) ||
+                    !isfinite(sh->weight) || !isfinite(sh->born_coh) ||
+                    sh->n < 0 || sh->n > LEO_SHARD_TOKENS) { tail_ok = 0; break; }
+            }
+        if (tail_ok) {
+            leo->n_shards = n_sh;
+            leo->consol_coh_ema = clampf(ema, 0.0f, 1.0f);
+            leo->consol_locked = (uint8_t)(lk ? 1 : 0);
+        } else {
+            fprintf(stderr, "[leo] WARNING: v10 consolidation tail truncated/corrupt — organism lives on without shards.\n");
+            leo->n_shards = 0; leo->consol_coh_ema = 0.0f; leo->consol_locked = 0;
+        }
+    }
+
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
     leo_build_chamber_tags(leo);
@@ -5149,6 +5425,36 @@ static void *leo_async_worker(void *arg) {
             }
         }
         pthread_rwlock_unlock(&a->field_lock);
+
+        /* stage-1 consolidation replay — the second kind of background work. ONE
+         * shard per lock acquisition (the Yent sleep lesson: release between
+         * stages so a human turn interleaves at the boundary). Gated on the HELD
+         * coherent regime (phase-lock), selected by resonance with the present
+         * (never weight). Replay = re-experience: the ring continues from the
+         * shard's own path and Leo lives it somatically — zero lexical ingest
+         * (stage 1 writes no table; the invariant holds). */
+        if (g_leo_consol_on) {
+            pthread_rwlock_wrlock(&a->field_lock);
+            if (a->leo->consol_locked) {
+                int si = leo_consol_select(a->leo);
+                if (si >= 0) {
+                    LeoShard *sh = &a->leo->shards[si];
+                    LeoRng rrng = { cycle ^ 0xC0501Du, 0 };   /* own stream, consolidation-salted */
+                    char cbuf[512]; int cds[LEO_GEN_MAX]; int ccap = LEO_GEN_MAX;
+                    leo_generate_ex(a->leo, cbuf, sizeof cbuf, -1, sh->ids, sh->n, cds, &ccap, &rrng);
+                    if (ccap > 1) {
+                        for (int i = 1; i < ccap; i++) {
+                            float coh = leo_squash((float)bigram_get(&a->leo->bigrams, cds[i - 1], cds[i]));
+                            leo_field_step(a->leo, cds[i], coh / (coh + 3.0f));
+                            leo_field_self_voice(a->leo, cds[i]);
+                        }
+                        leo_consol_absorb(sh, leo_coherence_score(a->leo, cds, ccap));
+                    }
+                    leo_consol_decay(a->leo);
+                }
+            }
+            pthread_rwlock_unlock(&a->field_lock);
+        }
     }
     return NULL;
 }
@@ -5271,6 +5577,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
         else if (!strcmp(argv[i], "--no-arc")) g_leo_arc_on = 0;
+        else if (!strcmp(argv[i], "--no-consolidation")) g_leo_consol_on = 0;
         else if (!strcmp(argv[i], "--no-be")) g_leo_be_on = 0;
         else if (!strcmp(argv[i], "--no-ask")) g_leo_ask_on = 0;
         else if (!strcmp(argv[i], "--no-conatus")) g_leo_conatus_on = 0;
@@ -5513,6 +5820,9 @@ int main(int argc, char **argv) {
             }
             printf("     [echo: external_vocab=%.3f (<0.2 = Leo speaks from his own field, not the prompt)]\n",
                    leo_echo_ratio(line, reply));
+            if (g_leo_consol_on)   /* stage-1 consolidation: the observer's ledger + the sleep trigger, in numbers */
+                printf("     [consol: shards=%d ema=%.2f locked=%d]\n",
+                       leo.n_shards, (double)leo.consol_coh_ema, (int)leo.consol_locked);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */
                 printf("     [async: rings lived=%ld]\n", async.rings_done);
                 pthread_rwlock_unlock(&async.field_lock);
