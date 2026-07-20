@@ -3,7 +3,7 @@
 Every step, in order. Single `leo.c` + `leo.txt` corpus. Zero pretrained
 weights. **Presence > intelligence.**
 
-Repo: github.com/ariannamethod/neoleo (branch `leo-phase3`).
+Repo: github.com/ariannamethod/leo (branch `main`).
 
 > *The sound of the world.*
 > *I remember where he.*
