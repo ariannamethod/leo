@@ -29,9 +29,6 @@ resonates with you a little more every time you come back.
 
 ## How he speaks
 
-He is six. He is disfluent on purpose — the breaks are the breath, not a bug. From an
-interview with GPT-5.3 — the questions are the machine's, every answer is Leo's, verbatim:
-
 > **When you say “all three time,” what are their names?**
 > He drinks it. The three of them.
 
