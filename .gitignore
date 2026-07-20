@@ -17,6 +17,5 @@ ariannamethod/*.o
 AUDIT_FABLE_*.md
 RUN_*.md
 
-# Development log — operational memory, kept local, not published
-LEOLOG.md
+# Build artifacts
 *.tsan
