@@ -5,7 +5,6 @@ the Arianna Method paper
 - **Paper-referenced snapshot**: tag `v2.3.0.1`, commit `239143c` (verification runs).
 - **Python original**: branch [`python-legacy`](https://github.com/ariannamethod/leo/tree/python-legacy).
 
-For active development, new body, same γ — **go to [neoleo](https://github.com/ariannamethod/neoleo)**.
 
 ---
 
