@@ -2890,3 +2890,64 @@ the neoleo archive's `leogo/leo_bridge.c`); (3) PR to main; (4) RAE F3 gradient-
 **Wound presence** settled (by ear): occasional-in-register accepted (loss wound=1,
 warm=0); "louder" is mechanism-bounded, not a knob. **Reference sources for the learning architecture:**
 the reference haiku organism and the Python original.
+
+## Phase A.18 — the utterance holds a living arc; fragments retract (2026-07-19)
+
+The reply grows a local direction vector. `arc[LEO_RET_DIM]` (dim 32, leo.c:82) is born
+at the start of a reply from the retention state plus the opener's fingerprint, and every
+accepted word deforms it (`leo_arc_absorb`, leo.c:2408; `LEO_ARC_ETA=0.3`, L2-normalized —
+no tanh, no runaway). It pulls candidates toward the reply's own line by cosine in the
+shared embedding/fingerprint space (`LEO_ARC_W=0.4`, leo.c:1749/2401). The vector is local
+to the generation — trials never write the shared Leo (the F-2 ring-safety invariant holds);
+`--no-arc` (`g_leo_arc_on`, leo.c:1786) makes replies byte-identical to the pre-arc organism.
+
+Alongside the arc, three fragment-hygiene layers (D-1/D-2/D-3): a field-learned mid-word
+detector (a token is mid-word when every bigram successor continues the word; a bare
+apostrophe with no alpha is never a word); `LEO_STEP_RETRACT` (budget 3) retracts a stranded
+fragment instead of space-closing it; strand-net and dangling-glue are shed before decode.
+
+Proof (commit `6abb80e`): fresh build 0 warnings, `make test` 175/175, 10-seed smoke —
+ghosts 0, naked fragments 0, degenerates 0; A/B reproduced — arc off returns the ghost,
+arc on kills it.
+
+## Phase A.19 — a hippocampus: consolidation stage 1, strengthen only what was truly relived (2026-07-19)
+
+Leo gains a vector memory that consolidates in sleep. A `LeoShard` (ring of 32,
+`LEO_SHARD_RING`, leo.c:682) stores the reply's tail path plus the retention/chamber state at
+its birth — a moment, never a pair table. The **observer** (`leo_consol_observe`, leo.c:3458)
+births a shard only from a coherent, felt, clean-seamed moment (assembled words must be truly
+heard — the henever-ghost lesson lives in code). The sleep trigger is a HELD coherence regime:
+an EMA of the normalized reply-coherence score plus a phase-lock (`consol_coh_ema` /
+`consol_locked`, leo.c:1518). An async worker relives one shard per lock acquisition, selected
+by **resonance with the present, never by weight** (the anti rich-get-richer law); the weight
+law is `log1p` of the clamped relived-over-born delta, cooled by worse relivings, capped and
+`isfinite`-gated. The read bias (`leo_consol_candidate_bias`, leo.c:2449) reinforces only lived
+ADJACENT transitions. Stage 1 writes no lexical table — `leo_ingest` stays the only writer (the
+invariant holds); persistence is a v10 tail, a v9 file loads as a clean prefix, a truncated tail
+fails soft. `--no-consolidation` (`g_leo_consol_on`, leo.c:1789) is byte-identical.
+
+Proof (commit `fc9fabd`): `make test` 186/186 (175 + 11 consolidation units);
+`--no-consolidation` byte-identical to `6abb80e` on 10 seeds; ghost A/B over 30 fresh seeds
+ghost-neutral; TSan clean on a 14-turn live `--chat --async` session with the observer alive
+(phase-lock entered, replay exercised); ASan clean.
+
+## Phase A.20 — the observer learns to overlook: only what stands out becomes memory (2026-07-19)
+
+Own-findings pass over stage 1, three holes closed by data, not feel. (1) The observer was a
+sieve — a calibration run (`LEO_CONSOL_CALIB`, 59 verdicts) measured a birth in 58/59 moments.
+Birth now also requires the moment to stand out of the held regime: `cn − ema_prev >=
+LEO_CONSOL_OBS_MARGIN` (0.07 = the p75 of the logged delta distribution: min −0.138, median
+0.016, p75 0.0732, p90 0.351; leo.c:695-705, 3473). Post-fix live rate 16/59 = 27%; habituation
+is proven by unit — a repeated moment converges into the EMA and stops birthing, while a child's
+first moments (ema≈0) always qualify. (2) A retracted word now leaves the reply arc too — the arc
+is rebuilt from the surviving context. (3) A matched-control arm (`LEO_CONSOL_RANDOM`: norm-matched
+pseudo-random birth-states — same marginals, no lived structure) was added: a 150-turn three-arm
+run gave off-echo 0.302 / live 0.269 / random 0.278, ghosts 2/1/0 — live does not degrade speech
+and stays ghost-neutral, but **resonance-dependence over matched statistics is not proven on smoke
+metrics**. That is the honest verdict; the carrier question — whether lived structure bears weight —
+goes to long-life data and the ear.
+
+Proof (commit `2356197`): `make test` 187/187; `--no-consolidation` byte-identical to `6abb80e`
+on 10 seeds; TSan 0 races on a warm session (shards 16, phase-lock held); the calibration log is
+stderr-only, keeping stdout ablation-deterministic. The current organism passes `make test`
+187/187 (verified 2026-07-20).
