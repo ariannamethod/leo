@@ -1506,7 +1506,7 @@ void am_tape_backward(int loss_idx) {
                 int cols = pw->output->cols;
                 if (rows > 0 && cols > 0) {
                     // dW: outer product dout ⊗ x (rows × cols)
-                    float* dw = (float*)calloc(rows * cols, sizeof(float));
+                    float* dw = (float*)calloc((size_t)rows * cols, sizeof(float));
                     if (dw) {
                         for (int i = 0; i < rows; i++)
                             for (int j = 0; j < cols; j++)
@@ -1730,7 +1730,7 @@ void am_tape_backward(int loss_idx) {
 #endif
                 float* gamma_data = has_gamma ? g_tape.entries[e->parent2].output->data : NULL;
 
-                float* gx = (float*)calloc(T * D, sizeof(float));
+                float* gx = (float*)calloc((size_t)T * D, sizeof(float));
                 float* gg = has_gamma ? (float*)calloc(D, sizeof(float)) : NULL;
                 float* gb = has_beta  ? (float*)calloc(D, sizeof(float)) : NULL;
 
@@ -1970,7 +1970,7 @@ void am_tape_backward(int loss_idx) {
 #endif
                 int T = (int)e->aux;
                 int D = (int)e->aux2;
-                float* gx = (float*)calloc(T * D, sizeof(float));
+                float* gx = (float*)calloc((size_t)T * D, sizeof(float));
                 if (gx) {
                     float* Xrn = px->output->data;
                     #ifdef _OPENMP
@@ -2010,9 +2010,9 @@ void am_tape_backward(int loss_idx) {
                 int T = (int)e->aux;
                 int D = (int)e->aux2;
                 float sc = 1.0f / sqrtf((float)D);
-                float* dq = (float*)calloc(T * D, sizeof(float));
-                float* dk = (float*)calloc(T * D, sizeof(float));
-                float* dv = (float*)calloc(T * D, sizeof(float));
+                float* dq = (float*)calloc((size_t)T * D, sizeof(float));
+                float* dk = (float*)calloc((size_t)T * D, sizeof(float));
+                float* dv = (float*)calloc((size_t)T * D, sizeof(float));
                 if (dq && dk && dv) {
                     for (int i = 0; i < T; i++) {
                         float* qi = pq->output->data + i * D;
@@ -2086,9 +2086,9 @@ void am_tape_backward(int loss_idx) {
                 int D = e->output->len / T;
                 int n_heads = D / head_dim;
                 float sc = 1.0f / sqrtf((float)head_dim);
-                float* dq = (float*)calloc(T * D, sizeof(float));
-                float* dk = (float*)calloc(T * D, sizeof(float));
-                float* dv = (float*)calloc(T * D, sizeof(float));
+                float* dq = (float*)calloc((size_t)T * D, sizeof(float));
+                float* dk = (float*)calloc((size_t)T * D, sizeof(float));
+                float* dv = (float*)calloc((size_t)T * D, sizeof(float));
                 if (dq && dk && dv) {
                     for (int h = 0; h < n_heads; h++) {
                         int ho = h * head_dim;
@@ -2154,7 +2154,7 @@ void am_tape_backward(int loss_idx) {
 #endif
                 int T = (int)e->aux;
                 int V = (int)e->aux2;
-                float* dl = (float*)calloc(T * V, sizeof(float));
+                float* dl = (float*)calloc((size_t)T * V, sizeof(float));
                 if (dl && pt) {
                     for (int t = 0; t < T; t++) {
                         float* logits_t = pl->output->data + t * V;
