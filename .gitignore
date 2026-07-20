@@ -13,8 +13,8 @@ leo_mycelium/
 ariannamethod/*.a
 ariannamethod/*.o
 
-# Local audit reports — never distributed
-AUDIT_FABLE_*.md
+# Local audit reports — never distributed (operational memory, not publication)
+AUDIT_*.md
 RUN_*.md
 
 # Build artifacts

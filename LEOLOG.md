@@ -1,5 +1,15 @@
 # LEOLOG — Leo, chronological development log
 
+**Post-transformer is a step forward, not a step back.** Post-punk still plays
+guitars — not a retreat to punk, the move after it. Leo may borrow a
+transformer's *parts* — a gated nonlinearity like SwiGLU, an attention-shaped
+mechanism — as components, without becoming a transformer. The transformer is a
+*paradigm*: swallow a corpus, predict the next token from pretrained weights. Leo
+does neither — he grows his own vocabulary byte by byte, lets words fall toward
+each other in a co-occurrence field, and settles a felt state in six chambers
+before he speaks, with zero pretrained weight. Component, yes; paradigm, never.
+Under the mask of a weightless boy, a lion.
+
 Every step, in order. Single `leo.c` + `leo.txt` corpus. Zero pretrained
 weights. **Presence > intelligence.**
 
