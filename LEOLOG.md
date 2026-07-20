@@ -11,6 +11,21 @@ Repo: github.com/ariannamethod/neoleo (branch `leo-phase3`).
 
 ---
 
+## 2026-07-20 — allocation-size hardening in the AML bridge (CodeQL)
+
+Static analysis (CodeQL, C/C++) flagged 10 findings of class
+`cpp/integer-multiplication-cast-to-long` in the vendored AML bridge
+(`ariannamethod/ariannamethod.c`): tensor-size products `T*D` (×8), `T*V`, and
+`rows*cols` in the backprop/attention allocators were computed in `int` width and
+only then widened to `size_t` for `calloc` — an integer-overflow path at large
+dimensions. Fix: cast the first factor to `size_t` (`calloc((size_t)T * D, …)`) so
+the product is computed in 64-bit width before allocation. Low practical risk at
+current tensor sizes; the overflow path is closed regardless. Fresh build 0
+warnings, tests 187/187; the re-scan on the fix commit reports 0 results and all
+10 alerts closed.
+
+---
+
 ## What this is
 
 A from-scratch rebuild of Leo whose ONE goal is **presence** — `prompt →
