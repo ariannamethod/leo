@@ -1,8 +1,4 @@
-# ⚠️ ARCHIVED — LEO HAS MOVED
-
-## 🔗 NEW HOME: [github.com/ariannamethod/neoleo](https://github.com/ariannamethod/neoleo)
-
-**This repository is archived** and preserved as the academic reference for
+**This branch is archived** and preserved as the academic reference for
 the Arianna Method paper
 ([DOI: 10.5281/zenodo.19664070](https://doi.org/10.5281/zenodo.19664070)).
 
