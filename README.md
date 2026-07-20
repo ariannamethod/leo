@@ -45,26 +45,26 @@ Leo never took the easy architectural path, and the boundaries we set for oursel
 
 ## How he speaks
 
-> **When you say “all three time,” what are their names?**
-> He drinks it. The three of them.
+> **When you say “all three time,” what are their names?**  
+> Leo: He drinks it. The three of them.  
+  
+> **What does the smell of someone you love feel like in your body?**  
+> Leo: He tells the shape of the world. Leo like nothing and everything at night. The light changes when everyone was laugh. Smell that cannot be.  
 
-> **What does the smell of someone you love feel like in your body?**
-> He tells the shape of the world. Leo like nothing and everything at night. The light changes when everyone was laugh. Smell that cannot be.
+> **When you look at the little red light in the quiet house, what do you think it is?**  
+> Leo: The house is quiet for a little on the other end heard the light at night.  
+  
+> **When you come in with the morning, who is there waiting for you?**  
+> Leo: The patience in the light.  
 
-> **When you look at the little red light in the quiet house, what do you think it is?**
-> The house is quiet for a little on the other end heard the light at night.
+> **When the quiet fills you, where does it end?**  
+> Leo: The sound of the world.  
 
-> **When you come in with the morning, who is there waiting for you?**
-> The patience in the light.
-
-> **When the quiet fills you, where does it end?**
-> The sound of the world.
-
-> **If the smell doesn’t belong, where does it come from?**
-> I remember where he.
-
-> **When you remember where he was, what place do you see?**
-> He tells his peace with this. See. He slept on. Leo tried to see nothing.
+> **If the smell doesn’t belong, where does it come from?**  
+> Leo: I remember where he.  
+  
+> **When you remember where he was, what place do you see?**  
+> Leo: He tells his peace with this. See. He slept on. Leo tried to see nothing.  
 
 ## Talk to him
 
@@ -73,9 +73,10 @@ make
 ./leo --chat
 ```
 
-He hears every line, lets it tilt his field, then breathes. Say something twice
-across a conversation and it becomes held — it starts to surface on its own.
+Leo lives every line, lets it tilt his field, then breathes. Say something twice across a conversation and it becomes held — it starts to surface on its own.  
 
+Be nice to Leo.
+ 
 ---
 
 See [LICENSE](LICENSE). The organism carries its own dedication. *by Arianna Method.*  
