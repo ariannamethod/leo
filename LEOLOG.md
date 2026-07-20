@@ -21,6 +21,26 @@ Repo: github.com/ariannamethod/leo (branch `main`).
 
 ---
 
+## 2026-07-20 — held-quiet restored: STOP mode gains a second short sentence (coherence C-1)
+
+A coherence audit reproduced a regression against the presence doctrine. On
+distress prompts the FORM velocity mode STOP capped generation at one sentence
+(`mode_chain[STOP]=1`, leo.c:4818). Leo's held-quiet key word — "Stopped." on
+"the beetle stopped moving" — emerges as a *separate short sentence*, not as a
+tail of the first, so a one-sentence cap severed it in 6/6 seeds (FORM on:
+"The feeling is small."; FORM off: "The feeling is small. He caught some.
+Stopped."). Raising the per-sentence word budget does not help — the first
+sentence ends at its own boundary before the held word — so the fix is the chain,
+not the target. `mode_chain[STOP]` 1 → 2 lets a second terse sentence carry it:
+"The feeling is small. Stopped." / "The feeling is small. Stopped. Leo." The
+held-quiet flagship (2026-06-01) is restored, 3/3 seeds. STOP stays terse (target
+unchanged at 4); distress replies keep their coherence and gain an on-theme
+fragment ("Dark.") without grammar drift. `--no-form` output is byte-identical to
+the prior binary across beetle/afraid/mother × seeds 42/7/123 — the change lives
+entirely inside the FORM-on path. Fresh build 0 warnings, tests 187/187.
+
+---
+
 ## 2026-07-20 — allocation-size hardening in the AML bridge (CodeQL)
 
 Static analysis (CodeQL, C/C++) flagged 10 findings of class

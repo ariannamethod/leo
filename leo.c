@@ -4815,7 +4815,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             leo->temp_mult *= (1.0f + LEO_ASK_W * askgain * ask_drive);
         }
         if (g_leo_form_on) {           /* A.6 F-2: the breath sets the length */
-            static const int mode_chain[LEO_MODE_COUNT] = { 3, 1, 5, 2 };  /* WALK STOP RUN BREATHE */
+            static const int mode_chain[LEO_MODE_COUNT] = { 3, 2, 5, 2 };  /* WALK STOP RUN BREATHE (STOP 1→2: held-quiet lands in a 2nd short sentence, C-1) */
             chain_len = mode_chain[leo->mode];
         } else if (d >= LEO_UNKNOWN_DISS) {
             chain_len = LEO_UNKNOWN_CHAIN;  /* alien → say less (legacy path) */
