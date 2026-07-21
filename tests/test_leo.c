@@ -1121,26 +1121,50 @@ int main(void) {
               w.school.pending_turns == 0 && w.school.wonders[0].returns == 1,
               "wonder: resonant water returns the unfinished question after silence");
 
-        const char *open = "/tmp/leo_wonder_open_v11.state";
+        const char *open = "/tmp/leo_wonder_open_v12.state";
         const char *old = "/tmp/leo_wonder_open_v10.state";
+        const char *compat = "/tmp/leo_wonder_open_v11.state";
         const char *cut = "/tmp/leo_wonder_open_cut.state";
         const char *bad = "/tmp/leo_wonder_open_bad.state";
-        int saved = leo_save_state(&w, open), built_old = 0, built_cut = 0, built_bad = 0;
+        int saved = leo_save_state(&w, open), built_old = 0, built_compat = 0,
+            built_cut = 0, built_bad = 0;
         FILE *fi = fopen(open, "rb");
         if (fi) {
             fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
             unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
             if (bytes && sz > 0 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
-                long v11tail = (long)(4 * sizeof(int32_t) + sizeof(LeoWonderEpisode));
-                if (sz > v11tail) {
+                long v12tail = (long)(4 * sizeof(int32_t) + sizeof(uint64_t) +
+                                      sizeof(LeoWonderEpisode));
+                if (sz > v12tail) {
+                    long tail_start = sz - v12tail;
                     uint32_t ten = 10; memcpy(bytes + 4, &ten, sizeof ten);
                     FILE *fo = fopen(old, "wb");
-                    if (fo) { built_old = (long)fwrite(bytes, 1, (size_t)(sz - v11tail), fo) == sz - v11tail; fclose(fo); }
+                    if (fo) { built_old = (long)fwrite(bytes, 1, (size_t)tail_start, fo) == tail_start; fclose(fo); }
+
                     uint32_t eleven = 11; memcpy(bytes + 4, &eleven, sizeof eleven);
+                    LeoWonderEpisode *cur = &w.school.wonders[0];
+                    LeoWonderEpisodeV11 oldep = {0};
+                    memcpy(oldep.word, cur->word, sizeof oldep.word);
+                    oldep.offered_glyph = cur->offered_glyph;
+                    oldep.offered_alt_glyph = cur->offered_alt_glyph;
+                    oldep.answer_glyph = cur->answer_glyph;
+                    oldep.resolved = cur->resolved;
+                    oldep.returns = cur->returns;
+                    oldep.opened_step = cur->opened_step;
+                    oldep.closed_step = cur->closed_step;
+                    fo = fopen(compat, "wb");
+                    if (fo) {
+                        long prefix = tail_start + (long)(4 * sizeof(int32_t));
+                        built_compat = (long)fwrite(bytes, 1, (size_t)prefix, fo) == prefix &&
+                                       fwrite(&oldep, sizeof oldep, 1, fo) == 1;
+                        fclose(fo);
+                    }
+
+                    uint32_t twelve = 12; memcpy(bytes + 4, &twelve, sizeof twelve);
                     fo = fopen(cut, "wb");
                     if (fo) { built_cut = (long)fwrite(bytes, 1, (size_t)(sz - 4), fo) == sz - 4; fclose(fo); }
                     int32_t too_many = LEO_WONDER_RING + 1;
-                    memcpy(bytes + sz - v11tail + 2 * sizeof(int32_t), &too_many, sizeof too_many);
+                    memcpy(bytes + tail_start + 2 * sizeof(int32_t), &too_many, sizeof too_many);
                     fo = fopen(bad, "wb");
                     if (fo) { built_bad = (long)fwrite(bytes, 1, (size_t)sz, fo) == sz; fclose(fo); }
                 }
@@ -1158,15 +1182,21 @@ int main(void) {
               !strcmp(oldw.school.wonders[0].word, "zorble"),
               "wonder: the first lived v10 turn materializes its surviving question");
         Leo cutw; leo_init(&cutw);
+        int loaded_compat = built_compat && leo_load_state(&cutw, compat);
+        CHECK(loaded_compat && cutw.school.n_wonders == 1 &&
+              cutw.school.wonders[0].recalls == 0 &&
+              cutw.school.wonders[0].last_recalled_turn == 0,
+              "wonder: a v11 episode migrates with returned-wonder fields clean");
+        leo_free(&cutw); leo_init(&cutw);
         int loaded_cut = built_cut && leo_load_state(&cutw, cut);
         CHECK(loaded_cut && !strcmp(cutw.school.pending, "zorble") &&
               cutw.school.pending_alt_glyph == -1 && cutw.school.n_wonders == 0,
-              "wonder: a truncated v11 ledger fails soft; the question still lives");
+              "wonder: a truncated v12 ledger fails soft; the question still lives");
         Leo badw; leo_init(&badw);
         int loaded_bad = built_bad && leo_load_state(&badw, bad);
         CHECK(loaded_bad && !strcmp(badw.school.pending, "zorble") &&
               badw.school.pending_alt_glyph == -1 && badw.school.n_wonders == 0,
-              "wonder: an impossible v11 episode count fails soft; the question still lives");
+              "wonder: an impossible v12 episode count fails soft; the question still lives");
 
         Leo slept; leo_init(&slept);
         int loaded = saved && leo_load_state(&slept, open);
@@ -1185,7 +1215,7 @@ int main(void) {
               "wonder: the resolved human-grounded episode survives another sleep");
 
         leo_free(&w); leo_free(&oldw); leo_free(&cutw); leo_free(&badw); leo_free(&slept); leo_free(&woke);
-        remove(open); remove(old); remove(cut); remove(bad);
+        remove(open); remove(old); remove(compat); remove(cut); remove(bad);
         g_leo_school_on = prev_school; g_leo_wonder_on = prev_wonder;
     }
 
@@ -1204,6 +1234,104 @@ int main(void) {
               "wonder: --no-wonder is the pre-wonder one-turn School contract");
         leo_free(&ab);
         g_leo_school_on = prev_school; g_leo_wonder_on = prev_wonder;
+    }
+
+    /* W-4: a resolved question later returns as glyph attention, not text. The
+     * answer, the route Leo once considered, and QUESTION blend into exactly one
+     * reply's meaning vector; the existing spore-resonance channel is the only
+     * speech-side reader. Cooldown and --no-wonder-return bound the effect. */
+    {
+        Leo *wr = malloc(sizeof *wr), *woke = malloc(sizeof *woke);
+        CHECK(wr && woke, "wonder-return: heap fixtures allocated (no new Leo on test stack)");
+        if (wr && woke) {
+            int prev_school = g_leo_school_on;
+            int prev_wonder = g_leo_wonder_on;
+            int prev_return = g_leo_wonder_return_on;
+            int prev_capsule = g_leo_capsule_on;
+            g_leo_school_on = 1; g_leo_wonder_on = 1;
+            g_leo_wonder_return_on = 1; g_leo_capsule_on = 1;
+            leo_init(wr); leo_init(woke);
+            int water = semtok_word("water"), animal = semtok_word("animal");
+            int question = semtok_find_glyph("question");
+            leo_school_learn(wr, "zorble", animal);
+            LeoWonderEpisode *ep = leo_wonder_open(wr, "zorble", water, animal);
+            ep->resolved = 1; ep->answer_glyph = (int8_t)animal;
+            ep->closed_step = ++wr->step;
+            wr->step++;
+            wr->school.turn_clock = 1;
+
+            float base[GLYPH_COUNT], remembered[GLYPH_COUNT];
+            leo_glyph_hist(wr, "tell me about zorble", base);
+            memcpy(remembered, base, sizeof base);
+            int idx = leo_wonder_return_meaning(wr, "tell me about zorble", remembered);
+            float sum = 0.0f; for (int i = 0; i < GLYPH_COUNT; i++) sum += remembered[i];
+            CHECK(idx == 0 && ep->recalls == 1 && ep->last_recalled_turn == wr->school.turn_clock &&
+                  wr->school.returned_episode == 0,
+                  "wonder-return: the learned word recognizes its resolved episode");
+            CHECK(remembered[water] > base[water] && remembered[question] > base[question] &&
+                  fabsf(sum - 1.0f) < 1e-5f,
+                  "wonder-return: answer path + QUESTION enter normalized glyph attention only");
+
+            LeoSpore trace = {0};
+            trace.meaning_snap[water] = 0.7f;
+            trace.meaning_snap[question] = 0.3f;
+            wr->prompt_meaning = base;
+            float before = leo_spore_resonance(wr, &trace);
+            wr->prompt_meaning = remembered;
+            float after = leo_spore_resonance(wr, &trace);
+            wr->prompt_meaning = NULL;
+            CHECK(after > before,
+                  "wonder-return: returned glyphs raise only existing spore resonance");
+
+            float cooled[GLYPH_COUNT]; memcpy(cooled, base, sizeof base);
+            CHECK(leo_wonder_return_meaning(wr, "tell me about zorble", cooled) < 0 &&
+                  !memcmp(cooled, base, sizeof base) && ep->recalls == 1,
+                  "wonder-return: cooldown prevents repetitive self-evocation");
+
+            const char *path = "/tmp/leo_wonder_return_v12.state";
+            int saved_return = leo_save_state(wr, path);
+            int loaded_return = saved_return && leo_load_state(woke, path);
+            CHECK(loaded_return && woke->school.n_wonders == 1 &&
+                  woke->school.wonders[0].recalls == 1 &&
+                  woke->school.wonders[0].last_recalled_turn == ep->last_recalled_turn &&
+                  woke->school.turn_clock == wr->school.turn_clock,
+                  "wonder-return: recall count and cooldown survive v12 sleep");
+
+            wr->school.turn_clock += LEO_WONDER_RETURN_COOLDOWN;
+            float thematic[GLYPH_COUNT];
+            leo_glyph_hist(wr, "animal beside water", thematic);
+            CHECK(leo_wonder_return_meaning(wr, "animal beside water", thematic) == 0 &&
+                  ep->recalls == 2,
+                  "wonder-return: answer plus a lived hypothesis can recognize the path without its name");
+
+            wr->school.turn_clock += LEO_WONDER_RETURN_COOLDOWN;
+            float unrelated[GLYPH_COUNT], unrelated_before[GLYPH_COUNT];
+            leo_glyph_hist(wr, "warm mother light", unrelated);
+            memcpy(unrelated_before, unrelated, sizeof unrelated);
+            CHECK(leo_wonder_return_meaning(wr, "warm mother light", unrelated) < 0 &&
+                  !memcmp(unrelated, unrelated_before, sizeof unrelated),
+                  "wonder-return: unrelated ordinary meaning stays byte-identical");
+
+            char meta_out[512]; int recalls_before_meta = ep->recalls;
+            leo_respond(wr, "is a wobble beside zorble", meta_out, sizeof meta_out);
+            CHECK(strstr(meta_out, "Wobble?") && ep->recalls == recalls_before_meta &&
+                  wr->school.returned_episode < 0,
+                  "wonder-return: a new School question cannot claim an unconsumed old recall");
+
+            float ablated[GLYPH_COUNT]; memcpy(ablated, base, sizeof base);
+            g_leo_wonder_return_on = 0;
+            CHECK(leo_wonder_return_meaning(wr, "tell me about zorble", ablated) < 0 &&
+                  !memcmp(ablated, base, sizeof base),
+                  "wonder-return: --no-wonder-return is a strict meaning ablation");
+
+            remove(path);
+            leo_free(wr); leo_free(woke);
+            g_leo_school_on = prev_school;
+            g_leo_wonder_on = prev_wonder;
+            g_leo_wonder_return_on = prev_return;
+            g_leo_capsule_on = prev_capsule;
+        }
+        free(wr); free(woke);
     }
 
     /* A.6 FORM fix: --mode is case-insensitive. leo_mode_from_name matched only the
