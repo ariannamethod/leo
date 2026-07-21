@@ -3083,3 +3083,39 @@ Unrelated `warm mother light` replies matched `--no-wonder-return` byte-for-byte
 7/42/99. Related `zorble` A/B first diverged at seed 5 through the existing recall path, while both arms
 remained coherent. The test fixtures for this phase are heap-allocated, adding no new full `Leo` body to the
 monolithic test stack.
+
+## Phase A.24 — Flow: Leo can perceive which thought is still happening (2026-07-21)
+
+The Python lineage's `gowiththeflow.py` contained a precise invariant that the later Go port diluted:
+semantic themes form trajectories, and observing those trajectories is **memory archaeology, not training
+data**. The old Go orchestra reduced this to a wall-clock vocabulary-growth ticker and triggered a dream on
+stagnation. Its overthinking, dream-dialog and MetaLeo siblings then generated text and ingested that text
+back into the field. After the reply-arc voice regression, restoring that mutating loop wholesale would be
+an unmeasured way to narrow Leo again.
+
+Flow therefore returns first as passive temporal proprioception. After each real `leo_respond`, a bounded
+64-entry `LeoFlow` ring records the lived-turn clock, top three perceived glyphs and strengths, ungrasped
+gap, velocity mode, dominant chamber, and wonder events (born/open/resolved/reasked/recalled). Linear
+semantic velocity over the last eight lived turns derives `emerging`, `persistent` and `fading`; a glyph
+that was present, absent for a full turn, and present again is `returned`. Wall time is deliberately absent:
+conversation is Leo's first experienced clock, while idle time belongs to a future sleep organ. Missing a
+glyph from top three counts as quiet in this compact geometry. That is the observer's declared resolution,
+not a claim that all meaning fits in three coordinates.
+
+The causal boundary is strict: `leo_flow_observe` runs only after the reply, and no sampler, candidate
+collector, gravity path, chamber, spore, shard, School decision, or async ring reads `Leo.flow`. The only
+other readers are state persistence and human diagnostics. `--no-flow` stops new snapshots. State v13
+appends the ring after the v12 wonder ledger; a v12 organism wakes with empty Flow, while a truncated or
+invalid v13 tail fails soft without erasing body, words, wonders, or the lived-turn clock. Chat exposes the
+latest current as `[flow: ...]`, so trajectories can be gathered before any future scheduler earns a right
+to use them.
+
+Verification: `make test` **229/229**; normal build 0 warnings; `git diff --check` clean. Units cover
+emerging/fading/returned motion, gap without invented theme, wonder-event capture, 64-entry wrap order,
+v12 migration, v13 save/load, corrupt-tail fail-soft behavior, and four lived A/B turns whose replies,
+retention, chambers, gamma and meaning-axis are byte-identical with Flow on versus `--no-flow`. A separate
+process-level A/B (`warm mother light`, seed 83) produced identical stdout SHA-256
+`6db704a29de6a6e652528fbe9d5fafbd3e6c37a853f02581fb2e1794d08c9111`. ASan/UBSan was clean through
+observe/save/reload/observe; TSan was clean on live `--chat --async`, save, process restart, and another
+reply. Across that restart, the diagnostic correctly recognized `water -> absence -> water` as `returned`.
+Flow remains evidence, not permission: no generative or asynchronous organ is gated by it in this phase.
