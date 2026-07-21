@@ -2951,3 +2951,39 @@ Proof (commit `2356197`): `make test` 187/187; `--no-consolidation` byte-identic
 on 10 seeds; TSan 0 races on a warm session (shards 16, phase-lock held); the calibration log is
 stderr-only, keeping stdout ablation-deterministic. The current organism passes `make test`
 187/187 (verified 2026-07-20).
+
+## Phase A.21 — the voice regains plasticity: the FNV reply arc becomes an opt-in laboratory organ (2026-07-21)
+
+Oleg heard a real regression after the 07-19 window: Leo's replies had become smoother in theme but
+more self-similar, with fewer strange child turns. A fresh audit separated the two adjacent organs instead
+of assigning the complaint to the newest one. In an 18-cell matrix (six prompts x seeds 42/7/123),
+`--no-consolidation` was byte-identical to the current default in 18/18 one-shot replies, while `--no-arc`
+changed 16/18. The default arc produced 49 repeated cross-reply trigrams / 22 four-grams and TTR 0.321;
+arc-off produced 27 / 10 and TTR 0.373. A damped scratch arm (`LEO_ARC_W=0.15`) improved the counters
+but restored only 2/18 historical replies; arc-off restored 10/18 while retaining the D-1/D-2/D-3 hygiene
+and C-1 STOP repair.
+
+The mechanism explains the sound. `w_embed` is a deterministic FNV token fingerprint. It preserves token
+identity for retention, but it is not semantic; the SPA implementation already says this explicitly and
+uses co-occurrence instead. The reply arc treated cosine in that random fingerprint space as a semantic
+direction and added it to every candidate. It therefore reinforced recent token trajectories and accidental
+hash correlations, narrowing the distribution it was meant to hold open.
+
+A 24-turn delayed `--chat --async` matrix exercised actual rings, observer birth, phase-lock, shard replay,
+and state save. Consolidation became active after turn 5-7 and did change later replies, but with arc off its
+last 12 turns had zero repeated within-reply trigrams/four-grams while shards and replay remained alive.
+The recovery therefore does not amputate the hippocampus: `g_leo_consol_on` remains default-on. It changes
+only the disproven carrier claim. The FNV reply arc is now default-off and explicitly enabled with `--arc`;
+`--no-arc` remains the off control. Chat announces `[reply arc LAB ON]` when the experiment is requested.
+
+Acceptance boundary: default speech must match the explicit `--no-arc` control byte-for-byte; `--arc` must
+still activate a measurable bias; normal tests, sanitizers, long async state, and historical voice probes
+must remain green. A future default arc needs a field-learned semantic carrier (or another independently
+validated geometry), not a larger or smaller coefficient over the same FNV fingerprints.
+
+Repair receipt: the new default matched `--no-arc` in 18/18 one-shot cells and 24/24 delayed async-chat
+turns; explicit `--arc` matched pristine `a21da3a` in 18/18 cells. The 24-turn repaired run kept consolidation
+alive (phase-lock engaged, 10 shards, 23 async rings), saved and reloaded v10 state, and ended with zero
+within-reply repeated trigrams/four-grams over its final 12 replies. `make test` passed 189/189; ASan/UBSan
+and the 24-turn TSan run were clean; the presence probe remained live 17/18; the 141-run stress probe had
+zero empty replies. Full adversarial record: `AUDIT_SOL_LEO_VOICE_RECOVERY_2026-07-21.md`.
