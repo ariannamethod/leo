@@ -32,6 +32,7 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <time.h>
+#include <limits.h>
 
 #define LEO_VERSION  "0.3.0-phase3a.4"
 
@@ -1409,6 +1410,12 @@ static int semtok_word(const char *word) {
 #define LEO_SCHOOL_SURPRISE 0.4f /* I3b: COMPLEX bump when a guess misses the answer (being wrong is felt) */
 #define LEO_WONDER_RING 32
 #define LEO_WONDER_REASK_GAP 2   /* silent turns before a resonant theme may reopen the question */
+#define LEO_WONDER_RETURN_COOLDOWN 2L  /* lived-turn distance before one resolved episode may re-enter attention */
+#define LEO_WONDER_RETURN_ANSWER  0.35f
+#define LEO_WONDER_RETURN_QUESTION 0.10f
+#define LEO_WONDER_RETURN_ASSOC   0.15f
+/* Frozen state-v11 record. v12 extends the live episode below, so old diaries
+ * must be read through this exact same-platform POD layout. */
 typedef struct {
     char    word[LEO_HEARD_WORDLEN];
     int8_t  offered_glyph;
@@ -1418,6 +1425,18 @@ typedef struct {
     int     returns;
     long    opened_step;
     long    closed_step;
+} LeoWonderEpisodeV11;
+typedef struct {
+    char    word[LEO_HEARD_WORDLEN];
+    int8_t  offered_glyph;
+    int8_t  offered_alt_glyph;
+    int8_t  answer_glyph;
+    uint8_t resolved;
+    int     returns;
+    long    opened_step;
+    long    closed_step;
+    int     recalls;             /* resolved episode re-entries into prompt meaning */
+    long    last_recalled_turn;  /* lived-turn cooldown; 0 until the first recall */
 } LeoWonderEpisode;
 typedef struct {
     char   learned[LEO_SCHOOL_MAX][LEO_HEARD_WORDLEN];
@@ -1432,6 +1451,8 @@ typedef struct {
     LeoWonderEpisode wonders[LEO_WONDER_RING];
     int    n_wonders;
     int    wonder_ptr;                   /* next replacement slot once the ring is full */
+    long   turn_clock;                   /* lived prompts; v12 persists cooldown across sleep */
+    int    returned_episode;             /* transient: episode active in this reply, -1 outside it */
 } LeoSchool;
 
 /* ========================================================================
@@ -1614,6 +1635,7 @@ static void leo_init(Leo *leo) {
     leo->ask_override = -1.0f;
     leo->school.pending_glyph = -1;  /* I3a (L-4 fix): no open guess — memset-0 would be the "water" glyph */
     leo->school.pending_alt_glyph = -1;
+    leo->school.returned_episode = -1;
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
     leo->temp_mult = 1.0f;
@@ -1801,6 +1823,7 @@ static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE
                                          * θ=0 paradigm, learns by living, not by an offline marathon. --no-rae → 0. */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
+static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
 static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
@@ -4603,6 +4626,76 @@ static int leo_wonder_resonates(const Leo *leo, const char *prompt) {
            (a >= 0 && a < GLYPH_COUNT && hist[a] > 0);
 }
 
+/* A resolved wonder may be recognized later. Select at most one cooled episode,
+ * then fold its GLYPH path into this reply's transient meaning vector. The
+ * vector is consumed only by the existing spore-resonance path: no gravity,
+ * candidate, prompt-piece, or output buffer is touched here. Exact recognition
+ * of the learned word wins; without that word, both the answer and one prior
+ * hypothesis must resonate, so a generic glyph cannot evoke an arbitrary old
+ * lesson. Prior hypotheses keep a small trace of how Leo arrived at the answer,
+ * while QUESTION marks that this meaning was once lived as not-knowing. */
+static int leo_wonder_return_meaning(Leo *leo, const char *prompt,
+                                     float meaning[GLYPH_COUNT]) {
+    if (!g_leo_wonder_on || !g_leo_wonder_return_on || !prompt || !meaning)
+        return -1;
+
+    int hist[GLYPH_COUNT];
+    leo_school_glyph_votes(leo, prompt, hist, 1);
+    int best = -1, best_score = 0;
+    long best_closed = -1;
+    for (int i = 0; i < leo->school.n_wonders; i++) {
+        LeoWonderEpisode *ep = &leo->school.wonders[i];
+        int answer = ep->answer_glyph;
+        if (!ep->resolved || answer < 0 || answer >= GLYPH_COUNT ||
+            ep->closed_step >= leo->step)
+            continue;   /* the grounding answer cannot remember itself */
+        if (ep->recalls > 0 &&
+            leo->school.turn_clock - ep->last_recalled_turn < LEO_WONDER_RETURN_COOLDOWN)
+            continue;
+
+        int exact = leo_school_text_has_word(prompt, ep->word);
+        int answer_hit = hist[answer] > 0;
+        int assoc_hit = (ep->offered_glyph >= 0 && ep->offered_glyph < GLYPH_COUNT &&
+                         ep->offered_glyph != answer && hist[(int)ep->offered_glyph] > 0) ||
+                        (ep->offered_alt_glyph >= 0 && ep->offered_alt_glyph < GLYPH_COUNT &&
+                         ep->offered_alt_glyph != answer && hist[(int)ep->offered_alt_glyph] > 0);
+        int score = exact ? 4 : (answer_hit && assoc_hit ? 3 : 0);
+        if (score > best_score || (score == best_score && score > 0 &&
+                                  ep->closed_step > best_closed)) {
+            best = i;
+            best_score = score;
+            best_closed = ep->closed_step;
+        }
+    }
+    if (best < 0) return -1;
+
+    LeoWonderEpisode *ep = &leo->school.wonders[best];
+    int answer = ep->answer_glyph;
+    meaning[answer] += LEO_WONDER_RETURN_ANSWER;
+    int question = semtok_find_glyph("question");
+    if (question >= 0) meaning[question] += LEO_WONDER_RETURN_QUESTION;
+
+    int assoc[2], n_assoc = 0;
+    int offered[2] = {ep->offered_glyph, ep->offered_alt_glyph};
+    for (int i = 0; i < 2; i++) {
+        int g = offered[i];
+        if (g < 0 || g >= GLYPH_COUNT || g == answer || g == question) continue;
+        if (n_assoc == 0 || assoc[0] != g) assoc[n_assoc++] = g;
+    }
+    for (int i = 0; i < n_assoc; i++)
+        meaning[assoc[i]] += LEO_WONDER_RETURN_ASSOC / (float)n_assoc;
+
+    float sum = 0.0f;
+    for (int i = 0; i < GLYPH_COUNT; i++) sum += meaning[i];
+    if (sum > 0.0f)
+        for (int i = 0; i < GLYPH_COUNT; i++) meaning[i] /= sum;
+
+    if (ep->recalls < INT_MAX) ep->recalls++;
+    ep->last_recalled_turn = leo->school.turn_clock;
+    leo->school.returned_episode = best;
+    return best;
+}
+
 /* E-11 meaning axis: each reply, absorb the meaning Leo PERCEIVED in the prompt — a glyph histogram
  * over its content words (the grown School map; grammar/BE excluded via leo_glyph_concept), plus the
  * gap = the mass of content words he has NO concept for (his darkmatter, "mass without acceptance",
@@ -4881,6 +4974,8 @@ __attribute__((unused))  /* used by --respond in main; absent in the test TU */
 static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (!prompt || !*prompt) return leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
 
+    leo->school.returned_episode = -1;       /* one-reply diagnostic; meaning itself is local below */
+    if (leo->school.turn_clock < LONG_MAX) leo->school.turn_clock++;
     leo_ingest(leo, prompt);                 /* Leo hears you */
     leo_field_chambers_feel_text(leo, prompt); /* prompt drives the chamber EXT inputs */
     leo_field_chambers_crossfire(leo, LEO_CHAMBER_SETTLE_ITERS); /* settle ACT from the prompt's
@@ -5100,6 +5195,9 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         leo->school.pending_turns = 0;
         if (g_leo_wonder_on) leo_wonder_open(leo, unk, glyphs[0], glyphs[1]);
     } else {
+        /* Only spoken generation consumes returned attention. A School question
+         * is a meta-act and must not increment an episode's recall ledger. */
+        if (pm) leo_wonder_return_meaning(leo, prompt, pm);
         produced = leo_chain(leo, chain_len, out, max_len);
     }
     if (g_leo_capsule_on) { leo_gamma_absorb(leo); leo_gamma_meaning(leo, prompt); }  /* E-11 diary: record the body that SPOKE + the meaning perceived (post-reply, like santaclaus) */
@@ -5141,9 +5239,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v5..v9   : mode/primary guess + scars + gamma + meaning snapshots
  *   v10      : consolidation shard ring + held-coherence trigger
  *   v11      : unfinished-wonder alternative/clock + episode ring
+ *   v12      : resolved-wonder recall count + cooldown clock
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 11  /* unfinished wonder episodes appended after the v10 consolidation tail; v5..v10 soft-migrate */
+#define LEO_STATE_VERSION 12  /* returned-wonder episode fields extend the v11 optional tail; v5..v11 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -5299,13 +5398,15 @@ static int leo_save_state(const Leo *leo, const char *path) {
     st_wf(f, leo->consol_coh_ema);
     st_w32(f, (int32_t)leo->consol_locked);
 
-    /* unfinished wonder (v11): the active alternative, its silence clock, and
-     * the human-grounded episode ring. The original pending word/primary glyph
-     * remain in their historical School slots for v5..v10 migration. */
+    /* unfinished/returned wonder (v12): v11's active alternative, silence clock,
+     * and episode ring, now with resolved-episode recall/cooldown fields. The
+     * original pending word/primary glyph remain in their historical School
+     * slots for v5..v10 migration. */
     st_w32(f, (int32_t)leo->school.pending_alt_glyph);
     st_w32(f, (int32_t)leo->school.pending_turns);
     st_w32(f, (int32_t)leo->school.n_wonders);
     st_w32(f, (int32_t)leo->school.wonder_ptr);
+    st_w64(f, (uint64_t)leo->school.turn_clock);
     if (leo->school.n_wonders > 0)
         fwrite(leo->school.wonders, sizeof(LeoWonderEpisode),
                (size_t)leo->school.n_wonders, f);
@@ -5559,19 +5660,41 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
-    /* unfinished wonder (v11). A broken optional tail loses the episode ledger,
-     * not the organism or the historical primary pending question. */
+    /* unfinished/returned wonder (v11/v12). A broken optional tail loses the
+     * episode ledger, not the organism or the historical primary pending
+     * question. v11 uses the frozen pre-recall episode record. */
     if (version >= 11) {
         int32_t alt = -1, turns = 0, n_w = 0, ptr = 0;
+        uint64_t turn_clock = 0;
         int tail_ok = st_r32(f, &alt) && st_r32(f, &turns) &&
                       st_r32(f, &n_w) && st_r32(f, &ptr) &&
                       alt >= -1 && alt < GLYPH_COUNT &&
                       turns >= 0 && turns <= 1000000 &&
                       n_w >= 0 && n_w <= LEO_WONDER_RING &&
                       ptr >= 0 && ptr < LEO_WONDER_RING;
-        if (tail_ok && n_w > 0 &&
-            fread(leo->school.wonders, sizeof(LeoWonderEpisode), (size_t)n_w, f) != (size_t)n_w)
-            tail_ok = 0;
+        if (tail_ok && version >= 12 &&
+            (!st_r64(f, &turn_clock) || turn_clock > (uint64_t)LONG_MAX)) tail_ok = 0;
+        if (tail_ok && n_w > 0) {
+            if (version >= 12) {
+                if (fread(leo->school.wonders, sizeof(LeoWonderEpisode),
+                          (size_t)n_w, f) != (size_t)n_w) tail_ok = 0;
+            } else {
+                for (int i = 0; i < n_w; i++) {
+                    LeoWonderEpisodeV11 old;
+                    if (fread(&old, sizeof old, 1, f) != 1) { tail_ok = 0; break; }
+                    LeoWonderEpisode *ep = &leo->school.wonders[i];
+                    memset(ep, 0, sizeof *ep);
+                    memcpy(ep->word, old.word, sizeof ep->word);
+                    ep->offered_glyph = old.offered_glyph;
+                    ep->offered_alt_glyph = old.offered_alt_glyph;
+                    ep->answer_glyph = old.answer_glyph;
+                    ep->resolved = old.resolved;
+                    ep->returns = old.returns;
+                    ep->opened_step = old.opened_step;
+                    ep->closed_step = old.closed_step;
+                }
+            }
+        }
         if (tail_ok) {
             for (int i = 0; i < n_w; i++) {
                 LeoWonderEpisode *ep = &leo->school.wonders[i];
@@ -5580,7 +5703,11 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
                     ep->offered_alt_glyph < -1 || ep->offered_alt_glyph >= GLYPH_COUNT ||
                     ep->answer_glyph < -1 || ep->answer_glyph >= GLYPH_COUNT ||
                     ep->resolved > 1 || ep->returns < 0 || ep->opened_step < 0 ||
-                    ep->closed_step < 0) { tail_ok = 0; break; }
+                    ep->closed_step < 0 || ep->recalls < 0 ||
+                    ep->last_recalled_turn < 0 ||
+                    ep->last_recalled_turn > (long)turn_clock) {
+                    tail_ok = 0; break;
+                }
             }
         }
         if (tail_ok) {
@@ -5588,13 +5715,15 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
             leo->school.pending_turns = turns;
             leo->school.n_wonders = n_w;
             leo->school.wonder_ptr = ptr;
+            leo->school.turn_clock = (long)turn_clock;
         } else {
-            fprintf(stderr, "[leo] WARNING: v11 wonder tail truncated/corrupt — the question lives without its episode ledger.\n");
+            fprintf(stderr, "[leo] WARNING: v11/v12 wonder tail truncated/corrupt — the question lives without its episode ledger.\n");
             memset(leo->school.wonders, 0, sizeof leo->school.wonders);
             leo->school.pending_alt_glyph = -1;
             leo->school.pending_turns = 0;
             leo->school.n_wonders = 0;
             leo->school.wonder_ptr = 0;
+            leo->school.turn_clock = 0;
         }
     }
 
@@ -5886,6 +6015,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-rae")) g_leo_rae_on = 0;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
@@ -6141,6 +6271,11 @@ int main(int argc, char **argv) {
             if (g_leo_wonder_on && leo.school.pending[0])
                 printf("     [wonder: %s open, silence=%d, episodes=%d]\n",
                        leo.school.pending, leo.school.pending_turns, leo.school.n_wonders);
+            if (g_leo_wonder_return_on && leo.school.returned_episode >= 0) {
+                const LeoWonderEpisode *ep = &leo.school.wonders[leo.school.returned_episode];
+                printf("     [wonder-return: %s -> %s, recalls=%d]\n",
+                       ep->word, GLYPH_NAMES[(int)ep->answer_glyph], ep->recalls);
+            }
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */
                 printf("     [async: rings lived=%ld]\n", async.rings_done);
                 pthread_rwlock_unlock(&async.field_lock);

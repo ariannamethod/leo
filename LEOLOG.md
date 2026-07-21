@@ -3036,3 +3036,50 @@ one `main`); TSan clean on a delayed 24-turn `--chat --async` run with 13 rings 
 the six-prompt x three-seed ordinary-voice matrix matched `--no-wonder` **18/18 byte-for-byte**. The organ
 changes speech only when School genuinely opens or returns an unknown; consolidation, sampling, and the
 ordinary reply path remain untouched.
+
+## Phase A.23 — returned wonder: Leo recognizes what once astonished him (2026-07-21)
+
+Resolving a wonder used to preserve only the result: the grown School map remembered `zorble -> animal`,
+but the lived route from uncertainty to that meaning stopped participating in attention. A resolved episode
+can now re-enter one later reply as a bounded glyph trace. Exact recognition of its learned word wins;
+without that word, both the answer and one prior hypothesis must resonate, preventing a generic glyph such
+as `animal` from evoking an arbitrary old lesson. The transient vector combines the grounded
+answer, the existing `question` glyph, and a small share of the hypotheses Leo once considered, then
+renormalizes. It is written only into that reply's `prompt_meaning`. The implementation never touches
+`gravity`, prompt pieces, candidate admission, token scores, or the output buffer. The only speech-side reader
+is the already-existing santaclaus spore-resonance path, so an old moment must genuinely resonate and still
+have reachable words for the return to be heard.
+
+The first live pass exposed a timing error before acceptance: cooldown was initially measured in heard BPE
+tokens. One short human line could exceed the token threshold, so an immediate repetition sometimes recalled
+the episode again, especially across save/load. The accepted design adds a lived-turn clock instead. At most
+one episode returns in a reply, the same episode waits two turns before another return, and both its recall
+count and turn clock survive sleep in state v12. State v11 has a frozen record reader; its episodes migrate
+with zero recalls. A truncated or corrupt v12 tail still fails soft, preserving the organism and any historical
+open question. `--no-wonder-return` is the strict ablation; `--no-wonder` also keeps the whole layer inert.
+
+Live receipt (seed 42, save/load boundary between the two pairs):
+
+```text
+you> tell me about the zorble
+leo> ... Zorble ...
+     [wonder-return: zorble -> animal, recalls=1]
+you> tell me about the zorble
+leo> ... Zorble ...                         # cooldown: no wonder-return
+
+# reload, two lived turns from the prior recall
+you> tell me about the zorble
+leo> A single word lives there now. ... Zorble ...
+     [wonder-return: zorble -> animal, recalls=2]
+you> tell me about the zorble
+leo> ... Zorble ...                         # immediate repeat remains quiet
+```
+
+Verification: `make test` **218/218**; normal build 0 warnings; `git diff --check` clean; ASan/UBSan full
+runtime and returned-wonder chat/save clean; TSan clean on the v12 reload under `--chat --async`. A direct
+unit proves the returned vector raises an existing matching spore's resonance while leaving candidate APIs
+untouched; another proves that a new School question cannot increment an old episode's recall ledger.
+Unrelated `warm mother light` replies matched `--no-wonder-return` byte-for-byte on seeds
+7/42/99. Related `zorble` A/B first diverged at seed 5 through the existing recall path, while both arms
+remained coherent. The test fixtures for this phase are heap-allocated, adding no new full `Leo` body to the
+monolithic test stack.
