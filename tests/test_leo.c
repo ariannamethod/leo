@@ -1078,6 +1078,134 @@ int main(void) {
         leo_free(&c2);
     }
 
+    /* W-1/W-2: unfinished wonder is not a one-turn UI event. Its possible
+     * meanings come from glyph evidence; a counter-question cannot erase it;
+     * later resonance returns it, and a grounded human answer closes it. */
+    {
+        int prev_school = g_leo_school_on, prev_wonder = g_leo_wonder_on;
+        g_leo_school_on = 1; g_leo_wonder_on = 1;
+        int water = semtok_word("water"), animal = semtok_word("animal");
+        Leo w; leo_init(&w);
+        leo_ingest(&w, "the rain falls. his mother is warm. the cat drinks water.");
+        char out[1024];
+        leo_respond(&w, "is a zorble water or cat", out, sizeof out);
+        CHECK(strstr(out, "Zorble?") && strstr(out, "Water or Animal?") &&
+              w.school.pending_glyph == water && w.school.pending_alt_glyph == animal,
+              "wonder: two lived glyphs form the question — no authored content phrase");
+        CHECK(w.school.n_wonders == 1 && !w.school.wonders[0].resolved &&
+              !strcmp(w.school.wonders[0].word, "zorble"),
+              "wonder: opening a question births one unfinished episode");
+        CHECK(leo_school_grounded_answer(&w, "I think about zorble") < 0,
+              "wonder: talking about thinking is not a definition");
+
+        char rel[LEO_HEARD_WORDLEN] = {0};
+        CHECK(!leo_school_find_unknown(&w, "does water feel like animal", rel),
+              "wonder: relational 'like' is grammar, not an unfinished thing");
+        leo_ingest(&w, "stopped stopped stopped stopped stopped stopped stopped stopped stopped");
+        CHECK(!leo_school_find_unknown(&w, "water stopped animal", rel),
+              "wonder: a corpus-familiar dedication word cannot become immortal not-knowing");
+        leo_ingest(&w, "resonance resonance resonance");
+        CHECK(leo_school_find_unknown(&w, "water resonance animal", rel) && !strcmp(rel, "resonance"),
+              "wonder: a rare origin word remains askable just past the novelty gate");
+
+        leo_respond(&w, "I do not know", out, sizeof out);
+        CHECK(!strcmp(w.school.pending, "zorble") && !leo_school_is_learned(&w, "zorble") &&
+              w.school.pending_turns == 1,
+              "wonder: human not-knowing keeps the question unfinished");
+        leo_respond(&w, "what do you think?", out, sizeof out);
+        CHECK(!strcmp(w.school.pending, "zorble") && !leo_school_is_learned(&w, "zorble") &&
+              w.school.pending_turns == 2,
+              "wonder: a counter-question does not pretend to be an answer");
+        leo_respond(&w, "is it water?", out, sizeof out);
+        CHECK(strstr(out, "Zorble?") && strstr(out, "Water or Animal?") &&
+              w.school.pending_turns == 0 && w.school.wonders[0].returns == 1,
+              "wonder: resonant water returns the unfinished question after silence");
+
+        const char *open = "/tmp/leo_wonder_open_v11.state";
+        const char *old = "/tmp/leo_wonder_open_v10.state";
+        const char *cut = "/tmp/leo_wonder_open_cut.state";
+        const char *bad = "/tmp/leo_wonder_open_bad.state";
+        int saved = leo_save_state(&w, open), built_old = 0, built_cut = 0, built_bad = 0;
+        FILE *fi = fopen(open, "rb");
+        if (fi) {
+            fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
+            unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
+            if (bytes && sz > 0 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
+                long v11tail = (long)(4 * sizeof(int32_t) + sizeof(LeoWonderEpisode));
+                if (sz > v11tail) {
+                    uint32_t ten = 10; memcpy(bytes + 4, &ten, sizeof ten);
+                    FILE *fo = fopen(old, "wb");
+                    if (fo) { built_old = (long)fwrite(bytes, 1, (size_t)(sz - v11tail), fo) == sz - v11tail; fclose(fo); }
+                    uint32_t eleven = 11; memcpy(bytes + 4, &eleven, sizeof eleven);
+                    fo = fopen(cut, "wb");
+                    if (fo) { built_cut = (long)fwrite(bytes, 1, (size_t)(sz - 4), fo) == sz - 4; fclose(fo); }
+                    int32_t too_many = LEO_WONDER_RING + 1;
+                    memcpy(bytes + sz - v11tail + 2 * sizeof(int32_t), &too_many, sizeof too_many);
+                    fo = fopen(bad, "wb");
+                    if (fo) { built_bad = (long)fwrite(bytes, 1, (size_t)sz, fo) == sz; fclose(fo); }
+                }
+            }
+            free(bytes); fclose(fi);
+        }
+        Leo oldw; leo_init(&oldw);
+        int loaded_old = built_old && leo_load_state(&oldw, old);
+        CHECK(saved && loaded_old && !strcmp(oldw.school.pending, "zorble") &&
+              oldw.school.pending_glyph == water && oldw.school.pending_alt_glyph == -1 &&
+              oldw.school.n_wonders == 0,
+              "wonder: a v10 body migrates with its old primary question intact");
+        leo_respond(&oldw, "I do not know", out, sizeof out);
+        CHECK(oldw.school.n_wonders == 1 && !oldw.school.wonders[0].resolved &&
+              !strcmp(oldw.school.wonders[0].word, "zorble"),
+              "wonder: the first lived v10 turn materializes its surviving question");
+        Leo cutw; leo_init(&cutw);
+        int loaded_cut = built_cut && leo_load_state(&cutw, cut);
+        CHECK(loaded_cut && !strcmp(cutw.school.pending, "zorble") &&
+              cutw.school.pending_alt_glyph == -1 && cutw.school.n_wonders == 0,
+              "wonder: a truncated v11 ledger fails soft; the question still lives");
+        Leo badw; leo_init(&badw);
+        int loaded_bad = built_bad && leo_load_state(&badw, bad);
+        CHECK(loaded_bad && !strcmp(badw.school.pending, "zorble") &&
+              badw.school.pending_alt_glyph == -1 && badw.school.n_wonders == 0,
+              "wonder: an impossible v11 episode count fails soft; the question still lives");
+
+        Leo slept; leo_init(&slept);
+        int loaded = saved && leo_load_state(&slept, open);
+        CHECK(loaded && !strcmp(slept.school.pending, "zorble") &&
+              slept.school.pending_alt_glyph == animal && slept.school.n_wonders == 1 &&
+              slept.school.wonders[0].returns == 1,
+              "wonder: the unfinished episode survives sleep with both hypotheses");
+        leo_respond(&slept, "a zorble is a small animal", out, sizeof out);
+        CHECK(!slept.school.pending[0] && leo_semtok_word(&slept, "zorble") == animal &&
+              slept.school.wonders[0].resolved && slept.school.wonders[0].answer_glyph == animal,
+              "wonder: a grounded human answer resolves the episode and grows meaning");
+        CHECK(leo_save_state(&slept, open), "wonder: a resolved episode saves");
+        Leo woke; leo_init(&woke);
+        CHECK(leo_load_state(&woke, open) && woke.school.n_wonders == 1 &&
+              woke.school.wonders[0].resolved && woke.school.wonders[0].answer_glyph == animal,
+              "wonder: the resolved human-grounded episode survives another sleep");
+
+        leo_free(&w); leo_free(&oldw); leo_free(&cutw); leo_free(&badw); leo_free(&slept); leo_free(&woke);
+        remove(open); remove(old); remove(cut); remove(bad);
+        g_leo_school_on = prev_school; g_leo_wonder_on = prev_wonder;
+    }
+
+    /* W-3 ablation: --no-wonder restores the exact old School semantics — one
+     * primary guess only, and the next turn closes the pending UI question. */
+    {
+        int prev_school = g_leo_school_on, prev_wonder = g_leo_wonder_on;
+        g_leo_school_on = 1; g_leo_wonder_on = 0;
+        Leo ab; leo_init(&ab);
+        leo_ingest(&ab, "the rain falls. his mother is warm. the cat drinks water.");
+        char out[1024];
+        leo_respond(&ab, "is a zorble water or cat", out, sizeof out);
+        int old_shape = strstr(out, "Zorble?") && !strstr(out, " or ");
+        leo_respond(&ab, "qwzx blorf", out, sizeof out);
+        CHECK(old_shape && !ab.school.pending[0] && ab.school.n_wonders == 0,
+              "wonder: --no-wonder is the pre-wonder one-turn School contract");
+        leo_free(&ab);
+        g_leo_school_on = prev_school; g_leo_wonder_on = prev_wonder;
+    }
+
     /* A.6 FORM fix: --mode is case-insensitive. leo_mode_from_name matched only the
      * UPPERCASE LEO_MODE_NAMES, so the natural lowercase "--mode stop" returned -1 and
      * the forced breath was silently dropped (override stayed -1). */
@@ -1572,15 +1700,15 @@ int main(void) {
         l.shards[0] = far_sh; l.shards[1] = near_sh; l.n_shards = 2;
         CHECK(leo_consol_select(&l) == 1,
               "consol: replay selection follows resonance, never weight (anti rich-get-richer)");
-        /* v10 persistence roundtrip */
+        /* The v10 consolidation section still roundtrips inside the current v11 state. */
         const char *sp = "/tmp/leo_consol_test.state";
         l.consol_coh_ema = 0.6f; l.consol_locked = 1;
-        CHECK(leo_save_state(&l, sp) == 1, "consol: v10 state saves");
+        CHECK(leo_save_state(&l, sp) == 1, "consol: current state saves its v10 shard section");
         Leo l2; leo_init(&l2);
         CHECK(leo_load_state(&l2, sp) == 1 && l2.n_shards == 2 &&
               l2.shards[1].ids[0] == 300 && l2.consol_locked == 1,
-              "consol: v10 save/load roundtrips the shard ring + sleep trigger");
-        /* half-write probe: truncate the v10 tail — the organism lives, shardless */
+              "consol: current state roundtrips the v10 shard ring + sleep trigger");
+        /* Half-write probe: remove v11 plus part of the v10 section — the organism lives, shardless. */
         {
             FILE *tf = fopen(sp, "rb");
             fseek(tf, 0, SEEK_END); long fl = ftell(tf); fseek(tf, 0, SEEK_SET);
@@ -1590,7 +1718,7 @@ int main(void) {
         }
         Leo l3; leo_init(&l3);
         CHECK(leo_load_state(&l3, sp) == 1 && l3.n_shards == 0,
-              "consol: a truncated v10 tail fails SOFT — organism lives, shards zero");
+              "consol: a truncated v10 section fails SOFT — organism lives, shards zero");
         leo_free(&l2); leo_free(&l3); remove(sp);
         leo_free(&l);
     }
