@@ -29,6 +29,19 @@ int main(void) {
     CHECK(leo.bpe.vocab_size == 256, "init: vocab_size == 256");
     CHECK(leo.bpe.n_merges == 0,     "init: n_merges == 0");
     CHECK(leo.cooc.total_tokens == 0, "init: total_tokens == 0");
+    CHECK(g_leo_arc_on == 0, "voice recovery: random-fingerprint reply arc is opt-in");
+    {
+        float arc[LEO_RET_DIM];
+        memcpy(arc, leo.w_embed + (size_t)'a' * LEO_RET_DIM, sizeof arc);
+        CandCollector cc; memset(&cc, 0, sizeof cc);
+        cc.leo = &leo; cc.arc = arc;
+        float off = leo_arc_bias(&cc, 'a');
+        g_leo_arc_on = 1;
+        float on = leo_arc_bias(&cc, 'a');
+        g_leo_arc_on = 0;
+        CHECK(off == 0.0f && on > 0.39f,
+              "voice recovery: --arc can still enable the laboratory trajectory bias");
+    }
 
     /* 2. encode/decode roundtrip with no merges (pure bytes) */
     {

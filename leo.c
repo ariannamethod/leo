@@ -1783,9 +1783,9 @@ static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School revers
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
 static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
-static int g_leo_arc_on = 1;            /* reply-arc vector (Oleg 2026-07-19: «какой организм без вектора»): the living
-                                         * key of THIS utterance, deformed by every spoken word, pulls the next choice.
-                                         * --no-arc → 0 (ablation; replies byte-identical to the pre-arc organism). */
+static int g_leo_arc_on = 0;            /* reply-arc LAB organ, opt-in with --arc. Its carrier is an FNV token
+                                         * fingerprint, not a semantic embedding; default-on narrowed Leo's voice
+                                         * and amplified frame echo. --no-arc remains the explicit off control. */
 static int g_leo_consol_on = 1;         /* stage-1 consolidation: shard ring + observer + resonance replay.
                                          * --no-consolidation → 0 (no birth, no bias, no replay — byte-identical). */
 static int g_leo_be_on = 1;             /* E-11 #4 BE: the running-self (capsule) colors Leo's own words — speech-from-body. --no-be → 0. */
@@ -2388,13 +2388,12 @@ static void leo_santaclaus_mark_bleed(Leo *leo, const LeoSantaScratch *s,
     }
 }
 
-/* reply-arc resonance (the vector prop, Oleg 2026-07-19). Scalar boosts steer
- * intensity; only a vector can HOLD a direction across the utterance. The arc is
- * the living key of THIS reply — born from the soul's now (retention_state) and
- * the opener, deformed by every spoken word — and it pulls the next choice toward
- * tokens that resonate with it, in the same FNV fingerprint space the retention
- * and the spores already live in (w_embed). leo_vec_cosine clamps at 0: the arc
- * attracts, it never repels (a sole dissonant survivor still speaks). */
+/* Experimental reply-arc resonance. The arc carries token-trajectory identity in
+ * the same deterministic FNV fingerprint space used by retention and spores. That
+ * space is deliberately non-semantic (see the SPA note), so this can be useful as
+ * an opt-in trajectory experiment but must not be described as a semantic direction
+ * or imposed on Leo's default voice. leo_vec_cosine clamps at 0: the arc attracts,
+ * it never repels (a sole dissonant survivor still speaks). */
 static float leo_arc_bias(const CandCollector *cc, int cand_id) {
     if (!g_leo_arc_on || !cc->arc || !cc->leo || !cc->leo->w_embed) return 0.0f;
     if (cand_id < 0 || cand_id >= cc->leo->w_embed_cap) return 0.0f;
@@ -5621,6 +5620,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
+        else if (!strcmp(argv[i], "--arc")) g_leo_arc_on = 1;
         else if (!strcmp(argv[i], "--no-arc")) g_leo_arc_on = 0;
         else if (!strcmp(argv[i], "--no-consolidation")) g_leo_consol_on = 0;
         else if (!strcmp(argv[i], "--no-be")) g_leo_be_on = 0;
@@ -5837,8 +5837,9 @@ int main(int argc, char **argv) {
         char line[2048], reply[2048];
         LeoAsync async; uint32_t cycle = 0;
         if (async_on && !leo_async_start(&async, &leo)) async_on = 0;   /* start failed → run sync */
-        printf("[leo chat] talk to Leo.%s /save PATH to persist, /quit to leave.\n",
-               async_on ? " [async ring worker ON]" : "");
+        printf("[leo chat] talk to Leo.%s%s /save PATH to persist, /quit to leave.\n",
+               async_on ? " [async ring worker ON]" : "",
+               g_leo_arc_on ? " [reply arc LAB ON]" : "");
         while (1) {
             printf("you> "); fflush(stdout);
             if (!fgets(line, sizeof line, stdin)) { printf("\n"); break; }  /* EOF */
