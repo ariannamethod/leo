@@ -1404,15 +1404,34 @@ static int semtok_word(const char *word) {
 #define LEO_SCHOOL_MAX 256
 #define LEO_SCHOOL_NOVEL_MAX 2   /* only ask about a word heard <= this — genuinely new,
                                   * not a common word that just lacks a glyph ("like") */
+#define LEO_SCHOOL_ORIGIN_MAX 8  /* dedication may lift a rare origin word past NOVEL_MAX;
+                                  * never turn a corpus-familiar word into permanent wonder */
 #define LEO_SCHOOL_SURPRISE 0.4f /* I3b: COMPLEX bump when a guess misses the answer (being wrong is felt) */
+#define LEO_WONDER_RING 32
+#define LEO_WONDER_REASK_GAP 2   /* silent turns before a resonant theme may reopen the question */
+typedef struct {
+    char    word[LEO_HEARD_WORDLEN];
+    int8_t  offered_glyph;
+    int8_t  offered_alt_glyph;
+    int8_t  answer_glyph;
+    uint8_t resolved;
+    int     returns;
+    long    opened_step;
+    long    closed_step;
+} LeoWonderEpisode;
 typedef struct {
     char   learned[LEO_SCHOOL_MAX][LEO_HEARD_WORDLEN];
     int8_t learned_glyph[LEO_SCHOOL_MAX];  /* I2: dominant glyph of the answer that taught the word */
     int    n_learned;
     char   pending[LEO_HEARD_WORDLEN];   /* non-empty = a question is open */
     int    pending_glyph;                /* I3a: Leo's guess at the pending word's concept (-1 = no guess) */
+    int    pending_alt_glyph;            /* second glyph hypothesis, if the lived context supports one */
+    int    pending_turns;                /* turns since Leo last voiced this unfinished wonder */
     int    guesses;                      /* E-2c: closed guesses this session (the track record; session-only, not persisted) */
     int    guess_hits;                   /* E-2c: how many landed (pending_glyph == the answer's glyph) */
+    LeoWonderEpisode wonders[LEO_WONDER_RING];
+    int    n_wonders;
+    int    wonder_ptr;                   /* next replacement slot once the ring is full */
 } LeoSchool;
 
 /* ========================================================================
@@ -1594,6 +1613,7 @@ static void leo_init(Leo *leo) {
     leo->be_override = -1.0f;  /* E-11 #4: autonomous expression until an AML BE/ASK operator forces it */
     leo->ask_override = -1.0f;
     leo->school.pending_glyph = -1;  /* I3a (L-4 fix): no open guess — memset-0 would be the "water" glyph */
+    leo->school.pending_alt_glyph = -1;
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
     leo->temp_mult = 1.0f;
@@ -1780,6 +1800,7 @@ static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE
                                          * like MathBrain (rule-based fallback until it has observations) — Leo's
                                          * θ=0 paradigm, learns by living, not by an offline marathon. --no-rae → 0. */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
+static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
 static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
@@ -4313,11 +4334,24 @@ static int leo_semtok_word(const Leo *leo, const char *w) {
  * Grammar glyphs are never a concept-slot or a guess, so they must not vote (L-1:
  * "it is what it is" must not teach a word the BE glyph). */
 static int leo_glyph_concept(int g) { return g >= 0 && g < GLYPH_COUNT && !(g >= 63 && g <= 70) && g != 86; }  /* g<GLYPH_COUNT: a corrupt loaded learned_glyph can't OOB any hist[g] */
-/* I2: the dominant glyph of a text — its concept-slot. Histogram over content
- * words via the SEED map; the most-frequent CONCEPT glyph, or -1 if the text
- * grounds in no concept (a non-answer: pure unknowns, a copula, a counter-question). */
-static int leo_school_dominant_glyph(const Leo *leo, const char *text) {
-    int hist[GLYPH_COUNT] = {0};
+/* Pronouns and question/knowledge operators can describe the dialogue without
+ * describing the unknown thing ("I do not know"). They remain real glyphs in
+ * Leo's world, but cannot alone close a lesson or become a proposed definition. */
+static int leo_glyph_teachable(int g) {
+    if (!leo_glyph_concept(g)) return 0;
+    return g != semtok_find_glyph("me") && g != semtok_find_glyph("you") &&
+           g != semtok_find_glyph("question") && g != semtok_find_glyph("how") &&
+           g != semtok_find_glyph("know") && g != semtok_find_glyph("think") &&
+           g != semtok_find_glyph("speak") && g != semtok_find_glyph("hear");
+}
+
+/* Shared glyph evidence. Returns the number of concept words that voted; the
+ * grown School map participates, so yesterday's human lesson shapes today's
+ * hypotheses. `teachable_only` removes dialogue-about-dialogue glyphs. */
+static int leo_school_glyph_votes(const Leo *leo, const char *text,
+                                  int hist[GLYPH_COUNT], int teachable_only) {
+    memset(hist, 0, GLYPH_COUNT * sizeof(int));
+    int total = 0;
     char cur[LEO_HEARD_WORDLEN]; int wi = 0;
     for (const char *q = text; ; q++) {
         unsigned char ch = (unsigned char)*q;
@@ -4325,35 +4359,57 @@ static int leo_school_dominant_glyph(const Leo *leo, const char *text) {
             if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
             continue;
         }
-        if (wi >= 2) { cur[wi] = 0; int g = leo_semtok_word(leo, cur); if (leo_glyph_concept(g)) hist[g]++; }  /* E-1: GROWN map — learned words vote, knowledge compounds */
+        if (wi >= 2) {
+            cur[wi] = 0;
+            int g = leo_semtok_word(leo, cur);
+            if (leo_glyph_concept(g) && (!teachable_only || leo_glyph_teachable(g))) {
+                hist[g]++;
+                total++;
+            }
+        }
         wi = 0;
         if (!ch) break;
     }
+    return total;
+}
+
+/* I2: the dominant glyph of a text — its concept-slot. Histogram over content
+ * words via the SEED map; the most-frequent CONCEPT glyph, or -1 if the text
+ * grounds in no concept (a non-answer: pure unknowns, a copula, a counter-question). */
+static int leo_school_dominant_glyph(const Leo *leo, const char *text) {
+    int hist[GLYPH_COUNT];
+    leo_school_glyph_votes(leo, text, hist, 0);
     int best = -1, bestn = 0;
     for (int i = 0; i < GLYPH_COUNT; i++) if (hist[i] > bestn) { bestn = hist[i]; best = i; }
     return best;
 }
-/* I3a: Leo's GUESS at an unknown word's concept — the dominant glyph of the rest
- * of the prompt (its context), but only when it is confident (>= 2 supporting
- * content words) and the guess is a concept, not a grammar word. -1 = no guess →
- * the bare echo. This is the toddler hazarding "is it an animal?" from context. */
-static int leo_school_predict_glyph(const Leo *leo, const char *prompt) {
-    int hist[GLYPH_COUNT] = {0};
-    char cur[LEO_HEARD_WORDLEN]; int wi = 0;
-    for (const char *q = prompt; ; q++) {
-        unsigned char ch = (unsigned char)*q;
-        if (ch && (isalpha(ch) || ch == '\'')) {
-            if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
-            continue;
-        }
-        if (wi >= 2) { cur[wi] = 0; int g = leo_semtok_word(leo, cur); if (leo_glyph_concept(g)) hist[g]++; }  /* E-1: GROWN map — learned words vote, knowledge compounds */
-        wi = 0;
-        if (!ch) break;
+
+/* I3a/W-1: rank up to two glyph hypotheses from the prompt's own grounded
+ * concepts. Two pieces of evidence are required in total; they may agree on one
+ * glyph (dog+cat -> animal) or open a real alternative (animal+water). No
+ * content phrase is authored here: the candidate words are Leo's glyph names. */
+static int leo_school_predict_glyphs(const Leo *leo, const char *prompt, int out[2]) {
+    int hist[GLYPH_COUNT];
+    int total = leo_school_glyph_votes(leo, prompt, hist, 1);
+    out[0] = out[1] = -1;
+    if (total < 2) return 0;
+    for (int rank = 0; rank < 2; rank++) {
+        int best = -1, bestn = 0;
+        for (int i = 0; i < GLYPH_COUNT; i++)
+            if (i != out[0] && hist[i] > bestn) { bestn = hist[i]; best = i; }
+        if (best < 0) break;
+        out[rank] = best;
     }
+    return out[1] >= 0 ? 2 : (out[0] >= 0 ? 1 : 0);
+}
+
+static int leo_school_predict_glyph(const Leo *leo, const char *prompt) {
+    int hist[GLYPH_COUNT];
+    leo_school_glyph_votes(leo, prompt, hist, 0);
     int best = -1, bestn = 0;
-    for (int i = 0; i < GLYPH_COUNT; i++) if (hist[i] > bestn) { bestn = hist[i]; best = i; }
-    if (bestn < 2) return -1;               /* not confident — one word isn't a guess */
-    return best;                            /* grammar/BE already excluded from the histogram (L-1) */
+    for (int i = 0; i < GLYPH_COUNT; i++)
+        if (hist[i] > bestn) { bestn = hist[i]; best = i; }
+    return bestn >= 2 ? best : -1;   /* exact pre-wonder confidence contract */
 }
 /* I2: bind a taught word to the answer's concept (its dominant glyph), growing
  * the map. F2: at capacity, log instead of dying silently. */
@@ -4374,13 +4430,19 @@ static void leo_school_learn(Leo *leo, const char *w, int glyph) {
 static int leo_school_unknown(const Leo *leo, const char *w) {
     return leo_semtok_word(leo, w) < 0;   /* grown map subsumes the learned-set */
 }
+/* Relational syntax can lack a glyph without naming a thing Leo can be taught.
+ * Keep this narrower than the global function-word list: changing that list
+ * would also retune prompt gravity and therefore Leo's ordinary voice. */
+static int leo_school_word_is_operator(const char *w) {
+    return !strcmp(w, "like") || !strcmp(w, "than");
+}
 /* scan the prompt's content words; copy the first one Leo has no concept for
  * (not a function/stop word, semtok < 0, not already learned) into out. 1 = found. */
-/* §4/N-4: is w one of Leo's ORIGIN (dedication) words? So he may keep re-asking an origin word he
- * does not yet understand, even after hearing it often — a child re-asks a word from a lullaby heard
- * a hundred times. The §4 dedication-ingest had pushed its signature words ("resonance") past the
- * novelty gate, closing School's path to them; this reopens it until he is taught. w is lowercased;
- * the dedication is tiny and this runs only when a heard word is otherwise unknown. */
+/* §4/N-4: is w one of Leo's ORIGIN (dedication) words? The dedication ingest
+ * itself can push a rare signature word ("resonance") just past the ordinary
+ * novelty gate. A separate bounded allowance reopens that path without making
+ * frequent corpus words from the dedication ("like", "stopped") immortal
+ * questions. w is lowercased; this runs only for an otherwise unknown word. */
 static int word_in_dedication(const char *w) {
     if (!w || !*w) return 0;
     size_t wl = strlen(w);
@@ -4410,10 +4472,12 @@ static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out
         }
         if (wi >= 3) {
             cur[wi] = 0;
-            if (!leo_word_is_function(cur) && !semtok_is_stop_word(cur) &&
+            if (!leo_word_is_function(cur) && !leo_school_word_is_operator(cur) &&
+                !semtok_is_stop_word(cur) &&
                 leo_school_unknown(leo, cur) &&
                 (leo_heard_count(&leo->heard, cur) <= LEO_SCHOOL_NOVEL_MAX ||
-                 (leo_semtok_word(leo, cur) < 0 && word_in_dedication(cur)))) {   /* N-4: keep asking an un-understood origin word */
+                 (leo_heard_count(&leo->heard, cur) <= LEO_SCHOOL_ORIGIN_MAX &&
+                  leo_semtok_word(leo, cur) < 0 && word_in_dedication(cur)))) {   /* N-4: rare origin words stay askable */
                 strncpy(out, cur, LEO_HEARD_WORDLEN - 1);
                 out[LEO_HEARD_WORDLEN - 1] = 0;
                 return 1;
@@ -4423,6 +4487,120 @@ static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out
         if (!ch) break;
     }
     return 0;
+}
+
+static int leo_school_text_has_word(const char *text, const char *word) {
+    if (!text || !word || !word[0]) return 0;
+    char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+    for (const char *p = text; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (!strcmp(cur, word)) return 1;
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
+/* A human answer must carry grounded, teachable glyph evidence. Adjacency gives
+ * the first turn after Leo asks a conversational answer window; after that, the
+ * unknown word must be named again. Questions never close questions. */
+static int leo_school_grounded_answer(const Leo *leo, const char *prompt) {
+    if (!leo->school.pending[0] || strchr(prompt, '?')) return -1;
+    int hist[GLYPH_COUNT];
+    int total = leo_school_glyph_votes(leo, prompt, hist, 1);
+    int best = -1, bestn = 0;
+    for (int i = 0; i < GLYPH_COUNT; i++)
+        if (hist[i] > bestn) { bestn = hist[i]; best = i; }
+    if (best < 0) return -1;
+    if (leo_school_text_has_word(prompt, leo->school.pending) ||
+        (leo->school.pending_turns == 0 && total >= 2))
+        return best;
+    return -1;
+}
+
+static void leo_school_title(char *out, size_t out_sz, const char *word) {
+    if (out_sz == 0) return;
+    snprintf(out, out_sz, "%s", word ? word : "");
+    if (out[0] >= 'a' && out[0] <= 'z') out[0] = (char)(out[0] - 'a' + 'A');
+}
+
+/* Only the interrogative form is code. Every content-bearing word is either
+ * the human's unknown token or a glyph selected from Leo's lived concept map. */
+static int leo_school_format_question(char *out, int max_len, const char *word,
+                                      int glyph, int alt_glyph) {
+    char w[LEO_HEARD_WORDLEN], g1[LEO_HEARD_WORDLEN], g2[LEO_HEARD_WORDLEN];
+    leo_school_title(w, sizeof w, word);
+    if (glyph < 0 || glyph >= GLYPH_COUNT)
+        return snprintf(out, (size_t)max_len, "%s?", w);
+    leo_school_title(g1, sizeof g1, GLYPH_NAMES[glyph]);
+    if (alt_glyph < 0 || alt_glyph >= GLYPH_COUNT || alt_glyph == glyph)
+        return snprintf(out, (size_t)max_len, "%s? %s?", w, g1);
+    leo_school_title(g2, sizeof g2, GLYPH_NAMES[alt_glyph]);
+    return snprintf(out, (size_t)max_len, "%s? %s or %s?", w, g1, g2);
+}
+
+static int leo_wonder_find_open(const Leo *leo, const char *word) {
+    for (int i = leo->school.n_wonders - 1; i >= 0; i--)
+        if (!leo->school.wonders[i].resolved &&
+            !strcmp(leo->school.wonders[i].word, word)) return i;
+    return -1;
+}
+
+static LeoWonderEpisode *leo_wonder_open(Leo *leo, const char *word,
+                                         int glyph, int alt_glyph) {
+    int idx = leo_wonder_find_open(leo, word);
+    if (idx < 0) {
+        if (leo->school.n_wonders < LEO_WONDER_RING) {
+            idx = leo->school.n_wonders++;
+        } else {
+            idx = leo->school.wonder_ptr;
+            for (int k = 0; k < LEO_WONDER_RING; k++) {
+                int cand = (leo->school.wonder_ptr + k) % LEO_WONDER_RING;
+                if (leo->school.wonders[cand].resolved) { idx = cand; break; }
+            }
+            leo->school.wonder_ptr = (idx + 1) % LEO_WONDER_RING;
+        }
+        memset(&leo->school.wonders[idx], 0, sizeof(LeoWonderEpisode));
+        strncpy(leo->school.wonders[idx].word, word, LEO_HEARD_WORDLEN - 1);
+        leo->school.wonders[idx].word[LEO_HEARD_WORDLEN - 1] = 0;
+        leo->school.wonders[idx].answer_glyph = -1;
+        leo->school.wonders[idx].opened_step = leo->step;
+    }
+    LeoWonderEpisode *ep = &leo->school.wonders[idx];
+    ep->offered_glyph = (int8_t)glyph;
+    ep->offered_alt_glyph = (int8_t)alt_glyph;
+    return ep;
+}
+
+static void leo_wonder_return(Leo *leo) {
+    int idx = leo_wonder_find_open(leo, leo->school.pending);
+    if (idx >= 0) leo->school.wonders[idx].returns++;
+}
+
+static void leo_wonder_resolve(Leo *leo, int answer_glyph) {
+    int idx = leo_wonder_find_open(leo, leo->school.pending);
+    if (idx < 0) return;
+    LeoWonderEpisode *ep = &leo->school.wonders[idx];
+    ep->answer_glyph = (int8_t)answer_glyph;
+    ep->resolved = 1;
+    ep->closed_step = leo->step;
+}
+
+static int leo_wonder_resonates(const Leo *leo, const char *prompt) {
+    if (!leo->school.pending[0]) return 0;
+    if (leo_school_text_has_word(prompt, leo->school.pending)) return 1;
+    int hist[GLYPH_COUNT];
+    leo_school_glyph_votes(leo, prompt, hist, 1);
+    int g = leo->school.pending_glyph, a = leo->school.pending_alt_glyph;
+    return (g >= 0 && g < GLYPH_COUNT && hist[g] > 0) ||
+           (a >= 0 && a < GLYPH_COUNT && hist[a] > 0);
 }
 
 /* E-11 meaning axis: each reply, absorb the meaning Leo PERCEIVED in the prompt — a glyph histogram
@@ -4739,33 +4917,63 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     leo_mode_update(leo);            /* A.6 FORM F-1: applies the script's forced breath, else quantizes from the settled chambers */
     leo->heard_word[0] = 0;
 
-    /* A.5 School: if Leo asked "What is X?" last turn, THIS prompt is the answer —
-     * already ingested above (it grows his field). Mark X learned so he won't
-     * re-ask, and don't open a new question this turn (he just got an answer). */
-    int was_answer = 0;
+    /* A.5/W-2: a question closes only on a grounded human answer. The old School
+     * cleared it on every next turn, including counter-questions and pure unknowns;
+     * unfinished wonder now survives those turns and may return on resonance. */
+    int was_answer = 0, wonder_reask = 0;
     if (g_leo_school_on && leo->school.pending[0]) {
-        int g = leo_school_dominant_glyph(leo, prompt);  /* I2: the answer's concept-slot (E-1: grown map) */
-        /* I3b: the prediction error is the teacher. If Leo's guess (pending_glyph)
-         * misses the answer, the surprise is FELT — a bump to COMPLEX, and the breath
-         * re-quantizes (being wrong reshapes the body). The word always binds to the
-         * ANSWER's glyph (mama wins the guess). */
-        if (g >= 0) {
-            if (leo->school.pending_glyph >= 0) {   /* E-2c: a guess was open; the answer closes it */
-                leo->school.guesses++;
-                if (leo->school.pending_glyph == g) {
-                    leo->school.guess_hits++;       /* curiosity landed */
-                } else {
-                    /* I3b: being wrong is FELT — a bump to COMPLEX, the breath re-quantizes. */
-                    leo->chamber_act[LEO_CH_COMPLEX] =
-                        clampf(leo->chamber_act[LEO_CH_COMPLEX] + LEO_SCHOOL_SURPRISE, 0.0f, 1.0f);
-                    leo_mode_update(leo);   /* the surprise reshapes the breath */
+        if (!g_leo_wonder_on) {
+            int g = leo_school_dominant_glyph(leo, prompt);  /* exact pre-wonder School contract */
+            if (g >= 0) {
+                if (leo->school.pending_glyph >= 0) {
+                    leo->school.guesses++;
+                    if (leo->school.pending_glyph == g) leo->school.guess_hits++;
+                    else {
+                        leo->chamber_act[LEO_CH_COMPLEX] =
+                            clampf(leo->chamber_act[LEO_CH_COMPLEX] + LEO_SCHOOL_SURPRISE, 0.0f, 1.0f);
+                        leo_mode_update(leo);
+                    }
                 }
+                leo_school_learn(leo, leo->school.pending, g);
             }
-            leo_school_learn(leo, leo->school.pending, g);  /* I4: bind only a real answer */
+            leo->school.pending[0] = 0;
+            leo->school.pending_glyph = -1;
+            leo->school.pending_alt_glyph = -1;
+            leo->school.pending_turns = 0;
+            was_answer = 1;
+        } else {
+            /* v5..v10 migration and a fail-soft v11 tail preserve the historical
+             * pending word/primary glyph but cannot carry an episode ledger.
+             * Materialize that surviving question on its first lived turn. */
+            if (leo_wonder_find_open(leo, leo->school.pending) < 0)
+                leo_wonder_open(leo, leo->school.pending,
+                                leo->school.pending_glyph,
+                                leo->school.pending_alt_glyph);
+            int g = leo_school_grounded_answer(leo, prompt);
+            if (g >= 0) {
+                if (leo->school.pending_glyph >= 0) {
+                    leo->school.guesses++;
+                    if (g == leo->school.pending_glyph || g == leo->school.pending_alt_glyph) {
+                        leo->school.guess_hits++;
+                    } else {
+                        leo->chamber_act[LEO_CH_COMPLEX] =
+                            clampf(leo->chamber_act[LEO_CH_COMPLEX] + LEO_SCHOOL_SURPRISE, 0.0f, 1.0f);
+                        leo_mode_update(leo);
+                    }
+                }
+                leo_school_learn(leo, leo->school.pending, g);
+                leo_wonder_resolve(leo, g);
+                leo->school.pending[0] = 0;
+                leo->school.pending_glyph = -1;
+                leo->school.pending_alt_glyph = -1;
+                leo->school.pending_turns = 0;
+            } else {
+                if (leo->school.pending_turns < 1000000) leo->school.pending_turns++;
+                if (leo->school.pending_turns >= LEO_WONDER_REASK_GAP &&
+                    leo_wonder_resonates(leo, prompt)) wonder_reask = 1;
+            }
+            was_answer = 1;   /* one open wonder at a time; this turn cannot silently replace it */
         }
-        leo->school.pending[0] = 0;
-        leo->school.pending_glyph = -1;
-        was_answer = 1;
     }
 
     float   *g = NULL;
@@ -4869,22 +5077,28 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
      * --no-conatus → the base gate (byte-identical). */
     float ask_gate = LEO_QUIET_DISTRESS;
     if (g_leo_conatus_on) ask_gate += LEO_DEBT_ASK_GATE * leo->debt;
-    if (g_leo_school_on && !was_answer &&
+    if (g_leo_school_on && g_leo_wonder_on && wonder_reask) {
+        int n = leo_school_format_question(out, max_len, leo->school.pending,
+                                           leo->school.pending_glyph,
+                                           leo->school.pending_alt_glyph);
+        produced = (n >= max_len) ? max_len - 1 : n;
+        leo->school.pending_turns = 0;
+        leo_wonder_return(leo);
+    } else if (g_leo_school_on && !was_answer &&
         (leo->chamber_act[0] + leo->chamber_act[3]) < ask_gate &&
         leo_school_find_unknown(leo, prompt, unk)) {
-        /* I3a: hazard a guess from the prompt's context — "Zorble? Animal?" — the
-         * guess (a glyph name) is Leo's OWN word, mama-child safe. No confident
-         * guess → the bare echo "Zorble?". */
-        int pg = leo_school_predict_glyph(leo, prompt);
-        int n = (pg >= 0) ? snprintf(out, (size_t)max_len, "%s? %s?", unk, GLYPH_NAMES[pg])
-                          : snprintf(out, (size_t)max_len, "%s?", unk);
-        if (out[0] >= 'a' && out[0] <= 'z') out[0] = (char)(out[0] - 'a' + 'A');  /* his own utterance */
-        for (int i = 1; out[i]; i++)   /* capitalize the guess after "? " too */
-            if (out[i-1] == ' ' && out[i] >= 'a' && out[i] <= 'z') out[i] = (char)(out[i] - 'a' + 'A');
+        int glyphs[2] = {-1, -1};
+        if (g_leo_wonder_on) leo_school_predict_glyphs(leo, prompt, glyphs);
+        else glyphs[0] = leo_school_predict_glyph(leo, prompt);
+        int n = leo_school_format_question(out, max_len, unk, glyphs[0],
+                                           g_leo_wonder_on ? glyphs[1] : -1);
         produced = (n >= max_len) ? max_len - 1 : n;
         strncpy(leo->school.pending, unk, LEO_HEARD_WORDLEN - 1);
         leo->school.pending[LEO_HEARD_WORDLEN - 1] = 0;
-        leo->school.pending_glyph = pg;   /* I3b will check the guess against the answer */
+        leo->school.pending_glyph = glyphs[0];   /* I3b will check the guess against the answer */
+        leo->school.pending_alt_glyph = g_leo_wonder_on ? glyphs[1] : -1;
+        leo->school.pending_turns = 0;
+        if (g_leo_wonder_on) leo_wonder_open(leo, unk, glyphs[0], glyphs[1]);
     } else {
         produced = leo_chain(leo, chain_len, out, max_len);
     }
@@ -4923,9 +5137,13 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   field    : retention_state[32] + chamber_act[6] + chamber_ext[6]
  *              + pain + tension + debt + trauma
  *   heard    : live [count, wordlen, bytes]
+ *   memory   : spores/sea + RAE + School map/pending
+ *   v5..v9   : mode/primary guess + scars + gamma + meaning snapshots
+ *   v10      : consolidation shard ring + held-coherence trigger
+ *   v11      : unfinished-wonder alternative/clock + episode ring
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 10  /* stage-1 consolidation: shard ring + sleep trigger appended (v9 file = clean prefix, truncated v10 tail fails SOFT); v<=8 read the old spore layout (LeoSporeV8) + meaning_snap=0 (soft-migrate) */
+#define LEO_STATE_VERSION 11  /* unfinished wonder episodes appended after the v10 consolidation tail; v5..v10 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -5081,6 +5299,17 @@ static int leo_save_state(const Leo *leo, const char *path) {
     st_wf(f, leo->consol_coh_ema);
     st_w32(f, (int32_t)leo->consol_locked);
 
+    /* unfinished wonder (v11): the active alternative, its silence clock, and
+     * the human-grounded episode ring. The original pending word/primary glyph
+     * remain in their historical School slots for v5..v10 migration. */
+    st_w32(f, (int32_t)leo->school.pending_alt_glyph);
+    st_w32(f, (int32_t)leo->school.pending_turns);
+    st_w32(f, (int32_t)leo->school.n_wonders);
+    st_w32(f, (int32_t)leo->school.wonder_ptr);
+    if (leo->school.n_wonders > 0)
+        fwrite(leo->school.wonders, sizeof(LeoWonderEpisode),
+               (size_t)leo->school.n_wonders, f);
+
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
     if (ok && rename(tmp, path) != 0) ok = 0;   /* atomically replace the prior state only on a clean, complete write */
@@ -5099,7 +5328,7 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
     if (!f) return 0;
     uint32_t magic = 0, version = 0; uint64_t step = 0;
     if (!st_ru(f, &magic)   || magic != LEO_STATE_MAGIC)     { fclose(f); return 0; }
-    if (!st_ru(f, &version) || (version != 5 && version != 6 && version != 7 && version != 8 && version != 9 && version != 10)) { fclose(f); return 0; }  /* soft-migrate v5..v10 */
+    if (!st_ru(f, &version) || version < 5 || version > LEO_STATE_VERSION) { fclose(f); return 0; }  /* soft-migrate v5..current */
     if (!st_r64(f, &step)) { fclose(f); return 0; }
 
     leo_free(leo);
@@ -5327,6 +5556,45 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         } else {
             fprintf(stderr, "[leo] WARNING: v10 consolidation tail truncated/corrupt — organism lives on without shards.\n");
             leo->n_shards = 0; leo->consol_coh_ema = 0.0f; leo->consol_locked = 0;
+        }
+    }
+
+    /* unfinished wonder (v11). A broken optional tail loses the episode ledger,
+     * not the organism or the historical primary pending question. */
+    if (version >= 11) {
+        int32_t alt = -1, turns = 0, n_w = 0, ptr = 0;
+        int tail_ok = st_r32(f, &alt) && st_r32(f, &turns) &&
+                      st_r32(f, &n_w) && st_r32(f, &ptr) &&
+                      alt >= -1 && alt < GLYPH_COUNT &&
+                      turns >= 0 && turns <= 1000000 &&
+                      n_w >= 0 && n_w <= LEO_WONDER_RING &&
+                      ptr >= 0 && ptr < LEO_WONDER_RING;
+        if (tail_ok && n_w > 0 &&
+            fread(leo->school.wonders, sizeof(LeoWonderEpisode), (size_t)n_w, f) != (size_t)n_w)
+            tail_ok = 0;
+        if (tail_ok) {
+            for (int i = 0; i < n_w; i++) {
+                LeoWonderEpisode *ep = &leo->school.wonders[i];
+                ep->word[LEO_HEARD_WORDLEN - 1] = 0;
+                if (!ep->word[0] || ep->offered_glyph < -1 || ep->offered_glyph >= GLYPH_COUNT ||
+                    ep->offered_alt_glyph < -1 || ep->offered_alt_glyph >= GLYPH_COUNT ||
+                    ep->answer_glyph < -1 || ep->answer_glyph >= GLYPH_COUNT ||
+                    ep->resolved > 1 || ep->returns < 0 || ep->opened_step < 0 ||
+                    ep->closed_step < 0) { tail_ok = 0; break; }
+            }
+        }
+        if (tail_ok) {
+            leo->school.pending_alt_glyph = alt;
+            leo->school.pending_turns = turns;
+            leo->school.n_wonders = n_w;
+            leo->school.wonder_ptr = ptr;
+        } else {
+            fprintf(stderr, "[leo] WARNING: v11 wonder tail truncated/corrupt — the question lives without its episode ledger.\n");
+            memset(leo->school.wonders, 0, sizeof leo->school.wonders);
+            leo->school.pending_alt_glyph = -1;
+            leo->school.pending_turns = 0;
+            leo->school.n_wonders = 0;
+            leo->school.wonder_ptr = 0;
         }
     }
 
@@ -5617,6 +5885,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
         else if (!strcmp(argv[i], "--no-rae")) g_leo_rae_on = 0;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
@@ -5869,6 +6138,9 @@ int main(int argc, char **argv) {
             if (g_leo_consol_on)   /* stage-1 consolidation: the observer's ledger + the sleep trigger, in numbers */
                 printf("     [consol: shards=%d ema=%.2f locked=%d]\n",
                        leo.n_shards, (double)leo.consol_coh_ema, (int)leo.consol_locked);
+            if (g_leo_wonder_on && leo.school.pending[0])
+                printf("     [wonder: %s open, silence=%d, episodes=%d]\n",
+                       leo.school.pending, leo.school.pending_turns, leo.school.n_wonders);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */
                 printf("     [async: rings lived=%ld]\n", async.rings_done);
                 pthread_rwlock_unlock(&async.field_lock);

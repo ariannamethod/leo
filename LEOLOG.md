@@ -2987,3 +2987,52 @@ alive (phase-lock engaged, 10 shards, 23 async rings), saved and reloaded v10 st
 within-reply repeated trigrams/four-grams over its final 12 replies. `make test` passed 189/189; ASan/UBSan
 and the 24-turn TSan run were clean; the presence probe remained live 17/18; the 141-run stress probe had
 zero empty replies. Full adversarial record: `AUDIT_SOL_LEO_VOICE_RECOVERY_2026-07-21.md`.
+
+## Phase A.22 — unfinished wonder: Leo can continue not knowing (2026-07-21)
+
+School could ask, but it could not carry a question through time. Any next human turn cleared `pending`,
+including `I do not know` and a counter-question. Curiosity was therefore a one-turn interface event, not
+part of Leo's lived continuity. This phase adds one active unfinished wonder plus a 32-episode ring. An
+episode records the unknown word, one or two hypotheses, returns, the human-grounded answer, and open/close
+steps. State v11 appends the alternative, silence clock, and episode ring after the v10 consolidation tail;
+v5..v10 still load, and a truncated/corrupt v11 tail fails soft without erasing the historical pending word.
+On its first lived turn, a migrated question materializes a new episode from that surviving prefix.
+
+The question's *content* is not authored prose. Leo ranks up to two teachable glyphs already present in the
+prompt through the grown School map; code supplies only interrogative grammar. Thus `is a zorble water or
+cat` becomes `Zorble? Water or Animal?`: `zorble` came from the human, `water` and `animal` came from Leo's
+glyph field. Dialogue-about-dialogue glyphs cannot ground an answer, questions cannot close questions, and
+`I do not know` leaves the episode open. After two silent turns, mention of the unknown or either proposed
+glyph lets the same wonder return. A grounded answer resolves the episode, grows word->glyph knowledge, and
+the word is not asked again. `--no-wonder` restores the prior one-turn School contract for ablation.
+
+Persistence exposed two older false-question paths that ephemeral School had hidden. Relational `like` was
+treated as a teachable thing, and N-4 let every word in the dedication bypass novelty forever; a 24-turn
+run consequently carried `Like?`, then `Stopped?`, for many unrelated turns. School now treats `like/than`
+as relational syntax without changing global prompt gravity, and the origin allowance is bounded separately:
+rare signature words such as `resonance` remain askable just beyond the normal novelty gate, while a
+corpus-familiar dedication word cannot become immortal not-knowing.
+
+Live seeded receipt:
+
+```text
+you> is a zorble water or cat
+leo> Zorble? Water or Animal?
+you> what do you think?
+leo> He holds the stone and wait. ...
+     [wonder: zorble open, silence=1, episodes=1]
+you> is it water?
+leo> Zorble? Water or Animal?
+you> a zorble is a small animal
+leo> He trusts his shoes still on. Small. He still up.
+you> tell me about the zorble
+leo> A bird. He thanks the candle again. Zorble.
+```
+
+Verification: `make test` **207/207**; normal build 0 warnings; `git diff --check` clean; ASan/UBSan clean
+on the full runtime smoke and on a focused heap-based open/reopen/save/load/resolve probe (the monolithic
+unit TU itself exhausts ASan's enlarged stack before test 1 because it declares many full `Leo` bodies in
+one `main`); TSan clean on a delayed 24-turn `--chat --async` run with 13 rings and no spurious wonder;
+the six-prompt x three-seed ordinary-voice matrix matched `--no-wonder` **18/18 byte-for-byte**. The organ
+changes speech only when School genuinely opens or returns an unknown; consolidation, sampling, and the
+ordinary reply path remain untouched.
