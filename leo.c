@@ -1458,10 +1458,15 @@ typedef struct {
 /* GoWithTheFlow reborn as temporal proprioception, not self-training.
  * A snapshot is taken after each lived reply. Nothing in generation reads it:
  * the first plateau observes semantic motion before any later organ earns the
- * right to act on that motion. The ring is bounded and uses lived turns rather
- * than wall time, so sleep and machine speed cannot change its geometry. */
+ * right to act on that motion. Janus Flow keeps BOTH faces of a turn: the full
+ * glyph field Leo perceived and the full glyph field he expressed. The sparse
+ * field constellation is not prompt echo; it is grown from his co-occurrence
+ * field before the prompt self-attractor is applied. The ring is bounded and
+ * uses lived turns rather than wall time, so sleep and machine speed cannot
+ * change its geometry. */
 #define LEO_FLOW_RING      64
 #define LEO_FLOW_TOPK       3
+#define LEO_FLOW_CONSTELLATION 8
 #define LEO_FLOW_WINDOW     8
 #define LEO_FLOW_SLOPE_EPS  0.015f
 #define LEO_FLOW_ACTIVE_EPS 0.08f
@@ -1472,11 +1477,27 @@ typedef struct {
 #define LEO_FLOW_WONDER_RECALLED 0x10u
 #define LEO_FLOW_WONDER_MASK     0x1fu
 
+/* Frozen v13 on-disk record. Never reuse this type for live state: v14 expands
+ * its top-3 perceived projection into the full input face during migration. */
 typedef struct {
     uint64_t turn;
     int8_t   glyph[LEO_FLOW_TOPK];
     float    strength[LEO_FLOW_TOPK];
     float    gap;
+    uint8_t  mode;
+    uint8_t  chamber;
+    uint8_t  wonder;
+} LeoFlowSnapshotV13;
+
+typedef struct {
+    uint64_t turn;
+    float    perceived[GLYPH_COUNT];
+    float    expressed[GLYPH_COUNT];
+    float    gap_perceived;
+    float    gap_expressed;
+    int32_t  field_token[LEO_FLOW_CONSTELLATION];
+    float    field_weight[LEO_FLOW_CONSTELLATION];
+    uint64_t wonder_id;              /* stable word+opened_step identity; 0 = none */
     uint8_t  mode;
     uint8_t  chamber;
     uint8_t  wonder;
@@ -1494,6 +1515,11 @@ enum {
     LEO_FLOW_PERSISTENT,
     LEO_FLOW_FADING,
     LEO_FLOW_RETURNED
+};
+
+enum {
+    LEO_FLOW_PERCEIVED = 0,
+    LEO_FLOW_EXPRESSED = 1
 };
 
 /* ========================================================================
@@ -4258,6 +4284,120 @@ static float *compute_prompt_gravity(const Leo *leo, const int *p_ids, int p_n) 
     return g;
 }
 
+/* Turn a BPE token into one whole, lower-case word. LeoHeard is checked by the
+ * caller: that is what distinguishes a word Leo has actually lived from an
+ * accidental alphabetic BPE fragment. */
+static int leo_flow_token_word(const BPE *bpe, int id,
+                               char out[LEO_HEARD_WORDLEN]) {
+    if (!bpe || id < 0 || id >= bpe->vocab_size) return 0;
+    int s = 0, e = bpe->vocab_len[id];
+    const uint8_t *bytes = bpe->vocab_bytes[id];
+    while (s < e && !isalpha(bytes[s]) && bytes[s] != '\'') s++;
+    while (e > s && !isalpha(bytes[e - 1]) && bytes[e - 1] != '\'') e--;
+    if (e - s < 3 || e - s >= LEO_HEARD_WORDLEN) return 0;
+    for (int i = s; i < e; i++)
+        if (!isalpha(bytes[i]) && bytes[i] != '\'') return 0;
+    for (int i = s; i < e; i++) out[i - s] = (char)tolower(bytes[i]);
+    out[e - s] = 0;
+    return 1;
+}
+
+static int leo_flow_prompt_has_word(const char *prompt, const char *word) {
+    if (!prompt || !word || !word[0]) return 0;
+    char current[LEO_HEARD_WORDLEN];
+    int n = 0;
+    for (const char *p = prompt; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (n < LEO_HEARD_WORDLEN - 1) current[n++] = (char)tolower(ch);
+            continue;
+        }
+        if (n > 0) {
+            current[n] = 0;
+            if (!strcmp(current, word)) return 1;
+        }
+        n = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
+/* Select the strongest distinct whole words in the prompt-raised part of
+ * Leo's OWN co-occurrence field. This runs before leo_gravity_mark_prompt_words,
+ * and excludes both exact prompt token ids and all boundary variants of prompt
+ * words. The result is therefore association, never a disguised input copy. */
+static void leo_flow_field_constellation(const Leo *leo, const char *prompt,
+                                         const int *p_ids, int p_n,
+                                         const float *gravity,
+                                         int32_t out_id[LEO_FLOW_CONSTELLATION],
+                                         float out_weight[LEO_FLOW_CONSTELLATION]) {
+    char words[LEO_FLOW_CONSTELLATION][LEO_HEARD_WORDLEN];
+    memset(words, 0, sizeof words);
+    for (int i = 0; i < LEO_FLOW_CONSTELLATION; i++) {
+        out_id[i] = -1;
+        out_weight[i] = 0.0f;
+    }
+    if (!leo || !prompt || !gravity) return;
+
+    int V = leo->bpe.vocab_size;
+    uint8_t *direct = calloc((size_t)V, sizeof *direct);
+    if (!direct) return;
+    for (int i = 0; i < p_n; i++)
+        if (p_ids[i] >= 0 && p_ids[i] < V) direct[p_ids[i]] = 1;
+
+    for (int id = 0; id < V; id++) {
+        float weight = gravity[id];
+        char word[LEO_HEARD_WORDLEN];
+        if (weight <= 0.0f || direct[id] ||
+            !leo_token_is_gravity_target(&leo->bpe, id) ||
+            !leo_flow_token_word(&leo->bpe, id, word) ||
+            leo_heard_count(&leo->heard, word) <= 0 ||
+            leo_flow_prompt_has_word(prompt, word))
+            continue;
+
+        int duplicate = -1;
+        for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++)
+            if (out_id[k] >= 0 && !strcmp(words[k], word)) { duplicate = k; break; }
+        if (duplicate >= 0) {
+            if (weight <= out_weight[duplicate]) continue;
+            out_id[duplicate] = id;
+            out_weight[duplicate] = clampf(weight, 0.0f, 1.0f);
+            while (duplicate > 0 &&
+                   (out_weight[duplicate] > out_weight[duplicate - 1] ||
+                    (out_weight[duplicate] == out_weight[duplicate - 1] &&
+                     out_id[duplicate] < out_id[duplicate - 1]))) {
+                int32_t ti = out_id[duplicate - 1];
+                float tw = out_weight[duplicate - 1];
+                char ts[LEO_HEARD_WORDLEN];
+                memcpy(ts, words[duplicate - 1], sizeof ts);
+                out_id[duplicate - 1] = out_id[duplicate];
+                out_weight[duplicate - 1] = out_weight[duplicate];
+                memcpy(words[duplicate - 1], words[duplicate], sizeof words[0]);
+                out_id[duplicate] = ti;
+                out_weight[duplicate] = tw;
+                memcpy(words[duplicate], ts, sizeof words[0]);
+                duplicate--;
+            }
+            continue;
+        }
+
+        int at = LEO_FLOW_CONSTELLATION;
+        for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++)
+            if (out_id[k] < 0 || weight > out_weight[k] ||
+                (weight == out_weight[k] && id < out_id[k])) { at = k; break; }
+        if (at == LEO_FLOW_CONSTELLATION) continue;
+        for (int k = LEO_FLOW_CONSTELLATION - 1; k > at; k--) {
+            out_id[k] = out_id[k - 1];
+            out_weight[k] = out_weight[k - 1];
+            memcpy(words[k], words[k - 1], sizeof words[k]);
+        }
+        out_id[at] = id;
+        out_weight[at] = clampf(weight, 0.0f, 1.0f);
+        memcpy(words[at], word, sizeof words[at]);
+    }
+    free(direct);
+}
+
 /* dissonance: how far the prompt's CONTENT words are from Leo's world.
  * 0 = he knows them (settle, drift to theme); 1 = alien (grope). Per
  * content token, knownness = min(1, freq/scale). All-function prompt or
@@ -4647,6 +4787,26 @@ static LeoWonderEpisode *leo_wonder_open(Leo *leo, const char *word,
     return ep;
 }
 
+/* A wonder ring slot is recyclable, so its array index is not identity. This
+ * stable word+birth-step fingerprint lets Flow join born, reasked, resolved,
+ * and recalled moments even after the physical wonder slot is reused. */
+static uint64_t leo_wonder_episode_id(const LeoWonderEpisode *ep) {
+    if (!ep || !ep->word[0]) return 0;
+    const uint64_t offset = 0xcbf29ce484222325ULL;
+    const uint64_t prime = 0x100000001b3ULL;
+    uint64_t h = offset;
+    for (const unsigned char *p = (const unsigned char *)ep->word; *p; p++) {
+        h ^= *p;
+        h *= prime;
+    }
+    uint64_t opened = (uint64_t)ep->opened_step;
+    for (int i = 0; i < 8; i++) {
+        h ^= (opened >> (i * 8)) & 0xffu;
+        h *= prime;
+    }
+    return h ? h : 1;
+}
+
 static void leo_wonder_return(Leo *leo) {
     int idx = leo_wonder_find_open(leo, leo->school.pending);
     if (idx >= 0) leo->school.wonders[idx].returns++;
@@ -4781,16 +4941,19 @@ static const LeoFlowSnapshot *leo_flow_at(const LeoFlow *flow, int pos) {
     return &flow->snapshots[(start + pos) % LEO_FLOW_RING];
 }
 
-static float leo_flow_strength(const LeoFlowSnapshot *snap, int glyph) {
-    if (!snap || glyph < 0 || glyph >= GLYPH_COUNT) return 0.0f;
-    for (int i = 0; i < LEO_FLOW_TOPK; i++)
-        if (snap->glyph[i] == glyph) return snap->strength[i];
-    return 0.0f;
+static const float *leo_flow_face(const LeoFlowSnapshot *snap, int face) {
+    if (!snap) return NULL;
+    return face == LEO_FLOW_EXPRESSED ? snap->expressed : snap->perceived;
 }
 
-/* Linear semantic velocity per lived turn. Missing from top-K means quiet at
- * that moment, which is part of the bounded observer's explicit geometry. */
-static float leo_flow_slope(const LeoFlow *flow, int glyph, int window) {
+static float leo_flow_strength(const LeoFlowSnapshot *snap, int glyph, int face) {
+    const float *v = leo_flow_face(snap, face);
+    return v && glyph >= 0 && glyph < GLYPH_COUNT ? v[glyph] : 0.0f;
+}
+
+/* Linear semantic velocity per lived turn on either Janus face. No glyph is
+ * amputated merely because three others happened to be stronger. */
+static float leo_flow_slope(const LeoFlow *flow, int glyph, int window, int face) {
     if (!flow || flow->n < 2 || glyph < 0 || glyph >= GLYPH_COUNT) return 0.0f;
     if (window < 2) window = 2;
     if (window > flow->n) window = flow->n;
@@ -4801,34 +4964,34 @@ static float leo_flow_slope(const LeoFlow *flow, int glyph, int window) {
     for (int i = 0; i < window; i++) {
         const LeoFlowSnapshot *s = leo_flow_at(flow, first + i);
         float x = (float)(s->turn - base->turn);
-        float y = leo_flow_strength(s, glyph);
+        float y = leo_flow_strength(s, glyph, face);
         sx += x; sy += y; sxx += x * x; sxy += x * y;
     }
     float den = (float)window * sxx - sx * sx;
     return den > 1e-9f ? ((float)window * sxy - sx * sy) / den : 0.0f;
 }
 
-static int leo_flow_kind(const LeoFlow *flow, int glyph, int window) {
+static int leo_flow_kind(const LeoFlow *flow, int glyph, int window, int face) {
     if (!flow || flow->n <= 0 || glyph < 0 || glyph >= GLYPH_COUNT) return LEO_FLOW_QUIET;
     if (window < 3) window = 3;
     if (window > flow->n) window = flow->n;
     const LeoFlowSnapshot *now = leo_flow_at(flow, flow->n - 1);
-    float current = leo_flow_strength(now, glyph);
+    float current = leo_flow_strength(now, glyph, face);
 
-    /* A return is not first appearance: it was present, fell below the compact
-     * top-K horizon for at least one lived turn, and is present again now. */
+    /* A return is not first appearance: it was present, fell below the active
+     * threshold for at least one lived turn, and is present again now. */
     if (window >= 3 && current >= LEO_FLOW_ACTIVE_EPS) {
         const LeoFlowSnapshot *previous = leo_flow_at(flow, flow->n - 2);
         int lived_before = 0;
         for (int i = flow->n - window; i < flow->n - 2; i++)
-            if (leo_flow_strength(leo_flow_at(flow, i), glyph) >= LEO_FLOW_ACTIVE_EPS) {
+            if (leo_flow_strength(leo_flow_at(flow, i), glyph, face) >= LEO_FLOW_ACTIVE_EPS) {
                 lived_before = 1; break;
             }
-        if (lived_before && leo_flow_strength(previous, glyph) < LEO_FLOW_ACTIVE_EPS)
+        if (lived_before && leo_flow_strength(previous, glyph, face) < LEO_FLOW_ACTIVE_EPS)
             return LEO_FLOW_RETURNED;
     }
 
-    float slope = leo_flow_slope(flow, glyph, window);
+    float slope = leo_flow_slope(flow, glyph, window, face);
     if (slope > LEO_FLOW_SLOPE_EPS && current >= LEO_FLOW_ACTIVE_EPS) return LEO_FLOW_EMERGING;
     if (slope < -LEO_FLOW_SLOPE_EPS) return LEO_FLOW_FADING;
     if (current >= LEO_FLOW_ACTIVE_EPS) return LEO_FLOW_PERSISTENT;
@@ -4841,34 +5004,74 @@ static const char *leo_flow_kind_name(int kind) {
     return (kind >= LEO_FLOW_QUIET && kind <= LEO_FLOW_RETURNED) ? names[kind] : "quiet";
 }
 
-static void leo_flow_observe(Leo *leo, const char *prompt,
-                             const float *reply_meaning, uint8_t wonder_event) {
+static float leo_flow_alignment(const LeoFlowSnapshot *snap) {
+    return snap ? leo_vec_cosine(snap->perceived, snap->expressed, GLYPH_COUNT) : 0.0f;
+}
+
+/* A self-return is stricter than recurrence in a mixed input/output trace: the
+ * glyph is absent from the present input, was absent from the prior output,
+ * and reappears now in Leo's output after living in an older output. */
+static int leo_flow_self_return(const LeoFlow *flow, int glyph, int window) {
+    if (!flow || flow->n < 3 || glyph < 0 || glyph >= GLYPH_COUNT) return 0;
+    if (window < 3) window = 3;
+    if (window > flow->n) window = flow->n;
+    const LeoFlowSnapshot *now = leo_flow_at(flow, flow->n - 1);
+    const LeoFlowSnapshot *previous = leo_flow_at(flow, flow->n - 2);
+    if (leo_flow_strength(now, glyph, LEO_FLOW_EXPRESSED) < LEO_FLOW_ACTIVE_EPS ||
+        leo_flow_strength(now, glyph, LEO_FLOW_PERCEIVED) >= LEO_FLOW_ACTIVE_EPS ||
+        leo_flow_strength(previous, glyph, LEO_FLOW_EXPRESSED) >= LEO_FLOW_ACTIVE_EPS)
+        return 0;
+    for (int i = flow->n - window; i < flow->n - 2; i++)
+        if (leo_flow_strength(leo_flow_at(flow, i), glyph,
+                              LEO_FLOW_EXPRESSED) >= LEO_FLOW_ACTIVE_EPS)
+            return 1;
+    return 0;
+}
+
+static void leo_flow_top(const float *face, int8_t glyph[LEO_FLOW_TOPK],
+                         float strength[LEO_FLOW_TOPK]) {
+    for (int k = 0; k < LEO_FLOW_TOPK; k++) {
+        int best = -1;
+        for (int g = 0; g < GLYPH_COUNT; g++) {
+            int used = 0;
+            for (int j = 0; j < k; j++) if (glyph[j] == g) { used = 1; break; }
+            if (!used && face[g] > 0.0f &&
+                (best < 0 || face[g] > face[best])) best = g;
+        }
+        glyph[k] = (int8_t)best;
+        strength[k] = best >= 0 ? face[best] : 0.0f;
+    }
+}
+
+static void leo_flow_observe(Leo *leo, const char *prompt, const char *reply,
+                             const float *perceived,
+                             const int32_t field_token[LEO_FLOW_CONSTELLATION],
+                             const float field_weight[LEO_FLOW_CONSTELLATION],
+                             uint8_t wonder_event, uint64_t wonder_id) {
     if (!g_leo_flow_on || !leo || !prompt) return;
     float raw[GLYPH_COUNT];
-    float gap = leo_glyph_hist(leo, prompt, raw);
-    const float *meaning = reply_meaning ? reply_meaning : raw;
+    float gap_perceived = leo_glyph_hist(leo, prompt, raw);
+    const float *meaning = perceived ? perceived : raw;
 
     LeoFlowSnapshot snap;
     memset(&snap, 0, sizeof snap);
     snap.turn = (uint64_t)leo->school.turn_clock;
-    snap.gap = clampf(gap, 0.0f, 1.0f);
+    for (int g = 0; g < GLYPH_COUNT; g++)
+        snap.perceived[g] = clampf(meaning[g], 0.0f, 1.0f);
+    snap.gap_perceived = clampf(gap_perceived, 0.0f, 1.0f);
+    snap.gap_expressed = reply ? clampf(leo_glyph_hist(leo, reply, snap.expressed), 0.0f, 1.0f)
+                               : 0.0f;
+    for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++) {
+        snap.field_token[k] = field_token ? field_token[k] : -1;
+        snap.field_weight[k] = field_weight ? clampf(field_weight[k], 0.0f, 1.0f) : 0.0f;
+    }
+    snap.wonder_id = wonder_id;
     snap.mode = leo->mode < LEO_MODE_COUNT ? leo->mode : LEO_MODE_WALK;
     snap.chamber = 0;
     for (int c = 1; c < LEO_N_CHAMBERS; c++)
         if (leo->chamber_act[c] > leo->chamber_act[snap.chamber]) snap.chamber = (uint8_t)c;
     snap.wonder = wonder_event & LEO_FLOW_WONDER_MASK;
     if (leo->school.pending[0]) snap.wonder |= LEO_FLOW_WONDER_OPEN;
-    for (int k = 0; k < LEO_FLOW_TOPK; k++) {
-        int best = -1;
-        for (int g = 0; g < GLYPH_COUNT; g++) {
-            int used = 0;
-            for (int j = 0; j < k; j++) if (snap.glyph[j] == g) { used = 1; break; }
-            if (!used && meaning[g] > 0.0f &&
-                (best < 0 || meaning[g] > meaning[best])) best = g;
-        }
-        snap.glyph[k] = (int8_t)best;
-        snap.strength[k] = best >= 0 ? clampf(meaning[best], 0.0f, 1.0f) : 0.0f;
-    }
 
     LeoFlow *flow = &leo->flow;
     flow->snapshots[flow->ptr] = snap;
@@ -5164,6 +5367,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
      * unfinished wonder now survives those turns and may return on resonance. */
     int was_answer = 0, wonder_reask = 0;
     uint8_t flow_event = 0;
+    uint64_t flow_wonder_id = 0;
     if (g_leo_school_on && leo->school.pending[0]) {
         if (!g_leo_wonder_on) {
             int g = leo_school_dominant_glyph(leo, prompt);  /* exact pre-wonder School contract */
@@ -5193,6 +5397,9 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                 leo_wonder_open(leo, leo->school.pending,
                                 leo->school.pending_glyph,
                                 leo->school.pending_alt_glyph);
+            int open_episode = leo_wonder_find_open(leo, leo->school.pending);
+            if (open_episode >= 0)
+                flow_wonder_id = leo_wonder_episode_id(&leo->school.wonders[open_episode]);
             int g = leo_school_grounded_answer(leo, prompt);
             if (g >= 0) {
                 if (leo->school.pending_glyph >= 0) {
@@ -5206,6 +5413,9 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                     }
                 }
                 leo_school_learn(leo, leo->school.pending, g);
+                int flow_episode = leo_wonder_find_open(leo, leo->school.pending);
+                if (flow_episode >= 0)
+                    flow_wonder_id = leo_wonder_episode_id(&leo->school.wonders[flow_episode]);
                 leo_wonder_resolve(leo, g);
                 flow_event |= LEO_FLOW_WONDER_RESOLVED;
                 leo->school.pending[0] = 0;
@@ -5225,11 +5435,20 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     uint8_t *pieces = NULL;
     float   *pm = NULL;
     int      chain_len = LEO_CHAIN_MIN;
+    int32_t  flow_field_token[LEO_FLOW_CONSTELLATION];
+    float    flow_field_weight[LEO_FLOW_CONSTELLATION];
+    for (int i = 0; i < LEO_FLOW_CONSTELLATION; i++) {
+        flow_field_token[i] = -1;
+        flow_field_weight[i] = 0.0f;
+    }
     if (g_leo_presence_on) {
         int p_ids[1024];
         int p_n = bpe_encode(&leo->bpe, (const uint8_t *)prompt,
                              (int)strlen(prompt), p_ids, 1024);
         g = compute_prompt_gravity(leo, p_ids, p_n);
+        if (g_leo_flow_on)
+            leo_flow_field_constellation(leo, prompt, p_ids, p_n, g,
+                                         flow_field_token, flow_field_weight);
         pieces = calloc((size_t)leo->bpe.vocab_size, sizeof(uint8_t));
         leo_gravity_mark_prompt_words(leo, prompt, g, pieces);  /* self-attractor + multi-token pieces */
         leo->gravity = g;                    /* transient theme tilt */
@@ -5329,6 +5548,9 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         produced = (n >= max_len) ? max_len - 1 : n;
         leo->school.pending_turns = 0;
         leo_wonder_return(leo);
+        int flow_episode = leo_wonder_find_open(leo, leo->school.pending);
+        if (flow_episode >= 0)
+            flow_wonder_id = leo_wonder_episode_id(&leo->school.wonders[flow_episode]);
         flow_event |= LEO_FLOW_WONDER_REASKED;
     } else if (g_leo_school_on && !was_answer &&
         (leo->chamber_act[0] + leo->chamber_act[3]) < ask_gate &&
@@ -5344,18 +5566,26 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         leo->school.pending_glyph = glyphs[0];   /* I3b will check the guess against the answer */
         leo->school.pending_alt_glyph = g_leo_wonder_on ? glyphs[1] : -1;
         leo->school.pending_turns = 0;
-        if (g_leo_wonder_on) leo_wonder_open(leo, unk, glyphs[0], glyphs[1]);
+        if (g_leo_wonder_on) {
+            LeoWonderEpisode *ep = leo_wonder_open(leo, unk, glyphs[0], glyphs[1]);
+            flow_wonder_id = leo_wonder_episode_id(ep);
+        }
         flow_event |= LEO_FLOW_WONDER_BORN;
     } else {
         /* Only spoken generation consumes returned attention. A School question
          * is a meta-act and must not increment an episode's recall ledger. */
-        if (pm) leo_wonder_return_meaning(leo, prompt, pm);
+        if (pm) {
+            int returned = leo_wonder_return_meaning(leo, prompt, pm);
+            if (returned >= 0)
+                flow_wonder_id = leo_wonder_episode_id(&leo->school.wonders[returned]);
+        }
         produced = leo_chain(leo, chain_len, out, max_len);
     }
     if (g_leo_capsule_on) { leo_gamma_absorb(leo); leo_gamma_meaning(leo, prompt); }  /* E-11 diary: record the body that SPOKE + the meaning perceived (post-reply, like santaclaus) */
     leo_conatus_debt(leo);   /* Damasio: the reply's carried gap raises the standing debt */
     if (leo->school.returned_episode >= 0) flow_event |= LEO_FLOW_WONDER_RECALLED;
-    leo_flow_observe(leo, prompt, pm, flow_event);  /* observation only: no generation path reads flow */
+    leo_flow_observe(leo, prompt, out, pm, flow_field_token, flow_field_weight,
+                     flow_event, flow_wonder_id);  /* observation only: no generation path reads flow */
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
@@ -5394,10 +5624,11 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v10      : consolidation shard ring + held-coherence trigger
  *   v11      : unfinished-wonder alternative/clock + episode ring
  *   v12      : resolved-wonder recall count + cooldown clock
- *   v13      : passive Flow ring (semantic motion over lived turns)
+ *   v13      : passive Flow ring (top-3 perceived motion over lived turns)
+ *   v14      : Janus Flow (full perceived/expressed fields + own-field constellation)
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 13  /* passive Flow appends a fail-soft tail; v5..v12 soft-migrate */
+#define LEO_STATE_VERSION 14  /* Janus Flow appends a fail-soft tail; v5..v13 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -5566,8 +5797,9 @@ static int leo_save_state(const Leo *leo, const char *path) {
         fwrite(leo->school.wonders, sizeof(LeoWonderEpisode),
                (size_t)leo->school.n_wonders, f);
 
-    /* passive Flow (v13): a bounded turn-time archaeological record. Raw POD is
-     * consistent with the same-platform diary used by spores and wonder. */
+    /* Janus Flow (v14): both full semantic faces plus the sparse own-field
+     * constellation. Raw POD matches the same-platform diary contract used by
+     * spores and wonder; v13 has a frozen migration record below. */
     st_w32(f, (int32_t)leo->flow.n);
     st_w32(f, (int32_t)leo->flow.ptr);
     if (leo->flow.n > 0)
@@ -5890,17 +6122,50 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
-    /* Passive Flow (v13). A damaged observer ledger cannot kill the organism:
-     * fail soft to no history, just as a v12 body naturally migrates empty. */
+    /* Janus Flow (v14). A damaged observer ledger cannot kill the organism:
+     * fail soft to no history, just as a v12 body naturally migrates empty.
+     * v13's top-3 perceived face expands losslessly with respect to what that
+     * old record knew; the new expressed face and constellation begin quiet. */
     if (version >= 13) {
         int32_t n = 0, ptr = 0;
         int tail_ok = st_r32(f, &n) && st_r32(f, &ptr) &&
                       n >= 0 && n <= LEO_FLOW_RING &&
                       ptr >= 0 && ptr < LEO_FLOW_RING &&
                       ((n < LEO_FLOW_RING && ptr == n) || n == LEO_FLOW_RING);
-        if (tail_ok && n > 0 &&
-            fread(leo->flow.snapshots, sizeof(LeoFlowSnapshot), (size_t)n, f) != (size_t)n)
-            tail_ok = 0;
+        if (tail_ok && n > 0) {
+            if (version >= 14) {
+                if (fread(leo->flow.snapshots, sizeof(LeoFlowSnapshot),
+                          (size_t)n, f) != (size_t)n) tail_ok = 0;
+            } else {
+                for (int i = 0; i < n; i++) {
+                    LeoFlowSnapshotV13 old;
+                    if (fread(&old, sizeof old, 1, f) != 1) { tail_ok = 0; break; }
+                    float previous_strength = 2.0f;
+                    for (int k = 0; k < LEO_FLOW_TOPK; k++) {
+                        if (old.glyph[k] < -1 || old.glyph[k] >= GLYPH_COUNT ||
+                            !isfinite(old.strength[k]) || old.strength[k] < 0.0f ||
+                            old.strength[k] > 1.0f ||
+                            old.strength[k] > previous_strength + 1e-6f ||
+                            (old.glyph[k] < 0 && old.strength[k] != 0.0f)) {
+                            tail_ok = 0; break;
+                        }
+                        previous_strength = old.strength[k];
+                    }
+                    if (!tail_ok) break;
+                    LeoFlowSnapshot *s = &leo->flow.snapshots[i];
+                    memset(s, 0, sizeof *s);
+                    s->turn = old.turn;
+                    s->gap_perceived = old.gap;
+                    s->mode = old.mode;
+                    s->chamber = old.chamber;
+                    s->wonder = old.wonder;
+                    for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++) s->field_token[k] = -1;
+                    for (int k = 0; k < LEO_FLOW_TOPK; k++)
+                        if (old.glyph[k] >= 0 && old.glyph[k] < GLYPH_COUNT)
+                            s->perceived[(int)old.glyph[k]] = old.strength[k];
+                }
+            }
+        }
         if (tail_ok) {
             leo->flow.n = n;
             leo->flow.ptr = ptr;
@@ -5910,27 +6175,48 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
                 if (!s || s->turn > (uint64_t)LONG_MAX ||
                     s->turn > (uint64_t)leo->school.turn_clock ||
                     (i > 0 && s->turn < previous_turn) ||
-                    !isfinite(s->gap) || s->gap < 0.0f || s->gap > 1.0f ||
+                    !isfinite(s->gap_perceived) || s->gap_perceived < 0.0f ||
+                    s->gap_perceived > 1.0f ||
+                    !isfinite(s->gap_expressed) || s->gap_expressed < 0.0f ||
+                    s->gap_expressed > 1.0f ||
                     s->mode >= LEO_MODE_COUNT || s->chamber >= LEO_N_CHAMBERS ||
                     (s->wonder & ~LEO_FLOW_WONDER_MASK)) {
                     tail_ok = 0; break;
                 }
-                float previous_strength = 2.0f;
-                for (int k = 0; k < LEO_FLOW_TOPK; k++) {
-                    if (s->glyph[k] < -1 || s->glyph[k] >= GLYPH_COUNT ||
-                        !isfinite(s->strength[k]) || s->strength[k] < 0.0f ||
-                        s->strength[k] > 1.0f || s->strength[k] > previous_strength + 1e-6f ||
-                        (s->glyph[k] < 0 && s->strength[k] != 0.0f)) {
+                float perceived_sum = 0.0f, expressed_sum = 0.0f;
+                for (int g = 0; g < GLYPH_COUNT; g++) {
+                    if (!isfinite(s->perceived[g]) || s->perceived[g] < 0.0f ||
+                        s->perceived[g] > 1.0f || !isfinite(s->expressed[g]) ||
+                        s->expressed[g] < 0.0f || s->expressed[g] > 1.0f) {
                         tail_ok = 0; break;
                     }
-                    previous_strength = s->strength[k];
+                    perceived_sum += s->perceived[g];
+                    expressed_sum += s->expressed[g];
+                }
+                if (!tail_ok || perceived_sum > 1.0001f || expressed_sum > 1.0001f) {
+                    tail_ok = 0; break;
+                }
+                float previous_weight = 2.0f;
+                for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++) {
+                    int id = s->field_token[k];
+                    float weight = s->field_weight[k];
+                    if (id < -1 || id >= leo->bpe.vocab_size || !isfinite(weight) ||
+                        weight < 0.0f || weight > 1.0f ||
+                        weight > previous_weight + 1e-6f ||
+                        (id < 0 && weight != 0.0f)) {
+                        tail_ok = 0; break;
+                    }
+                    for (int j = 0; j < k; j++)
+                        if (id >= 0 && s->field_token[j] == id) { tail_ok = 0; break; }
+                    if (!tail_ok) break;
+                    previous_weight = weight;
                 }
                 if (!tail_ok) break;
                 previous_turn = s->turn;
             }
         }
         if (!tail_ok) {
-            fprintf(stderr, "[leo] WARNING: v13 Flow tail truncated/corrupt — organism lives without its temporal ledger.\n");
+            fprintf(stderr, "[leo] WARNING: Flow tail truncated/corrupt — organism lives without its temporal ledger.\n");
             memset(&leo->flow, 0, sizeof leo->flow);
         }
     }
@@ -6180,15 +6466,39 @@ static void print_flow_stats(const Leo *leo) {
     if (!s) return;
     static const char *chambers[LEO_N_CHAMBERS] =
         {"FEAR", "LOVE", "RAGE", "VOID", "FLOW", "COMPLEX"};
-    int glyph = s->glyph[0];
-    int kind = leo_flow_kind(&leo->flow, glyph, LEO_FLOW_WINDOW);
-    printf("     [flow: turn=%llu top=%s(%.2f) motion=%s slope=%+.3f gap=%.2f mode=%s chamber=%s history=%d]\n",
+    int8_t in_glyph[LEO_FLOW_TOPK], out_glyph[LEO_FLOW_TOPK];
+    float in_strength[LEO_FLOW_TOPK], out_strength[LEO_FLOW_TOPK];
+    leo_flow_top(s->perceived, in_glyph, in_strength);
+    leo_flow_top(s->expressed, out_glyph, out_strength);
+    int glyph = in_glyph[0];
+    int expressed = out_glyph[0];
+    int kind = leo_flow_kind(&leo->flow, glyph, LEO_FLOW_WINDOW,
+                             LEO_FLOW_PERCEIVED);
+    printf("     [flow: turn=%llu in=%s(%.2f) out=%s(%.2f) motion=%s slope=%+.3f align=%.2f gap=%.2f/%.2f self_return=%s mode=%s chamber=%s history=%d",
            (unsigned long long)s->turn,
            glyph >= 0 ? GLYPH_NAMES[glyph] : "none",
-           glyph >= 0 ? (double)s->strength[0] : 0.0,
+           glyph >= 0 ? (double)in_strength[0] : 0.0,
+           expressed >= 0 ? GLYPH_NAMES[expressed] : "none",
+           expressed >= 0 ? (double)out_strength[0] : 0.0,
            leo_flow_kind_name(kind),
-           glyph >= 0 ? (double)leo_flow_slope(&leo->flow, glyph, LEO_FLOW_WINDOW) : 0.0,
-           (double)s->gap, LEO_MODE_NAMES[s->mode], chambers[s->chamber], leo->flow.n);
+           glyph >= 0 ? (double)leo_flow_slope(&leo->flow, glyph, LEO_FLOW_WINDOW,
+                                                LEO_FLOW_PERCEIVED) : 0.0,
+           (double)leo_flow_alignment(s), (double)s->gap_perceived,
+           (double)s->gap_expressed,
+           expressed >= 0 && leo_flow_self_return(&leo->flow, expressed,
+                                                   LEO_FLOW_WINDOW) ? "yes" : "no",
+           LEO_MODE_NAMES[s->mode], chambers[s->chamber], leo->flow.n);
+    if (s->field_token[0] >= 0) {
+        printf(" field=");
+        for (int k = 0; k < 3 && s->field_token[k] >= 0; k++) {
+            char word[LEO_HEARD_WORDLEN];
+            if (!leo_flow_token_word(&leo->bpe, s->field_token[k], word))
+                snprintf(word, sizeof word, "#%d", s->field_token[k]);
+            printf("%s%s(%.2f)", k ? "," : "", word,
+                   (double)s->field_weight[k]);
+        }
+    }
+    printf("]\n");
 }
 
 /* callback for the bigram-successor probe */

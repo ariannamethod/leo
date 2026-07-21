@@ -1136,10 +1136,10 @@ int main(void) {
             if (bytes && sz > 0 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                 long v12tail = (long)(4 * sizeof(int32_t) + sizeof(uint64_t) +
                                       sizeof(LeoWonderEpisode));
-                long v13flow = (long)(2 * sizeof(int32_t) +
-                                      w.flow.n * (int)sizeof(LeoFlowSnapshot));
-                if (sz > v12tail + v13flow) {
-                    long flow_start = sz - v13flow;
+                long current_flow = (long)(2 * sizeof(int32_t) +
+                                           w.flow.n * (int)sizeof(LeoFlowSnapshot));
+                if (sz > v12tail + current_flow) {
+                    long flow_start = sz - current_flow;
                     long tail_start = flow_start - v12tail;
                     uint32_t ten = 10; memcpy(bytes + 4, &ten, sizeof ten);
                     FILE *fo = fopen(old, "wb");
@@ -1347,59 +1347,122 @@ int main(void) {
     /* A.6 FORM fix: --mode is case-insensitive. leo_mode_from_name matched only the
      * UPPERCASE LEO_MODE_NAMES, so the natural lowercase "--mode stop" returned -1 and
      * the forced breath was silently dropped (override stayed -1). */
-    /* GoWithTheFlow: temporal proprioception observes semantic motion but has no
-     * reader in generation. Turns, not wall time, define its geometry. */
+    /* Janus Flow: temporal proprioception keeps full perceived and expressed
+     * fields plus Leo-grown associations, but has no reader in generation.
+     * Turns, not wall time, define its geometry. */
     {
         int prev_flow = g_leo_flow_on;
         g_leo_flow_on = 1;
-        Leo *fl = malloc(sizeof *fl), *loaded = malloc(sizeof *loaded), *cut = malloc(sizeof *cut);
-        CHECK(fl && loaded && cut, "flow: heap fixtures allocated");
-        if (fl && loaded && cut) {
-            leo_init(fl); leo_init(loaded); leo_init(cut);
+        Leo *fl = malloc(sizeof *fl), *loaded = malloc(sizeof *loaded),
+            *cut = malloc(sizeof *cut), *old = malloc(sizeof *old);
+        CHECK(fl && loaded && cut && old, "flow: heap fixtures allocated");
+        if (fl && loaded && cut && old) {
+            leo_init(fl); leo_init(loaded); leo_init(cut); leo_init(old);
             int water = semtok_word("water"), fire = semtok_word("fire");
+            int tree = semtok_word("tree"), sky = semtok_word("sky");
+
+            /* The constellation is drawn before the prompt self-attractor and
+             * only from whole words already present in LeoHeard. */
+            const char *field_corpus =
+                "ocean candle meadow. ocean candle meadow. ocean candle meadow. "
+                "ocean candle meadow. ocean candle meadow. ocean candle meadow. ";
+            for (int r = 0; r < 8; r++) leo_ingest(fl, field_corpus);
+            leo_ingest(fl, "ocean");
+            int p_ids[64];
+            int p_n = bpe_encode(&fl->bpe, (const uint8_t *)"ocean", 5, p_ids, 64);
+            float *gravity = compute_prompt_gravity(fl, p_ids, p_n);
+            int32_t field_id[LEO_FLOW_CONSTELLATION];
+            float field_weight[LEO_FLOW_CONSTELLATION];
+            leo_flow_field_constellation(fl, "ocean", p_ids, p_n, gravity,
+                                         field_id, field_weight);
+            int constellation_ok = field_id[0] >= 0;
+            for (int k = 0; k < LEO_FLOW_CONSTELLATION && field_id[k] >= 0; k++) {
+                char word[LEO_HEARD_WORDLEN];
+                if (!leo_flow_token_word(&fl->bpe, field_id[k], word) ||
+                    leo_flow_prompt_has_word("ocean", word)) constellation_ok = 0;
+                for (int i = 0; i < p_n; i++) if (field_id[k] == p_ids[i]) constellation_ok = 0;
+            }
+            CHECK(constellation_ok,
+                  "flow: field constellation contains Leo-grown whole words, never prompt words");
+
             char pending[LEO_HEARD_WORDLEN] = "zorble";
             memcpy(fl->school.pending, pending, sizeof pending);
+            LeoWonderEpisode *episode = leo_wonder_open(fl, "zorble", water, fire);
+            uint64_t episode_id = leo_wonder_episode_id(episode);
             fl->school.turn_clock = 1;
-            leo_flow_observe(fl, "water", NULL, LEO_FLOW_WONDER_BORN);
+            leo_flow_observe(fl, "water fire tree sky", "fire", NULL,
+                             field_id, field_weight, LEO_FLOW_WONDER_BORN, episode_id);
             CHECK(fl->flow.n == 1 && fl->flow.snapshots[0].turn == 1 &&
-                  fl->flow.snapshots[0].glyph[0] == water &&
+                  fl->flow.snapshots[0].perceived[water] == 0.25f &&
+                  fl->flow.snapshots[0].perceived[fire] == 0.25f &&
+                  fl->flow.snapshots[0].perceived[tree] == 0.25f &&
+                  fl->flow.snapshots[0].perceived[sky] == 0.25f &&
+                  fl->flow.snapshots[0].expressed[fire] == 1.0f &&
+                  fl->flow.snapshots[0].field_token[0] == field_id[0] &&
+                  fl->flow.snapshots[0].wonder_id == episode_id &&
+                  fabsf(leo_flow_alignment(&fl->flow.snapshots[0]) - 0.5f) < 1e-5f &&
                   (fl->flow.snapshots[0].wonder & (LEO_FLOW_WONDER_BORN | LEO_FLOW_WONDER_OPEN)) ==
                   (LEO_FLOW_WONDER_BORN | LEO_FLOW_WONDER_OPEN),
-                  "flow: a lived reply records meaning and wonder state without authored text");
+                  "flow: both full 88-d faces survive the old top-3 horizon with episode identity");
+            episode->resolved = 1;
+            CHECK(leo_wonder_episode_id(episode) == episode_id,
+                  "flow: wonder identity survives episode state changes and is not a ring index");
+
+            memset(&fl->flow, 0, sizeof fl->flow);
             fl->school.pending[0] = 0;
-            fl->school.turn_clock = 2; leo_flow_observe(fl, "water", NULL, 0);
-            fl->school.turn_clock = 3; leo_flow_observe(fl, "fire", NULL, 0);
-            fl->school.turn_clock = 4; leo_flow_observe(fl, "fire", NULL, 0);
-            CHECK(leo_flow_kind(&fl->flow, water, 4) == LEO_FLOW_FADING &&
-                  leo_flow_kind(&fl->flow, fire, 4) == LEO_FLOW_EMERGING,
-                  "flow: lived-turn slopes distinguish fading from emerging meaning");
-            fl->school.turn_clock = 5; leo_flow_observe(fl, "water", NULL, LEO_FLOW_WONDER_RECALLED);
-            CHECK(leo_flow_kind(&fl->flow, water, 5) == LEO_FLOW_RETURNED &&
+            fl->school.turn_clock = 1; leo_flow_observe(fl, "water", "water", NULL, NULL, NULL, 0, 0);
+            fl->school.turn_clock = 2; leo_flow_observe(fl, "water", "water", NULL, NULL, NULL, 0, 0);
+            fl->school.turn_clock = 3; leo_flow_observe(fl, "fire", "fire", NULL, NULL, NULL, 0, 0);
+            fl->school.turn_clock = 4; leo_flow_observe(fl, "fire", "fire", NULL, NULL, NULL, 0, 0);
+            CHECK(leo_flow_kind(&fl->flow, water, 4, LEO_FLOW_PERCEIVED) == LEO_FLOW_FADING &&
+                  leo_flow_kind(&fl->flow, fire, 4, LEO_FLOW_PERCEIVED) == LEO_FLOW_EMERGING,
+                  "flow: full-field lived-turn slopes distinguish fading from emerging meaning");
+            fl->school.turn_clock = 5;
+            leo_flow_observe(fl, "water", "water", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_RECALLED, episode_id);
+            CHECK(leo_flow_kind(&fl->flow, water, 5, LEO_FLOW_PERCEIVED) == LEO_FLOW_RETURNED &&
                   (leo_flow_at(&fl->flow, fl->flow.n - 1)->wonder & LEO_FLOW_WONDER_RECALLED),
                   "flow: meaning can return after a real absence");
-            fl->school.turn_clock = 6; leo_flow_observe(fl, "zorble", NULL, 0);
+            fl->school.turn_clock = 6;
+            leo_flow_observe(fl, "zorble", NULL, NULL, NULL, NULL, 0, 0);
             const LeoFlowSnapshot *unknown = leo_flow_at(&fl->flow, fl->flow.n - 1);
-            CHECK(unknown && unknown->glyph[0] == -1 && unknown->gap == 1.0f,
+            float unknown_mass = 0.0f;
+            if (unknown) for (int g = 0; g < GLYPH_COUNT; g++) unknown_mass += unknown->perceived[g];
+            CHECK(unknown && unknown_mass == 0.0f && unknown->gap_perceived == 1.0f,
                   "flow: ungrasped meaning is observed as gap, not invented as a theme");
+
+            memset(&fl->flow, 0, sizeof fl->flow);
+            fl->school.turn_clock = 1; leo_flow_observe(fl, "water", "fire", NULL, NULL, NULL, 0, 0);
+            fl->school.turn_clock = 2; leo_flow_observe(fl, "water", "water", NULL, NULL, NULL, 0, 0);
+            fl->school.turn_clock = 3; leo_flow_observe(fl, "water", "fire", NULL, NULL, NULL, 0, 0);
+            CHECK(leo_flow_self_return(&fl->flow, fire, 3) &&
+                  leo_flow_strength(leo_flow_at(&fl->flow, 2), fire,
+                                    LEO_FLOW_PERCEIVED) == 0.0f,
+                  "flow: a self-return is Leo's earlier expression returning without present input");
 
             memset(&fl->flow, 0, sizeof fl->flow);
             for (int turn = 1; turn <= LEO_FLOW_RING + 6; turn++) {
                 fl->school.turn_clock = turn;
-                leo_flow_observe(fl, (turn & 1) ? "water" : "fire", NULL, 0);
+                leo_flow_observe(fl, (turn & 1) ? "water" : "fire",
+                                 (turn & 1) ? "fire" : "water", NULL,
+                                 field_id, field_weight, 0, 0);
             }
             CHECK(fl->flow.n == LEO_FLOW_RING && fl->flow.ptr == 6 &&
                   leo_flow_at(&fl->flow, 0)->turn == 7 &&
                   leo_flow_at(&fl->flow, LEO_FLOW_RING - 1)->turn == LEO_FLOW_RING + 6,
                   "flow: the bounded ring keeps the newest 64 lived turns in chronological order");
 
-            const char *state = "/tmp/leo_flow_v13.state";
-            const char *truncated = "/tmp/leo_flow_v13_cut.state";
+            const char *state = "/tmp/leo_flow_v14.state";
+            const char *legacy = "/tmp/leo_flow_v13.state";
+            const char *truncated = "/tmp/leo_flow_v14_cut.state";
             int saved = leo_save_state(fl, state);
             int woke = saved && leo_load_state(loaded, state);
             CHECK(woke && loaded->flow.n == LEO_FLOW_RING && loaded->flow.ptr == 6 &&
-                  leo_flow_at(&loaded->flow, 0)->turn == 7,
-                  "flow: the v13 temporal ledger survives sleep with ring order intact");
-            int built_cut = 0;
+                  leo_flow_at(&loaded->flow, 0)->turn == 7 &&
+                  leo_flow_at(&loaded->flow, 0)->field_token[0] == field_id[0] &&
+                  leo_flow_at(&loaded->flow, 0)->expressed[fire] == 1.0f,
+                  "flow: the v14 Janus ledger survives sleep with both faces and field intact");
+            int built_cut = 0, built_legacy = 0;
             FILE *fi = fopen(state, "rb");
             if (fi) {
                 fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
@@ -1407,16 +1470,49 @@ int main(void) {
                 if (bytes && sz > 1 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                     FILE *fo = fopen(truncated, "wb");
                     if (fo) { built_cut = (long)fwrite(bytes, 1, (size_t)(sz - 1), fo) == sz - 1; fclose(fo); }
+                    long current_tail = (long)(2 * sizeof(int32_t) +
+                                              fl->flow.n * (int)sizeof(LeoFlowSnapshot));
+                    long prefix = sz - current_tail;
+                    if (prefix > 0) {
+                        uint32_t thirteen = 13;
+                        memcpy(bytes + sizeof(uint32_t), &thirteen, sizeof thirteen);
+                        fo = fopen(legacy, "wb");
+                        if (fo) {
+                            int32_t n = fl->flow.n, ptr = fl->flow.ptr;
+                            built_legacy = (long)fwrite(bytes, 1, (size_t)prefix, fo) == prefix &&
+                                           fwrite(&n, sizeof n, 1, fo) == 1 &&
+                                           fwrite(&ptr, sizeof ptr, 1, fo) == 1;
+                            for (int i = 0; built_legacy && i < fl->flow.n; i++) {
+                                const LeoFlowSnapshot *cur = &fl->flow.snapshots[i];
+                                LeoFlowSnapshotV13 v13 = {0};
+                                v13.turn = cur->turn;
+                                leo_flow_top(cur->perceived, v13.glyph, v13.strength);
+                                v13.gap = cur->gap_perceived;
+                                v13.mode = cur->mode; v13.chamber = cur->chamber; v13.wonder = cur->wonder;
+                                built_legacy = fwrite(&v13, sizeof v13, 1, fo) == 1;
+                            }
+                            fclose(fo);
+                        }
+                    }
                 }
                 free(bytes); fclose(fi);
             }
             CHECK(built_cut && leo_load_state(cut, truncated) && cut->flow.n == 0 &&
                   cut->school.turn_clock == fl->school.turn_clock,
-                  "flow: a truncated v13 tail fails soft without erasing the lived body");
-            remove(state); remove(truncated);
-            leo_free(fl); leo_free(loaded); leo_free(cut);
+                  "flow: a truncated v14 tail fails soft without erasing the lived body");
+            int migrated = built_legacy && leo_load_state(old, legacy);
+            const LeoFlowSnapshot *oldest = migrated ? leo_flow_at(&old->flow, 0) : NULL;
+            float expressed_mass = 0.0f;
+            if (oldest) for (int g = 0; g < GLYPH_COUNT; g++) expressed_mass += oldest->expressed[g];
+            CHECK(migrated && old->flow.n == LEO_FLOW_RING && oldest && oldest->turn == 7 &&
+                  oldest->perceived[water] == 1.0f && expressed_mass == 0.0f &&
+                  oldest->field_token[0] == -1,
+                  "flow: v13 top-3 history migrates into the perceived face without invented output");
+            free(gravity);
+            remove(state); remove(legacy); remove(truncated);
+            leo_free(fl); leo_free(loaded); leo_free(cut); leo_free(old);
         }
-        free(fl); free(loaded); free(cut);
+        free(fl); free(loaded); free(cut); free(old);
 
         Leo *on = malloc(sizeof *on), *off = malloc(sizeof *off);
         CHECK(on && off, "flow: inert-voice fixtures allocated");

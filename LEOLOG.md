@@ -3119,3 +3119,46 @@ process-level A/B (`warm mother light`, seed 83) produced identical stdout SHA-2
 observe/save/reload/observe; TSan was clean on live `--chat --async`, save, process restart, and another
 reply. Across that restart, the diagnostic correctly recognized `water -> absence -> water` as `returned`.
 Flow remains evidence, not permission: no generative or asynchronous organ is gated by it in this phase.
+
+## Phase A.25 — Janus Flow: Leo can distinguish what he heard from what he continued (2026-07-21)
+
+The first Flow plateau deliberately stored only the three strongest perceived glyphs. That was enough to
+prove temporal motion but not enough to distinguish external entrainment from Leo's own return: a fourth
+meaning vanished merely because three neighbours were stronger, and there was no output face at all. Janus
+Flow v14 removes that amputation. Every one of the 64 lived-turn snapshots now carries the complete
+`perceived[88]` and `expressed[88]` fields, separate unknown gaps, mode/body/wonder state, and a stable
+wonder identity. The two semantic faces occupy 44 KiB for the whole ring; the complete ring remains about
+50 KiB. Top-3 survives only as a diagnostic computed from a full face, never as stored reality.
+
+The second face makes new distinctions without touching speech. Cosine alignment measures how much of the
+perceived field remained in the expression. Motion and slope can be derived independently on either face.
+A `self_return` is intentionally strict: the glyph is absent from the present input, absent from the prior
+output, alive in an older output, and expressed again now. Thus `water -> fire` is transformation rather
+than false persistence, while a later unprompted `fire` can be recognized as Leo continuing something of
+his own. These are readouts only; no generator, sampler, field update, School decision, or async ring reads
+them.
+
+The glyph alphabet is still an a priori perception basis, so v14 adds a third sparse layer rather than
+pretending 88 coordinates exhaust meaning. Before the prompt self-attractor raises any direct word, Flow
+selects up to eight strongest associated BPE tokens from Leo's own co-occurrence gravity. A candidate must
+decode to one whole word, must already exist in `LeoHeard`, cannot be a function token, cannot equal any
+prompt token or any boundary/case form of a prompt word, and cannot duplicate another selected word. This
+`field constellation` therefore records meanings Leo's field grew around the prompt, including words with
+no glyph coordinate, without smuggling the human line back into the observer.
+
+Wonder identity is not a recyclable ring index. A stable 64-bit fingerprint of the episode word and its
+opening step joins born, open, reasked, resolved, and recalled moments even if the physical episode slot is
+later reused. State v14 persists the full Janus record. The frozen v13 reader expands every old top-3 entry
+into the new perceived face while leaving output and constellation explicitly empty; a damaged v14 tail
+still fails soft without erasing the organism.
+
+Verification: `make test` **233/233** and normal `-Wall -Wextra` build clean. Units prove that four equal
+glyphs all survive (the old fourth-coordinate loss), input/output separation and alignment, lived-turn
+motion on the full face, strict self-return, prompt-word exclusion from a Leo-grown constellation, stable
+wonder identity, 64-turn ring order, v14 save/load, truncated-tail fail-soft behavior, and a constructed
+real v13 diary migrating without invented output. ASan/UBSan was clean across corpus ingest,
+observe/save/reload/observe. TSan was clean through live `--chat --async`, four replies, Flow diagnostics,
+and state save. A process A/B (`warm mother light`, seed 83) produced identical stdout SHA-256 with Flow on
+and `--no-flow`: `6db704a29de6a6e652528fbe9d5fafbd3e6c37a853f02581fb2e1794d08c9111`.
+Janus Flow is still proprioception, not authority; short/long currents and any speech-side use remain a
+separate, gated phase.
