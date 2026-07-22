@@ -3162,3 +3162,54 @@ and state save. A process A/B (`warm mother light`, seed 83) produced identical 
 and `--no-flow`: `6db704a29de6a6e652528fbe9d5fafbd3e6c37a853f02581fb2e1794d08c9111`.
 Janus Flow is still proprioception, not authority; short/long currents and any speech-side use remain a
 separate, gated phase.
+
+## Phase A.26 — dual current: the moment moves, unfinished wonder endures (2026-07-21)
+
+Janus Flow made perception and expression separately visible, but one bounded snapshot ring still mixed
+two different meanings of time. A local semantic movement belongs to the recent conversation; an
+unfinished wonder belongs to the interval from asking until grounding, however long that takes. Making
+both of them larger windows would confuse duration with identity. Dual current therefore uses two clocks
+with different geometry and keeps both read-only.
+
+The short current is derived from the existing eight lived-turn horizon and is never persisted as another
+copy of state. It computes complete `perceived_velocity[88]` and `expressed_velocity[88]` fields by linear
+regression over actual turn numbers. Diagnostics show the strongest real rise and fall on each face, or
+`none` when every velocity remains under the established slope threshold. This is the motion of the
+present: when input water fades while output fire rises, the two directions remain distinct.
+
+The long current is event-bounded instead. A `LeoFlowWonderCurrent` begins on a stable `wonder_id`, absorbs
+every born/open/reasked turn, includes the grounding turn, and freezes on resolution. A later recall can
+refer to that identity but cannot reopen or mutate its unfinished history. Each current carries running
+means of both full 88-glyph faces and the strongest eight words of its own-field constellation. The sparse
+field mean accounts for absence on each observed turn rather than only summing appearances. Thirty-two
+currents form a bounded ring; only completed oldest paths may be replaced, so unfinished not-knowing is
+never evicted to make room.
+
+The distinction matters beyond naming. In the acceptance probe, a wonder born at turn 1 remained intact
+after its birth snapshot had fallen out of the 64-turn ring; it closed at turn 71 and a recall at turn 72
+left `last_turn` and `observations` unchanged. State v15 persists that full event path. A v14 diary has no
+long-current tail, so load reconstructs only the honest portion still evidenced by its Janus snapshots.
+A truncated or corrupt v15 current tail preserves valid snapshots and performs the same bounded rebuild.
+The loader validates chronology, vector mass, finite sparse weights, unique identities, at most one
+unfinished current, and the observation count against the lived duration.
+
+Live ASan dialogue showed the two clocks independently:
+
+```text
+[flow-short: turns=1..3 in+=think(+0.500) in-=water(-0.250)
+             out+=think(+0.200) out-=water(-0.250)]
+[flow-wonder: id=89e90f552786b3f7 turns=1..3 observations=3 state=unfinished align=0.77]
+...
+[flow-wonder: id=89e90f552786b3f7 turns=1..4 observations=4 state=resolved align=0.64]
+```
+
+Verification: `make test` **239/239**; normal `-Wall -Wextra` build clean; `git diff --check` clean.
+Tests cover full two-face short velocity, birth/open/resolve/recall lifecycle, survival beyond the snapshot
+horizon, frozen resolved state, field-constellation averaging, v15 round-trip, v14 evidence-bounded rebuild,
+v13 migration with no invented current, corrupt-tail recovery, and 32-current ring order. ASan/UBSan was
+clean through a real four-turn unknown/answer dialogue, save, reload, and returned-wonder reply. TSan was
+clean through the same lifecycle under `--chat --async`. Flow on and `--no-flow` again produced identical
+stdout SHA-256 for `warm mother light`, seed 83:
+`6db704a29de6a6e652528fbe9d5fafbd3e6c37a853f02581fb2e1794d08c9111`.
+No sampler, candidate collector, gravity path, School decision, spore, shard, or background ring reads
+either current. The two clocks can now be observed before any future shadow scheduler earns permission.

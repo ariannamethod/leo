@@ -1468,6 +1468,7 @@ typedef struct {
 #define LEO_FLOW_TOPK       3
 #define LEO_FLOW_CONSTELLATION 8
 #define LEO_FLOW_WINDOW     8
+#define LEO_FLOW_CURRENT_RING LEO_WONDER_RING
 #define LEO_FLOW_SLOPE_EPS  0.015f
 #define LEO_FLOW_ACTIVE_EPS 0.08f
 #define LEO_FLOW_WONDER_OPEN     0x01u
@@ -1503,11 +1504,41 @@ typedef struct {
     uint8_t  wonder;
 } LeoFlowSnapshot;
 
+/* The long clock is not a larger arbitrary window. It is an event-bounded
+ * current: one unfinished wonder from its first lived question through the
+ * grounding turn that resolves it. Means remain in [0,1]; sparse field mass is
+ * the per-observation mean of Leo's associated words. Resolved currents freeze. */
+typedef struct {
+    uint64_t wonder_id;
+    uint64_t started_turn;
+    uint64_t last_turn;
+    uint64_t closed_turn;            /* 0 while unfinished */
+    uint32_t observations;
+    float    perceived_mean[GLYPH_COUNT];
+    float    expressed_mean[GLYPH_COUNT];
+    int32_t  field_token[LEO_FLOW_CONSTELLATION];
+    float    field_mean[LEO_FLOW_CONSTELLATION];
+    uint8_t  resolved;
+} LeoFlowWonderCurrent;
+
 typedef struct {
     LeoFlowSnapshot snapshots[LEO_FLOW_RING];
     int n;
     int ptr;                         /* next write; oldest entry when full */
+    LeoFlowWonderCurrent currents[LEO_FLOW_CURRENT_RING];
+    int n_currents;
+    int current_ptr;                 /* next write; oldest current when full */
 } LeoFlow;
+
+/* The short clock is derived, never persisted separately: a complete semantic
+ * velocity field over the recent lived-turn window on both Janus faces. */
+typedef struct {
+    uint64_t started_turn;
+    uint64_t last_turn;
+    int observations;
+    float perceived_velocity[GLYPH_COUNT];
+    float expressed_velocity[GLYPH_COUNT];
+} LeoFlowShortCurrent;
 
 enum {
     LEO_FLOW_QUIET = 0,
@@ -4971,6 +5002,182 @@ static float leo_flow_slope(const LeoFlow *flow, int glyph, int window, int face
     return den > 1e-9f ? ((float)window * sxy - sx * sy) / den : 0.0f;
 }
 
+static int leo_flow_short_current(const LeoFlow *flow, int window,
+                                  LeoFlowShortCurrent *out) {
+    if (!flow || !out || flow->n < 2) return 0;
+    memset(out, 0, sizeof *out);
+    if (window < 2) window = 2;
+    if (window > flow->n) window = flow->n;
+    const LeoFlowSnapshot *first = leo_flow_at(flow, flow->n - window);
+    const LeoFlowSnapshot *last = leo_flow_at(flow, flow->n - 1);
+    if (!first || !last) return 0;
+    out->started_turn = first->turn;
+    out->last_turn = last->turn;
+    out->observations = window;
+    for (int g = 0; g < GLYPH_COUNT; g++) {
+        out->perceived_velocity[g] = leo_flow_slope(flow, g, window, LEO_FLOW_PERCEIVED);
+        out->expressed_velocity[g] = leo_flow_slope(flow, g, window, LEO_FLOW_EXPRESSED);
+    }
+    return 1;
+}
+
+static const LeoFlowWonderCurrent *leo_flow_current_at(const LeoFlow *flow, int pos) {
+    if (!flow || pos < 0 || pos >= flow->n_currents) return NULL;
+    int start = flow->n_currents == LEO_FLOW_CURRENT_RING ? flow->current_ptr : 0;
+    return &flow->currents[(start + pos) % LEO_FLOW_CURRENT_RING];
+}
+
+static LeoFlowWonderCurrent *leo_flow_current_find(LeoFlow *flow, uint64_t wonder_id) {
+    if (!flow || !wonder_id) return NULL;
+    for (int i = 0; i < flow->n_currents; i++)
+        if (flow->currents[i].wonder_id == wonder_id) return &flow->currents[i];
+    return NULL;
+}
+
+static const LeoFlowWonderCurrent *leo_flow_current_find_const(const LeoFlow *flow,
+                                                               uint64_t wonder_id) {
+    if (!flow || !wonder_id) return NULL;
+    for (int i = 0; i < flow->n_currents; i++)
+        if (flow->currents[i].wonder_id == wonder_id) return &flow->currents[i];
+    return NULL;
+}
+
+static LeoFlowWonderCurrent *leo_flow_current_create(LeoFlow *flow,
+                                                     uint64_t wonder_id,
+                                                     uint64_t turn) {
+    if (!flow || !wonder_id) return NULL;
+    int at = flow->current_ptr;
+    LeoFlowWonderCurrent *current = &flow->currents[at];
+    if (flow->n_currents == LEO_FLOW_CURRENT_RING && !current->resolved)
+        return NULL;                 /* never evict unfinished not-knowing */
+    memset(current, 0, sizeof *current);
+    for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++) current->field_token[k] = -1;
+    current->wonder_id = wonder_id;
+    current->started_turn = turn;
+    current->last_turn = turn;
+    flow->current_ptr = (flow->current_ptr + 1) % LEO_FLOW_CURRENT_RING;
+    if (flow->n_currents < LEO_FLOW_CURRENT_RING) flow->n_currents++;
+    return current;
+}
+
+static void leo_flow_current_sort_field(LeoFlowWonderCurrent *current) {
+    for (int i = 0; i < LEO_FLOW_CONSTELLATION; i++) {
+        if (current->field_token[i] >= 0 && current->field_mean[i] <= 1e-8f) {
+            current->field_token[i] = -1;
+            current->field_mean[i] = 0.0f;
+        }
+    }
+    for (int i = 0; i < LEO_FLOW_CONSTELLATION; i++)
+        for (int j = i + 1; j < LEO_FLOW_CONSTELLATION; j++) {
+            int swap = current->field_token[i] < 0 ||
+                       (current->field_token[j] >= 0 &&
+                        (current->field_mean[j] > current->field_mean[i] ||
+                         (current->field_mean[j] == current->field_mean[i] &&
+                          current->field_token[j] < current->field_token[i])));
+            if (swap) {
+                int32_t id = current->field_token[i];
+                float mass = current->field_mean[i];
+                current->field_token[i] = current->field_token[j];
+                current->field_mean[i] = current->field_mean[j];
+                current->field_token[j] = id;
+                current->field_mean[j] = mass;
+            }
+        }
+}
+
+static void leo_flow_current_observe(LeoFlow *flow, const LeoFlowSnapshot *snap) {
+    if (!flow || !snap || !snap->wonder_id) return;
+    uint8_t lived = snap->wonder & (LEO_FLOW_WONDER_OPEN | LEO_FLOW_WONDER_BORN |
+                                    LEO_FLOW_WONDER_REASKED | LEO_FLOW_WONDER_RESOLVED);
+    if (!lived) return;              /* a later recall does not reopen the unfinished current */
+    LeoFlowWonderCurrent *current = leo_flow_current_find(flow, snap->wonder_id);
+    if (!current) current = leo_flow_current_create(flow, snap->wonder_id, snap->turn);
+    if (!current || current->resolved) return;
+
+    uint32_t old_n = current->observations;
+    uint32_t new_n = old_n == UINT32_MAX ? UINT32_MAX : old_n + 1;
+    float alpha = old_n == UINT32_MAX ? 0.0f : 1.0f / (float)new_n;
+    for (int g = 0; g < GLYPH_COUNT; g++) {
+        current->perceived_mean[g] += alpha * (snap->perceived[g] - current->perceived_mean[g]);
+        current->expressed_mean[g] += alpha * (snap->expressed[g] - current->expressed_mean[g]);
+    }
+
+    float keep = 1.0f - alpha;
+    for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++) current->field_mean[k] *= keep;
+    for (int k = 0; k < LEO_FLOW_CONSTELLATION && snap->field_token[k] >= 0; k++) {
+        int id = snap->field_token[k], at = -1;
+        for (int j = 0; j < LEO_FLOW_CONSTELLATION; j++)
+            if (current->field_token[j] == id) { at = j; break; }
+        if (at < 0) {
+            for (int j = 0; j < LEO_FLOW_CONSTELLATION; j++)
+                if (current->field_token[j] < 0) { at = j; break; }
+        }
+        float contribution = alpha * snap->field_weight[k];
+        if (at < 0) {
+            int weakest = 0;
+            for (int j = 1; j < LEO_FLOW_CONSTELLATION; j++)
+                if (current->field_mean[j] < current->field_mean[weakest]) weakest = j;
+            if (contribution > current->field_mean[weakest]) at = weakest;
+        }
+        if (at >= 0) {
+            if (current->field_token[at] != id) {
+                current->field_token[at] = id;
+                current->field_mean[at] = 0.0f;
+            }
+            current->field_mean[at] += contribution;
+        }
+    }
+    leo_flow_current_sort_field(current);
+    current->observations = new_n;
+    current->last_turn = snap->turn;
+    if (snap->wonder & LEO_FLOW_WONDER_RESOLVED) {
+        current->resolved = 1;
+        current->closed_turn = snap->turn;
+    }
+}
+
+static void leo_flow_rebuild_currents(LeoFlow *flow) {
+    if (!flow) return;
+    memset(flow->currents, 0, sizeof flow->currents);
+    flow->n_currents = 0;
+    flow->current_ptr = 0;
+    for (int i = 0; i < flow->n; i++)
+        leo_flow_current_observe(flow, leo_flow_at(flow, i));
+}
+
+static int leo_flow_current_valid(const Leo *leo,
+                                  const LeoFlowWonderCurrent *current,
+                                  uint64_t turn_clock) {
+    if (!leo || !current || !current->wonder_id || current->observations == 0 ||
+        current->started_turn > current->last_turn || current->last_turn > turn_clock ||
+        (uint64_t)current->observations > current->last_turn - current->started_turn + 1 ||
+        current->resolved > 1 ||
+        (current->resolved && current->closed_turn != current->last_turn) ||
+        (!current->resolved && current->closed_turn != 0)) return 0;
+    float perceived_sum = 0.0f, expressed_sum = 0.0f;
+    for (int g = 0; g < GLYPH_COUNT; g++) {
+        if (!isfinite(current->perceived_mean[g]) || current->perceived_mean[g] < 0.0f ||
+            current->perceived_mean[g] > 1.0f || !isfinite(current->expressed_mean[g]) ||
+            current->expressed_mean[g] < 0.0f || current->expressed_mean[g] > 1.0f)
+            return 0;
+        perceived_sum += current->perceived_mean[g];
+        expressed_sum += current->expressed_mean[g];
+    }
+    if (perceived_sum > 1.0001f || expressed_sum > 1.0001f) return 0;
+    float previous = 2.0f;
+    for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++) {
+        int id = current->field_token[k];
+        float mass = current->field_mean[k];
+        if (id < -1 || id >= leo->bpe.vocab_size || !isfinite(mass) ||
+            mass < 0.0f || mass > 1.0f || mass > previous + 1e-6f ||
+            (id < 0 && mass != 0.0f)) return 0;
+        for (int j = 0; j < k; j++)
+            if (id >= 0 && current->field_token[j] == id) return 0;
+        previous = mass;
+    }
+    return 1;
+}
+
 static int leo_flow_kind(const LeoFlow *flow, int glyph, int window, int face) {
     if (!flow || flow->n <= 0 || glyph < 0 || glyph >= GLYPH_COUNT) return LEO_FLOW_QUIET;
     if (window < 3) window = 3;
@@ -5075,6 +5282,7 @@ static void leo_flow_observe(Leo *leo, const char *prompt, const char *reply,
 
     LeoFlow *flow = &leo->flow;
     flow->snapshots[flow->ptr] = snap;
+    leo_flow_current_observe(flow, &snap);
     flow->ptr = (flow->ptr + 1) % LEO_FLOW_RING;
     if (flow->n < LEO_FLOW_RING) flow->n++;
 }
@@ -5626,9 +5834,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v12      : resolved-wonder recall count + cooldown clock
  *   v13      : passive Flow ring (top-3 perceived motion over lived turns)
  *   v14      : Janus Flow (full perceived/expressed fields + own-field constellation)
+ *   v15      : event-bounded unfinished-wonder currents beyond the snapshot horizon
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 14  /* Janus Flow appends a fail-soft tail; v5..v13 soft-migrate */
+#define LEO_STATE_VERSION 15  /* dual-time Flow appends a fail-soft tail; v5..v14 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -5805,6 +6014,14 @@ static int leo_save_state(const Leo *leo, const char *path) {
     if (leo->flow.n > 0)
         fwrite(leo->flow.snapshots, sizeof(LeoFlowSnapshot),
                (size_t)leo->flow.n, f);
+
+    /* Dual-time Flow (v15): event-bounded wonder currents persist after their
+     * birth snapshots leave the 64-turn horizon. */
+    st_w32(f, (int32_t)leo->flow.n_currents);
+    st_w32(f, (int32_t)leo->flow.current_ptr);
+    if (leo->flow.n_currents > 0)
+        fwrite(leo->flow.currents, sizeof(LeoFlowWonderCurrent),
+               (size_t)leo->flow.n_currents, f);
 
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
@@ -6221,6 +6438,48 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
+    /* Dual-time current tail (v15). This is independently fail-soft: valid
+     * Janus snapshots survive a damaged long-current summary and rebuild the
+     * portion still visible inside their 64-turn horizon. */
+    if (version >= 15) {
+        int32_t n = 0, ptr = 0;
+        int current_ok = st_r32(f, &n) && st_r32(f, &ptr) &&
+                         n >= 0 && n <= LEO_FLOW_CURRENT_RING &&
+                         ptr >= 0 && ptr < LEO_FLOW_CURRENT_RING &&
+                         ((n < LEO_FLOW_CURRENT_RING && ptr == n) ||
+                          n == LEO_FLOW_CURRENT_RING);
+        if (current_ok && n > 0 &&
+            fread(leo->flow.currents, sizeof(LeoFlowWonderCurrent),
+                  (size_t)n, f) != (size_t)n) current_ok = 0;
+        if (current_ok) {
+            leo->flow.n_currents = n;
+            leo->flow.current_ptr = ptr;
+            uint64_t previous_started = 0;
+            int unfinished = 0;
+            for (int i = 0; i < n; i++) {
+                const LeoFlowWonderCurrent *current = leo_flow_current_at(&leo->flow, i);
+                if (!leo_flow_current_valid(leo, current,
+                                            (uint64_t)leo->school.turn_clock) ||
+                    (i > 0 && current->started_turn < previous_started)) {
+                    current_ok = 0; break;
+                }
+                if (!current->resolved && ++unfinished > 1) { current_ok = 0; break; }
+                for (int j = 0; j < i; j++)
+                    if (leo_flow_current_at(&leo->flow, j)->wonder_id == current->wonder_id) {
+                        current_ok = 0; break;
+                    }
+                if (!current_ok) break;
+                previous_started = current->started_turn;
+            }
+        }
+        if (!current_ok) {
+            fprintf(stderr, "[leo] WARNING: v15 current tail truncated/corrupt — rebuilding visible currents from Flow.\n");
+            leo_flow_rebuild_currents(&leo->flow);
+        }
+    } else if (version >= 14) {
+        leo_flow_rebuild_currents(&leo->flow);
+    }
+
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
     leo_build_chamber_tags(leo);
@@ -6499,6 +6758,54 @@ static void print_flow_stats(const Leo *leo) {
         }
     }
     printf("]\n");
+
+    LeoFlowShortCurrent short_current;
+    if (leo_flow_short_current(&leo->flow, LEO_FLOW_WINDOW, &short_current)) {
+        int in_rise = -1, in_fall = -1, out_rise = -1, out_fall = -1;
+        for (int g = 0; g < GLYPH_COUNT; g++) {
+            if (in_rise < 0 || short_current.perceived_velocity[g] >
+                               short_current.perceived_velocity[in_rise]) in_rise = g;
+            if (in_fall < 0 || short_current.perceived_velocity[g] <
+                               short_current.perceived_velocity[in_fall]) in_fall = g;
+            if (out_rise < 0 || short_current.expressed_velocity[g] >
+                                short_current.expressed_velocity[out_rise]) out_rise = g;
+            if (out_fall < 0 || short_current.expressed_velocity[g] <
+                                short_current.expressed_velocity[out_fall]) out_fall = g;
+        }
+        printf("     [flow-short: turns=%llu..%llu in+=%s(%+.3f) in-=%s(%+.3f) out+=%s(%+.3f) out-=%s(%+.3f)]\n",
+               (unsigned long long)short_current.started_turn,
+               (unsigned long long)short_current.last_turn,
+               short_current.perceived_velocity[in_rise] > LEO_FLOW_SLOPE_EPS ?
+                   GLYPH_NAMES[in_rise] : "none",
+               (double)short_current.perceived_velocity[in_rise],
+               short_current.perceived_velocity[in_fall] < -LEO_FLOW_SLOPE_EPS ?
+                   GLYPH_NAMES[in_fall] : "none",
+               (double)short_current.perceived_velocity[in_fall],
+               short_current.expressed_velocity[out_rise] > LEO_FLOW_SLOPE_EPS ?
+                   GLYPH_NAMES[out_rise] : "none",
+               (double)short_current.expressed_velocity[out_rise],
+               short_current.expressed_velocity[out_fall] < -LEO_FLOW_SLOPE_EPS ?
+                   GLYPH_NAMES[out_fall] : "none",
+               (double)short_current.expressed_velocity[out_fall]);
+    }
+
+    const LeoFlowWonderCurrent *long_current =
+        leo_flow_current_find_const(&leo->flow, s->wonder_id);
+    if (!long_current)
+        for (int i = leo->flow.n_currents - 1; i >= 0; i--) {
+            const LeoFlowWonderCurrent *candidate = leo_flow_current_at(&leo->flow, i);
+            if (candidate && !candidate->resolved) { long_current = candidate; break; }
+        }
+    if (long_current) {
+        printf("     [flow-wonder: id=%016llx turns=%llu..%llu observations=%u state=%s align=%.2f]\n",
+               (unsigned long long)long_current->wonder_id,
+               (unsigned long long)long_current->started_turn,
+               (unsigned long long)long_current->last_turn,
+               long_current->observations,
+               long_current->resolved ? "resolved" : "unfinished",
+               (double)leo_vec_cosine(long_current->perceived_mean,
+                                      long_current->expressed_mean, GLYPH_COUNT));
+    }
 }
 
 /* callback for the bigram-successor probe */
