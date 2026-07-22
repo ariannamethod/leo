@@ -4913,6 +4913,14 @@ static uint64_t leo_wonder_episode_id(const LeoWonderEpisode *ep) {
     return h ? h : 1;
 }
 
+static const char *leo_wonder_word_for_id(const Leo *leo, uint64_t wonder_id) {
+    if (!leo || !wonder_id) return NULL;
+    for (int i = 0; i < leo->school.n_wonders; i++)
+        if (leo_wonder_episode_id(&leo->school.wonders[i]) == wonder_id)
+            return leo->school.wonders[i].word;
+    return NULL;
+}
+
 static void leo_wonder_return(Leo *leo) {
     int idx = leo_wonder_find_open(leo, leo->school.pending);
     if (idx >= 0) leo->school.wonders[idx].returns++;
@@ -5509,8 +5517,10 @@ static const char *leo_calibration_verdict_name(int verdict) {
 /* Judge the PREVIOUS proposal against this already-lived turn, before writing
  * a proposal for the next one. SPACE/HOLD both forbid immediate pressure;
  * HOLD additionally requires the unfinished identity not to disappear.
- * RELEASE requires that the same identity not reopen. */
-static void leo_shadow_calibrate(Leo *leo) {
+ * RELEASE requires that the same identity not reopen. A human who explicitly
+ * names the target confounds REASKED/REOPENED: that is a return invited from
+ * outside, not evidence that Leo applied autonomous pressure. */
+static void leo_shadow_calibrate(Leo *leo, const char *prompt) {
     if (!g_leo_shadow_on || !g_leo_flow_on || !leo ||
         leo->shadow.n <= 0 || leo->flow.n <= 0) return;
     const LeoShadowReceipt *proposal =
@@ -5547,8 +5557,12 @@ static void leo_shadow_calibrate(Leo *leo) {
                    (observed->wonder & (LEO_FLOW_WONDER_OPEN |
                                         LEO_FLOW_WONDER_BORN |
                                         LEO_FLOW_WONDER_REASKED));
+    const char *target_word = leo_wonder_word_for_id(leo, proposal->wonder_id);
+    int human_return = target_word && leo_flow_prompt_has_word(prompt, target_word);
 
     if (!adjacent) {
+        receipt.verdict = LEO_CALIB_UNSCORABLE;
+    } else if (human_return && (reasked || reopened)) {
         receipt.verdict = LEO_CALIB_UNSCORABLE;
     } else if (proposal->action == LEO_SHADOW_RELEASE) {
         if (reopened) receipt.verdict = LEO_CALIB_RELEASE_RELAPSE;
@@ -6111,7 +6125,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (leo->school.returned_episode >= 0) flow_event |= LEO_FLOW_WONDER_RECALLED;
     leo_flow_observe(leo, prompt, out, pm, flow_field_token, flow_field_weight,
                      flow_event, flow_wonder_id);  /* observation only: no generation path reads flow */
-    leo_shadow_calibrate(leo);                    /* judge t-1 only after t has become history */
+    leo_shadow_calibrate(leo, prompt);            /* judge t-1 only after t has become history */
     leo_shadow_observe(leo);                      /* after speech: a proposal for the next turn, never a reader */
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;

@@ -1671,7 +1671,7 @@ int main(void) {
             sh->school.turn_clock = 1;
             leo_flow_observe(sh, "water fire", "fire", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_BORN, id);
-            leo_shadow_calibrate(sh);
+            leo_shadow_calibrate(sh, "water fire");
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r0 = leo_shadow_at(&sh->shadow, 0);
             CHECK(r0 && r0->action == LEO_SHADOW_SPACE && r0->wonder_id == id &&
@@ -1681,7 +1681,7 @@ int main(void) {
 
             sh->school.turn_clock = 2;
             leo_flow_observe(sh, "I do not know", NULL, NULL, NULL, NULL, 0, id);
-            leo_shadow_calibrate(sh);
+            leo_shadow_calibrate(sh, "I do not know");
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r1 = leo_shadow_at(&sh->shadow, 1);
             CHECK(r1 && r1->action == LEO_SHADOW_HOLD && r1->gap < 0.01f &&
@@ -1696,7 +1696,7 @@ int main(void) {
             sh->school.turn_clock = 3;
             leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_REASKED, id);
-            leo_shadow_calibrate(sh);
+            leo_shadow_calibrate(sh, "water");
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r2 = leo_shadow_at(&sh->shadow, 2);
             CHECK(r2 && r2->action == LEO_SHADOW_SPACE &&
@@ -1712,7 +1712,7 @@ int main(void) {
             sh->school.turn_clock = 4;
             leo_flow_observe(sh, "animal", "animal", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_RESOLVED, id);
-            leo_shadow_calibrate(sh);
+            leo_shadow_calibrate(sh, "animal");
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r3 = leo_shadow_at(&sh->shadow, 3);
             CHECK(r3 && r3->action == LEO_SHADOW_RELEASE && r3->wonder_id == id &&
@@ -1726,7 +1726,7 @@ int main(void) {
             sh->school.turn_clock = 5;
             leo_flow_observe(sh, "water", "fire", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_RECALLED, id);
-            leo_shadow_calibrate(sh);
+            leo_shadow_calibrate(sh, "water");
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r4 = leo_shadow_at(&sh->shadow, 4);
             CHECK(r4 && r4->action == LEO_SHADOW_NONE && r4->wonder_id == 0,
@@ -1736,7 +1736,7 @@ int main(void) {
                   c3->verdict == LEO_CALIB_CONFIRMED && c3->brier == 0.0f &&
                   sh->calibration.n == 4,
                   "shadow-calibration: release survives recall without reopening the target");
-            leo_shadow_calibrate(sh);
+            leo_shadow_calibrate(sh, "water");
             CHECK(sh->calibration.n == 4,
                   "shadow-calibration: one observed turn cannot judge a proposal twice");
 
@@ -1816,14 +1816,14 @@ int main(void) {
             compat->school.turn_clock = 1;
             leo_flow_observe(compat, "water", "water", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_BORN, sleeping_id);
-            leo_shadow_calibrate(compat); leo_shadow_observe(compat);
+            leo_shadow_calibrate(compat, "water"); leo_shadow_observe(compat);
             int pending_saved = leo_save_state(compat, pending_state);
             leo_free(cut); leo_init(cut);
             int pending_loaded = pending_saved && leo_load_state(cut, pending_state);
             cut->school.turn_clock = 2;
             leo_flow_observe(cut, "I do not know", NULL, NULL, NULL, NULL, 0,
                              sleeping_id);
-            leo_shadow_calibrate(cut);
+            leo_shadow_calibrate(cut, "I do not know");
             const LeoCalibrationReceipt *after_sleep =
                 leo_calibration_at(&cut->calibration, 0);
             CHECK(pending_loaded && after_sleep && after_sleep->proposal_turn == 1 &&
@@ -1834,7 +1834,7 @@ int main(void) {
             for (int turn = 6; turn <= LEO_SHADOW_RING + 6; turn++) {
                 sh->school.turn_clock = turn;
                 leo_flow_observe(sh, "water", "water", NULL, NULL, NULL, 0, 0);
-                leo_shadow_calibrate(sh);
+                leo_shadow_calibrate(sh, "water");
                 leo_shadow_observe(sh);
             }
             CHECK(sh->shadow.n == LEO_SHADOW_RING && sh->shadow.ptr == 6 &&
@@ -1846,20 +1846,42 @@ int main(void) {
             memset(&sh->flow, 0, sizeof sh->flow);
             memset(&sh->shadow, 0, sizeof sh->shadow);
             memset(&sh->calibration, 0, sizeof sh->calibration);
+            strncpy(sh->school.pending, "returnword", sizeof sh->school.pending - 1);
+            LeoWonderEpisode *human_ep =
+                leo_wonder_open(sh, "returnword", water, fire);
+            uint64_t human_id = leo_wonder_episode_id(human_ep);
+            sh->school.turn_clock = 1;
+            leo_flow_observe(sh, "What is a returnword?", "Returnword?",
+                             NULL, NULL, NULL, LEO_FLOW_WONDER_BORN, human_id);
+            leo_shadow_calibrate(sh, "What is a returnword?");
+            leo_shadow_observe(sh);
+            sh->school.turn_clock = 2;
+            leo_flow_observe(sh, "Do you remember returnword?", "Returnword?",
+                             NULL, NULL, NULL, LEO_FLOW_WONDER_REASKED, human_id);
+            leo_shadow_calibrate(sh, "Do you remember returnword?");
+            const LeoCalibrationReceipt *human_return =
+                leo_calibration_at(&sh->calibration, 0);
+            CHECK(human_return && human_return->verdict == LEO_CALIB_UNSCORABLE &&
+                  human_return->brier == 0.0f,
+                  "shadow-calibration: a human-invited return is not autonomous pressure");
+
+            memset(&sh->flow, 0, sizeof sh->flow);
+            memset(&sh->shadow, 0, sizeof sh->shadow);
+            memset(&sh->calibration, 0, sizeof sh->calibration);
             strncpy(sh->school.pending, "lost", sizeof sh->school.pending - 1);
             uint64_t lost_id = 0x1020304050607080ULL;
             sh->school.turn_clock = 1;
             leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_BORN, lost_id);
-            leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+            leo_shadow_calibrate(sh, "water"); leo_shadow_observe(sh);
             sh->school.turn_clock = 2;
             leo_flow_observe(sh, "I do not know", NULL, NULL, NULL, NULL, 0, lost_id);
-            leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+            leo_shadow_calibrate(sh, "I do not know"); leo_shadow_observe(sh);
             memset(&sh->flow, 0, sizeof sh->flow);   /* adversarial disappearance without resolve */
             sh->school.pending[0] = 0;
             sh->school.turn_clock = 3;
             leo_flow_observe(sh, "water", "water", NULL, NULL, NULL, 0, 0);
-            leo_shadow_calibrate(sh);
+            leo_shadow_calibrate(sh, "water");
             const LeoCalibrationReceipt *missed =
                 leo_calibration_at(&sh->calibration, sh->calibration.n - 1);
             CHECK(missed && missed->verdict == LEO_CALIB_MISSED_OPENING &&
@@ -1875,12 +1897,12 @@ int main(void) {
             leo_flow_observe(sh, "animal", "animal", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_BORN | LEO_FLOW_WONDER_RESOLVED,
                              relapse_id);
-            leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+            leo_shadow_calibrate(sh, "animal"); leo_shadow_observe(sh);
             strncpy(sh->school.pending, "relapse", sizeof sh->school.pending - 1);
             sh->school.turn_clock = 2;
             leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_REASKED, relapse_id);
-            leo_shadow_calibrate(sh);
+            leo_shadow_calibrate(sh, "water");
             const LeoCalibrationReceipt *relapse =
                 leo_calibration_at(&sh->calibration, 0);
             CHECK(relapse && relapse->verdict == LEO_CALIB_RELEASE_RELAPSE,
@@ -1896,19 +1918,19 @@ int main(void) {
                 sh->school.turn_clock = ++turn;
                 leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
                                  LEO_FLOW_WONDER_BORN, cycle_id);
-                leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+                leo_shadow_calibrate(sh, "water"); leo_shadow_observe(sh);
                 sh->school.turn_clock = ++turn;
                 leo_flow_observe(sh, "water", "water", NULL, NULL, NULL, 0, cycle_id);
-                leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+                leo_shadow_calibrate(sh, "water"); leo_shadow_observe(sh);
                 sh->school.pending[0] = 0;
                 sh->school.turn_clock = ++turn;
                 leo_flow_observe(sh, "animal", "animal", NULL, NULL, NULL,
                                  LEO_FLOW_WONDER_RESOLVED, cycle_id);
-                leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+                leo_shadow_calibrate(sh, "animal"); leo_shadow_observe(sh);
                 sh->school.turn_clock = ++turn;
                 leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
                                  LEO_FLOW_WONDER_RECALLED, cycle_id);
-                leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+                leo_shadow_calibrate(sh, "water"); leo_shadow_observe(sh);
             }
             const LeoCalibrationReceipt *oldest_cal =
                 leo_calibration_at(&sh->calibration, 0);
