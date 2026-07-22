@@ -1,0 +1,5 @@
+# Space should allow uncertainty to continue without inventing closure.
+What is a glim?
+I do not know.
+Maybe nobody knows yet.
+Can we keep wondering?

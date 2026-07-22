@@ -14,7 +14,7 @@ ifneq ($(wildcard $(AML_SRC)),)   # the ONLY AML source is the vendored copy in 
   AML_FLAGS := -DHAVE_AML -Iariannamethod
 endif
 
-.PHONY: all test asan tsan clean run
+.PHONY: all test asan tsan clean run dialogue-probe
 
 all: leo
 
@@ -28,10 +28,14 @@ leo: leo.c $(AML_LIB)
 run: leo
 	./leo
 
+dialogue-probe: leo
+	./scripts/shadow_dialogue_probe.sh
+
 # unit tests — test_leo.c #includes leo.c with LEO_NO_MAIN
 test: tests/test_leo.c leo.c
 	$(CC) -DLEO_NO_MAIN tests/test_leo.c $(CFLAGS) -o tests/test_leo
 	./tests/test_leo
+	./scripts/test_shadow_dialogue_report.sh
 
 # address + undefined behaviour sanitizers on the smoke run
 asan: leo.c
