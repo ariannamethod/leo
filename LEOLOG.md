@@ -3295,7 +3295,17 @@ Live four-turn output produced three causally delayed verdicts:
 [shadow-calibration: proposal=3 observed=4 verdict=confirmed scored=3 confirmed=3 brier=0.035]
 ```
 
-Verification: `make test` **261/261** and normal `-Wall -Wextra` build clean. The suite covers delayed
+A first scripted conversation corpus then exposed a causal confound hidden by the synthetic lifecycle.
+After several unrelated turns, the human explicitly asked `Do you remember vesperling?`; Leo answered
+`Vesperling?`, and calibration called that `false-pressure` merely because the observed event was
+`REASKED`. That verdict pretended the return was autonomous even though the human had named its exact
+target. Calibration now resolves the proposal's stable identity back to its Wonder word and marks a
+human-invited `REASKED` or `REOPENED` event `unscorable` with zero Brier. The same event without the target
+in the human prompt remains a real `false-pressure` or `release-relapse`. The observer therefore separates
+Leo's initiative from an invitation before assigning blame; generation and the state-v17 layout remain
+unchanged.
+
+Verification: `make test` **262/262** and normal `-Wall -Wextra` build clean. The suite covers delayed
 single evaluation, all three failure verdicts, Brier integrity, bounded chronology, v17 round-trip,
 pending-proposal continuation across sleep, honest v16 migration, corrupt-tail isolation, cosine epsilon
 canonicalization, and the older v5-v16 migrations. ASan/UBSan was clean through dialogue, save, reload,
