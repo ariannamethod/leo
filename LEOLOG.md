@@ -3317,3 +3317,42 @@ four-turn process, SHA-256:
 Calibration is still evidence, not authority. The next decision should be made from a real conversation
 corpus of receipts: estimate verdict rates and confidence reliability by action and context, then decide
 whether any single reversible scheduling gate has earned a guarded experiment.
+
+## Phase A.29 — conversations become causal evidence (2026-07-23)
+
+The first calibration corpus is an external observatory rather than another organ in `leo.c`.
+`scripts/shadow_dialogue_probe.sh` starts every `.txt` scenario from the same clean corpus, runs explicit
+seeds through the real `--chat` process, preserves the complete raw transcript, and emits one TSV row that
+joins proposal turn `t` to the actual human prompt, full multi-line Leo reply, and verdict at `t+1`.
+The final proposal remains pending in public; the runner never invents a future to improve its score.
+`unscorable` is reported separately from both scored and pending receipts.
+
+Five initial scenarios separate continuing uncertainty, human grounding, counter-question, explicit
+human recall, and association-driven return. At seeds `83 137 211` the clean matrix produced:
+
+```text
+proposals=69 scored=48 unscorable=6 pending=15
+confirmed=45 false-pressure=3
+hold: 19 confirmed, mean confidence 0.777
+space: 23 confirmed, 3 false-pressure, 6 unscorable, mean scored confidence 0.881
+release: 3 confirmed, mean confidence 1.000
+```
+
+All six confounded receipts were exact human invitations: three counter-questions repeated `talven`, and
+three explicit `Do you remember vesperling?` turns repeated `vesperling`. All became `unscorable` after
+the causal correction. The three real failures were seed-invariant and did not name the target: after
+`glimmerfox` remained unknown and the dialogue moved away, `The water moves under the moon` resonated
+with Leo's own `water/fire` hypotheses and School emitted `Glimmerfox? Water or Fire?` despite the prior
+`space` proposal. The observatory therefore both cleared a false accusation and preserved a reproducible
+case of autonomous pressure.
+
+The parser has a synthetic regression for causal turn joining, full multi-line replies, pending tails,
+and `unscorable` preservation. `make test` remains the body suite plus this cheap report-contract check;
+`make dialogue-probe` runs the live corpus and writes only to a fresh temporary directory. No state is
+saved, no threshold is tuned, and no result is read by generation. A model-driven interlocutor can later
+replace or extend the fixed scenario files without becoming a hidden judge: its exact prompts, seed, raw
+replies, and every receipt remain the evidence.
+
+The current 48 scored receipts are enough to validate the instrument, not enough to grant the shadow
+authority. The next corpus should combine longer human conversations, a persistent Leo state, and an
+external interlocutor instructed to vary epistemic posture while never seeing the scheduler verdicts.

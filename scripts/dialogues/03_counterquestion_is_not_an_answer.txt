@@ -1,0 +1,5 @@
+# Dialogue about the question must not counterfeit grounded meaning.
+What is a talven?
+What do you think a talven is?
+Could it be a sound?
+I still do not know.
