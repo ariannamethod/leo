@@ -3257,3 +3257,53 @@ byte-identical with scheduler on and `--no-shadow`:
 This phase grants observation, not will. The next honest step is calibration: replay receipts against
 what the human and Wonder actually did next, measure false pressure and missed openings, and keep that
 evaluation in shadow before any proposal is allowed to alter a token.
+
+## Phase A.28 — the next turn judges the shadow (2026-07-23)
+
+Shadow confidence is no longer allowed to validate itself on the turn where it was produced. After reply
+`t` becomes immutable history, the scheduler proposes for `t+1`. Only after reply `t+1` and its Flow
+snapshot exist does `leo_shadow_calibrate` judge the prior proposal; the new proposal for `t+2` is written
+after that verdict. Reload preserves this ordering: an unevaluated proposal saved at sleep receives its
+first verdict from the first lived turn after waking.
+
+Calibration judges scheduling semantics rather than trying to predict the human's sentence. `space` is
+not wrong when the human says "I do not know"; allowing that answer was the point. Instead, the ledger
+names structural failures: `false-pressure` when the existing organism reasks immediately despite a
+`hold/space` proposal, `missed-opening` when an unfinished target disappears without resolution, and
+`release-relapse` when the same released identity returns open. Everything else is `confirmed`; a
+non-adjacent turn is `unscorable`, never silently paired. Confidence is recorded with a Brier score, but
+no threshold or weight is adapted online. Measurement precedes self-modification.
+
+Each `LeoCalibrationReceipt` copies the proposal turn, observed turn, stable wonder identity, proposed
+action and confidence, observed Wonder event, verdict, and Brier error. The 64-entry ring is independent
+of the proposal ring and remains read-only to generation. State v17 appends this ledger after the v16
+shadow tail. A v16 body wakes with no retroactive verdicts; a damaged v17 tail discards only calibration
+while preserving Flow and shadow; verdict chronology and semantic evidence are validated on load.
+
+The first process-level save/reload found a floating-point boundary that synthetic vectors missed:
+cosine alignment for a perfect live match was `1.00000012`. The v16 loader correctly rejected values over
+its stated unit interval, but that made an honest live receipt look corrupt. New receipts now clamp cosine
+at birth. Existing v16/v17 states accept only a `1e-4` numerical halo and canonicalize all scalar evidence
+back into `[0,1]` during load. A dedicated regression writes `1+epsilon`, sleeps, and proves it wakes as
+exactly `1.0`.
+
+Live four-turn output produced three causally delayed verdicts:
+
+```text
+[shadow-calibration: proposal=1 observed=2 verdict=confirmed scored=1 confirmed=1 brier=0.003]
+[shadow-calibration: proposal=2 observed=3 verdict=confirmed scored=2 confirmed=2 brier=0.032]
+[shadow-calibration: proposal=3 observed=4 verdict=confirmed scored=3 confirmed=3 brier=0.035]
+```
+
+Verification: `make test` **261/261** and normal `-Wall -Wextra` build clean. The suite covers delayed
+single evaluation, all three failure verdicts, Brier integrity, bounded chronology, v17 round-trip,
+pending-proposal continuation across sleep, honest v16 migration, corrupt-tail isolation, cosine epsilon
+canonicalization, and the older v5-v16 migrations. ASan/UBSan was clean through dialogue, save, reload,
+and the next verdict. TSan was clean through the lifecycle under `--chat --async` with state save. After
+removing only `[shadow...]` diagnostics, `shadow on` and `--no-shadow` remained byte-identical across the
+four-turn process, SHA-256:
+`c7ab391bcd49b8e3acfbde03ca057350d970f3429aaee765ca251b5587d86b02`.
+
+Calibration is still evidence, not authority. The next decision should be made from a real conversation
+corpus of receipts: estimate verdict rates and confidence reliability by action and context, then decide
+whether any single reversible scheduling gate has earned a guarded experiment.

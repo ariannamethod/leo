@@ -1138,11 +1138,13 @@ int main(void) {
                                       sizeof(LeoWonderEpisode));
                 long shadow_tail = (long)(2 * sizeof(int32_t) +
                                           w.shadow.n * (int)sizeof(LeoShadowReceipt));
+                long calibration_tail = (long)(2 * sizeof(int32_t) +
+                                               w.calibration.n * (int)sizeof(LeoCalibrationReceipt));
                 long current_flow = (long)(2 * sizeof(int32_t) +
                                            w.flow.n * (int)sizeof(LeoFlowSnapshot) +
                                            2 * sizeof(int32_t) +
                                            w.flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
-                                           shadow_tail);
+                                           shadow_tail + calibration_tail);
                 if (sz > v12tail + current_flow) {
                     long flow_start = sz - current_flow;
                     long tail_start = flow_start - v12tail;
@@ -1519,11 +1521,14 @@ int main(void) {
                 if (bytes && sz > 1 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                     long shadow_tail = (long)(2 * sizeof(int32_t) +
                                               fl->shadow.n * (int)sizeof(LeoShadowReceipt));
+                    long calibration_tail = (long)(2 * sizeof(int32_t) +
+                                                   fl->calibration.n *
+                                                       (int)sizeof(LeoCalibrationReceipt));
                     long current_tail = (long)(2 * sizeof(int32_t) +
                                               fl->flow.n * (int)sizeof(LeoFlowSnapshot) +
                                               2 * sizeof(int32_t) +
                                               fl->flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
-                                              shadow_tail);
+                                              shadow_tail + calibration_tail);
                     long prefix = sz - current_tail;
                     if (prefix > 0) {
                         long current_only = (long)(2 * sizeof(int32_t) +
@@ -1533,8 +1538,9 @@ int main(void) {
                         FILE *fo = fopen(truncated, "wb");
                         if (fo) {
                             built_cut = (long)fwrite(bytes, 1,
-                                                     (size_t)(sz - shadow_tail - 1), fo) ==
-                                        sz - shadow_tail - 1;
+                                                     (size_t)(sz - calibration_tail -
+                                                              shadow_tail - 1), fo) ==
+                                        sz - calibration_tail - shadow_tail - 1;
                             fclose(fo);
                         }
                         uint32_t fourteen = 14;
@@ -1542,8 +1548,9 @@ int main(void) {
                         fo = fopen(legacy14, "wb");
                         if (fo) {
                             built_legacy14 = (long)fwrite(bytes, 1,
-                                                         (size_t)(sz - shadow_tail - current_only), fo) ==
-                                             sz - shadow_tail - current_only;
+                                                         (size_t)(sz - calibration_tail -
+                                                                  shadow_tail - current_only), fo) ==
+                                             sz - calibration_tail - shadow_tail - current_only;
                             fclose(fo);
                         }
                         uint32_t thirteen = 13;
@@ -1649,10 +1656,11 @@ int main(void) {
         g_leo_flow_on = 1;
         g_leo_shadow_on = 1;
         Leo *sh = malloc(sizeof *sh), *woke = malloc(sizeof *woke),
-            *old = malloc(sizeof *old), *cut = malloc(sizeof *cut);
-        CHECK(sh && woke && old && cut, "shadow: heap fixtures allocated");
-        if (sh && woke && old && cut) {
-            leo_init(sh); leo_init(woke); leo_init(old); leo_init(cut);
+            *old = malloc(sizeof *old), *compat = malloc(sizeof *compat),
+            *cut = malloc(sizeof *cut);
+        CHECK(sh && woke && old && compat && cut, "shadow: heap fixtures allocated");
+        if (sh && woke && old && compat && cut) {
+            leo_init(sh); leo_init(woke); leo_init(old); leo_init(compat); leo_init(cut);
             int water = semtok_word("water"), fire = semtok_word("fire");
             strncpy(sh->school.pending, "zorble", sizeof sh->school.pending - 1);
             sh->school.pending_glyph = water;
@@ -1663,6 +1671,7 @@ int main(void) {
             sh->school.turn_clock = 1;
             leo_flow_observe(sh, "water fire", "fire", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_BORN, id);
+            leo_shadow_calibrate(sh);
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r0 = leo_shadow_at(&sh->shadow, 0);
             CHECK(r0 && r0->action == LEO_SHADOW_SPACE && r0->wonder_id == id &&
@@ -1672,44 +1681,72 @@ int main(void) {
 
             sh->school.turn_clock = 2;
             leo_flow_observe(sh, "I do not know", NULL, NULL, NULL, NULL, 0, id);
+            leo_shadow_calibrate(sh);
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r1 = leo_shadow_at(&sh->shadow, 1);
             CHECK(r1 && r1->action == LEO_SHADOW_HOLD && r1->gap < 0.01f &&
                   r1->grounded_mass == 0.0f &&
                   (r1->reasons & LEO_SHADOW_REASON_UNGROUNDED),
                   "shadow: known words for not-knowing cannot counterfeit grounded movement");
+            const LeoCalibrationReceipt *c0 = leo_calibration_at(&sh->calibration, 0);
+            CHECK(c0 && c0->proposal_turn == 1 && c0->observed_turn == 2 &&
+                  c0->verdict == LEO_CALIB_CONFIRMED && c0->brier > 0.0f,
+                  "shadow-calibration: space is confirmed when the next turn applies no pressure");
 
             sh->school.turn_clock = 3;
             leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_REASKED, id);
+            leo_shadow_calibrate(sh);
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r2 = leo_shadow_at(&sh->shadow, 2);
             CHECK(r2 && r2->action == LEO_SHADOW_SPACE &&
                   (r2->reasons & LEO_SHADOW_REASON_ASKED),
                   "shadow: a re-asked wonder again yields the next turn to the human");
+            const LeoCalibrationReceipt *c1 = leo_calibration_at(&sh->calibration, 1);
+            CHECK(c1 && c1->proposal_turn == 2 &&
+                  c1->verdict == LEO_CALIB_FALSE_PRESSURE &&
+                  c1->brier > r1->confidence * r1->confidence - 1e-6f,
+                  "shadow-calibration: an immediate re-ask is visible as false pressure");
 
             sh->school.pending[0] = 0;
             sh->school.turn_clock = 4;
             leo_flow_observe(sh, "animal", "animal", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_RESOLVED, id);
+            leo_shadow_calibrate(sh);
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r3 = leo_shadow_at(&sh->shadow, 3);
             CHECK(r3 && r3->action == LEO_SHADOW_RELEASE && r3->wonder_id == id &&
                   r3->reasons == LEO_SHADOW_REASON_RESOLVED && r3->confidence == 1.0f,
                   "shadow: grounded closure is acknowledged exactly as release");
+            const LeoCalibrationReceipt *c2 = leo_calibration_at(&sh->calibration, 2);
+            CHECK(c2 && c2->proposal_turn == 3 &&
+                  c2->verdict == LEO_CALIB_CONFIRMED,
+                  "shadow-calibration: space can end in grounding without becoming an error");
 
             sh->school.turn_clock = 5;
             leo_flow_observe(sh, "water", "fire", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_RECALLED, id);
+            leo_shadow_calibrate(sh);
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r4 = leo_shadow_at(&sh->shadow, 4);
             CHECK(r4 && r4->action == LEO_SHADOW_NONE && r4->wonder_id == 0,
                   "shadow: later recall cannot counterfeit a second closure");
+            const LeoCalibrationReceipt *c3 = leo_calibration_at(&sh->calibration, 3);
+            CHECK(c3 && c3->proposal_turn == 4 &&
+                  c3->verdict == LEO_CALIB_CONFIRMED && c3->brier == 0.0f &&
+                  sh->calibration.n == 4,
+                  "shadow-calibration: release survives recall without reopening the target");
+            leo_shadow_calibrate(sh);
+            CHECK(sh->calibration.n == 4,
+                  "shadow-calibration: one observed turn cannot judge a proposal twice");
 
-            const char *state = "/tmp/leo_shadow_v16.state";
+            const char *state = "/tmp/leo_shadow_v17.state";
             const char *legacy = "/tmp/leo_shadow_v15.state";
-            const char *truncated = "/tmp/leo_shadow_v16_cut.state";
-            int saved = leo_save_state(sh, state), built_old = 0, built_cut = 0;
+            const char *legacy16 = "/tmp/leo_shadow_v16.state";
+            const char *truncated = "/tmp/leo_shadow_v17_cut.state";
+            sh->shadow.receipts[0].face_alignment = 1.0f + 1e-7f;
+            int saved = leo_save_state(sh, state), built_old = 0,
+                built_compat = 0, built_cut = 0;
             FILE *fi = fopen(state, "rb");
             if (fi) {
                 fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
@@ -1717,17 +1754,30 @@ int main(void) {
                 if (bytes && sz > 1 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                     long shadow_tail = (long)(2 * sizeof(int32_t) +
                                               sh->shadow.n * (int)sizeof(LeoShadowReceipt));
+                    long calibration_tail = (long)(2 * sizeof(int32_t) +
+                                                   sh->calibration.n *
+                                                       (int)sizeof(LeoCalibrationReceipt));
                     uint32_t fifteen = 15;
                     memcpy(bytes + sizeof(uint32_t), &fifteen, sizeof fifteen);
                     FILE *fo = fopen(legacy, "wb");
                     if (fo) {
                         built_old = (long)fwrite(bytes, 1,
-                                                 (size_t)(sz - shadow_tail), fo) ==
-                                    sz - shadow_tail;
+                                                 (size_t)(sz - calibration_tail -
+                                                          shadow_tail), fo) ==
+                                    sz - calibration_tail - shadow_tail;
                         fclose(fo);
                     }
                     uint32_t sixteen = 16;
                     memcpy(bytes + sizeof(uint32_t), &sixteen, sizeof sixteen);
+                    fo = fopen(legacy16, "wb");
+                    if (fo) {
+                        built_compat = (long)fwrite(bytes, 1,
+                                                    (size_t)(sz - calibration_tail), fo) ==
+                                       sz - calibration_tail;
+                        fclose(fo);
+                    }
+                    uint32_t seventeen = 17;
+                    memcpy(bytes + sizeof(uint32_t), &seventeen, sizeof seventeen);
                     fo = fopen(truncated, "wb");
                     if (fo) {
                         built_cut = (long)fwrite(bytes, 1, (size_t)(sz - 1), fo) == sz - 1;
@@ -1741,18 +1791,50 @@ int main(void) {
                 loaded ? leo_shadow_at(&woke->shadow, 3) : NULL;
             CHECK(loaded && woke->shadow.n == 5 && woke_release &&
                   woke_release->action == LEO_SHADOW_RELEASE &&
-                  woke_release->wonder_id == id,
-                  "shadow: v16 sleep preserves the counterfactual receipt trail");
+                  woke_release->wonder_id == id && woke->calibration.n == 4 &&
+                  leo_shadow_at(&woke->shadow, 0)->face_alignment == 1.0f &&
+                  leo_calibration_at(&woke->calibration, 1)->verdict ==
+                      LEO_CALIB_FALSE_PRESSURE,
+                  "shadow-calibration: v17 sleep preserves verdicts and canonicalizes cosine epsilon");
             CHECK(built_old && leo_load_state(old, legacy) && old->flow.n == 5 &&
-                  old->flow.n_currents == 1 && old->shadow.n == 0,
+                  old->flow.n_currents == 1 && old->shadow.n == 0 &&
+                  old->calibration.n == 0,
                   "shadow: a v15 body migrates without invented proposals");
+            CHECK(built_compat && leo_load_state(compat, legacy16) &&
+                  compat->flow.n == 5 && compat->shadow.n == 5 &&
+                  compat->calibration.n == 0,
+                  "shadow-calibration: a v16 body migrates without retroactive verdicts");
             CHECK(built_cut && leo_load_state(cut, truncated) && cut->flow.n == 5 &&
-                  cut->flow.n_currents == 1 && cut->shadow.n == 0,
-                  "shadow: a corrupt v16 receipt tail leaves both Flow clocks intact");
+                  cut->flow.n_currents == 1 && cut->shadow.n == 5 &&
+                  cut->calibration.n == 0,
+                  "shadow-calibration: a corrupt v17 verdict tail preserves proposals and Flow");
+
+            const char *pending_state = "/tmp/leo_shadow_pending_v17.state";
+            leo_free(compat); leo_init(compat);
+            strncpy(compat->school.pending, "sleeping", sizeof compat->school.pending - 1);
+            uint64_t sleeping_id = 0x1717171717171717ULL;
+            compat->school.turn_clock = 1;
+            leo_flow_observe(compat, "water", "water", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_BORN, sleeping_id);
+            leo_shadow_calibrate(compat); leo_shadow_observe(compat);
+            int pending_saved = leo_save_state(compat, pending_state);
+            leo_free(cut); leo_init(cut);
+            int pending_loaded = pending_saved && leo_load_state(cut, pending_state);
+            cut->school.turn_clock = 2;
+            leo_flow_observe(cut, "I do not know", NULL, NULL, NULL, NULL, 0,
+                             sleeping_id);
+            leo_shadow_calibrate(cut);
+            const LeoCalibrationReceipt *after_sleep =
+                leo_calibration_at(&cut->calibration, 0);
+            CHECK(pending_loaded && after_sleep && after_sleep->proposal_turn == 1 &&
+                  after_sleep->observed_turn == 2 &&
+                  after_sleep->verdict == LEO_CALIB_CONFIRMED,
+                  "shadow-calibration: an unevaluated proposal receives its next-turn verdict after sleep");
 
             for (int turn = 6; turn <= LEO_SHADOW_RING + 6; turn++) {
                 sh->school.turn_clock = turn;
                 leo_flow_observe(sh, "water", "water", NULL, NULL, NULL, 0, 0);
+                leo_shadow_calibrate(sh);
                 leo_shadow_observe(sh);
             }
             CHECK(sh->shadow.n == LEO_SHADOW_RING && sh->shadow.ptr == 6 &&
@@ -1761,10 +1843,88 @@ int main(void) {
                       LEO_SHADOW_RING + 6,
                   "shadow: the receipt diary is bounded and chronologically ordered");
 
-            remove(state); remove(legacy); remove(truncated);
-            leo_free(sh); leo_free(woke); leo_free(old); leo_free(cut);
+            memset(&sh->flow, 0, sizeof sh->flow);
+            memset(&sh->shadow, 0, sizeof sh->shadow);
+            memset(&sh->calibration, 0, sizeof sh->calibration);
+            strncpy(sh->school.pending, "lost", sizeof sh->school.pending - 1);
+            uint64_t lost_id = 0x1020304050607080ULL;
+            sh->school.turn_clock = 1;
+            leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_BORN, lost_id);
+            leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+            sh->school.turn_clock = 2;
+            leo_flow_observe(sh, "I do not know", NULL, NULL, NULL, NULL, 0, lost_id);
+            leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+            memset(&sh->flow, 0, sizeof sh->flow);   /* adversarial disappearance without resolve */
+            sh->school.pending[0] = 0;
+            sh->school.turn_clock = 3;
+            leo_flow_observe(sh, "water", "water", NULL, NULL, NULL, 0, 0);
+            leo_shadow_calibrate(sh);
+            const LeoCalibrationReceipt *missed =
+                leo_calibration_at(&sh->calibration, sh->calibration.n - 1);
+            CHECK(missed && missed->verdict == LEO_CALIB_MISSED_OPENING &&
+                  missed->wonder_id == lost_id,
+                  "shadow-calibration: a target lost without resolution is a missed opening");
+
+            memset(&sh->flow, 0, sizeof sh->flow);
+            memset(&sh->shadow, 0, sizeof sh->shadow);
+            memset(&sh->calibration, 0, sizeof sh->calibration);
+            uint64_t relapse_id = 0x9090909090909090ULL;
+            sh->school.pending[0] = 0;
+            sh->school.turn_clock = 1;
+            leo_flow_observe(sh, "animal", "animal", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_BORN | LEO_FLOW_WONDER_RESOLVED,
+                             relapse_id);
+            leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+            strncpy(sh->school.pending, "relapse", sizeof sh->school.pending - 1);
+            sh->school.turn_clock = 2;
+            leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_REASKED, relapse_id);
+            leo_shadow_calibrate(sh);
+            const LeoCalibrationReceipt *relapse =
+                leo_calibration_at(&sh->calibration, 0);
+            CHECK(relapse && relapse->verdict == LEO_CALIB_RELEASE_RELAPSE,
+                  "shadow-calibration: reopening a released identity is a relapse, not success");
+
+            memset(&sh->flow, 0, sizeof sh->flow);
+            memset(&sh->shadow, 0, sizeof sh->shadow);
+            memset(&sh->calibration, 0, sizeof sh->calibration);
+            int turn = 0;
+            for (int cycle = 0; cycle < 24; cycle++) {
+                uint64_t cycle_id = (uint64_t)(0x2000 + cycle);
+                strncpy(sh->school.pending, "path", sizeof sh->school.pending - 1);
+                sh->school.turn_clock = ++turn;
+                leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
+                                 LEO_FLOW_WONDER_BORN, cycle_id);
+                leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+                sh->school.turn_clock = ++turn;
+                leo_flow_observe(sh, "water", "water", NULL, NULL, NULL, 0, cycle_id);
+                leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+                sh->school.pending[0] = 0;
+                sh->school.turn_clock = ++turn;
+                leo_flow_observe(sh, "animal", "animal", NULL, NULL, NULL,
+                                 LEO_FLOW_WONDER_RESOLVED, cycle_id);
+                leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+                sh->school.turn_clock = ++turn;
+                leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
+                                 LEO_FLOW_WONDER_RECALLED, cycle_id);
+                leo_shadow_calibrate(sh); leo_shadow_observe(sh);
+            }
+            const LeoCalibrationReceipt *oldest_cal =
+                leo_calibration_at(&sh->calibration, 0);
+            const LeoCalibrationReceipt *newest_cal =
+                leo_calibration_at(&sh->calibration, LEO_CALIB_RING - 1);
+            CHECK(sh->calibration.n == LEO_CALIB_RING && sh->calibration.ptr == 8 &&
+                  oldest_cal && newest_cal &&
+                  oldest_cal->proposal_turn < newest_cal->proposal_turn &&
+                  newest_cal->observed_turn == (uint64_t)turn,
+                  "shadow-calibration: verdict history is bounded without losing chronology");
+
+            remove(state); remove(legacy); remove(legacy16); remove(truncated);
+            remove(pending_state);
+            leo_free(sh); leo_free(woke); leo_free(old); leo_free(compat); leo_free(cut);
         }
-        free(sh); free(woke); free(old); free(cut);
+        free(sh); free(woke); free(old); free(compat); free(cut);
 
         Leo *on = malloc(sizeof *on), *off = malloc(sizeof *off);
         CHECK(on && off, "shadow: inert-voice fixtures allocated");
@@ -2308,7 +2468,7 @@ int main(void) {
             FILE *tf = fopen(sp, "rb");
             fseek(tf, 0, SEEK_END); long fl = ftell(tf); fseek(tf, 0, SEEK_SET);
             char *fb = malloc((size_t)fl); fread(fb, 1, (size_t)fl, tf); fclose(tf);
-            tf = fopen(sp, "wb"); fwrite(fb, 1, (size_t)(fl - 56), tf); fclose(tf);
+            tf = fopen(sp, "wb"); fwrite(fb, 1, (size_t)(fl - 64), tf); fclose(tf);
             free(fb);
         }
         Leo l3; leo_init(&l3);
