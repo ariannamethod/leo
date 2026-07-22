@@ -3213,3 +3213,47 @@ stdout SHA-256 for `warm mother light`, seed 83:
 `6db704a29de6a6e652528fbe9d5fafbd3e6c37a853f02581fb2e1794d08c9111`.
 No sampler, candidate collector, gravity path, School decision, spore, shard, or background ring reads
 either current. The two clocks can now be observed before any future shadow scheduler earns permission.
+
+## Phase A.27 — the shadow proposes without commanding (2026-07-23)
+
+The first consumer of dual-current Flow is deliberately placed after speech. `leo_respond` chooses and
+records the complete reply, Flow fixes the lived snapshot and both clocks, and only then
+`leo_shadow_observe` writes a proposal for the next turn. No candidate, temperature, School, spore,
+consolidation, or async path reads the result. The scheduler is therefore a counterfactual witness: it can
+be wrong in public before it earns any authority over Leo's voice.
+
+The proposal vocabulary is small and operational. `space` follows a question Leo has just voiced, or a
+still-open question receiving coherently moving, teachable meaning. `hold` keeps an unresolved identity
+legible without asking again. `release` acknowledges one actually grounded closure. `none` is an explicit
+absence of claim. Every receipt names the stable `wonder_id`, observed turn, proposed next turn, gap,
+teachable semantic mass, maximum two-face short motion, present face alignment, long-current alignment,
+confidence, and reason bits. Sixty-four receipts form a bounded chronological ring.
+
+The live probe corrected an important false equivalence in the first formula. `I do not know` has low
+lexical gap because `know` is a real glyph, but it carries zero teachable mass: known language about
+not-knowing is not grounding. Shadow now computes `grounded_mass` only across the same teachable concept
+boundary that protects Wonder. Thus the four-turn lifecycle reads:
+
+```text
+[shadow: observed=1 next=2 action=space   confidence=0.95 reasons=open,asked,aligned]
+[shadow: observed=2 next=3 action=hold    confidence=0.75 reasons=open,motion,aligned,ungrounded]
+[shadow: observed=3 next=4 action=hold    confidence=0.80 reasons=open,motion,aligned,ungrounded]
+[shadow: observed=4 next=5 action=release confidence=1.00 reasons=resolved]
+```
+
+State v16 appends the receipt diary after both Flow tails. A v15 body migrates with no invented proposals.
+A truncated or corrupt v16 tail discards only shadow claims while preserving snapshots and event-bounded
+currents. Validation rejects non-finite or out-of-range evidence, unknown reasons/actions, broken ring
+chronology, targetless actions, and counterfeit release receipts.
+
+Verification: `make test` **251/251** and normal `-Wall -Wextra` build clean. Tests cover the complete
+space/hold/space/release/none grammar, the known-but-ungrounded distinction, single closure, bounded ring,
+v16 sleep, honest v15 migration, corrupt-tail isolation, and in-process voice identity. ASan/UBSan was
+clean through the real four-turn lifecycle; TSan was clean through the same lifecycle under
+`--chat --async`. A process A/B over all four turns, after removing only the shadow receipt lines, was
+byte-identical with scheduler on and `--no-shadow`:
+`c7ab391bcd49b8e3acfbde03ca057350d970f3429aaee765ca251b5587d86b02`.
+
+This phase grants observation, not will. The next honest step is calibration: replay receipts against
+what the human and Wonder actually did next, measure false pressure and missed openings, and keep that
+evaluation in shadow before any proposal is allowed to alter a token.

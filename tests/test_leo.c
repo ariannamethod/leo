@@ -1136,10 +1136,13 @@ int main(void) {
             if (bytes && sz > 0 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                 long v12tail = (long)(4 * sizeof(int32_t) + sizeof(uint64_t) +
                                       sizeof(LeoWonderEpisode));
+                long shadow_tail = (long)(2 * sizeof(int32_t) +
+                                          w.shadow.n * (int)sizeof(LeoShadowReceipt));
                 long current_flow = (long)(2 * sizeof(int32_t) +
                                            w.flow.n * (int)sizeof(LeoFlowSnapshot) +
                                            2 * sizeof(int32_t) +
-                                           w.flow.n_currents * (int)sizeof(LeoFlowWonderCurrent));
+                                           w.flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
+                                           shadow_tail);
                 if (sz > v12tail + current_flow) {
                     long flow_start = sz - current_flow;
                     long tail_start = flow_start - v12tail;
@@ -1490,7 +1493,7 @@ int main(void) {
                   long_current->observations == resolved_observations,
                   "flow-current: resolution freezes the long current and later recall cannot reopen it");
 
-            const char *state = "/tmp/leo_flow_v15.state";
+            const char *state = "/tmp/leo_flow_v16.state";
             const char *legacy = "/tmp/leo_flow_v13.state";
             const char *legacy14 = "/tmp/leo_flow_v14.state";
             const char *truncated = "/tmp/leo_flow_v15_current_cut.state";
@@ -1514,23 +1517,33 @@ int main(void) {
                 fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
                 unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
                 if (bytes && sz > 1 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
-                    FILE *fo = fopen(truncated, "wb");
-                    if (fo) { built_cut = (long)fwrite(bytes, 1, (size_t)(sz - 1), fo) == sz - 1; fclose(fo); }
+                    long shadow_tail = (long)(2 * sizeof(int32_t) +
+                                              fl->shadow.n * (int)sizeof(LeoShadowReceipt));
                     long current_tail = (long)(2 * sizeof(int32_t) +
                                               fl->flow.n * (int)sizeof(LeoFlowSnapshot) +
                                               2 * sizeof(int32_t) +
-                                              fl->flow.n_currents * (int)sizeof(LeoFlowWonderCurrent));
+                                              fl->flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
+                                              shadow_tail);
                     long prefix = sz - current_tail;
                     if (prefix > 0) {
                         long current_only = (long)(2 * sizeof(int32_t) +
                                                   fl->flow.n_currents * (int)sizeof(LeoFlowWonderCurrent));
+                        uint32_t fifteen = 15;
+                        memcpy(bytes + sizeof(uint32_t), &fifteen, sizeof fifteen);
+                        FILE *fo = fopen(truncated, "wb");
+                        if (fo) {
+                            built_cut = (long)fwrite(bytes, 1,
+                                                     (size_t)(sz - shadow_tail - 1), fo) ==
+                                        sz - shadow_tail - 1;
+                            fclose(fo);
+                        }
                         uint32_t fourteen = 14;
                         memcpy(bytes + sizeof(uint32_t), &fourteen, sizeof fourteen);
                         fo = fopen(legacy14, "wb");
                         if (fo) {
                             built_legacy14 = (long)fwrite(bytes, 1,
-                                                         (size_t)(sz - current_only), fo) ==
-                                             sz - current_only;
+                                                         (size_t)(sz - shadow_tail - current_only), fo) ==
+                                             sz - shadow_tail - current_only;
                             fclose(fo);
                         }
                         uint32_t thirteen = 13;
@@ -1627,6 +1640,168 @@ int main(void) {
         }
         free(on); free(off);
         g_leo_flow_on = prev_flow;
+    }
+
+    /* A.26b shadow scheduler: decisions are post-reply counterfactual receipts.
+     * They may witness both clocks, but cannot touch School or generation. */
+    {
+        int prev_flow = g_leo_flow_on, prev_shadow = g_leo_shadow_on;
+        g_leo_flow_on = 1;
+        g_leo_shadow_on = 1;
+        Leo *sh = malloc(sizeof *sh), *woke = malloc(sizeof *woke),
+            *old = malloc(sizeof *old), *cut = malloc(sizeof *cut);
+        CHECK(sh && woke && old && cut, "shadow: heap fixtures allocated");
+        if (sh && woke && old && cut) {
+            leo_init(sh); leo_init(woke); leo_init(old); leo_init(cut);
+            int water = semtok_word("water"), fire = semtok_word("fire");
+            strncpy(sh->school.pending, "zorble", sizeof sh->school.pending - 1);
+            sh->school.pending_glyph = water;
+            sh->school.pending_alt_glyph = fire;
+            LeoWonderEpisode *ep = leo_wonder_open(sh, "zorble", water, fire);
+            uint64_t id = leo_wonder_episode_id(ep);
+
+            sh->school.turn_clock = 1;
+            leo_flow_observe(sh, "water fire", "fire", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_BORN, id);
+            leo_shadow_observe(sh);
+            const LeoShadowReceipt *r0 = leo_shadow_at(&sh->shadow, 0);
+            CHECK(r0 && r0->action == LEO_SHADOW_SPACE && r0->wonder_id == id &&
+                  (r0->reasons & (LEO_SHADOW_REASON_OPEN | LEO_SHADOW_REASON_ASKED)) ==
+                  (LEO_SHADOW_REASON_OPEN | LEO_SHADOW_REASON_ASKED),
+                  "shadow: a question just voiced earns space, not an immediate re-ask");
+
+            sh->school.turn_clock = 2;
+            leo_flow_observe(sh, "I do not know", NULL, NULL, NULL, NULL, 0, id);
+            leo_shadow_observe(sh);
+            const LeoShadowReceipt *r1 = leo_shadow_at(&sh->shadow, 1);
+            CHECK(r1 && r1->action == LEO_SHADOW_HOLD && r1->gap < 0.01f &&
+                  r1->grounded_mass == 0.0f &&
+                  (r1->reasons & LEO_SHADOW_REASON_UNGROUNDED),
+                  "shadow: known words for not-knowing cannot counterfeit grounded movement");
+
+            sh->school.turn_clock = 3;
+            leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_REASKED, id);
+            leo_shadow_observe(sh);
+            const LeoShadowReceipt *r2 = leo_shadow_at(&sh->shadow, 2);
+            CHECK(r2 && r2->action == LEO_SHADOW_SPACE &&
+                  (r2->reasons & LEO_SHADOW_REASON_ASKED),
+                  "shadow: a re-asked wonder again yields the next turn to the human");
+
+            sh->school.pending[0] = 0;
+            sh->school.turn_clock = 4;
+            leo_flow_observe(sh, "animal", "animal", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_RESOLVED, id);
+            leo_shadow_observe(sh);
+            const LeoShadowReceipt *r3 = leo_shadow_at(&sh->shadow, 3);
+            CHECK(r3 && r3->action == LEO_SHADOW_RELEASE && r3->wonder_id == id &&
+                  r3->reasons == LEO_SHADOW_REASON_RESOLVED && r3->confidence == 1.0f,
+                  "shadow: grounded closure is acknowledged exactly as release");
+
+            sh->school.turn_clock = 5;
+            leo_flow_observe(sh, "water", "fire", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_RECALLED, id);
+            leo_shadow_observe(sh);
+            const LeoShadowReceipt *r4 = leo_shadow_at(&sh->shadow, 4);
+            CHECK(r4 && r4->action == LEO_SHADOW_NONE && r4->wonder_id == 0,
+                  "shadow: later recall cannot counterfeit a second closure");
+
+            const char *state = "/tmp/leo_shadow_v16.state";
+            const char *legacy = "/tmp/leo_shadow_v15.state";
+            const char *truncated = "/tmp/leo_shadow_v16_cut.state";
+            int saved = leo_save_state(sh, state), built_old = 0, built_cut = 0;
+            FILE *fi = fopen(state, "rb");
+            if (fi) {
+                fseek(fi, 0, SEEK_END); long sz = ftell(fi); fseek(fi, 0, SEEK_SET);
+                unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
+                if (bytes && sz > 1 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
+                    long shadow_tail = (long)(2 * sizeof(int32_t) +
+                                              sh->shadow.n * (int)sizeof(LeoShadowReceipt));
+                    uint32_t fifteen = 15;
+                    memcpy(bytes + sizeof(uint32_t), &fifteen, sizeof fifteen);
+                    FILE *fo = fopen(legacy, "wb");
+                    if (fo) {
+                        built_old = (long)fwrite(bytes, 1,
+                                                 (size_t)(sz - shadow_tail), fo) ==
+                                    sz - shadow_tail;
+                        fclose(fo);
+                    }
+                    uint32_t sixteen = 16;
+                    memcpy(bytes + sizeof(uint32_t), &sixteen, sizeof sixteen);
+                    fo = fopen(truncated, "wb");
+                    if (fo) {
+                        built_cut = (long)fwrite(bytes, 1, (size_t)(sz - 1), fo) == sz - 1;
+                        fclose(fo);
+                    }
+                }
+                free(bytes); fclose(fi);
+            }
+            int loaded = saved && leo_load_state(woke, state);
+            const LeoShadowReceipt *woke_release =
+                loaded ? leo_shadow_at(&woke->shadow, 3) : NULL;
+            CHECK(loaded && woke->shadow.n == 5 && woke_release &&
+                  woke_release->action == LEO_SHADOW_RELEASE &&
+                  woke_release->wonder_id == id,
+                  "shadow: v16 sleep preserves the counterfactual receipt trail");
+            CHECK(built_old && leo_load_state(old, legacy) && old->flow.n == 5 &&
+                  old->flow.n_currents == 1 && old->shadow.n == 0,
+                  "shadow: a v15 body migrates without invented proposals");
+            CHECK(built_cut && leo_load_state(cut, truncated) && cut->flow.n == 5 &&
+                  cut->flow.n_currents == 1 && cut->shadow.n == 0,
+                  "shadow: a corrupt v16 receipt tail leaves both Flow clocks intact");
+
+            for (int turn = 6; turn <= LEO_SHADOW_RING + 6; turn++) {
+                sh->school.turn_clock = turn;
+                leo_flow_observe(sh, "water", "water", NULL, NULL, NULL, 0, 0);
+                leo_shadow_observe(sh);
+            }
+            CHECK(sh->shadow.n == LEO_SHADOW_RING && sh->shadow.ptr == 6 &&
+                  leo_shadow_at(&sh->shadow, 0)->turn == 7 &&
+                  leo_shadow_at(&sh->shadow, LEO_SHADOW_RING - 1)->turn ==
+                      LEO_SHADOW_RING + 6,
+                  "shadow: the receipt diary is bounded and chronologically ordered");
+
+            remove(state); remove(legacy); remove(truncated);
+            leo_free(sh); leo_free(woke); leo_free(old); leo_free(cut);
+        }
+        free(sh); free(woke); free(old); free(cut);
+
+        Leo *on = malloc(sizeof *on), *off = malloc(sizeof *off);
+        CHECK(on && off, "shadow: inert-voice fixtures allocated");
+        if (on && off) {
+            leo_init(on); leo_init(off);
+            const char *corpus =
+                "The warm light. His mother holds him. The rain at night. "
+                "Leo loves the warm light and his mother and the rain. ";
+            for (int r = 0; r < 3; r++) { leo_ingest(on, corpus); leo_ingest(off, corpus); }
+            leo_build_chamber_tags(on); leo_build_chamber_tags(off);
+            leo_supertok_scan(on); leo_supertok_scan(off);
+            const char *prompts[] = {
+                "is a zorble water or cat", "I do not know",
+                "what do you think?", "a zorble is a small animal"
+            };
+            int same = 1;
+            for (int i = 0; i < 4; i++) {
+                char a[1024], b[1024];
+                g_leo_shadow_on = 1; srand(183 + i); leo_respond(on, prompts[i], a, sizeof a);
+                g_leo_shadow_on = 0; srand(183 + i); leo_respond(off, prompts[i], b, sizeof b);
+                if (strcmp(a, b) != 0) same = 0;
+            }
+            CHECK(same && on->shadow.n == 4 && off->shadow.n == 0 &&
+                  !memcmp(&on->flow, &off->flow, sizeof on->flow) &&
+                  on->step == off->step &&
+                  !memcmp(on->retention_state, off->retention_state,
+                          sizeof on->retention_state) &&
+                  !memcmp(on->chamber_act, off->chamber_act, sizeof on->chamber_act) &&
+                  !memcmp(on->gamma, off->gamma, sizeof on->gamma) &&
+                  !memcmp(on->gamma_meaning, off->gamma_meaning,
+                          sizeof on->gamma_meaning),
+                  "shadow: default-on and --no-shadow voices remain byte-identical");
+            leo_free(on); leo_free(off);
+        }
+        free(on); free(off);
+        g_leo_flow_on = prev_flow;
+        g_leo_shadow_on = prev_shadow;
     }
 
     CHECK(leo_mode_from_name("stop") == LEO_MODE_STOP &&
@@ -2133,7 +2308,7 @@ int main(void) {
             FILE *tf = fopen(sp, "rb");
             fseek(tf, 0, SEEK_END); long fl = ftell(tf); fseek(tf, 0, SEEK_SET);
             char *fb = malloc((size_t)fl); fread(fb, 1, (size_t)fl, tf); fclose(tf);
-            tf = fopen(sp, "wb"); fwrite(fb, 1, (size_t)(fl - 48), tf); fclose(tf);
+            tf = fopen(sp, "wb"); fwrite(fb, 1, (size_t)(fl - 56), tf); fclose(tf);
             free(fb);
         }
         Leo l3; leo_init(&l3);
