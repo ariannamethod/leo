@@ -1579,6 +1579,36 @@ typedef struct {
     int ptr;                         /* next write; oldest entry when full */
 } LeoShadow;
 
+/* Calibration judges a proposal only after the next lived turn. It measures
+ * whether the existing organism already behaved consistently with the shadow;
+ * it never tunes thresholds or feeds a score back into generation. */
+#define LEO_CALIB_RING LEO_SHADOW_RING
+enum {
+    LEO_CALIB_CONFIRMED = 0,
+    LEO_CALIB_FALSE_PRESSURE,
+    LEO_CALIB_MISSED_OPENING,
+    LEO_CALIB_RELEASE_RELAPSE,
+    LEO_CALIB_UNSCORABLE,
+    LEO_CALIB_VERDICT_COUNT
+};
+
+typedef struct {
+    uint64_t proposal_turn;
+    uint64_t observed_turn;
+    uint64_t wonder_id;
+    float    confidence;
+    float    brier;
+    uint8_t  proposed_action;
+    uint8_t  observed_wonder;
+    uint8_t  verdict;
+} LeoCalibrationReceipt;
+
+typedef struct {
+    LeoCalibrationReceipt receipts[LEO_CALIB_RING];
+    int n;
+    int ptr;
+} LeoCalibration;
+
 enum {
     LEO_FLOW_QUIET = 0,
     LEO_FLOW_EMERGING,
@@ -1706,6 +1736,8 @@ typedef struct {
     /* v16 counterfactual proposals derived after a lived reply. This remains a
      * witness surface until a later phase independently earns authority. */
     LeoShadow shadow;
+    /* v17 next-turn verdicts over shadow receipts. Still no speech reader. */
+    LeoCalibration calibration;
 } Leo;
 
 /* A.4 RAE — micrograd MLP (fixed 5→8→1, hand-rolled scalar autograd, zero deps). */
@@ -5370,7 +5402,7 @@ static void leo_shadow_observe(Leo *leo) {
         if (leo_glyph_teachable(g)) receipt.grounded_mass += snap->perceived[g];
     receipt.grounded_mass = clampf(receipt.grounded_mass, 0.0f, 1.0f);
     receipt.short_motion = leo_shadow_short_motion(&leo->flow);
-    receipt.face_alignment = leo_flow_alignment(snap);
+    receipt.face_alignment = clampf(leo_flow_alignment(snap), 0.0f, 1.0f);
 
     const LeoFlowWonderCurrent *current = NULL;
     if (snap->wonder_id)
@@ -5443,7 +5475,7 @@ static int leo_shadow_valid(const LeoShadowReceipt *receipt, uint64_t turn_clock
         receipt->grounded_mass > 1.0f ||
         !isfinite(receipt->short_motion) || receipt->short_motion < 0.0f ||
         receipt->short_motion > 1.0f || !isfinite(receipt->face_alignment) ||
-        receipt->face_alignment < 0.0f || receipt->face_alignment > 1.0f ||
+        receipt->face_alignment < 0.0f || receipt->face_alignment > 1.0001f ||
         !isfinite(receipt->current_alignment) || receipt->current_alignment < 0.0f ||
         receipt->current_alignment > 1.0f || !isfinite(receipt->confidence) ||
         receipt->confidence < 0.0f || receipt->confidence > 1.0f)
@@ -5457,6 +5489,119 @@ static int leo_shadow_valid(const LeoShadowReceipt *receipt, uint64_t turn_clock
                receipt->confidence == 1.0f;
     return (receipt->reasons & LEO_SHADOW_REASON_OPEN) != 0 &&
            (receipt->reasons & LEO_SHADOW_REASON_RESOLVED) == 0;
+}
+
+static const LeoCalibrationReceipt *leo_calibration_at(const LeoCalibration *calibration,
+                                                       int pos) {
+    if (!calibration || pos < 0 || pos >= calibration->n) return NULL;
+    int start = calibration->n == LEO_CALIB_RING ? calibration->ptr : 0;
+    return &calibration->receipts[(start + pos) % LEO_CALIB_RING];
+}
+
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_calibration_verdict_name(int verdict) {
+    static const char *names[] = {
+        "confirmed", "false-pressure", "missed-opening", "release-relapse", "unscorable"
+    };
+    return verdict >= 0 && verdict < LEO_CALIB_VERDICT_COUNT ? names[verdict] : "unscorable";
+}
+
+/* Judge the PREVIOUS proposal against this already-lived turn, before writing
+ * a proposal for the next one. SPACE/HOLD both forbid immediate pressure;
+ * HOLD additionally requires the unfinished identity not to disappear.
+ * RELEASE requires that the same identity not reopen. */
+static void leo_shadow_calibrate(Leo *leo) {
+    if (!g_leo_shadow_on || !g_leo_flow_on || !leo ||
+        leo->shadow.n <= 0 || leo->flow.n <= 0) return;
+    const LeoShadowReceipt *proposal =
+        leo_shadow_at(&leo->shadow, leo->shadow.n - 1);
+    const LeoFlowSnapshot *observed =
+        leo_flow_at(&leo->flow, leo->flow.n - 1);
+    if (!proposal || !observed || proposal->action == LEO_SHADOW_NONE ||
+        observed->turn <= proposal->turn) return;
+    const LeoCalibrationReceipt *last =
+        leo_calibration_at(&leo->calibration, leo->calibration.n - 1);
+    if (last && last->proposal_turn == proposal->turn) return;
+
+    LeoCalibrationReceipt receipt;
+    memset(&receipt, 0, sizeof receipt);
+    receipt.proposal_turn = proposal->turn;
+    receipt.observed_turn = observed->turn;
+    receipt.wonder_id = proposal->wonder_id;
+    receipt.confidence = proposal->confidence;
+    receipt.proposed_action = proposal->action;
+    receipt.observed_wonder = observed->wonder & LEO_FLOW_WONDER_MASK;
+    receipt.verdict = LEO_CALIB_CONFIRMED;
+
+    int adjacent = proposal->turn != UINT64_MAX &&
+                   observed->turn == proposal->turn + 1;
+    int same_event = observed->wonder_id == proposal->wonder_id;
+    const LeoFlowWonderCurrent *current =
+        leo_flow_current_find_const(&leo->flow, proposal->wonder_id);
+    int active = current && !current->resolved;
+    int reasked = same_event &&
+                  (observed->wonder & LEO_FLOW_WONDER_REASKED);
+    int resolved = same_event &&
+                   (observed->wonder & LEO_FLOW_WONDER_RESOLVED);
+    int reopened = same_event && !resolved &&
+                   (observed->wonder & (LEO_FLOW_WONDER_OPEN |
+                                        LEO_FLOW_WONDER_BORN |
+                                        LEO_FLOW_WONDER_REASKED));
+
+    if (!adjacent) {
+        receipt.verdict = LEO_CALIB_UNSCORABLE;
+    } else if (proposal->action == LEO_SHADOW_RELEASE) {
+        if (reopened) receipt.verdict = LEO_CALIB_RELEASE_RELAPSE;
+    } else if (reasked) {
+        receipt.verdict = LEO_CALIB_FALSE_PRESSURE;
+    } else if (!resolved && !active) {
+        receipt.verdict = LEO_CALIB_MISSED_OPENING;
+    }
+
+    if (receipt.verdict != LEO_CALIB_UNSCORABLE) {
+        float target = receipt.verdict == LEO_CALIB_CONFIRMED ? 1.0f : 0.0f;
+        float error = receipt.confidence - target;
+        receipt.brier = error * error;
+    }
+
+    LeoCalibration *calibration = &leo->calibration;
+    calibration->receipts[calibration->ptr] = receipt;
+    calibration->ptr = (calibration->ptr + 1) % LEO_CALIB_RING;
+    if (calibration->n < LEO_CALIB_RING) calibration->n++;
+}
+
+static int leo_calibration_valid(const LeoCalibrationReceipt *receipt,
+                                 uint64_t turn_clock) {
+    if (!receipt || !receipt->wonder_id || receipt->proposal_turn >= receipt->observed_turn ||
+        receipt->observed_turn > turn_clock ||
+        receipt->proposed_action <= LEO_SHADOW_NONE ||
+        receipt->proposed_action >= LEO_SHADOW_ACTION_COUNT ||
+        receipt->verdict >= LEO_CALIB_VERDICT_COUNT ||
+        (receipt->observed_wonder & ~LEO_FLOW_WONDER_MASK) ||
+        !isfinite(receipt->confidence) || receipt->confidence < 0.0f ||
+        receipt->confidence > 1.0f || !isfinite(receipt->brier) ||
+        receipt->brier < 0.0f || receipt->brier > 1.0f) return 0;
+    if (receipt->verdict == LEO_CALIB_UNSCORABLE)
+        return receipt->brier == 0.0f;
+    if (receipt->proposal_turn == UINT64_MAX ||
+        receipt->observed_turn != receipt->proposal_turn + 1) return 0;
+    if (receipt->verdict == LEO_CALIB_FALSE_PRESSURE &&
+        (!(receipt->observed_wonder & LEO_FLOW_WONDER_REASKED) ||
+         (receipt->proposed_action != LEO_SHADOW_HOLD &&
+          receipt->proposed_action != LEO_SHADOW_SPACE))) return 0;
+    if (receipt->verdict == LEO_CALIB_MISSED_OPENING &&
+        ((receipt->observed_wonder & LEO_FLOW_WONDER_RESOLVED) ||
+         (receipt->proposed_action != LEO_SHADOW_HOLD &&
+          receipt->proposed_action != LEO_SHADOW_SPACE))) return 0;
+    if (receipt->verdict == LEO_CALIB_RELEASE_RELAPSE &&
+        (receipt->proposed_action != LEO_SHADOW_RELEASE ||
+         (receipt->observed_wonder & LEO_FLOW_WONDER_RESOLVED) ||
+         !(receipt->observed_wonder & (LEO_FLOW_WONDER_OPEN |
+                                       LEO_FLOW_WONDER_BORN |
+                                       LEO_FLOW_WONDER_REASKED)))) return 0;
+    float target = receipt->verdict == LEO_CALIB_CONFIRMED ? 1.0f : 0.0f;
+    float error = receipt->confidence - target;
+    return fabsf(receipt->brier - error * error) <= 1e-6f;
 }
 
 static void leo_gamma_meaning(Leo *leo, const char *prompt) {
@@ -5966,6 +6111,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (leo->school.returned_episode >= 0) flow_event |= LEO_FLOW_WONDER_RECALLED;
     leo_flow_observe(leo, prompt, out, pm, flow_field_token, flow_field_weight,
                      flow_event, flow_wonder_id);  /* observation only: no generation path reads flow */
+    leo_shadow_calibrate(leo);                    /* judge t-1 only after t has become history */
     leo_shadow_observe(leo);                      /* after speech: a proposal for the next turn, never a reader */
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
@@ -6009,9 +6155,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v14      : Janus Flow (full perceived/expressed fields + own-field constellation)
  *   v15      : event-bounded unfinished-wonder currents beyond the snapshot horizon
  *   v16      : bounded counterfactual shadow-scheduler receipts
+ *   v17      : next-turn calibration verdicts over shadow receipts
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 16  /* shadow receipts append a fail-soft tail; v5..v15 soft-migrate */
+#define LEO_STATE_VERSION 17  /* calibration appends a fail-soft tail; v5..v16 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -6204,6 +6351,14 @@ static int leo_save_state(const Leo *leo, const char *path) {
     if (leo->shadow.n > 0)
         fwrite(leo->shadow.receipts, sizeof(LeoShadowReceipt),
                (size_t)leo->shadow.n, f);
+
+    /* Shadow calibration (v17): verdicts arrive one lived turn after their
+     * proposals. The ledger is evidence only and can fail independently. */
+    st_w32(f, (int32_t)leo->calibration.n);
+    st_w32(f, (int32_t)leo->calibration.ptr);
+    if (leo->calibration.n > 0)
+        fwrite(leo->calibration.receipts, sizeof(LeoCalibrationReceipt),
+               (size_t)leo->calibration.n, f);
 
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
@@ -6688,10 +6843,60 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
                 }
                 previous_turn = receipt->turn;
             }
+            if (shadow_ok) {
+                int start = n == LEO_SHADOW_RING ? ptr : 0;
+                for (int i = 0; i < n; i++) {
+                    LeoShadowReceipt *receipt =
+                        &leo->shadow.receipts[(start + i) % LEO_SHADOW_RING];
+                    receipt->gap = clampf(receipt->gap, 0.0f, 1.0f);
+                    receipt->grounded_mass = clampf(receipt->grounded_mass, 0.0f, 1.0f);
+                    receipt->short_motion = clampf(receipt->short_motion, 0.0f, 1.0f);
+                    receipt->face_alignment = clampf(receipt->face_alignment, 0.0f, 1.0f);
+                    receipt->current_alignment = clampf(receipt->current_alignment, 0.0f, 1.0f);
+                    receipt->confidence = clampf(receipt->confidence, 0.0f, 1.0f);
+                }
+            }
         }
         if (!shadow_ok) {
             fprintf(stderr, "[leo] WARNING: v16 shadow tail truncated/corrupt — organism lives without counterfactual receipts.\n");
             memset(&leo->shadow, 0, sizeof leo->shadow);
+        }
+    }
+
+    /* Next-turn calibration (v17). Older bodies begin without verdicts rather
+     * than retrospectively judging proposals from incomplete future context. */
+    if (version >= 17) {
+        int32_t n = 0, ptr = 0;
+        int calibration_ok = st_r32(f, &n) && st_r32(f, &ptr) &&
+                             n >= 0 && n <= LEO_CALIB_RING &&
+                             ptr >= 0 && ptr < LEO_CALIB_RING &&
+                             ((n < LEO_CALIB_RING && ptr == n) ||
+                              n == LEO_CALIB_RING);
+        if (calibration_ok && n > 0 &&
+            fread(leo->calibration.receipts, sizeof(LeoCalibrationReceipt),
+                  (size_t)n, f) != (size_t)n) calibration_ok = 0;
+        if (calibration_ok) {
+            leo->calibration.n = n;
+            leo->calibration.ptr = ptr;
+            uint64_t previous_proposal = 0;
+            uint64_t previous_observed = 0;
+            for (int i = 0; i < n; i++) {
+                const LeoCalibrationReceipt *receipt =
+                    leo_calibration_at(&leo->calibration, i);
+                if (!leo_calibration_valid(receipt,
+                                           (uint64_t)leo->school.turn_clock) ||
+                    (i > 0 && (receipt->proposal_turn <= previous_proposal ||
+                               receipt->observed_turn <= previous_observed))) {
+                    calibration_ok = 0;
+                    break;
+                }
+                previous_proposal = receipt->proposal_turn;
+                previous_observed = receipt->observed_turn;
+            }
+        }
+        if (!calibration_ok) {
+            fprintf(stderr, "[leo] WARNING: v17 calibration tail truncated/corrupt — shadow proposals survive without verdicts.\n");
+            memset(&leo->calibration, 0, sizeof leo->calibration);
         }
     }
 
@@ -7045,6 +7250,26 @@ static void print_flow_stats(const Leo *leo) {
 #undef LEO_SHADOW_PRINT_REASON
         if (!receipt->reasons) printf("none");
         printf("]\n");
+    }
+
+    const LeoCalibrationReceipt *cal =
+        leo_calibration_at(&leo->calibration, leo->calibration.n - 1);
+    if (g_leo_shadow_on && cal && cal->observed_turn == s->turn) {
+        int scored = 0, confirmed = 0;
+        float brier_sum = 0.0f;
+        for (int i = 0; i < leo->calibration.n; i++) {
+            const LeoCalibrationReceipt *item =
+                leo_calibration_at(&leo->calibration, i);
+            if (!item || item->verdict == LEO_CALIB_UNSCORABLE) continue;
+            scored++;
+            if (item->verdict == LEO_CALIB_CONFIRMED) confirmed++;
+            brier_sum += item->brier;
+        }
+        printf("     [shadow-calibration: proposal=%llu observed=%llu verdict=%s scored=%d confirmed=%d brier=%.3f]\n",
+               (unsigned long long)cal->proposal_turn,
+               (unsigned long long)cal->observed_turn,
+               leo_calibration_verdict_name(cal->verdict),
+               scored, confirmed, scored ? (double)(brier_sum / (float)scored) : 0.0);
     }
 }
 
