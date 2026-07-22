@@ -1540,6 +1540,45 @@ typedef struct {
     float expressed_velocity[GLYPH_COUNT];
 } LeoFlowShortCurrent;
 
+/* Shadow scheduling is a counterfactual diary, not a controller. It records
+ * what a future speech-side organ might do on the NEXT turn, after the current
+ * reply and both Flow clocks are already fixed. No generation path reads it. */
+#define LEO_SHADOW_RING 64
+#define LEO_SHADOW_REASON_OPEN       0x01u
+#define LEO_SHADOW_REASON_ASKED      0x02u
+#define LEO_SHADOW_REASON_GAP        0x04u
+#define LEO_SHADOW_REASON_MOTION     0x08u
+#define LEO_SHADOW_REASON_ALIGNMENT  0x10u
+#define LEO_SHADOW_REASON_RESOLVED   0x20u
+#define LEO_SHADOW_REASON_UNGROUNDED 0x40u
+
+enum {
+    LEO_SHADOW_NONE = 0,
+    LEO_SHADOW_HOLD,
+    LEO_SHADOW_SPACE,
+    LEO_SHADOW_RELEASE,
+    LEO_SHADOW_ACTION_COUNT
+};
+
+typedef struct {
+    uint64_t turn;                   /* observed turn; proposal is for turn+1 */
+    uint64_t wonder_id;              /* stable target, 0 when no wonder applies */
+    float    gap;
+    float    grounded_mass;          /* teachable semantic mass, not mere known words */
+    float    short_motion;
+    float    face_alignment;
+    float    current_alignment;
+    float    confidence;
+    uint8_t  action;
+    uint8_t  reasons;
+} LeoShadowReceipt;
+
+typedef struct {
+    LeoShadowReceipt receipts[LEO_SHADOW_RING];
+    int n;
+    int ptr;                         /* next write; oldest entry when full */
+} LeoShadow;
+
 enum {
     LEO_FLOW_QUIET = 0,
     LEO_FLOW_EMERGING,
@@ -1664,6 +1703,9 @@ typedef struct {
     /* passive temporal proprioception (state v13): a bounded archaeological
      * record of what has been flowing through lived replies. No speech reader. */
     LeoFlow flow;
+    /* v16 counterfactual proposals derived after a lived reply. This remains a
+     * witness surface until a later phase independently earns authority. */
+    LeoShadow shadow;
 } Leo;
 
 /* A.4 RAE — micrograd MLP (fixed 5→8→1, hand-rolled scalar autograd, zero deps). */
@@ -1926,6 +1968,7 @@ static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School revers
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
 static int g_leo_flow_on = 1;           /* passive temporal proprioception. --no-flow stops snapshots; no generation path reads them. */
+static int g_leo_shadow_on = 1;         /* counterfactual next-turn proposals. --no-shadow keeps Flow but writes no receipts. */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
 static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
@@ -5287,6 +5330,135 @@ static void leo_flow_observe(Leo *leo, const char *prompt, const char *reply,
     if (flow->n < LEO_FLOW_RING) flow->n++;
 }
 
+static const LeoShadowReceipt *leo_shadow_at(const LeoShadow *shadow, int pos) {
+    if (!shadow || pos < 0 || pos >= shadow->n) return NULL;
+    int start = shadow->n == LEO_SHADOW_RING ? shadow->ptr : 0;
+    return &shadow->receipts[(start + pos) % LEO_SHADOW_RING];
+}
+
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_shadow_action_name(int action) {
+    static const char *names[] = {"none", "hold", "space", "release"};
+    return action >= 0 && action < LEO_SHADOW_ACTION_COUNT ? names[action] : "none";
+}
+
+static float leo_shadow_short_motion(const LeoFlow *flow) {
+    LeoFlowShortCurrent short_current;
+    if (!leo_flow_short_current(flow, LEO_FLOW_WINDOW, &short_current)) return 0.0f;
+    float motion = 0.0f;
+    for (int g = 0; g < GLYPH_COUNT; g++) {
+        motion = fmaxf(motion, fabsf(short_current.perceived_velocity[g]));
+        motion = fmaxf(motion, fabsf(short_current.expressed_velocity[g]));
+    }
+    return clampf(motion, 0.0f, 1.0f);
+}
+
+/* Decide only after the reply and Flow observation have become history. HOLD
+ * keeps an unresolved target legible, SPACE says a just-asked or coherently
+ * moving question should not be pressed, and RELEASE acknowledges an actual
+ * grounded closure. These are proposals for study, never speech commands. */
+static void leo_shadow_observe(Leo *leo) {
+    if (!g_leo_shadow_on || !g_leo_flow_on || !leo || leo->flow.n <= 0) return;
+    const LeoFlowSnapshot *snap = leo_flow_at(&leo->flow, leo->flow.n - 1);
+    if (!snap) return;
+
+    LeoShadowReceipt receipt;
+    memset(&receipt, 0, sizeof receipt);
+    receipt.turn = snap->turn;
+    receipt.gap = snap->gap_perceived;
+    for (int g = 0; g < GLYPH_COUNT; g++)
+        if (leo_glyph_teachable(g)) receipt.grounded_mass += snap->perceived[g];
+    receipt.grounded_mass = clampf(receipt.grounded_mass, 0.0f, 1.0f);
+    receipt.short_motion = leo_shadow_short_motion(&leo->flow);
+    receipt.face_alignment = leo_flow_alignment(snap);
+
+    const LeoFlowWonderCurrent *current = NULL;
+    if (snap->wonder_id)
+        current = leo_flow_current_find_const(&leo->flow, snap->wonder_id);
+    if (!current || (current->resolved && !(snap->wonder & LEO_FLOW_WONDER_RESOLVED))) {
+        current = NULL;
+        for (int i = leo->flow.n_currents - 1; i >= 0; i--) {
+            const LeoFlowWonderCurrent *candidate = leo_flow_current_at(&leo->flow, i);
+            if (candidate && !candidate->resolved) { current = candidate; break; }
+        }
+    }
+
+    if (current) {
+        receipt.wonder_id = current->wonder_id;
+        receipt.current_alignment = clampf(
+            leo_vec_cosine(current->perceived_mean, current->expressed_mean,
+                           GLYPH_COUNT), 0.0f, 1.0f);
+        if ((snap->wonder & LEO_FLOW_WONDER_RESOLVED) && current->resolved &&
+            current->closed_turn == snap->turn) {
+            receipt.action = LEO_SHADOW_RELEASE;
+            receipt.reasons = LEO_SHADOW_REASON_RESOLVED;
+            receipt.confidence = 1.0f;
+        } else if (!current->resolved) {
+            receipt.reasons = LEO_SHADOW_REASON_OPEN;
+            int asked = (snap->wonder & (LEO_FLOW_WONDER_BORN |
+                                         LEO_FLOW_WONDER_REASKED)) != 0;
+            int moving = receipt.short_motion > LEO_FLOW_SLOPE_EPS;
+            int aligned = receipt.face_alignment >= 0.25f ||
+                          receipt.current_alignment >= 0.25f;
+            if (asked) receipt.reasons |= LEO_SHADOW_REASON_ASKED;
+            if (receipt.gap >= 0.50f) receipt.reasons |= LEO_SHADOW_REASON_GAP;
+            if (moving) receipt.reasons |= LEO_SHADOW_REASON_MOTION;
+            if (aligned) receipt.reasons |= LEO_SHADOW_REASON_ALIGNMENT;
+            if (receipt.grounded_mass < 0.20f)
+                receipt.reasons |= LEO_SHADOW_REASON_UNGROUNDED;
+
+            if (asked || (receipt.grounded_mass >= 0.20f && moving && aligned)) {
+                receipt.action = LEO_SHADOW_SPACE;
+                receipt.confidence = asked ? 0.95f :
+                    clampf(0.50f + 0.25f * receipt.short_motion +
+                           0.25f * fmaxf(receipt.face_alignment,
+                                         receipt.current_alignment), 0.0f, 1.0f);
+            } else {
+                receipt.action = LEO_SHADOW_HOLD;
+                receipt.confidence = clampf(0.50f +
+                                             0.25f * (1.0f - receipt.grounded_mass) +
+                                             0.15f * receipt.gap +
+                                             0.10f * (1.0f - receipt.short_motion),
+                                             0.0f, 1.0f);
+            }
+        }
+    }
+
+    LeoShadow *shadow = &leo->shadow;
+    shadow->receipts[shadow->ptr] = receipt;
+    shadow->ptr = (shadow->ptr + 1) % LEO_SHADOW_RING;
+    if (shadow->n < LEO_SHADOW_RING) shadow->n++;
+}
+
+static int leo_shadow_valid(const LeoShadowReceipt *receipt, uint64_t turn_clock) {
+    const uint8_t known_reasons = LEO_SHADOW_REASON_OPEN | LEO_SHADOW_REASON_ASKED |
+        LEO_SHADOW_REASON_GAP | LEO_SHADOW_REASON_MOTION |
+        LEO_SHADOW_REASON_ALIGNMENT | LEO_SHADOW_REASON_RESOLVED |
+        LEO_SHADOW_REASON_UNGROUNDED;
+    if (!receipt || receipt->turn > turn_clock ||
+        receipt->action >= LEO_SHADOW_ACTION_COUNT ||
+        (receipt->reasons & ~known_reasons) ||
+        !isfinite(receipt->gap) || receipt->gap < 0.0f || receipt->gap > 1.0f ||
+        !isfinite(receipt->grounded_mass) || receipt->grounded_mass < 0.0f ||
+        receipt->grounded_mass > 1.0f ||
+        !isfinite(receipt->short_motion) || receipt->short_motion < 0.0f ||
+        receipt->short_motion > 1.0f || !isfinite(receipt->face_alignment) ||
+        receipt->face_alignment < 0.0f || receipt->face_alignment > 1.0f ||
+        !isfinite(receipt->current_alignment) || receipt->current_alignment < 0.0f ||
+        receipt->current_alignment > 1.0f || !isfinite(receipt->confidence) ||
+        receipt->confidence < 0.0f || receipt->confidence > 1.0f)
+        return 0;
+    if (receipt->action == LEO_SHADOW_NONE)
+        return receipt->wonder_id == 0 && receipt->reasons == 0 &&
+               receipt->confidence == 0.0f;
+    if (!receipt->wonder_id) return 0;
+    if (receipt->action == LEO_SHADOW_RELEASE)
+        return receipt->reasons == LEO_SHADOW_REASON_RESOLVED &&
+               receipt->confidence == 1.0f;
+    return (receipt->reasons & LEO_SHADOW_REASON_OPEN) != 0 &&
+           (receipt->reasons & LEO_SHADOW_REASON_RESOLVED) == 0;
+}
+
 static void leo_gamma_meaning(Leo *leo, const char *prompt) {
     float p[GLYPH_COUNT];
     float gap_now = leo_glyph_hist(leo, prompt, p);
@@ -5794,6 +5966,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (leo->school.returned_episode >= 0) flow_event |= LEO_FLOW_WONDER_RECALLED;
     leo_flow_observe(leo, prompt, out, pm, flow_field_token, flow_field_weight,
                      flow_event, flow_wonder_id);  /* observation only: no generation path reads flow */
+    leo_shadow_observe(leo);                      /* after speech: a proposal for the next turn, never a reader */
     leo->gravity = NULL;
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
@@ -5835,9 +6008,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v13      : passive Flow ring (top-3 perceived motion over lived turns)
  *   v14      : Janus Flow (full perceived/expressed fields + own-field constellation)
  *   v15      : event-bounded unfinished-wonder currents beyond the snapshot horizon
+ *   v16      : bounded counterfactual shadow-scheduler receipts
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 15  /* dual-time Flow appends a fail-soft tail; v5..v14 soft-migrate */
+#define LEO_STATE_VERSION 16  /* shadow receipts append a fail-soft tail; v5..v15 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -6022,6 +6196,14 @@ static int leo_save_state(const Leo *leo, const char *path) {
     if (leo->flow.n_currents > 0)
         fwrite(leo->flow.currents, sizeof(LeoFlowWonderCurrent),
                (size_t)leo->flow.n_currents, f);
+
+    /* Shadow scheduler (v16): a bounded receipt trail for counterfactual study.
+     * It carries no authority and is independently disposable on corruption. */
+    st_w32(f, (int32_t)leo->shadow.n);
+    st_w32(f, (int32_t)leo->shadow.ptr);
+    if (leo->shadow.n > 0)
+        fwrite(leo->shadow.receipts, sizeof(LeoShadowReceipt),
+               (size_t)leo->shadow.n, f);
 
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
@@ -6480,6 +6662,39 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         leo_flow_rebuild_currents(&leo->flow);
     }
 
+    /* Shadow receipts (v16). Unlike Flow observations, proposals are not
+     * reconstructed from an older body: migration begins with no claims, and
+     * a corrupt interpretive tail is simply discarded. */
+    if (version >= 16) {
+        int32_t n = 0, ptr = 0;
+        int shadow_ok = st_r32(f, &n) && st_r32(f, &ptr) &&
+                        n >= 0 && n <= LEO_SHADOW_RING &&
+                        ptr >= 0 && ptr < LEO_SHADOW_RING &&
+                        ((n < LEO_SHADOW_RING && ptr == n) ||
+                         n == LEO_SHADOW_RING);
+        if (shadow_ok && n > 0 &&
+            fread(leo->shadow.receipts, sizeof(LeoShadowReceipt),
+                  (size_t)n, f) != (size_t)n) shadow_ok = 0;
+        if (shadow_ok) {
+            leo->shadow.n = n;
+            leo->shadow.ptr = ptr;
+            uint64_t previous_turn = 0;
+            for (int i = 0; i < n; i++) {
+                const LeoShadowReceipt *receipt = leo_shadow_at(&leo->shadow, i);
+                if (!leo_shadow_valid(receipt, (uint64_t)leo->school.turn_clock) ||
+                    (i > 0 && receipt->turn < previous_turn)) {
+                    shadow_ok = 0;
+                    break;
+                }
+                previous_turn = receipt->turn;
+            }
+        }
+        if (!shadow_ok) {
+            fprintf(stderr, "[leo] WARNING: v16 shadow tail truncated/corrupt — organism lives without counterfactual receipts.\n");
+            memset(&leo->shadow, 0, sizeof leo->shadow);
+        }
+    }
+
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
     leo_build_chamber_tags(leo);
@@ -6806,6 +7021,31 @@ static void print_flow_stats(const Leo *leo) {
                (double)leo_vec_cosine(long_current->perceived_mean,
                                       long_current->expressed_mean, GLYPH_COUNT));
     }
+
+    const LeoShadowReceipt *receipt =
+        leo_shadow_at(&leo->shadow, leo->shadow.n - 1);
+    if (g_leo_shadow_on && receipt && receipt->turn == s->turn) {
+        printf("     [shadow: observed=%llu next=%llu action=%s target=%016llx confidence=%.2f reasons=",
+               (unsigned long long)receipt->turn,
+               (unsigned long long)(receipt->turn == UINT64_MAX ? UINT64_MAX :
+                                    receipt->turn + 1),
+               leo_shadow_action_name(receipt->action),
+               (unsigned long long)receipt->wonder_id,
+               (double)receipt->confidence);
+        const char *sep = "";
+#define LEO_SHADOW_PRINT_REASON(bit, name) \
+        do { if (receipt->reasons & (bit)) { printf("%s%s", sep, (name)); sep = ","; } } while (0)
+        LEO_SHADOW_PRINT_REASON(LEO_SHADOW_REASON_OPEN, "open");
+        LEO_SHADOW_PRINT_REASON(LEO_SHADOW_REASON_ASKED, "asked");
+        LEO_SHADOW_PRINT_REASON(LEO_SHADOW_REASON_GAP, "gap");
+        LEO_SHADOW_PRINT_REASON(LEO_SHADOW_REASON_MOTION, "motion");
+        LEO_SHADOW_PRINT_REASON(LEO_SHADOW_REASON_ALIGNMENT, "aligned");
+        LEO_SHADOW_PRINT_REASON(LEO_SHADOW_REASON_RESOLVED, "resolved");
+        LEO_SHADOW_PRINT_REASON(LEO_SHADOW_REASON_UNGROUNDED, "ungrounded");
+#undef LEO_SHADOW_PRINT_REASON
+        if (!receipt->reasons) printf("none");
+        printf("]\n");
+    }
 }
 
 /* callback for the bigram-successor probe */
@@ -6859,6 +7099,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
         else if (!strcmp(argv[i], "--no-flow")) g_leo_flow_on = 0;
+        else if (!strcmp(argv[i], "--no-shadow")) g_leo_shadow_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
