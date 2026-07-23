@@ -4913,11 +4913,12 @@ static uint64_t leo_wonder_episode_id(const LeoWonderEpisode *ep) {
     return h ? h : 1;
 }
 
-static const char *leo_wonder_word_for_id(const Leo *leo, uint64_t wonder_id) {
+static const LeoWonderEpisode *leo_wonder_for_id(const Leo *leo,
+                                                 uint64_t wonder_id) {
     if (!leo || !wonder_id) return NULL;
     for (int i = 0; i < leo->school.n_wonders; i++)
         if (leo_wonder_episode_id(&leo->school.wonders[i]) == wonder_id)
-            return leo->school.wonders[i].word;
+            return &leo->school.wonders[i];
     return NULL;
 }
 
@@ -5514,12 +5515,31 @@ static const char *leo_calibration_verdict_name(int verdict) {
     return verdict >= 0 && verdict < LEO_CALIB_VERDICT_COUNT ? names[verdict] : "unscorable";
 }
 
+/* The human can causally invite an unfinished question without repeating its
+ * title. Mirror Wonder's own open-episode resonance contract against the exact
+ * episode named by the proposal: literal target OR either offered hypothesis.
+ * This only changes how the observer scores a lived return. */
+static int leo_wonder_prompt_invites(const Leo *leo, uint64_t wonder_id,
+                                     const char *prompt) {
+    const LeoWonderEpisode *ep = leo_wonder_for_id(leo, wonder_id);
+    if (!ep || !prompt) return 0;
+    if (leo_flow_prompt_has_word(prompt, ep->word)) return 1;
+    int hist[GLYPH_COUNT];
+    leo_school_glyph_votes(leo, prompt, hist, 1);
+    int offered[2] = {ep->offered_glyph, ep->offered_alt_glyph};
+    for (int i = 0; i < 2; i++)
+        if (offered[i] >= 0 && offered[i] < GLYPH_COUNT &&
+            hist[offered[i]] > 0) return 1;
+    return 0;
+}
+
 /* Judge the PREVIOUS proposal against this already-lived turn, before writing
  * a proposal for the next one. SPACE/HOLD both forbid immediate pressure;
  * HOLD additionally requires the unfinished identity not to disappear.
- * RELEASE requires that the same identity not reopen. A human who explicitly
- * names the target confounds REASKED/REOPENED: that is a return invited from
- * outside, not evidence that Leo applied autonomous pressure. */
+ * RELEASE requires that the same identity not reopen. A human who names the
+ * target or returns one of that episode's offered hypotheses confounds
+ * REASKED/REOPENED: that is a return invited from outside, not evidence that
+ * Leo applied autonomous pressure. */
 static void leo_shadow_calibrate(Leo *leo, const char *prompt) {
     if (!g_leo_shadow_on || !g_leo_flow_on || !leo ||
         leo->shadow.n <= 0 || leo->flow.n <= 0) return;
@@ -5557,12 +5577,12 @@ static void leo_shadow_calibrate(Leo *leo, const char *prompt) {
                    (observed->wonder & (LEO_FLOW_WONDER_OPEN |
                                         LEO_FLOW_WONDER_BORN |
                                         LEO_FLOW_WONDER_REASKED));
-    const char *target_word = leo_wonder_word_for_id(leo, proposal->wonder_id);
-    int human_return = target_word && leo_flow_prompt_has_word(prompt, target_word);
+    int human_invitation =
+        leo_wonder_prompt_invites(leo, proposal->wonder_id, prompt);
 
     if (!adjacent) {
         receipt.verdict = LEO_CALIB_UNSCORABLE;
-    } else if (human_return && (reasked || reopened)) {
+    } else if (human_invitation && (reasked || reopened)) {
         receipt.verdict = LEO_CALIB_UNSCORABLE;
     } else if (proposal->action == LEO_SHADOW_RELEASE) {
         if (reopened) receipt.verdict = LEO_CALIB_RELEASE_RELAPSE;
