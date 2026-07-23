@@ -2,7 +2,7 @@
   <img src="assets/leo.png" alt="Leo" width="300">
 </p>
   
-# leo — language-emergent organism · by Arianna Method
+# LEO — language emergent organism · by Arianna Method
 
 > *language is a field. dedicated to Leo.*
 
