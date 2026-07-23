@@ -77,6 +77,22 @@ times. It retains per-cell lives plus aggregate `matrix.tsv`, `receipts.tsv`,
 `sleep_edges.tsv`, and `summary.txt`. `LEO_MATRIX_PLAN_ONLY=1` validates the
 stimuli and writes the complete rotation without launching Leo.
 
+Run the matched unnamed-association experiment:
+
+```sh
+make visible-resonance-matrix
+```
+
+`local-v2-resonance` keeps an observed Wonder question open across three neutral
+turns, then returns either anchor A, anchor B, or an unrelated control without
+naming the target. Its orthogonal nine-cell design balances target, anchor pair,
+and return cue pairwise. `matrix.tsv` preserves the raw calibration verdict and
+adds separate columns for whether the question opened before the cue, whether
+the target returned on the cue turn, and the external causal interpretation.
+An unopened question is reported as `unopened-question`, never counted as a
+missed resonance or a quiet control. The raw receipt remains evidence and is
+never rewritten by this report.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow

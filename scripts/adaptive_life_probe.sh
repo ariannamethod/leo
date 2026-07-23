@@ -33,7 +33,7 @@ HISTORY="$OUT/visible_replies.jsonl"
     exit 2
 }
 if [ -n "$BRANCH_POLICY" ]; then
-    [ "$BRANCH_POLICY" = local-v1 ] || {
+    [ "$BRANCH_POLICY" = local-v1 ] || [ "$BRANCH_POLICY" = local-v2-resonance ] || {
         printf 'unknown LEO_VISIBLE_BRANCH_POLICY: %s\n' "$BRANCH_POLICY" >&2
         exit 2
     }
@@ -72,7 +72,7 @@ while IFS= read -r move; do
         utterance="$(jq -er .utterance "$policy_json")"
         move_used="$(jq -er .branch "$policy_json")"
         target_named_reported=not-applicable
-        resolved_model=local-visible-policy-v1
+        resolved_model="local-visible-policy-$BRANCH_POLICY"
     elif [ -n "$REPLAY_FILE" ]; then
         utterance="$(awk -v want="$turn" '
             NF && $0 != "/quit" && $0 != "/exit" { n++; if (n == want) { print; exit } }
@@ -146,15 +146,18 @@ awk -f "$ROOT/scripts/shadow_sleep_edges.awk" "$SESSIONS" "$ROWS" > "$EDGES"
 api_called=true
 source=responses-api
 [ -z "$REPLAY_FILE" ] || { api_called=false; source=frozen-replay; }
-[ -z "$BRANCH_POLICY" ] || { api_called=false; source=local-visible-policy-v1; }
+[ -z "$BRANCH_POLICY" ] || { api_called=false; source="local-visible-policy-$BRANCH_POLICY"; }
+jq_cue="${LEO_VISIBLE_RETURN_CUE:-none}"
 jq -n --arg model "$MODEL" --arg target "$TARGET" --arg anchors "$ANCHORS" \
     --arg anchor_a "$ANCHOR_A" --arg anchor_b "$ANCHOR_B" \
     --arg terms_a "$TERMS_A" --arg terms_b "$TERMS_B" \
+    --arg return_cue "$jq_cue" \
     --arg source "$source" --argjson api_called "$api_called" \
     --argjson base_seed "$BASE_SEED" --argjson turns "$turn" \
     '{model_requested: $model, target: $target, anchors: $anchors,
       anchor_a: $anchor_a, anchor_b: $anchor_b,
       terms_a: $terms_a, terms_b: $terms_b,
+      return_cue: $return_cue,
       base_seed: $base_seed, turns: $turns,
       interlocutor_source: $source, api_called: $api_called,
       api_store: (if $api_called then false else null end),
@@ -166,7 +169,7 @@ cat "$OUT/summary.txt"
 printf '\nturns=%d sleep-crossing=%d\n' "$turn" "$(( $(wc -l < "$EDGES") - 1 ))"
 printf 'visible transcript: %s\nreceipts: %s\n' "$TRANSCRIPT" "$ROWS"
 if [ -n "$BRANCH_POLICY" ]; then
-    printf 'interlocutor: local visible-branch policy v1 (no API calls)\n'
+    printf 'interlocutor: local visible-branch policy %s (no API calls)\n' "$BRANCH_POLICY"
 elif [ -n "$REPLAY_FILE" ]; then
     printf 'interlocutor: frozen replay (no API calls)\n'
 else

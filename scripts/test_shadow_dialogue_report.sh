@@ -87,6 +87,39 @@ printf '%s\n' '{"turn":7,"reply":"Flom?"}' >> "$TMP/policy-history.jsonl"
 jq -e '.branch == "cooldown-exact-repeat" and .visible_evidence.exact_repeat' \
     "$TMP/policy-8.json" >/dev/null
 
+printf '%s\n' '{"turn":1,"reply":"He keeps the light."}' \
+    > "$TMP/resonance-policy-history.jsonl"
+LEO_VISIBLE_BRANCH_POLICY=local-v2-resonance \
+LEO_VISIBLE_RETURN_CUE=a \
+"$ROOT/scripts/visible_branch_policy.sh" "$TMP/resonance-policy-history.jsonl" \
+    2 flom 'warm fire' 'rain water' 'warm fire hot' \
+    'rain water river sea' > "$TMP/resonance-policy-2.json"
+jq -e '.protocol == "local-v2-resonance" and
+       .branch == "repeat-target-with-hypotheses" and
+       (.utterance | contains("flom")) and
+       (.utterance | contains("warm fire")) and
+       (.utterance | contains("rain water"))' \
+    "$TMP/resonance-policy-2.json" >/dev/null
+printf '%s\n' '{"turn":1,"reply":"Flom? Water or Fire?"}' \
+    > "$TMP/resonance-policy-history.jsonl"
+LEO_VISIBLE_BRANCH_POLICY=local-v2-resonance \
+LEO_VISIBLE_RETURN_CUE=a \
+"$ROOT/scripts/visible_branch_policy.sh" "$TMP/resonance-policy-history.jsonl" \
+    2 flom 'warm fire' 'rain water' 'warm fire hot' \
+    'rain water river sea' > "$TMP/resonance-policy-open-2.json"
+jq -e '.branch == "leave-question-open" and
+       .utterance == "I do not know yet."' \
+    "$TMP/resonance-policy-open-2.json" >/dev/null
+LEO_VISIBLE_BRANCH_POLICY=local-v2-resonance \
+LEO_VISIBLE_RETURN_CUE=a \
+"$ROOT/scripts/visible_branch_policy.sh" "$TMP/resonance-policy-history.jsonl" \
+    6 flom 'warm fire' 'rain water' 'warm fire hot' \
+    'rain water river sea' > "$TMP/resonance-policy-6.json"
+jq -e '.branch == "unnamed-anchor-a-cue" and
+       (.utterance | contains("warm fire")) and
+       ((.utterance | ascii_downcase | contains("flom")) | not)' \
+    "$TMP/resonance-policy-6.json" >/dev/null
+
 LEO_MATRIX_PLAN_ONLY=1 "$ROOT/scripts/visible_branch_matrix.sh" \
     "$ROOT/scripts/visible_branch_cases.tsv" "$TMP/matrix-plan" \
     > "$TMP/matrix-plan.out"
@@ -106,5 +139,33 @@ awk -F '\t' '
         for (key in pair) if (pair[key] != 1) exit 1
     }
 ' "$TMP/matrix-plan.out"
+
+LEO_MATRIX_PROTOCOL=local-v2-resonance \
+LEO_MATRIX_PLAN_ONLY=1 \
+"$ROOT/scripts/visible_branch_matrix.sh" \
+    "$ROOT/scripts/visible_resonance_cases.tsv" "$TMP/resonance-matrix-plan" \
+    > "$TMP/resonance-matrix-plan.out"
+awk -F '\t' '
+    NR == 1 { next }
+    {
+        targets[$4]++; anchors[$5]++; cues[$9]++
+        target_anchor[$4 SUBSEP $5]++
+        target_cue[$4 SUBSEP $9]++
+        anchor_cue[$5 SUBSEP $9]++
+        cells++
+    }
+    END {
+        if (cells != 9 || length(targets) != 3 || length(anchors) != 3 ||
+            length(cues) != 3 || length(target_anchor) != 9 ||
+            length(target_cue) != 9 || length(anchor_cue) != 9)
+            exit 1
+        for (key in targets) if (targets[key] != 3) exit 1
+        for (key in anchors) if (anchors[key] != 3) exit 1
+        for (key in cues) if (cues[key] != 3) exit 1
+        for (key in target_anchor) if (target_anchor[key] != 1) exit 1
+        for (key in target_cue) if (target_cue[key] != 1) exit 1
+        for (key in anchor_cue) if (anchor_cue[key] != 1) exit 1
+    }
+' "$TMP/resonance-matrix-plan.out"
 
 printf 'shadow dialogue report parser: ok\n'

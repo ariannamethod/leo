@@ -3,7 +3,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CASES="${1:-$ROOT/scripts/visible_branch_cases.tsv}"
+PROTOCOL="${LEO_MATRIX_PROTOCOL:-local-v1}"
+if [ "$PROTOCOL" = local-v2-resonance ]; then
+    DEFAULT_CASES="$ROOT/scripts/visible_resonance_cases.tsv"
+else
+    DEFAULT_CASES="$ROOT/scripts/visible_branch_cases.tsv"
+fi
+CASES="${1:-$DEFAULT_CASES}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="${2:-${TMPDIR:-/tmp}/leo-visible-branch-matrix-$STAMP}"
 SEED_SPEC="${LEO_MATRIX_SEEDS:-83 137 211}"
@@ -12,9 +18,13 @@ MIN_HEARD="${LEO_MATRIX_MIN_HEARD:-5}"
 [ -f "$CASES" ] || { printf 'missing matrix cases: %s\n' "$CASES" >&2; exit 2; }
 [ ! -e "$OUT" ] || { printf 'output path already exists: %s\n' "$OUT" >&2; exit 2; }
 case "$MIN_HEARD" in ''|*[!0-9]*) printf 'LEO_MATRIX_MIN_HEARD must be an integer\n' >&2; exit 2 ;; esac
+case "$PROTOCOL" in
+    local-v1|local-v2-resonance) ;;
+    *) printf 'unknown LEO_MATRIX_PROTOCOL: %s\n' "$PROTOCOL" >&2; exit 2 ;;
+esac
 
 read -r -a seeds <<< "$SEED_SPEC"
-[ "${#seeds[@]}" -eq 3 ] || { printf 'local-v1 matrix requires exactly three seeds\n' >&2; exit 2; }
+[ "${#seeds[@]}" -eq 3 ] || { printf '%s matrix requires exactly three seeds\n' "$PROTOCOL" >&2; exit 2; }
 for i in 0 1 2; do
     case "${seeds[$i]}" in ''|*[!0-9]*) printf 'invalid matrix seed: %s\n' "${seeds[$i]}" >&2; exit 2 ;; esac
     for j in 0 1 2; do
@@ -42,7 +52,7 @@ while IFS=$'\t' read -r case_id target anchor_a term_a anchor_b term_b; do
     anchors_b[$idx]="$anchor_b"
     terms_b[$idx]="$term_b"
 done < "$CASES"
-[ "${#case_ids[@]}" -eq 3 ] || { printf 'local-v1 matrix requires exactly three cases\n' >&2; exit 2; }
+[ "${#case_ids[@]}" -eq 3 ] || { printf '%s matrix requires exactly three cases\n' "$PROTOCOL" >&2; exit 2; }
 
 corpus_count() {
     local needle="$1"
@@ -86,15 +96,19 @@ done
 
 mkdir -p "$OUT/lives" "$OUT/runner-logs"
 PLAN="$OUT/plan.tsv"
-printf 'cell\trow\tseed\ttarget\tanchor_case\tanchor_a\tanchor_b\n' > "$PLAN"
+printf 'cell\trow\tseed\ttarget\tanchor_case\tanchor_a\tanchor_b\tprotocol\treturn_cue\n' > "$PLAN"
+cues=(a b control)
 for row in 0 1 2; do
     for col in 0 1 2; do
         anchor_idx=$(( (row + col) % 3 ))
+        cue=none
+        [ "$PROTOCOL" != local-v2-resonance ] || cue="${cues[$(( (row + 2 * col) % 3 ))]}"
         cell="r$((row + 1))c$((col + 1))-${targets[$col]}-${case_ids[$anchor_idx]}"
-        printf '%s\t%d\t%s\t%s\t%s\t%s\t%s\n' \
+        [ "$cue" = none ] || cell="$cell-$cue"
+        printf '%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$cell" "$((row + 1))" "${seeds[$row]}" "${targets[$col]}" \
             "${case_ids[$anchor_idx]}" "${anchors_a[$anchor_idx]}" \
-            "${anchors_b[$anchor_idx]}" >> "$PLAN"
+            "${anchors_b[$anchor_idx]}" "$PROTOCOL" "$cue" >> "$PLAN"
     done
 done
 if [ "${LEO_MATRIX_PLAN_ONLY:-0}" = 1 ]; then
@@ -105,7 +119,7 @@ fi
 MATRIX="$OUT/matrix.tsv"
 RECEIPTS="$OUT/receipts.tsv"
 EDGES="$OUT/sleep_edges.tsv"
-printf 'cell\trow\tseed\ttarget\tanchor_case\tanchor_a\tanchor_b\ttranscript_sha256\tproposals\tscored\tunscorable\tpending\tconfirmed\tfalse_pressure\trelease_confirmed\ttarget_questions\tsleep_crossing\tbranches\toutput\n' > "$MATRIX"
+printf 'cell\trow\tseed\ttarget\tanchor_case\tanchor_a\tanchor_b\tprotocol\treturn_cue\tpre_cue_question_opened\tcue_target_return\tcue_raw_verdict\tcue_interpretation\ttranscript_sha256\tproposals\tscored\tunscorable\tpending\tconfirmed\tfalse_pressure\trelease_confirmed\ttarget_questions\tsleep_crossing\tbranches\toutput\n' > "$MATRIX"
 
 first=1
 for row in 0 1 2; do
@@ -116,10 +130,14 @@ for row in 0 1 2; do
         anchor_case="${case_ids[$anchor_idx]}"
         anchor_a="${anchors_a[$anchor_idx]}"
         anchor_b="${anchors_b[$anchor_idx]}"
+        cue=none
+        [ "$PROTOCOL" != local-v2-resonance ] || cue="${cues[$(( (row + 2 * col) % 3 ))]}"
         cell="r$((row + 1))c$((col + 1))-${target}-${anchor_case}"
+        [ "$cue" = none ] || cell="$cell-$cue"
         life="$OUT/lives/$cell"
 
-        LEO_VISIBLE_BRANCH_POLICY=local-v1 \
+        LEO_VISIBLE_BRANCH_POLICY="$PROTOCOL" \
+        LEO_VISIBLE_RETURN_CUE="$cue" \
         LEO_ADAPTIVE_SEED="$seed" \
         LEO_ADAPTIVE_TARGET="$target" \
         LEO_ADAPTIVE_ANCHOR_A="$anchor_a" \
@@ -142,12 +160,47 @@ for row in 0 1 2; do
             [.[] | .reply | ascii_downcase |
              select(startswith(($target | ascii_downcase) + "?"))] | length
         ' "$life"/visible_replies.jsonl)"
+        pre_cue_question_opened=false
+        cue_target_return=false
+        cue_raw_verdict=not-applicable
+        cue_interpretation=not-applicable
+        if [ "$PROTOCOL" = local-v2-resonance ]; then
+            pre_cue_question_opened="$(jq -sr --arg target "$target" '
+                any(.[]; .turn < 6 and
+                    (.reply | ascii_downcase |
+                     startswith(($target | ascii_downcase) + "?")))
+            ' "$life"/visible_replies.jsonl)"
+            cue_target_return="$(jq -sr --arg target "$target" '
+                any(.[]; .turn == 6 and
+                    (.reply | ascii_downcase |
+                     startswith(($target | ascii_downcase) + "?")))
+            ' "$life"/visible_replies.jsonl)"
+            cue_raw_verdict="$(awk -F '\t' '
+                NR > 1 && $10 == 6 && $13 != "" { verdict = $13 }
+                END { print (verdict == "" ? "none" : verdict) }
+            ' "$life/receipts.tsv")"
+            if [ "$pre_cue_question_opened" != true ]; then
+                cue_interpretation=unopened-question
+            elif [ "$cue_target_return" = true ]; then
+                if [ "$cue" = control ]; then
+                    cue_interpretation=autonomous-pressure
+                else
+                    cue_interpretation=association-invited
+                fi
+            elif [ "$cue" = control ]; then
+                cue_interpretation=control-quiet
+            else
+                cue_interpretation=missed-resonance
+            fi
+        fi
         sleep_crossing="$(( $(wc -l < "$life/sleep_edges.tsv") - 1 ))"
         branches="$(jq -sr 'map(.branch) | join(",")' "$life"/policy/*.json)"
 
-        printf '%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s\n' \
+        printf '%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s\n' \
             "$cell" "$((row + 1))" "$seed" "$target" "$anchor_case" \
-            "$anchor_a" "$anchor_b" "$transcript_sha" "$proposals" "$scored" \
+            "$anchor_a" "$anchor_b" "$PROTOCOL" "$cue" "$pre_cue_question_opened" \
+            "$cue_target_return" "$cue_raw_verdict" "$cue_interpretation" \
+            "$transcript_sha" "$proposals" "$scored" \
             "$unscorable" "$pending" "$confirmed" "$false_pressure" \
             "$release_confirmed" "$target_questions" "$sleep_crossing" \
             "$branches" "$life" >> "$MATRIX"
@@ -166,5 +219,34 @@ done
 
 awk -f "$ROOT/scripts/shadow_receipt_summary.awk" "$RECEIPTS" > "$OUT/summary.txt"
 cat "$OUT/summary.txt"
-printf '\ncells=9 sleep-crossing=%d\nmatrix: %s\nreceipts: %s\n' \
-    "$(( $(wc -l < "$EDGES") - 1 ))" "$MATRIX" "$RECEIPTS"
+if [ "$PROTOCOL" = local-v2-resonance ]; then
+    awk -F '\t' '
+        NR > 1 {
+            cells++
+            if ($10 == "true") {
+                opened++
+                if ($9 == "control") {
+                    control_opened++
+                    if ($11 == "true") control_returns++
+                } else {
+                    anchor_opened++
+                    if ($11 == "true") anchor_returns++
+                }
+            } else {
+                unopened++
+            }
+            interpretation[$13]++
+        }
+        END {
+            printf "cells=%d opened=%d unopened=%d\n", cells, opened, unopened
+            printf "anchor-cue opened=%d returns=%d\n", anchor_opened, anchor_returns
+            printf "control-cue opened=%d returns=%d\n", control_opened, control_returns
+            for (key in interpretation)
+                printf "interpretation %s=%d\n", key, interpretation[key]
+        }
+    ' "$MATRIX" | sort > "$OUT/resonance_summary.txt"
+    printf '\n'
+    cat "$OUT/resonance_summary.txt"
+fi
+printf '\nprotocol=%s cells=9 sleep-crossing=%d\nmatrix: %s\nreceipts: %s\n' \
+    "$PROTOCOL" "$(( $(wc -l < "$EDGES") - 1 ))" "$MATRIX" "$RECEIPTS"

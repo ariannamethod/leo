@@ -3530,3 +3530,52 @@ yet prove autonomous recall: the second visible question followed a human prompt
 which is why calibration excluded it. The next matched experiment should remove that invitation and use
 only predeclared association returns, comparing resonant, opposite, and unrelated visible cues. Until that
 test, the result licenses the external observatory, not any scheduler authority over speech.
+
+## Phase A.34 — a question can be invited without being named (2026-07-23)
+
+The matched return experiment removes the direct target invitation from A.33. Three new anchor geometries
+map cleanly onto distinct lived glyph pairs: `warm fire / rain water`, `cat bird / dark night`, and
+`bright sun / cold winter`. An orthogonal nine-cell rotation balances target, anchor pair, and return cue
+pairwise. After Leo visibly opens the novel target as a Wonder question, the human says only `I do not
+know yet`, crosses three neutral turns and process deaths, then returns anchor A, anchor B, or the unrelated
+control `small room`. The cue never contains the target word. Explicit grounding happens only after the
+cue has been observed.
+
+The first smoke exposed and removed an experimental fault rather than a Leo fault. The preliminary policy
+asked which hypothesis to keep and then offered one anchor; School correctly treated that as an answer,
+so Wonder resolved before the planned cue. The final policy never counter-questions or supplies a
+hypothesis while preserving the open question. A matched seed-83 smoke then returned
+`Flom? Water or Fire?` on `The warm fire is here again`, while the otherwise identical control replied
+without `flom`.
+
+The full matrix produced:
+
+```text
+cells=9 opened=6 unopened=3
+anchor-cue: opened=4 returns=4
+control-cue: opened=2 returns=0
+association-invited=4 control-quiet=2 unopened-question=3
+raw proposals=81 scored=48 pending=33
+raw confirmed=44 false-pressure=4
+sleep-crossing receipts=48
+```
+
+The denominator matters. Two apparent anchor misses and one quiet control were lives in which Leo never
+asked the novel target before the cue; they are `unopened-question`, not evidence about recall. Among
+eligible open Wonders, an unnamed lived hypothesis returned the exact target in all four anchor cells,
+while neither of the two unrelated controls did. Across all controls the target returned `0/3`.
+The four association-driven replies preserved the appropriate two hypotheses:
+`Flom? Water or Fire?`, `Flom? Dark or Animal?`, `Nareth? Water or Fire?`, and
+`Suvin? Dark or Animal?`.
+
+All four meaningful returns were labelled `false-pressure` by the raw calibrator because its current
+human-invitation test recognizes only the literal target word. The raw verdict is retained unchanged next
+to the external `association-invited` interpretation. This is evidence of a specific observational blind
+spot, not permission for shadow to govern speech: a human can invite Leo's unfinished question through
+the question's own lived hypotheses without saying its name.
+
+The next narrow repair is calibration-only. At verdict time, it should classify a return as invited when
+the human prompt resonates with the same unresolved episode's stored offered glyphs, while keeping an
+unrelated return as real autonomous pressure. Generation, Wonder recurrence, thresholds, and persisted
+meaning must remain untouched, and the new rule must be proved against literal invitation, semantic
+invitation, unrelated control, and sleep round-trip fixtures before the live matrix is repeated.
