@@ -31,4 +31,26 @@ awk -F '\t' '
     END { exit !(ok && NR == 2) }
 ' "$TMP/rows.tsv"
 
+printf 'scenario\tseed\tproposal_turn\tprompt\treply\taction\ttarget\tconfidence\treasons\tobserved_turn\tnext_prompt\tnext_reply\tverdict\n' > "$TMP/receipts.tsv"
+cat "$TMP/rows.tsv" >> "$TMP/receipts.tsv"
+printf '%s\n' \
+    $'scenario\tseed\tturn\tsession\tsession_seed\tprompt' \
+    $'fixture\t83\t1\t1\t83\tWhat is a glim?' \
+    $'fixture\t83\t2\t2\t84\tDo you remember glim?' > "$TMP/sessions.tsv"
+
+awk -f "$ROOT/scripts/shadow_sleep_edges.awk" \
+    "$TMP/sessions.tsv" "$TMP/receipts.tsv" > "$TMP/edges.tsv"
+awk -F '\t' '
+    NR == 2 {
+        ok = NF == 9 && $1 == "fixture" && $3 == "1" && $4 == "1" &&
+             $5 == "space" && $7 == "2" && $8 == "2" &&
+             $9 == "unscorable"
+    }
+    END { exit !(ok && NR == 2) }
+' "$TMP/edges.tsv"
+
+awk -f "$ROOT/scripts/shadow_receipt_summary.awk" \
+    "$TMP/receipts.tsv" > "$TMP/summary.txt"
+grep -Fq 'proposals=2 scored=0 unscorable=1 pending=1' "$TMP/summary.txt"
+
 printf 'shadow dialogue report parser: ok\n'

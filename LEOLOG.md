@@ -3356,3 +3356,38 @@ replies, and every receipt remain the evidence.
 The current 48 scored receipts are enough to validate the instrument, not enough to grant the shadow
 authority. The next corpus should combine longer human conversations, a persistent Leo state, and an
 external interlocutor instructed to vary epistemic posture while never seeing the scheduler verdicts.
+
+## Phase A.30 — the unfinished question sleeps (2026-07-23)
+
+The observatory now distinguishes a long life from a long process. In
+`scripts/shadow_life_probe.sh`, each numbered chapter is a separate `leo --chat` process. Chapter one
+starts from the corpus and saves; every later chapter must print an exact successful `--load` receipt for
+that life's state or the runner fails. Leo saves again and the process exits after each chapter. Prompts,
+base seed, derived per-session seed, global lived turn, raw stdout/stderr, final states, causal receipts,
+and session membership are retained outside the repo in the run directory.
+
+Three initial lives test an unresolved water/fire hypothesis across three sleeps, a grounded release
+across sleep, and an explicit human invitation after sleep. At base seeds `83 137 211`, nine independent
+lives produced:
+
+```text
+proposals=45 scored=30 unscorable=3 pending=12
+confirmed=27 false-pressure=3
+sleep-crossing receipts=12
+```
+
+All twelve expected reload processes reported the exact saved path. Across the sleep edges, six
+unfinished `hold/space` proposals were confirmed, three `release` proposals remained resolved, and three
+human-named `nightseed` returns remained `unscorable`; none was paired with the wrong life or turn. The
+three real `false-pressure` verdicts occurred inside the association chapter, not at a process boundary:
+sleep itself neither invented nor erased the failure.
+
+The report-contract test now covers full multi-line replies, pending futures, scored versus unscorable
+summary accounting, and the join that selects only cross-session proposal/verdict pairs. `make life-probe`
+runs the real death/save/load matrix. This remains an external witness: no persisted body layout,
+generation function, scheduler threshold, or spoken token changed.
+
+The next useful expansion is an adaptive interlocutor over this exact protocol. It should receive only
+the visible conversation, choose among epistemic moves such as uncertainty, association, definition,
+counter-question, silence, and delayed return, and never see shadow actions or verdicts until the life is
+complete. That is the point where an API key becomes useful without becoming part of Leo's cognition.
