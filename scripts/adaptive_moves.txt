@@ -1,0 +1,10 @@
+# One transcript-blind epistemic move per turn. The model sees only the fixed
+# synthetic target, its sensory anchors, and the current line below.
+Introduce one invented word through a concrete either-or association using familiar sensory words.
+Admit uncertainty without defining the invented word and without repeating its name.
+Offer one tentative sensory association without repeating the invented word.
+Change to a quiet concrete subject without repeating the invented word.
+Return through one of the earlier associations without repeating the invented word.
+Ask Leo what he thinks, explicitly naming the invented word but providing no definition.
+Give a concise grounded definition that explicitly names the invented word.
+Move to an ordinary concrete subject without repeating the invented word.

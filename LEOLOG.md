@@ -3391,3 +3391,106 @@ The next useful expansion is an adaptive interlocutor over this exact protocol. 
 the visible conversation, choose among epistemic moves such as uncertainty, association, definition,
 counter-question, silence, and delayed return, and never see shadow actions or verdicts until the life is
 complete. That is the point where an API key becomes useful without becoming part of Leo's cognition.
+
+## Phase A.31 — the stranger never sees the child (2026-07-23)
+
+The first model-driven interlocutor keeps a harder privacy and causal boundary than originally planned.
+The external Responses API receives no Leo transcript at all: only a fixed synthetic target (`flom`),
+fixed sensory anchors (`warm cinnamon or cool rain`), one abstract epistemic move, and the turn number.
+It returns one schema-constrained human utterance with `store: false`. Leo, every state file, all Flow and
+Wonder records, shadow proposals, calibration verdicts, and the causal report remain local. Every turn is
+still a separate process with an exact save, exit, and required load. The API key travels through a
+mode-600 temporary curl configuration and is absent from requests, responses, manifests, and argv.
+
+The first complete fixed-target life used `gpt-5.6-luna`, base seed 83, eight API calls, and eight Leo
+processes. All calls completed (1,714 input tokens, 856 output tokens), all target-name claims agreed with
+an independent local word-boundary measurement, and five proposal verdicts crossed real sleep edges:
+
+```text
+proposals=8 scored=5 unscorable=0 pending=3
+confirmed=4 false-pressure=1
+sleep-crossing receipts=5
+```
+
+Leo carried both sensory poles across the life. Before the human defined the word, his replies retained
+warmth, winter, window, water, and the choice `Fire or Home?`; after `Flom means...`, he returned to rain
+and window. This is evidence of persistent association, not proof that Leo installed a lexical definition
+for `flom`: his own Wonder current selected `Brings?` as its unfinished identity rather than the external
+target. That distinction is exactly why the observatory records both human stimuli and internal stable
+identities instead of declaring semantic success from surface echoes.
+
+The one `false-pressure` receipt is real under the existing contract. After Leo asked `Brings? Fire or
+Home?`, shadow proposed `space`; on the next process the human defined `flom` without naming `brings`, and
+Leo autonomously asked `Brings? Fire or Home?` again. It was neither a human-invited return nor a sleep
+pairing error. Because shadow remains read-only, this is a measured boundary rather than a voice
+regression. It argues against granting a scheduler broad speech authority and for testing only a narrow,
+reversible cooldown on exact autonomous reasks if a future intervention phase is opened.
+
+An aborted preliminary run also caught an instrumentation error before it could become evidence: JSON
+`false` from the model was read with `jq -e` and treated as process failure. The runner now validates a
+boolean without assigning truth to its exit status. A second preliminary run showed why self-report is
+not proof: a model could literally name a newly invented word while reporting `target_named=false`.
+The final protocol pins one target across all moves and computes literal naming locally while retaining
+the model report separately.
+
+This is not yet a genuinely adaptive interlocutor. The fixed move sequence varies epistemic posture but
+does not react to Leo's replies. Feeding shadow verdicts into move choice would leak the judge into the
+stimulus, while exporting Leo's private dialogue would break the chosen boundary. A frozen-replay lane
+therefore reuses the exact captured human utterances without another API call and changes only Leo's base
+sampling seed. Replays at 137 and 211 produced distinct transcript hashes from seed 83, but the same
+causal topology. The three-life matrix totals:
+
+```text
+proposals=24 scored=15 unscorable=0 pending=9
+confirmed=12 false-pressure=3
+sleep-crossing receipts=15
+```
+
+Three replies were byte-invariant across all sampling paths: `Cinnamon?`, then `Brings? Fire or Home?`,
+then the same `Brings? Fire or Home?` after the definition. The surrounding speech changed substantially.
+Thus the retained association and its pressure boundary are not artifacts of one random continuation;
+they arise from the deterministic Wonder/School scaffold around these prompts. This still does not license
+a speech intervention. The next causal design is a predeclared local branching policy whose inputs are
+visible conversational events only and whose branches are written before any run.
+
+## Phase A.32 — the human can continue not knowing (2026-07-23)
+
+The first adaptive interlocutor is local and predeclared. `local-v1` reads only the accumulated visible
+Leo replies. Its complete sensorium is a literal question mark, whole-word occurrence of the fixed target,
+exact reply repetition, and counts of the two public sensory anchor vocabularies. It cannot open raw logs,
+state, Flow, Wonder, shadow proposals, calibration verdicts, confidence, or future replies. Before each
+human turn it writes a JSON receipt containing the branch, exact utterance, and visible evidence that chose
+it. No external service participates.
+
+A lexical control mattered. With corpus-familiar `warm light` and `cool rain`, the old fixed sequence
+produced nine `none` proposals: association alone did not manufacture Wonder. The target had not been
+asked on the first distress-gated turn, and a fixed human immediately stopped naming it. The adaptive rule
+therefore repeats only an unmet target. Once Leo visibly asks `Flom?`, the next human line is only `I do not
+know yet.` It contains no teachable concept pair and cannot accidentally masquerade as an answer. Later
+branches choose the less represented anchor, protect exact repeated questions, explicitly invite the
+target once, ground it once, and then observe an ordinary post-closure turn.
+
+Three nine-process lives at base seeds 83, 137, and 211 produced different transcript hashes and one real
+policy divergence: seed 83 selected a delayed cool return, while 137 and 211 selected delayed warm returns
+from their visible word balance. The causal matrix was nevertheless invariant:
+
+```text
+proposals=27 scored=15 unscorable=3 pending=9
+confirmed=15 false-pressure=0
+hold confirmed=3
+space confirmed=9, unscorable=3
+release confirmed=3
+sleep-crossing receipts=18
+```
+
+In every life, the first ordinary reply omitted the target; the policy repeated `flom` without a
+definition; Leo asked `Flom?`; the human continued not knowing; the question survived unrelated speech
+and process death; a later human-named return was correctly `unscorable`; and the explicit definition
+closed the same stable Wonder identity exactly once. The policy never saw that identity. It inferred only
+that Leo's visible `Flom?` was an exact repeated question and selected `ground-with-repeat-open`.
+
+This is the first evidence that the intended distinction is operational rather than poetic: Leo can ask,
+the human can refuse false omniscience, and the organism can carry the open question without either party
+pretending it has already become knowledge. The branch policy remains an external conversational research
+instrument. It does not alter Leo's generator, state layout, or will, and its clean result is not permission
+to route shadow actions into speech.

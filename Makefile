@@ -14,7 +14,7 @@ ifneq ($(wildcard $(AML_SRC)),)   # the ONLY AML source is the vendored copy in 
   AML_FLAGS := -DHAVE_AML -Iariannamethod
 endif
 
-.PHONY: all test asan tsan clean run dialogue-probe life-probe
+.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe visible-branch-probe
 
 all: leo
 
@@ -33,6 +33,12 @@ dialogue-probe: leo
 
 life-probe: leo
 	./scripts/shadow_life_probe.sh
+
+adaptive-probe: leo
+	./scripts/adaptive_life_probe.sh
+
+visible-branch-probe: leo
+	LEO_VISIBLE_BRANCH_POLICY=local-v1 ./scripts/adaptive_life_probe.sh scripts/visible_branch_phases.txt
 
 # unit tests — test_leo.c #includes leo.c with LEO_NO_MAIN
 test: tests/test_leo.c leo.c

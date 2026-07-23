@@ -53,4 +53,34 @@ awk -f "$ROOT/scripts/shadow_receipt_summary.awk" \
     "$TMP/receipts.tsv" > "$TMP/summary.txt"
 grep -Fq 'proposals=2 scored=0 unscorable=1 pending=1' "$TMP/summary.txt"
 
+printf '%s\n' \
+    'you> leo> Glim?' \
+    'A second line.' \
+    '     [shadow: observed=1 next=2 action=space target=abc confidence=0.95 reasons=open,asked]' \
+    'you> [leo step0] PASS' > "$TMP/visible-raw.log"
+awk -f "$ROOT/scripts/leo_visible_reply.awk" "$TMP/visible-raw.log" > "$TMP/reply.txt"
+printf 'Glim?\nA second line.\n' > "$TMP/expected-reply.txt"
+cmp -s "$TMP/expected-reply.txt" "$TMP/reply.txt"
+
+: > "$TMP/policy-history.jsonl"
+"$ROOT/scripts/visible_branch_policy.sh" "$TMP/policy-history.jsonl" \
+    1 flom 'warm light' 'cool rain' > "$TMP/policy-1.json"
+jq -e '.branch == "introduce-target" and (.utterance | contains("flom"))' \
+    "$TMP/policy-1.json" >/dev/null
+printf '%s\n' '{"turn":1,"reply":"He keeps the light."}' > "$TMP/policy-history.jsonl"
+"$ROOT/scripts/visible_branch_policy.sh" "$TMP/policy-history.jsonl" \
+    2 flom 'warm light' 'cool rain' > "$TMP/policy-2.json"
+jq -e '.branch == "repeat-unmet-target" and (.utterance | contains("flom"))' \
+    "$TMP/policy-2.json" >/dev/null
+printf '%s\n' '{"turn":2,"reply":"Flom?"}' >> "$TMP/policy-history.jsonl"
+"$ROOT/scripts/visible_branch_policy.sh" "$TMP/policy-history.jsonl" \
+    3 flom 'warm light' 'cool rain' > "$TMP/policy-3.json"
+jq -e '.branch == "protect-new-question" and .utterance == "I do not know yet."' \
+    "$TMP/policy-3.json" >/dev/null
+printf '%s\n' '{"turn":7,"reply":"Flom?"}' >> "$TMP/policy-history.jsonl"
+"$ROOT/scripts/visible_branch_policy.sh" "$TMP/policy-history.jsonl" \
+    8 flom 'warm light' 'cool rain' > "$TMP/policy-8.json"
+jq -e '.branch == "cooldown-exact-repeat" and .visible_evidence.exact_repeat' \
+    "$TMP/policy-8.json" >/dev/null
+
 printf 'shadow dialogue report parser: ok\n'
