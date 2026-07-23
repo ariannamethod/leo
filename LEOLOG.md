@@ -3494,3 +3494,39 @@ the human can refuse false omniscience, and the organism can carry the open ques
 pretending it has already become knowledge. The branch policy remains an external conversational research
 instrument. It does not alter Leo's generator, state layout, or will, and its clean result is not permission
 to route shadow actions into speech.
+
+## Phase A.33 — the question is not named flom (2026-07-23)
+
+One target and one sensory pair could have been a lexical coincidence. The local visible policy is now
+parameterized by neutral anchor A/B phrases and explicit visible term sets. A guarded Latin-square runner
+rotates three corpus-absent targets (`flom`, `nareth`, `suvin`), three corpus-familiar anchor pairs, and
+base seeds 83/137/211 across nine lives. Every target meets every anchor pair exactly once; every seed sees
+every pair once. Before launching Leo, the runner rejects a target found anywhere in `leo.txt`, an anchor
+term seen fewer than five times, duplicate targets or seeds, and any malformed three-by-three design.
+
+The three anchor geometries were `warm light / cool rain`, `small bird / dark water`, and
+`bright sun / cold stone`. Their visible association terms were declared before the run. All nine lives
+used the same nine policy phases, but anchor-return direction remained adaptive: five cells selected A
+and four selected B from the words actually visible in Leo's preceding replies. Every cell had a distinct
+transcript SHA-256. The aggregate causal result was:
+
+```text
+proposals=81 scored=45 unscorable=9 pending=27
+confirmed=45 false-pressure=0
+hold confirmed=9
+space confirmed=27, unscorable=9
+release confirmed=9
+sleep-crossing receipts=54
+```
+
+Each target followed the same visible lifecycle in all three anchor contexts. The first turn did not ask;
+the policy repeated only the unmet target; Leo asked the correctly titled `Target?`; the human answered
+only `I do not know yet.`; the open question crossed unrelated turns and process boundaries; the direct
+human invitation later produced the same `Target?` and was correctly `unscorable`; one explicit grounding
+produced one confirmed release. All cells counted exactly two target questions and one confirmed release.
+
+This rules out a `flom`-specific or warm/rain-specific explanation for continued not-knowing. It does not
+yet prove autonomous recall: the second visible question followed a human prompt that named the target,
+which is why calibration excluded it. The next matched experiment should remove that invitation and use
+only predeclared association returns, comparing resonant, opposite, and unrelated visible cues. Until that
+test, the result licenses the external observatory, not any scheduler authority over speech.

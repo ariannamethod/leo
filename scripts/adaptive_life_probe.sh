@@ -10,9 +10,11 @@ OUT="${2:-${TMPDIR:-/tmp}/leo-adaptive-life-$STAMP}"
 BASE_SEED="${LEO_ADAPTIVE_SEED:-83}"
 MODEL="${LEO_INTERLOCUTOR_MODEL:-gpt-5.6-luna}"
 TARGET="${LEO_ADAPTIVE_TARGET:-flom}"
-WARM_ANCHOR="${LEO_ADAPTIVE_WARM_ANCHOR:-warm light}"
-COOL_ANCHOR="${LEO_ADAPTIVE_COOL_ANCHOR:-cool rain}"
-ANCHORS="${LEO_ADAPTIVE_ANCHORS:-$WARM_ANCHOR or $COOL_ANCHOR}"
+ANCHOR_A="${LEO_ADAPTIVE_ANCHOR_A:-${LEO_ADAPTIVE_WARM_ANCHOR:-warm light}}"
+ANCHOR_B="${LEO_ADAPTIVE_ANCHOR_B:-${LEO_ADAPTIVE_COOL_ANCHOR:-cool rain}}"
+TERMS_A="${LEO_ADAPTIVE_TERMS_A:-$ANCHOR_A}"
+TERMS_B="${LEO_ADAPTIVE_TERMS_B:-$ANCHOR_B}"
+ANCHORS="${LEO_ADAPTIVE_ANCHORS:-$ANCHOR_A or $ANCHOR_B}"
 KEY_FILE="${OPENAI_API_KEY_FILE:-}"
 REPLAY_FILE="${LEO_INTERLOCUTOR_REPLAY_FILE:-}"
 BRANCH_POLICY="${LEO_VISIBLE_BRANCH_POLICY:-}"
@@ -65,7 +67,8 @@ while IFS= read -r move; do
     if [ -n "$BRANCH_POLICY" ]; then
         policy_json="$OUT/policy/turn-$(printf '%02d' "$turn").json"
         "$ROOT/scripts/visible_branch_policy.sh" "$HISTORY" "$turn" \
-            "$TARGET" "$WARM_ANCHOR" "$COOL_ANCHOR" > "$policy_json"
+            "$TARGET" "$ANCHOR_A" "$ANCHOR_B" "$TERMS_A" "$TERMS_B" \
+            > "$policy_json"
         utterance="$(jq -er .utterance "$policy_json")"
         move_used="$(jq -er .branch "$policy_json")"
         target_named_reported=not-applicable
@@ -145,9 +148,13 @@ source=responses-api
 [ -z "$REPLAY_FILE" ] || { api_called=false; source=frozen-replay; }
 [ -z "$BRANCH_POLICY" ] || { api_called=false; source=local-visible-policy-v1; }
 jq -n --arg model "$MODEL" --arg target "$TARGET" --arg anchors "$ANCHORS" \
+    --arg anchor_a "$ANCHOR_A" --arg anchor_b "$ANCHOR_B" \
+    --arg terms_a "$TERMS_A" --arg terms_b "$TERMS_B" \
     --arg source "$source" --argjson api_called "$api_called" \
     --argjson base_seed "$BASE_SEED" --argjson turns "$turn" \
     '{model_requested: $model, target: $target, anchors: $anchors,
+      anchor_a: $anchor_a, anchor_b: $anchor_b,
+      terms_a: $terms_a, terms_b: $terms_b,
       base_seed: $base_seed, turns: $turns,
       interlocutor_source: $source, api_called: $api_called,
       api_store: (if $api_called then false else null end),
