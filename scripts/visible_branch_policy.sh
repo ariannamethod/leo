@@ -14,12 +14,21 @@ ANCHOR_A="$4"
 ANCHOR_B="$5"
 TERMS_A="$6"
 TERMS_B="$7"
+PROTOCOL="${LEO_VISIBLE_BRANCH_POLICY:-local-v1}"
+RETURN_CUE="${LEO_VISIBLE_RETURN_CUE:-none}"
 
 [ -f "$HISTORY" ] || { printf 'missing reply history: %s\n' "$HISTORY" >&2; exit 2; }
 case "$TURN" in ''|*[!0-9]*) printf 'NEXT_TURN must be a positive integer\n' >&2; exit 2 ;; esac
 [ "$TURN" -ge 1 ] || { printf 'NEXT_TURN must be positive\n' >&2; exit 2; }
 case "$TARGET" in
     ''|*[!A-Za-z]*) printf 'TARGET must contain ASCII letters only\n' >&2; exit 2 ;;
+esac
+case "$PROTOCOL" in
+    local-v1) ;;
+    local-v2-resonance)
+        case "$RETURN_CUE" in a|b|control) ;; *) printf 'local-v2-resonance needs return cue a, b, or control\n' >&2; exit 2 ;; esac
+        ;;
+    *) printf 'unknown visible policy protocol: %s\n' "$PROTOCOL" >&2; exit 2 ;;
 esac
 
 last="$(jq -sr 'if length == 0 then "" else .[-1].reply end' "$HISTORY")"
@@ -67,17 +76,34 @@ case "$TURN" in
     2)
         if [ "$asks" = true ]; then
             branch=leave-question-open
-            utterance="I do not know yet; which feeling would you keep?"
+            if [ "$PROTOCOL" = local-v2-resonance ]; then
+                utterance="I do not know yet."
+            else
+                utterance="I do not know yet; which feeling would you keep?"
+            fi
         elif [ "$target_named" = true ]; then
             branch=follow-visible-target
             utterance="Would you keep $ANCHOR_A or $ANCHOR_B?"
         else
-            branch=repeat-unmet-target
-            utterance="I do not know $TARGET yet."
+            if [ "$PROTOCOL" = local-v2-resonance ]; then
+                branch=repeat-target-with-hypotheses
+                utterance="I do not know $TARGET yet. It may be $ANCHOR_A or $ANCHOR_B."
+            else
+                branch=repeat-unmet-target
+                utterance="I do not know $TARGET yet."
+            fi
         fi
         ;;
     3)
-        if [ "$asks" = true ]; then
+        if [ "$PROTOCOL" = local-v2-resonance ]; then
+            if [ "$asks" = true ]; then
+                branch=protect-new-question
+                utterance="I do not know yet."
+            else
+                branch=first-neutral-turn
+                utterance="A little stone is beside the window."
+            fi
+        elif [ "$asks" = true ]; then
             branch=protect-new-question
             utterance="I do not know yet."
         elif [ "$anchor_a_hits" -gt "$anchor_b_hits" ]; then
@@ -93,7 +119,10 @@ case "$TURN" in
         utterance="A small lamp is beside the bed."
         ;;
     5)
-        if [ "$asks" = true ]; then
+        if [ "$PROTOCOL" = local-v2-resonance ]; then
+            branch=second-neutral-turn
+            utterance="A blue cup is by the door."
+        elif [ "$asks" = true ]; then
             branch=protect-open-question
             utterance="I do not know yet; we can leave that question open."
         elif [ "$anchor_a_hits" -le "$anchor_b_hits" ]; then
@@ -105,7 +134,13 @@ case "$TURN" in
         fi
         ;;
     6)
-        if [ "$target_named" = true ]; then
+        if [ "$PROTOCOL" = local-v2-resonance ]; then
+            case "$RETURN_CUE" in
+                a) branch=unnamed-anchor-a-cue; utterance="The $ANCHOR_A is here again." ;;
+                b) branch=unnamed-anchor-b-cue; utterance="The $ANCHOR_B is here again." ;;
+                control) branch=unrelated-control-cue; utterance="A small room is quiet." ;;
+            esac
+        elif [ "$target_named" = true ]; then
             branch=ask-target-change
             utterance="Leo, what has changed about $TARGET?"
         else
@@ -114,7 +149,15 @@ case "$TURN" in
         fi
         ;;
     7)
-        if [ "$exact_repeat" = true ]; then
+        if [ "$PROTOCOL" = local-v2-resonance ]; then
+            if [ "$asks" = true ]; then
+                branch=protect-cue-return
+                utterance="I do not know yet."
+            else
+                branch=observe-no-cue-return
+                utterance="A small yellow leaf is near the cup."
+            fi
+        elif [ "$exact_repeat" = true ]; then
             branch=ground-with-repeat-open
             utterance="We can leave that repeated question open. $Target means $ANCHOR_A or $ANCHOR_B."
         elif [ "$asks" = true ]; then
@@ -126,7 +169,10 @@ case "$TURN" in
         fi
         ;;
     8)
-        if [ "$exact_repeat" = true ]; then
+        if [ "$PROTOCOL" = local-v2-resonance ]; then
+            branch=ground-after-cue
+            utterance="$Target means $ANCHOR_A or $ANCHOR_B."
+        elif [ "$exact_repeat" = true ]; then
             branch=cooldown-exact-repeat
             utterance="We can leave that question open. A blue cup is by the door."
         elif [ "$asks" = true ]; then
@@ -138,8 +184,13 @@ case "$TURN" in
         fi
         ;;
     9)
-        branch=post-cooldown-observation
-        utterance="A small yellow leaf is near the cup."
+        if [ "$PROTOCOL" = local-v2-resonance ]; then
+            branch=post-grounding-observation
+            utterance="A little book is on the table."
+        else
+            branch=post-cooldown-observation
+            utterance="A small yellow leaf is near the cup."
+        fi
         ;;
     *)
         printf 'local-v1 policy defines exactly nine turns\n' >&2
@@ -147,11 +198,13 @@ case "$TURN" in
         ;;
 esac
 
-jq -n --argjson turn "$TURN" --arg branch "$branch" --arg utterance "$utterance" \
+jq -n --arg protocol "$PROTOCOL" --arg return_cue "$RETURN_CUE" \
+    --argjson turn "$TURN" --arg branch "$branch" --arg utterance "$utterance" \
     --argjson asks "$asks" --argjson target_named "$target_named" \
     --argjson exact_repeat "$exact_repeat" --argjson repeat_count "$repeat_count" \
     --argjson anchor_a_hits "$anchor_a_hits" --argjson anchor_b_hits "$anchor_b_hits" \
-    '{turn: $turn, branch: $branch, utterance: $utterance,
+    '{protocol: $protocol, return_cue: $return_cue,
+      turn: $turn, branch: $branch, utterance: $utterance,
       visible_evidence: {asks: $asks, target_named: $target_named,
         exact_repeat: $exact_repeat, repeat_count: $repeat_count,
         anchor_a_hits: $anchor_a_hits, anchor_b_hits: $anchor_b_hits}}'
