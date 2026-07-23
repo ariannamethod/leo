@@ -21,9 +21,10 @@ LEO_INTERLOCUTOR_MODEL=gpt-5.6-luna \
 make adaptive-probe
 ```
 
-Optional controls are `LEO_ADAPTIVE_SEED`, `LEO_ADAPTIVE_TARGET`, and
-`LEO_ADAPTIVE_WARM_ANCHOR`, `LEO_ADAPTIVE_COOL_ANCHOR`, and
-`LEO_ADAPTIVE_ANCHORS`. The default anchors are corpus-familiar `warm light`
+Optional controls are `LEO_ADAPTIVE_SEED`, `LEO_ADAPTIVE_TARGET`,
+`LEO_ADAPTIVE_ANCHOR_A`, `LEO_ADAPTIVE_ANCHOR_B`, `LEO_ADAPTIVE_TERMS_A`,
+`LEO_ADAPTIVE_TERMS_B`, and `LEO_ADAPTIVE_ANCHORS`. The legacy warm/cool
+anchor names remain aliases. Default anchors are corpus-familiar `warm light`
 and `cool rain`; unfamiliar protocol vocabulary can become a competing Wonder
 target and confound the intended experiment. The output directory is always
 required to be new.
@@ -57,11 +58,24 @@ make visible-branch-probe
 
 `local-v1` reads only `visible_replies.jsonl`. It can observe a literal
 question mark, the fixed target as a whole word, exact reply repetition, and
-literal warm/cool anchor terms. It cannot read state files, raw diagnostics,
+literal terms assigned to anchor A/B. It cannot read state files, raw diagnostics,
 Flow, Wonder, shadow proposals, calibration verdicts, confidence, or future
 replies. Before every human turn it writes the selected branch, utterance, and
 visible evidence to `policy/turn-NN.json`. The nine available phases and every
 branch are fixed in source before the run.
+
+Run the balanced three-target, three-anchor, three-seed rotation:
+
+```sh
+make visible-branch-matrix
+```
+
+The nine cells form a Latin-square rotation: each novel target meets each
+anchor pair exactly once, and each seed sees every anchor pair once. The runner
+refuses targets found in the corpus and anchor terms seen fewer than five
+times. It retains per-cell lives plus aggregate `matrix.tsv`, `receipts.tsv`,
+`sleep_edges.tsv`, and `summary.txt`. `LEO_MATRIX_PLAN_ONLY=1` validates the
+stimuli and writes the complete rotation without launching Leo.
 
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,

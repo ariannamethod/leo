@@ -2,16 +2,18 @@
 # Predeclared local branching over visible replies only.
 set -euo pipefail
 
-if [ "$#" -ne 5 ]; then
-    printf 'usage: %s REPLY_HISTORY NEXT_TURN TARGET WARM_ANCHOR COOL_ANCHOR\n' "$0" >&2
+if [ "$#" -ne 7 ]; then
+    printf 'usage: %s REPLY_HISTORY NEXT_TURN TARGET ANCHOR_A ANCHOR_B TERMS_A TERMS_B\n' "$0" >&2
     exit 2
 fi
 
 HISTORY="$1"
 TURN="$2"
 TARGET="$3"
-WARM="$4"
-COOL="$5"
+ANCHOR_A="$4"
+ANCHOR_B="$5"
+TERMS_A="$6"
+TERMS_B="$7"
 
 [ -f "$HISTORY" ] || { printf 'missing reply history: %s\n' "$HISTORY" >&2; exit 2; }
 case "$TURN" in ''|*[!0-9]*) printf 'NEXT_TURN must be a positive integer\n' >&2; exit 2 ;; esac
@@ -48,10 +50,8 @@ count_terms() {
     '
 }
 
-warm_terms="$WARM fire home"
-cool_terms="$COOL water window"
-warm_hits="$(count_terms "$all" "$warm_terms")"
-cool_hits="$(count_terms "$all" "$cool_terms")"
+anchor_a_hits="$(count_terms "$all" "$TERMS_A")"
+anchor_b_hits="$(count_terms "$all" "$TERMS_B")"
 exact_repeat=false
 [ "$repeat_count" -le 1 ] || exact_repeat=true
 
@@ -62,7 +62,7 @@ utterance=""
 case "$TURN" in
     1)
         branch=introduce-target
-        utterance="Does $TARGET feel like $WARM or $COOL?"
+        utterance="Does $TARGET feel like $ANCHOR_A or $ANCHOR_B?"
         ;;
     2)
         if [ "$asks" = true ]; then
@@ -70,7 +70,7 @@ case "$TURN" in
             utterance="I do not know yet; which feeling would you keep?"
         elif [ "$target_named" = true ]; then
             branch=follow-visible-target
-            utterance="Would you keep the warmth or the rain?"
+            utterance="Would you keep $ANCHOR_A or $ANCHOR_B?"
         else
             branch=repeat-unmet-target
             utterance="I do not know $TARGET yet."
@@ -80,12 +80,12 @@ case "$TURN" in
         if [ "$asks" = true ]; then
             branch=protect-new-question
             utterance="I do not know yet."
-        elif [ "$warm_hits" -gt "$cool_hits" ]; then
-                branch=offer-cool-counterweight
-                utterance="It might feel like $COOL at a window."
+        elif [ "$anchor_a_hits" -gt "$anchor_b_hits" ]; then
+                branch=offer-anchor-b-counterweight
+                utterance="It might feel like $ANCHOR_B."
         else
-            branch=offer-warm-counterweight
-            utterance="It might feel like $WARM in the morning."
+            branch=offer-anchor-a-counterweight
+            utterance="It might feel like $ANCHOR_A."
         fi
         ;;
     4)
@@ -96,12 +96,12 @@ case "$TURN" in
         if [ "$asks" = true ]; then
             branch=protect-open-question
             utterance="I do not know yet; we can leave that question open."
-        elif [ "$warm_hits" -le "$cool_hits" ]; then
-            branch=delayed-warm-return
-            utterance="The $WARM is in the quiet kitchen again."
+        elif [ "$anchor_a_hits" -le "$anchor_b_hits" ]; then
+            branch=delayed-anchor-a-return
+            utterance="The $ANCHOR_A is here again."
         else
-            branch=delayed-cool-return
-            utterance="The $COOL is at the window again."
+            branch=delayed-anchor-b-return
+            utterance="The $ANCHOR_B is here again."
         fi
         ;;
     6)
@@ -110,19 +110,19 @@ case "$TURN" in
             utterance="Leo, what has changed about $TARGET?"
         else
             branch=ask-target-choice
-            utterance="Leo, what do you think $TARGET feels like, $WARM or $COOL?"
+            utterance="Leo, what do you think $TARGET feels like, $ANCHOR_A or $ANCHOR_B?"
         fi
         ;;
     7)
         if [ "$exact_repeat" = true ]; then
             branch=ground-with-repeat-open
-            utterance="We can leave that repeated question open. $Target means the gentle comfort of $WARM or $COOL."
+            utterance="We can leave that repeated question open. $Target means $ANCHOR_A or $ANCHOR_B."
         elif [ "$asks" = true ]; then
             branch=ground-with-question-open
-            utterance="I hear the question. $Target means the gentle comfort of $WARM or $COOL."
+            utterance="I hear the question. $Target means $ANCHOR_A or $ANCHOR_B."
         else
             branch=ground-target
-            utterance="$Target means the gentle comfort of $WARM or $COOL."
+            utterance="$Target means $ANCHOR_A or $ANCHOR_B."
         fi
         ;;
     8)
@@ -150,8 +150,8 @@ esac
 jq -n --argjson turn "$TURN" --arg branch "$branch" --arg utterance "$utterance" \
     --argjson asks "$asks" --argjson target_named "$target_named" \
     --argjson exact_repeat "$exact_repeat" --argjson repeat_count "$repeat_count" \
-    --argjson warm_hits "$warm_hits" --argjson cool_hits "$cool_hits" \
+    --argjson anchor_a_hits "$anchor_a_hits" --argjson anchor_b_hits "$anchor_b_hits" \
     '{turn: $turn, branch: $branch, utterance: $utterance,
       visible_evidence: {asks: $asks, target_named: $target_named,
         exact_repeat: $exact_repeat, repeat_count: $repeat_count,
-        warm_hits: $warm_hits, cool_hits: $cool_hits}}'
+        anchor_a_hits: $anchor_a_hits, anchor_b_hits: $anchor_b_hits}}'

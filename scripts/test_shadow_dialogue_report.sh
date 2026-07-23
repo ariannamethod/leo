@@ -64,23 +64,47 @@ cmp -s "$TMP/expected-reply.txt" "$TMP/reply.txt"
 
 : > "$TMP/policy-history.jsonl"
 "$ROOT/scripts/visible_branch_policy.sh" "$TMP/policy-history.jsonl" \
-    1 flom 'warm light' 'cool rain' > "$TMP/policy-1.json"
+    1 flom 'warm light' 'cool rain' 'warm light fire home' \
+    'cool rain water window' > "$TMP/policy-1.json"
 jq -e '.branch == "introduce-target" and (.utterance | contains("flom"))' \
     "$TMP/policy-1.json" >/dev/null
 printf '%s\n' '{"turn":1,"reply":"He keeps the light."}' > "$TMP/policy-history.jsonl"
 "$ROOT/scripts/visible_branch_policy.sh" "$TMP/policy-history.jsonl" \
-    2 flom 'warm light' 'cool rain' > "$TMP/policy-2.json"
+    2 flom 'warm light' 'cool rain' 'warm light fire home' \
+    'cool rain water window' > "$TMP/policy-2.json"
 jq -e '.branch == "repeat-unmet-target" and (.utterance | contains("flom"))' \
     "$TMP/policy-2.json" >/dev/null
 printf '%s\n' '{"turn":2,"reply":"Flom?"}' >> "$TMP/policy-history.jsonl"
 "$ROOT/scripts/visible_branch_policy.sh" "$TMP/policy-history.jsonl" \
-    3 flom 'warm light' 'cool rain' > "$TMP/policy-3.json"
+    3 flom 'warm light' 'cool rain' 'warm light fire home' \
+    'cool rain water window' > "$TMP/policy-3.json"
 jq -e '.branch == "protect-new-question" and .utterance == "I do not know yet."' \
     "$TMP/policy-3.json" >/dev/null
 printf '%s\n' '{"turn":7,"reply":"Flom?"}' >> "$TMP/policy-history.jsonl"
 "$ROOT/scripts/visible_branch_policy.sh" "$TMP/policy-history.jsonl" \
-    8 flom 'warm light' 'cool rain' > "$TMP/policy-8.json"
+    8 flom 'warm light' 'cool rain' 'warm light fire home' \
+    'cool rain water window' > "$TMP/policy-8.json"
 jq -e '.branch == "cooldown-exact-repeat" and .visible_evidence.exact_repeat' \
     "$TMP/policy-8.json" >/dev/null
+
+LEO_MATRIX_PLAN_ONLY=1 "$ROOT/scripts/visible_branch_matrix.sh" \
+    "$ROOT/scripts/visible_branch_cases.tsv" "$TMP/matrix-plan" \
+    > "$TMP/matrix-plan.out"
+awk -F '\t' '
+    NR == 1 { next }
+    {
+        rows[$2]++; seeds[$3]++; targets[$4]++; anchors[$5]++
+        pair[$4 SUBSEP $5]++
+        cells++
+    }
+    END {
+        if (cells != 9 || length(rows) != 3 || length(seeds) != 3 ||
+            length(targets) != 3 || length(anchors) != 3 || length(pair) != 9)
+            exit 1
+        for (key in targets) if (targets[key] != 3) exit 1
+        for (key in anchors) if (anchors[key] != 3) exit 1
+        for (key in pair) if (pair[key] != 1) exit 1
+    }
+' "$TMP/matrix-plan.out"
 
 printf 'shadow dialogue report parser: ok\n'
