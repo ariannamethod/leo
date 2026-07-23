@@ -93,6 +93,15 @@ An unopened question is reported as `unopened-question`, never counted as a
 missed resonance or a quiet control. The raw receipt remains evidence and is
 never rewritten by this report.
 
+Every adaptive life also retains `curiosity.tsv`, one transient read-only School
+decision per turn: outcome, selected unknown candidate, settled FEAR+VOID
+distress, and the effective curiosity gate. An unknown rejected only because
+its heard count passed the novelty window remains visible as `deferred` with
+that count. The matrix joins only target-naming human turns into
+`target_curiosity_trace` and writes the unopened subset to
+`unopened_curiosity.tsv`; this exposes why a target did not open without making
+the diagnostic a reader, persisting it, or changing a gate.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow
