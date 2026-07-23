@@ -3579,3 +3579,37 @@ the human prompt resonates with the same unresolved episode's stored offered gly
 unrelated return as real autonomous pressure. Generation, Wonder recurrence, thresholds, and persisted
 meaning must remain untouched, and the new rule must be proved against literal invitation, semantic
 invitation, unrelated control, and sleep round-trip fixtures before the live matrix is repeated.
+
+## Phase A.35 — calibration hears the question's meaning (2026-07-23)
+
+The A.34 repair changes only the next-turn judge. Given a proposal's stable `wonder_id`, calibration now
+locates that exact persisted Wonder episode and asks whether the human prompt contains either its literal
+target or one of its two stored offered glyphs. The glyph scan uses School's existing teachable concept
+votes, the same semantic evidence by which an open Wonder recognizes a return. A matching `REASKED` or
+`REOPENED` event is `unscorable`: the human supplied the causal invitation, even without speaking the
+question's title. An unrelated prompt remains eligible for `false-pressure`.
+
+Four unit contracts pin the boundary:
+
+- literal target invitation remains `unscorable`;
+- an offered glyph invites the same episode without naming it;
+- unrelated `small room` leaves an artificial reask as scored autonomous pressure;
+- save/load preserves the episode's offered glyphs and semantic invitation.
+
+The suite is **265/265**. No state field, version, threshold, return mechanism, generator path, or spoken
+buffer changed. The full A.34 matrix was then repeated from the same targets, anchors, seeds, and policy:
+
+```text
+proposals=81 scored=44 unscorable=4 pending=33
+confirmed=44 false-pressure=0
+anchor-cue: opened=4 returns=4, all four unscorable
+control-cue: opened=2 returns=0, both confirmed
+unopened-question=3
+sleep-crossing receipts=48
+```
+
+Every one of the nine visible transcript SHA-256 values is identical to the pre-repair A.34 run. Thus
+calibration no longer accuses the four semantically invited returns, while Leo's voice and behavior are
+byte-identical and the unrelated controls remain quiet. The external interpretation and the organism's
+raw receipt now agree without granting shadow any authority over speech. The normal build is warning-free;
+ASan/UBSan passed the corpus smoke, and TSan reported no race through a live `--chat --async` turn.

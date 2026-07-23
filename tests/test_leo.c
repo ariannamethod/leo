@@ -1694,9 +1694,9 @@ int main(void) {
                   "shadow-calibration: space is confirmed when the next turn applies no pressure");
 
             sh->school.turn_clock = 3;
-            leo_flow_observe(sh, "water", "water", NULL, NULL, NULL,
+            leo_flow_observe(sh, "small room", "water", NULL, NULL, NULL,
                              LEO_FLOW_WONDER_REASKED, id);
-            leo_shadow_calibrate(sh, "water");
+            leo_shadow_calibrate(sh, "small room");
             leo_shadow_observe(sh);
             const LeoShadowReceipt *r2 = leo_shadow_at(&sh->shadow, 2);
             CHECK(r2 && r2->action == LEO_SHADOW_SPACE &&
@@ -1863,7 +1863,82 @@ int main(void) {
                 leo_calibration_at(&sh->calibration, 0);
             CHECK(human_return && human_return->verdict == LEO_CALIB_UNSCORABLE &&
                   human_return->brier == 0.0f,
-                  "shadow-calibration: a human-invited return is not autonomous pressure");
+                  "shadow-calibration: a literal human invitation is not autonomous pressure");
+
+            memset(&sh->flow, 0, sizeof sh->flow);
+            memset(&sh->shadow, 0, sizeof sh->shadow);
+            memset(&sh->calibration, 0, sizeof sh->calibration);
+            strncpy(sh->school.pending, "fieldword", sizeof sh->school.pending - 1);
+            LeoWonderEpisode *field_ep =
+                leo_wonder_open(sh, "fieldword", water, fire);
+            uint64_t field_id = leo_wonder_episode_id(field_ep);
+            sh->school.turn_clock = 1;
+            leo_flow_observe(sh, "What is fieldword? Water or fire?", "Fieldword?",
+                             NULL, NULL, NULL, LEO_FLOW_WONDER_BORN, field_id);
+            leo_shadow_calibrate(sh, "What is fieldword? Water or fire?");
+            leo_shadow_observe(sh);
+            sh->school.turn_clock = 2;
+            leo_flow_observe(sh, "The warm fire is here again", "Fieldword?",
+                             NULL, NULL, NULL, LEO_FLOW_WONDER_REASKED, field_id);
+            leo_shadow_calibrate(sh, "The warm fire is here again");
+            const LeoCalibrationReceipt *semantic_return =
+                leo_calibration_at(&sh->calibration, 0);
+            CHECK(semantic_return &&
+                  semantic_return->verdict == LEO_CALIB_UNSCORABLE &&
+                  semantic_return->brier == 0.0f,
+                  "shadow-calibration: an offered glyph can invite a return without naming it");
+
+            memset(&sh->flow, 0, sizeof sh->flow);
+            memset(&sh->shadow, 0, sizeof sh->shadow);
+            memset(&sh->calibration, 0, sizeof sh->calibration);
+            strncpy(sh->school.pending, "controlword", sizeof sh->school.pending - 1);
+            LeoWonderEpisode *control_ep =
+                leo_wonder_open(sh, "controlword", water, fire);
+            uint64_t control_id = leo_wonder_episode_id(control_ep);
+            sh->school.turn_clock = 1;
+            leo_flow_observe(sh, "What is controlword? Water or fire?", "Controlword?",
+                             NULL, NULL, NULL, LEO_FLOW_WONDER_BORN, control_id);
+            leo_shadow_calibrate(sh, "What is controlword? Water or fire?");
+            leo_shadow_observe(sh);
+            sh->school.turn_clock = 2;
+            leo_flow_observe(sh, "A small room is quiet", "Controlword?",
+                             NULL, NULL, NULL, LEO_FLOW_WONDER_REASKED, control_id);
+            leo_shadow_calibrate(sh, "A small room is quiet");
+            const LeoCalibrationReceipt *autonomous_return =
+                leo_calibration_at(&sh->calibration, 0);
+            CHECK(autonomous_return &&
+                  autonomous_return->verdict == LEO_CALIB_FALSE_PRESSURE &&
+                  autonomous_return->brier > 0.0f,
+                  "shadow-calibration: an unrelated prompt leaves autonomous pressure scorable");
+
+            const char *semantic_state = "/tmp/leo_shadow_semantic_invite_v17.state";
+            leo_free(compat); leo_init(compat);
+            strncpy(compat->school.pending, "sleepfield",
+                    sizeof compat->school.pending - 1);
+            LeoWonderEpisode *sleepfield_ep =
+                leo_wonder_open(compat, "sleepfield", water, fire);
+            uint64_t sleepfield_id = leo_wonder_episode_id(sleepfield_ep);
+            compat->school.turn_clock = 1;
+            leo_flow_observe(compat, "What is sleepfield? Water or fire?",
+                             "Sleepfield?", NULL, NULL, NULL,
+                             LEO_FLOW_WONDER_BORN, sleepfield_id);
+            leo_shadow_calibrate(compat, "What is sleepfield? Water or fire?");
+            leo_shadow_observe(compat);
+            int semantic_saved = leo_save_state(compat, semantic_state);
+            leo_free(cut); leo_init(cut);
+            int semantic_loaded = semantic_saved &&
+                                  leo_load_state(cut, semantic_state);
+            cut->school.turn_clock = 2;
+            leo_flow_observe(cut, "The rain water is here again", "Sleepfield?",
+                             NULL, NULL, NULL, LEO_FLOW_WONDER_REASKED,
+                             sleepfield_id);
+            leo_shadow_calibrate(cut, "The rain water is here again");
+            const LeoCalibrationReceipt *semantic_after_sleep =
+                leo_calibration_at(&cut->calibration, 0);
+            CHECK(semantic_loaded && semantic_after_sleep &&
+                  semantic_after_sleep->verdict == LEO_CALIB_UNSCORABLE &&
+                  semantic_after_sleep->brier == 0.0f,
+                  "shadow-calibration: semantic invitation survives sleep with its episode");
 
             memset(&sh->flow, 0, sizeof sh->flow);
             memset(&sh->shadow, 0, sizeof sh->shadow);
