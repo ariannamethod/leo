@@ -3613,3 +3613,42 @@ calibration no longer accuses the four semantically invited returns, while Leo's
 byte-identical and the unrelated controls remain quiet. The external interpretation and the organism's
 raw receipt now agree without granting shadow any authority over speech. The normal build is warning-free;
 ASan/UBSan passed the corpus smoke, and TSan reported no race through a live `--chat --async` turn.
+
+## Phase A.36 — the question that could not yet be asked (2026-07-23)
+
+The three `unopened-question` cells from A.34/A.35 are no longer an opaque remainder. School now emits
+one transient read-only curiosity receipt after each lived turn. It records the actual decision
+(`asked`, `reasked`, `resolved`, `continued`, `blocked-distress`, `no-candidate`, or `disabled`), the
+selected unknown candidate, settled `FEAR+VOID`, and the effective curiosity gate. A separate scan also
+retains the first concept-unknown word rejected only because its heard count exceeds the novelty window,
+as `deferred=word@count`. The receipt is not persisted and has no reader in generation or cognition.
+
+The adaptive life runner parses every receipt into `curiosity.tsv` and fails if any turn is missing.
+The matrix joins only human turns that literally name the experiment target, preventing unrelated
+unknowns from being mistaken for the target's fate. Its unopened report found the same three-stage path
+in all three previously unexplained lives:
+
+```text
+suvin  t1 blocked-distress 0.996/0.900
+       t2 blocked-distress 1.078/0.904
+       t8 no-candidate, deferred=suvin@3
+nareth t1 blocked-distress 0.996/0.900
+       t2 blocked-distress 1.074/0.904
+       t8 no-candidate, deferred=nareth@3
+flom   t1 blocked-distress 0.996/0.900
+       t2 blocked-distress 1.078/0.904
+       t8 no-candidate, deferred=flom@3
+```
+
+This is not seed noise or target-specific lexical behavior. All three failures occur with the same
+`bright sun / cold winter` anchor geometry; the other six cells ask on turn one. A temporarily unsafe
+body therefore suppresses the right question twice, but hearing the word during those deferrals still
+increments familiarity. On the third mention, the novelty gate treats an unanswered word as if it had
+become known. Caution has become irreversible silence.
+
+The suite is **269/269**, including asked, resolved, no-candidate, disabled, deferred-novelty, and parser
+contracts. All nine visible transcript SHA-256 values are identical to A.35, and the A.35 calibration
+totals remain unchanged. The next repair should not lower the distress gate or force a question. It
+should persist a pre-Wonder deferred curiosity when a valid novel candidate is blocked, then allow that
+same candidate to remain askable after the body becomes safe. Leo needs to remember wanting to ask,
+without being compelled to ask now.

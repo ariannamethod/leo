@@ -119,7 +119,7 @@ fi
 MATRIX="$OUT/matrix.tsv"
 RECEIPTS="$OUT/receipts.tsv"
 EDGES="$OUT/sleep_edges.tsv"
-printf 'cell\trow\tseed\ttarget\tanchor_case\tanchor_a\tanchor_b\tprotocol\treturn_cue\tpre_cue_question_opened\tcue_target_return\tcue_raw_verdict\tcue_interpretation\ttranscript_sha256\tproposals\tscored\tunscorable\tpending\tconfirmed\tfalse_pressure\trelease_confirmed\ttarget_questions\tsleep_crossing\tbranches\toutput\n' > "$MATRIX"
+printf 'cell\trow\tseed\ttarget\tanchor_case\tanchor_a\tanchor_b\tprotocol\treturn_cue\tpre_cue_question_opened\tcue_target_return\tcue_raw_verdict\tcue_interpretation\ttarget_curiosity_trace\ttranscript_sha256\tproposals\tscored\tunscorable\tpending\tconfirmed\tfalse_pressure\trelease_confirmed\ttarget_questions\tsleep_crossing\tbranches\toutput\n' > "$MATRIX"
 
 first=1
 for row in 0 1 2; do
@@ -195,12 +195,24 @@ for row in 0 1 2; do
         fi
         sleep_crossing="$(( $(wc -l < "$life/sleep_edges.tsv") - 1 ))"
         branches="$(jq -sr 'map(.branch) | join(",")' "$life"/policy/*.json)"
+        target_curiosity_trace="$(awk -F '\t' '
+            NR == FNR {
+                if (FNR > 1 && $9 == "true") named[$3] = 1
+                next
+            }
+            FNR > 1 && named[$3] {
+                if (trace != "") trace = trace ","
+                trace = trace "t" $3 ":" $4 ":candidate=" $5 \
+                    ":deferred=" $6 "@" $7 ":" $8 "/" $9
+            }
+            END { print (trace == "" ? "none" : trace) }
+        ' "$life/sessions.tsv" "$life/curiosity.tsv")"
 
-        printf '%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s\n' \
+        printf '%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s\n' \
             "$cell" "$((row + 1))" "$seed" "$target" "$anchor_case" \
             "$anchor_a" "$anchor_b" "$PROTOCOL" "$cue" "$pre_cue_question_opened" \
             "$cue_target_return" "$cue_raw_verdict" "$cue_interpretation" \
-            "$transcript_sha" "$proposals" "$scored" \
+            "$target_curiosity_trace" "$transcript_sha" "$proposals" "$scored" \
             "$unscorable" "$pending" "$confirmed" "$false_pressure" \
             "$release_confirmed" "$target_questions" "$sleep_crossing" \
             "$branches" "$life" >> "$MATRIX"
@@ -245,8 +257,14 @@ if [ "$PROTOCOL" = local-v2-resonance ]; then
                 printf "interpretation %s=%d\n", key, interpretation[key]
         }
     ' "$MATRIX" | sort > "$OUT/resonance_summary.txt"
+    printf 'cell\ttarget\ttarget_curiosity_trace\n' > "$OUT/unopened_curiosity.tsv"
+    awk -F '\t' -v OFS='\t' 'NR > 1 && $10 == "false" {
+        print $1, $4, $14
+    }' "$MATRIX" >> "$OUT/unopened_curiosity.tsv"
     printf '\n'
     cat "$OUT/resonance_summary.txt"
+    printf '\nunopened curiosity:\n'
+    cat "$OUT/unopened_curiosity.tsv"
 fi
 printf '\nprotocol=%s cells=9 sleep-crossing=%d\nmatrix: %s\nreceipts: %s\n' \
     "$PROTOCOL" "$(( $(wc -l < "$EDGES") - 1 ))" "$MATRIX" "$RECEIPTS"

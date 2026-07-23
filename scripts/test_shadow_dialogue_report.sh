@@ -54,6 +54,28 @@ awk -f "$ROOT/scripts/shadow_receipt_summary.awk" \
 grep -Fq 'proposals=2 scored=0 unscorable=1 pending=1' "$TMP/summary.txt"
 
 printf '%s\n' \
+    '     [curiosity: turn=1 outcome=blocked-distress candidate=flom deferred=none heard=0 distress=1.100 gate=0.900]' \
+    '     [curiosity: turn=2 outcome=no-candidate candidate=none deferred=nareth heard=3 distress=0.200 gate=0.900]' \
+    > "$TMP/curiosity.log"
+printf 'scenario\tseed\tturn\toutcome\tcandidate\tdeferred\tdeferred_heard\tdistress\tgate\n' \
+    > "$TMP/curiosity.tsv"
+awk -v scenario=fixture -v seed=83 \
+    -f "$ROOT/scripts/curiosity_dialogue_report.awk" "$TMP/curiosity.log" \
+    >> "$TMP/curiosity.tsv"
+awk -F '\t' '
+    NR == 2 {
+        ok = NF == 9 && $1 == "fixture" && $2 == "83" && $3 == "1" &&
+             $4 == "blocked-distress" && $5 == "flom" &&
+             $6 == "none" && $7 == "0" && $8 == "1.100" && $9 == "0.900"
+    }
+    NR == 3 {
+        ok = ok && $3 == "2" && $4 == "no-candidate" &&
+             $5 == "none" && $6 == "nareth" && $7 == "3"
+    }
+    END { exit !(ok && NR == 3) }
+' "$TMP/curiosity.tsv"
+
+printf '%s\n' \
     'you> leo> Glim?' \
     'A second line.' \
     '     [shadow: observed=1 next=2 action=space target=abc confidence=0.95 reasons=open,asked]' \

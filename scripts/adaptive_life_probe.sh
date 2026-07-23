@@ -27,6 +27,7 @@ ROWS="$OUT/receipts.tsv"
 SESSIONS="$OUT/sessions.tsv"
 EDGES="$OUT/sleep_edges.tsv"
 HISTORY="$OUT/visible_replies.jsonl"
+CURIOSITY="$OUT/curiosity.tsv"
 
 [ -z "$REPLAY_FILE" ] || [ -z "$BRANCH_POLICY" ] || {
     printf 'replay and visible branch policy are mutually exclusive\n' >&2
@@ -142,6 +143,14 @@ awk -v scenario=adaptive -v seed="$BASE_SEED" -v prompt_file="$PROMPTS" \
     -f "$ROOT/scripts/shadow_dialogue_report.awk" "$COMBINED" >> "$ROWS"
 awk -f "$ROOT/scripts/shadow_receipt_summary.awk" "$ROWS" > "$OUT/summary.txt"
 awk -f "$ROOT/scripts/shadow_sleep_edges.awk" "$SESSIONS" "$ROWS" > "$EDGES"
+printf 'scenario\tseed\tturn\toutcome\tcandidate\tdeferred\tdeferred_heard\tdistress\tgate\n' > "$CURIOSITY"
+awk -v scenario=adaptive -v seed="$BASE_SEED" \
+    -f "$ROOT/scripts/curiosity_dialogue_report.awk" "$COMBINED" >> "$CURIOSITY"
+curiosity_turns="$(awk 'NR > 1 { n++ } END { print n + 0 }' "$CURIOSITY")"
+[ "$curiosity_turns" -eq "$turn" ] || {
+    printf 'curiosity receipts cover %d of %d turns\n' "$curiosity_turns" "$turn" >&2
+    exit 1
+}
 
 api_called=true
 source=responses-api
@@ -167,7 +176,8 @@ jq -n --arg model "$MODEL" --arg target "$TARGET" --arg anchors "$ANCHORS" \
 
 cat "$OUT/summary.txt"
 printf '\nturns=%d sleep-crossing=%d\n' "$turn" "$(( $(wc -l < "$EDGES") - 1 ))"
-printf 'visible transcript: %s\nreceipts: %s\n' "$TRANSCRIPT" "$ROWS"
+printf 'visible transcript: %s\nreceipts: %s\ncuriosity: %s\n' \
+    "$TRANSCRIPT" "$ROWS" "$CURIOSITY"
 if [ -n "$BRANCH_POLICY" ]; then
     printf 'interlocutor: local visible-branch policy %s (no API calls)\n' "$BRANCH_POLICY"
 elif [ -n "$REPLAY_FILE" ]; then

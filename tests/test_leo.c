@@ -906,17 +906,37 @@ int main(void) {
         CHECK(strcmp(sc.school.pending, "zorble") == 0 &&
               buf[0] == 'Z' && buf[strlen(buf) - 1] == '?',
               "school: an unknown word makes Leo echo it back as a question ('Zorble?')");
+        CHECK(sc.curiosity.outcome == LEO_CURIOSITY_ASKED &&
+              !strcmp(sc.curiosity.candidate, "zorble") &&
+              sc.curiosity.distress < sc.curiosity.gate,
+              "curiosity: an asked word records its candidate and open gate");
         leo_respond(&sc, "a zorble is a small round stone", buf, sizeof buf);
         CHECK(sc.school.pending[0] == 0 && leo_school_is_learned(&sc, "zorble"),
               "school: the answer is learned and the question closes");
+        CHECK(sc.curiosity.outcome == LEO_CURIOSITY_RESOLVED,
+              "curiosity: a grounded answer records resolution, not another candidate");
         leo_respond(&sc, "tell me about the zorble again", buf, sizeof buf);
         CHECK(sc.school.pending[0] == 0,
               "school: a learned word no longer triggers a question");
+        CHECK(sc.curiosity.outcome == LEO_CURIOSITY_NO_CANDIDATE &&
+              !sc.curiosity.candidate[0],
+              "curiosity: familiar meaning records an honest absence of candidate");
+        Leo deferred; leo_init(&deferred);
+        leo_ingest(&deferred, "suvin suvin suvin");
+        char selected[LEO_HEARD_WORDLEN], delayed[LEO_HEARD_WORDLEN];
+        int delayed_heard = 0;
+        CHECK(!leo_school_scan_unknown(&deferred, "tell me about suvin", selected,
+                                       delayed, &delayed_heard) &&
+              !strcmp(delayed, "suvin") &&
+              delayed_heard > LEO_SCHOOL_NOVEL_MAX,
+              "curiosity: an unknown word beyond novelty remains visible as deferred");
         g_leo_school_on = 0;
         leo_respond(&sc, "tell me about the wobble", buf, sizeof buf);
-        CHECK(sc.school.pending[0] == 0, "school: --no-school suppresses the question");
+        CHECK(sc.school.pending[0] == 0 &&
+              sc.curiosity.outcome == LEO_CURIOSITY_DISABLED,
+              "school: --no-school suppresses the question and says why");
         g_leo_school_on = prev;
-        leo_free(&sc);
+        leo_free(&sc); leo_free(&deferred);
     }
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the

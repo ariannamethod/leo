@@ -1609,6 +1609,31 @@ typedef struct {
     int ptr;
 } LeoCalibration;
 
+/* One-turn read-only witness over the School decision. It is deliberately
+ * transient: the reason a question did or did not surface belongs to the lived
+ * turn's evidence, not to Leo's persistent self. */
+enum {
+    LEO_CURIOSITY_NONE = 0,
+    LEO_CURIOSITY_ASKED,
+    LEO_CURIOSITY_REASKED,
+    LEO_CURIOSITY_RESOLVED,
+    LEO_CURIOSITY_CONTINUED,
+    LEO_CURIOSITY_BLOCKED_DISTRESS,
+    LEO_CURIOSITY_NO_CANDIDATE,
+    LEO_CURIOSITY_DISABLED,
+    LEO_CURIOSITY_OUTCOME_COUNT
+};
+
+typedef struct {
+    uint64_t turn;
+    char     candidate[LEO_HEARD_WORDLEN];
+    char     deferred[LEO_HEARD_WORDLEN];
+    int32_t  deferred_heard;
+    float    distress;
+    float    gate;
+    uint8_t  outcome;
+} LeoCuriosityReceipt;
+
 enum {
     LEO_FLOW_QUIET = 0,
     LEO_FLOW_EMERGING,
@@ -1730,6 +1755,9 @@ typedef struct {
     /* A.5 — School: the reversed role (Leo asks YOU what an unknown word means).
      * In-memory in v1; learned answers persist via the field (ingest save/load). */
     LeoSchool school;
+    /* A.36: one-turn School decision receipt. Runtime diagnostic only; never
+     * persisted and never read by cognition or generation. */
+    LeoCuriosityReceipt curiosity;
     /* passive temporal proprioception (state v13): a bounded archaeological
      * record of what has been flowing through lived replies. No speech reader. */
     LeoFlow flow;
@@ -4776,8 +4804,12 @@ static int word_in_dedication(const char *w) {
     return 0;
 }
 
-static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out) {
+static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out,
+                                   char *deferred, int *deferred_heard) {
     char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+    if (out) out[0] = 0;
+    if (deferred) deferred[0] = 0;
+    if (deferred_heard) *deferred_heard = 0;
     for (const char *q = prompt; ; q++) {
         unsigned char ch = (unsigned char)*q;
         if (ch && (isalpha(ch) || ch == '\'')) {
@@ -4788,19 +4820,34 @@ static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out
             cur[wi] = 0;
             if (!leo_word_is_function(cur) && !leo_school_word_is_operator(cur) &&
                 !semtok_is_stop_word(cur) &&
-                leo_school_unknown(leo, cur) &&
-                (leo_heard_count(&leo->heard, cur) <= LEO_SCHOOL_NOVEL_MAX ||
-                 (leo_heard_count(&leo->heard, cur) <= LEO_SCHOOL_ORIGIN_MAX &&
-                  leo_semtok_word(leo, cur) < 0 && word_in_dedication(cur)))) {   /* N-4: rare origin words stay askable */
-                strncpy(out, cur, LEO_HEARD_WORDLEN - 1);
-                out[LEO_HEARD_WORDLEN - 1] = 0;
-                return 1;
+                leo_school_unknown(leo, cur)) {
+                int heard = leo_heard_count(&leo->heard, cur);
+                int askable = heard <= LEO_SCHOOL_NOVEL_MAX ||
+                    (heard <= LEO_SCHOOL_ORIGIN_MAX &&
+                     leo_semtok_word(leo, cur) < 0 && word_in_dedication(cur));
+                if (askable) {   /* N-4: rare origin words stay askable */
+                    if (out) {
+                        strncpy(out, cur, LEO_HEARD_WORDLEN - 1);
+                        out[LEO_HEARD_WORDLEN - 1] = 0;
+                    }
+                    return 1;
+                }
+                if (deferred && !deferred[0]) {
+                    strncpy(deferred, cur, LEO_HEARD_WORDLEN - 1);
+                    deferred[LEO_HEARD_WORDLEN - 1] = 0;
+                    if (deferred_heard) *deferred_heard = heard;
+                }
             }
         }
         wi = 0;
         if (!ch) break;
     }
     return 0;
+}
+
+__attribute__((unused))  /* direct School contract tests; live path uses the traced scan */
+static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out) {
+    return leo_school_scan_unknown(leo, prompt, out, NULL, NULL);
 }
 
 static int leo_school_text_has_word(const char *text, const char *word) {
@@ -6094,12 +6141,49 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
      * (asking, the reversed role), NOT generation: the never-echo invariant governs
      * REPLIES (what he builds from the field), and a question is not a reply. Else
      * he speaks from the field. */
-    char unk[LEO_HEARD_WORDLEN];
+    char unk[LEO_HEARD_WORDLEN] = {0};
+    char deferred[LEO_HEARD_WORDLEN] = {0};
+    int deferred_heard = 0;
     /* Damasio #1: the standing debt widens the curiosity gate — a hungry Leo asks even through
      * mild distress (the need to know overrides caution); the ask is the act that pays his debt.
      * --no-conatus → the base gate (byte-identical). */
     float ask_gate = LEO_QUIET_DISTRESS;
     if (g_leo_conatus_on) ask_gate += LEO_DEBT_ASK_GATE * leo->debt;
+    float ask_distress = leo->chamber_act[LEO_CH_FEAR] +
+                         leo->chamber_act[LEO_CH_VOID];
+    int has_unknown = g_leo_school_on && !was_answer && !wonder_reask &&
+                      leo_school_scan_unknown(leo, prompt, unk, deferred,
+                                              &deferred_heard);
+
+    LeoCuriosityReceipt curiosity;
+    memset(&curiosity, 0, sizeof curiosity);
+    curiosity.turn = (uint64_t)leo->school.turn_clock;
+    curiosity.distress = ask_distress;
+    curiosity.gate = ask_gate;
+    if (has_unknown) {
+        strncpy(curiosity.candidate, unk, LEO_HEARD_WORDLEN - 1);
+        curiosity.candidate[LEO_HEARD_WORDLEN - 1] = 0;
+    }
+    if (deferred[0]) {
+        strncpy(curiosity.deferred, deferred, LEO_HEARD_WORDLEN - 1);
+        curiosity.deferred[LEO_HEARD_WORDLEN - 1] = 0;
+        curiosity.deferred_heard = deferred_heard;
+    }
+    if (!g_leo_school_on)
+        curiosity.outcome = LEO_CURIOSITY_DISABLED;
+    else if (wonder_reask)
+        curiosity.outcome = LEO_CURIOSITY_REASKED;
+    else if (was_answer)
+        curiosity.outcome = (flow_event & LEO_FLOW_WONDER_RESOLVED) ?
+            LEO_CURIOSITY_RESOLVED : LEO_CURIOSITY_CONTINUED;
+    else if (!has_unknown)
+        curiosity.outcome = LEO_CURIOSITY_NO_CANDIDATE;
+    else if (ask_distress >= ask_gate)
+        curiosity.outcome = LEO_CURIOSITY_BLOCKED_DISTRESS;
+    else
+        curiosity.outcome = LEO_CURIOSITY_ASKED;
+    leo->curiosity = curiosity;
+
     if (g_leo_school_on && g_leo_wonder_on && wonder_reask) {
         int n = leo_school_format_question(out, max_len, leo->school.pending,
                                            leo->school.pending_glyph,
@@ -6112,8 +6196,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             flow_wonder_id = leo_wonder_episode_id(&leo->school.wonders[flow_episode]);
         flow_event |= LEO_FLOW_WONDER_REASKED;
     } else if (g_leo_school_on && !was_answer &&
-        (leo->chamber_act[0] + leo->chamber_act[3]) < ask_gate &&
-        leo_school_find_unknown(leo, prompt, unk)) {
+               ask_distress < ask_gate && has_unknown) {
         int glyphs[2] = {-1, -1};
         if (g_leo_wonder_on) leo_school_predict_glyphs(leo, prompt, glyphs);
         else glyphs[0] = leo_school_predict_glyph(leo, prompt);
@@ -7187,6 +7270,22 @@ static void print_flow_stats(const Leo *leo) {
     int expressed = out_glyph[0];
     int kind = leo_flow_kind(&leo->flow, glyph, LEO_FLOW_WINDOW,
                              LEO_FLOW_PERCEIVED);
+    if (leo->curiosity.turn == s->turn &&
+        leo->curiosity.outcome > LEO_CURIOSITY_NONE &&
+        leo->curiosity.outcome < LEO_CURIOSITY_OUTCOME_COUNT) {
+        static const char *outcomes[LEO_CURIOSITY_OUTCOME_COUNT] = {
+            "none", "asked", "reasked", "resolved", "continued",
+            "blocked-distress", "no-candidate", "disabled"
+        };
+        printf("     [curiosity: turn=%llu outcome=%s candidate=%s deferred=%s heard=%d distress=%.3f gate=%.3f]\n",
+               (unsigned long long)leo->curiosity.turn,
+               outcomes[leo->curiosity.outcome],
+               leo->curiosity.candidate[0] ? leo->curiosity.candidate : "none",
+               leo->curiosity.deferred[0] ? leo->curiosity.deferred : "none",
+               leo->curiosity.deferred_heard,
+               (double)leo->curiosity.distress,
+               (double)leo->curiosity.gate);
+    }
     printf("     [flow: turn=%llu in=%s(%.2f) out=%s(%.2f) motion=%s slope=%+.3f align=%.2f gap=%.2f/%.2f self_return=%s mode=%s chamber=%s history=%d",
            (unsigned long long)s->turn,
            glyph >= 0 ? GLYPH_NAMES[glyph] : "none",
