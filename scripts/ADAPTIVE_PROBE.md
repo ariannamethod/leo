@@ -102,6 +102,13 @@ that count. The matrix joins only target-naming human turns into
 `unopened_curiosity.tsv`; this exposes why a target did not open without making
 the diagnostic a reader, persisting it, or changing a gate.
 
+State v18 adds a separate active pre-Wonder memory. `blocked-distress` is the
+birth of a withheld question; later exact encounters report
+`blocked-deferred` while the body remains unsafe, or `asked-deferred` when the
+ordinary gate finally opens. The memory does not make an unrelated prompt
+resonate and never lowers the gate. `--no-deferred-wonder` disables both
+retention and recovery while leaving ordinary Wonder behavior enabled.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow

@@ -1409,6 +1409,7 @@ static int semtok_word(const char *word) {
                                   * never turn a corpus-familiar word into permanent wonder */
 #define LEO_SCHOOL_SURPRISE 0.4f /* I3b: COMPLEX bump when a guess misses the answer (being wrong is felt) */
 #define LEO_WONDER_RING 32
+#define LEO_DEFERRED_WONDER_MAX 8
 #define LEO_WONDER_REASK_GAP 2   /* silent turns before a resonant theme may reopen the question */
 #define LEO_WONDER_RETURN_COOLDOWN 2L  /* lived-turn distance before one resolved episode may re-enter attention */
 #define LEO_WONDER_RETURN_ANSWER  0.35f
@@ -1438,6 +1439,19 @@ typedef struct {
     int     recalls;             /* resolved episode re-entries into prompt meaning */
     long    last_recalled_turn;  /* lived-turn cooldown; 0 until the first recall */
 } LeoWonderEpisode;
+/* Pre-Wonder is not an open question. It remembers that a valid novel word was
+ * about to become one, but the settled body was not safe enough to ask. The
+ * original hypotheses travel with that withheld moment; activation still
+ * requires the same word to return and the ordinary distress gate to open. */
+typedef struct {
+    char     word[LEO_HEARD_WORDLEN];
+    int8_t   offered_glyph;
+    int8_t   offered_alt_glyph;
+    int32_t  heard_at_birth;
+    uint32_t blocks;
+    uint64_t born_turn;
+    uint64_t last_seen_turn;
+} LeoDeferredWonder;
 typedef struct {
     char   learned[LEO_SCHOOL_MAX][LEO_HEARD_WORDLEN];
     int8_t learned_glyph[LEO_SCHOOL_MAX];  /* I2: dominant glyph of the answer that taught the word */
@@ -1452,6 +1466,8 @@ typedef struct {
     int    n_wonders;
     int    wonder_ptr;                   /* next replacement slot once the ring is full */
     long   turn_clock;                   /* lived prompts; v12 persists cooldown across sleep */
+    LeoDeferredWonder deferred[LEO_DEFERRED_WONDER_MAX];
+    int    n_deferred;
     int    returned_episode;             /* transient: episode active in this reply, -1 outside it */
 } LeoSchool;
 
@@ -1619,6 +1635,8 @@ enum {
     LEO_CURIOSITY_RESOLVED,
     LEO_CURIOSITY_CONTINUED,
     LEO_CURIOSITY_BLOCKED_DISTRESS,
+    LEO_CURIOSITY_ASKED_DEFERRED,
+    LEO_CURIOSITY_BLOCKED_DEFERRED,
     LEO_CURIOSITY_NO_CANDIDATE,
     LEO_CURIOSITY_DISABLED,
     LEO_CURIOSITY_OUTCOME_COUNT
@@ -2026,6 +2044,7 @@ static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE
                                          * θ=0 paradigm, learns by living, not by an offline marathon. --no-rae → 0. */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
+static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
 static int g_leo_flow_on = 1;           /* passive temporal proprioception. --no-flow stops snapshots; no generation path reads them. */
 static int g_leo_shadow_on = 1;         /* counterfactual next-turn proposals. --no-shadow keeps Flow but writes no receipts. */
@@ -4753,10 +4772,80 @@ static int leo_school_predict_glyph(const Leo *leo, const char *prompt) {
         if (hist[i] > bestn) { bestn = hist[i]; best = i; }
     return bestn >= 2 ? best : -1;   /* exact pre-wonder confidence contract */
 }
+
+static int leo_deferred_wonder_find(const Leo *leo, const char *word) {
+    if (!leo || !word || !word[0]) return -1;
+    for (int i = 0; i < leo->school.n_deferred; i++)
+        if (!strcmp(leo->school.deferred[i].word, word)) return i;
+    return -1;
+}
+
+static void leo_deferred_wonder_forget(Leo *leo, const char *word) {
+    int idx = leo_deferred_wonder_find(leo, word);
+    if (idx < 0) return;
+    for (int i = idx + 1; i < leo->school.n_deferred; i++)
+        leo->school.deferred[i - 1] = leo->school.deferred[i];
+    if (leo->school.n_deferred > 0) {
+        leo->school.n_deferred--;
+        memset(&leo->school.deferred[leo->school.n_deferred], 0,
+               sizeof leo->school.deferred[0]);
+    }
+}
+
+/* Remember one withheld question. At capacity, replace the least recently
+ * encountered entry: the body is bounded, but repeated unresolved not-knowing
+ * protects itself better than a word that never returned. */
+static LeoDeferredWonder *leo_deferred_wonder_remember(
+        Leo *leo, const char *word, int glyph, int alt_glyph, int heard) {
+    if (!leo || !word || !word[0]) return NULL;
+    int idx = leo_deferred_wonder_find(leo, word);
+    if (idx < 0) {
+        if (leo->school.n_deferred < LEO_DEFERRED_WONDER_MAX) {
+            idx = leo->school.n_deferred++;
+        } else {
+            idx = 0;
+            for (int i = 1; i < LEO_DEFERRED_WONDER_MAX; i++) {
+                const LeoDeferredWonder *cur = &leo->school.deferred[i];
+                const LeoDeferredWonder *old = &leo->school.deferred[idx];
+                if (cur->last_seen_turn < old->last_seen_turn ||
+                    (cur->last_seen_turn == old->last_seen_turn &&
+                     cur->born_turn < old->born_turn))
+                    idx = i;
+            }
+        }
+        LeoDeferredWonder *entry = &leo->school.deferred[idx];
+        memset(entry, 0, sizeof *entry);
+        strncpy(entry->word, word, LEO_HEARD_WORDLEN - 1);
+        entry->word[LEO_HEARD_WORDLEN - 1] = 0;
+        entry->offered_glyph =
+            (int8_t)(glyph >= 0 && glyph < GLYPH_COUNT ? glyph : -1);
+        entry->offered_alt_glyph =
+            (int8_t)(alt_glyph >= 0 && alt_glyph < GLYPH_COUNT &&
+                     alt_glyph != glyph ? alt_glyph : -1);
+        entry->heard_at_birth = heard > 0 ? heard : 0;
+        entry->born_turn = (uint64_t)leo->school.turn_clock;
+    }
+    LeoDeferredWonder *entry = &leo->school.deferred[idx];
+    /* If the first frightened context carried no hypothesis, a later blocked
+     * encounter may complete the empty slots, but never rewrite a lived one. */
+    if (entry->offered_glyph < 0 && glyph >= 0 && glyph < GLYPH_COUNT)
+        entry->offered_glyph = (int8_t)glyph;
+    if (entry->offered_alt_glyph < 0 && alt_glyph >= 0 &&
+        alt_glyph < GLYPH_COUNT && alt_glyph != entry->offered_glyph)
+        entry->offered_alt_glyph = (int8_t)alt_glyph;
+    if (entry->blocks < UINT32_MAX) entry->blocks++;
+    entry->last_seen_turn = (uint64_t)leo->school.turn_clock;
+    return entry;
+}
+
 /* I2: bind a taught word to the answer's concept (its dominant glyph), growing
  * the map. F2: at capacity, log instead of dying silently. */
 static void leo_school_learn(Leo *leo, const char *w, int glyph) {
-    if (!w[0] || leo_school_is_learned(leo, w)) return;
+    if (!w[0]) return;
+    if (leo_school_is_learned(leo, w)) {
+        leo_deferred_wonder_forget(leo, w);
+        return;
+    }
     if (leo->school.n_learned >= LEO_SCHOOL_MAX) {
         fprintf(stderr, "[leo school] concept vocabulary full (%d) — '%s' not learned\n",
                 LEO_SCHOOL_MAX, w);
@@ -4766,6 +4855,7 @@ static void leo_school_learn(Leo *leo, const char *w, int glyph) {
     leo->school.learned[leo->school.n_learned][LEO_HEARD_WORDLEN - 1] = 0;
     leo->school.learned_glyph[leo->school.n_learned] = (int8_t)glyph;
     leo->school.n_learned++;
+    leo_deferred_wonder_forget(leo, w);
     if (g_leo_conatus_on)   /* Damasio: a satisfied need — the first good-for-him event; relieve the debt */
         leo->debt = clampf(leo->debt - LEO_DEBT_RELIEF, 0.0f, LEO_DEBT_MAX);
 }
@@ -4805,11 +4895,13 @@ static int word_in_dedication(const char *w) {
 }
 
 static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out,
-                                   char *deferred, int *deferred_heard) {
+                                   char *deferred, int *deferred_heard,
+                                   int *from_deferred) {
     char cur[LEO_HEARD_WORDLEN]; int wi = 0;
     if (out) out[0] = 0;
     if (deferred) deferred[0] = 0;
     if (deferred_heard) *deferred_heard = 0;
+    if (from_deferred) *from_deferred = 0;
     for (const char *q = prompt; ; q++) {
         unsigned char ch = (unsigned char)*q;
         if (ch && (isalpha(ch) || ch == '\'')) {
@@ -4822,7 +4914,10 @@ static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out
                 !semtok_is_stop_word(cur) &&
                 leo_school_unknown(leo, cur)) {
                 int heard = leo_heard_count(&leo->heard, cur);
-                int askable = heard <= LEO_SCHOOL_NOVEL_MAX ||
+                int remembered = g_leo_wonder_on &&
+                    g_leo_deferred_wonder_on &&
+                    leo_deferred_wonder_find(leo, cur) >= 0;
+                int askable = remembered || heard <= LEO_SCHOOL_NOVEL_MAX ||
                     (heard <= LEO_SCHOOL_ORIGIN_MAX &&
                      leo_semtok_word(leo, cur) < 0 && word_in_dedication(cur));
                 if (askable) {   /* N-4: rare origin words stay askable */
@@ -4830,6 +4925,7 @@ static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out
                         strncpy(out, cur, LEO_HEARD_WORDLEN - 1);
                         out[LEO_HEARD_WORDLEN - 1] = 0;
                     }
+                    if (from_deferred) *from_deferred = remembered;
                     return 1;
                 }
                 if (deferred && !deferred[0]) {
@@ -4847,7 +4943,7 @@ static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out
 
 __attribute__((unused))  /* direct School contract tests; live path uses the traced scan */
 static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out) {
-    return leo_school_scan_unknown(leo, prompt, out, NULL, NULL);
+    return leo_school_scan_unknown(leo, prompt, out, NULL, NULL, NULL);
 }
 
 static int leo_school_text_has_word(const char *text, const char *word) {
@@ -6144,6 +6240,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     char unk[LEO_HEARD_WORDLEN] = {0};
     char deferred[LEO_HEARD_WORDLEN] = {0};
     int deferred_heard = 0;
+    int from_deferred = 0;
     /* Damasio #1: the standing debt widens the curiosity gate — a hungry Leo asks even through
      * mild distress (the need to know overrides caution); the ask is the act that pays his debt.
      * --no-conatus → the base gate (byte-identical). */
@@ -6153,7 +6250,26 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                          leo->chamber_act[LEO_CH_VOID];
     int has_unknown = g_leo_school_on && !was_answer && !wonder_reask &&
                       leo_school_scan_unknown(leo, prompt, unk, deferred,
-                                              &deferred_heard);
+                                              &deferred_heard, &from_deferred);
+    int question_glyphs[2] = {-1, -1};
+    if (has_unknown && g_leo_wonder_on) {
+        int remembered = from_deferred ?
+            leo_deferred_wonder_find(leo, unk) : -1;
+        if (remembered >= 0) {
+            const LeoDeferredWonder *entry =
+                &leo->school.deferred[remembered];
+            question_glyphs[0] = entry->offered_glyph;
+            question_glyphs[1] = entry->offered_alt_glyph;
+        } else {
+            leo_school_predict_glyphs(leo, prompt, question_glyphs);
+        }
+    }
+    if (has_unknown && ask_distress >= ask_gate && g_leo_wonder_on &&
+        g_leo_deferred_wonder_on) {
+        leo_deferred_wonder_remember(
+            leo, unk, question_glyphs[0], question_glyphs[1],
+            leo_heard_count(&leo->heard, unk));
+    }
 
     LeoCuriosityReceipt curiosity;
     memset(&curiosity, 0, sizeof curiosity);
@@ -6179,9 +6295,13 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     else if (!has_unknown)
         curiosity.outcome = LEO_CURIOSITY_NO_CANDIDATE;
     else if (ask_distress >= ask_gate)
-        curiosity.outcome = LEO_CURIOSITY_BLOCKED_DISTRESS;
+        curiosity.outcome = from_deferred ?
+            LEO_CURIOSITY_BLOCKED_DEFERRED :
+            LEO_CURIOSITY_BLOCKED_DISTRESS;
     else
-        curiosity.outcome = LEO_CURIOSITY_ASKED;
+        curiosity.outcome = from_deferred ?
+            LEO_CURIOSITY_ASKED_DEFERRED :
+            LEO_CURIOSITY_ASKED;
     leo->curiosity = curiosity;
 
     if (g_leo_school_on && g_leo_wonder_on && wonder_reask) {
@@ -6198,7 +6318,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     } else if (g_leo_school_on && !was_answer &&
                ask_distress < ask_gate && has_unknown) {
         int glyphs[2] = {-1, -1};
-        if (g_leo_wonder_on) leo_school_predict_glyphs(leo, prompt, glyphs);
+        if (g_leo_wonder_on) {
+            glyphs[0] = question_glyphs[0];
+            glyphs[1] = question_glyphs[1];
+        }
         else glyphs[0] = leo_school_predict_glyph(leo, prompt);
         int n = leo_school_format_question(out, max_len, unk, glyphs[0],
                                            g_leo_wonder_on ? glyphs[1] : -1);
@@ -6208,6 +6331,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         leo->school.pending_glyph = glyphs[0];   /* I3b will check the guess against the answer */
         leo->school.pending_alt_glyph = g_leo_wonder_on ? glyphs[1] : -1;
         leo->school.pending_turns = 0;
+        if (from_deferred) leo_deferred_wonder_forget(leo, unk);
         if (g_leo_wonder_on) {
             LeoWonderEpisode *ep = leo_wonder_open(leo, unk, glyphs[0], glyphs[1]);
             flow_wonder_id = leo_wonder_episode_id(ep);
@@ -6273,9 +6397,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v15      : event-bounded unfinished-wonder currents beyond the snapshot horizon
  *   v16      : bounded counterfactual shadow-scheduler receipts
  *   v17      : next-turn calibration verdicts over shadow receipts
+ *   v18      : bounded pre-Wonder memory for distress-deferred questions
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 17  /* calibration appends a fail-soft tail; v5..v16 soft-migrate */
+#define LEO_STATE_VERSION 18  /* deferred Wonder appends a fail-soft tail; v5..v17 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -6476,6 +6601,14 @@ static int leo_save_state(const Leo *leo, const char *path) {
     if (leo->calibration.n > 0)
         fwrite(leo->calibration.receipts, sizeof(LeoCalibrationReceipt),
                (size_t)leo->calibration.n, f);
+
+    /* Deferred Wonder (v18): remembered withheld questions are part of School,
+     * but remain a separate fail-soft tail so every v5..v17 body is a clean
+     * prefix and can wake with no invented curiosity. */
+    st_w32(f, (int32_t)leo->school.n_deferred);
+    if (leo->school.n_deferred > 0)
+        fwrite(leo->school.deferred, sizeof(LeoDeferredWonder),
+               (size_t)leo->school.n_deferred, f);
 
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
@@ -7017,6 +7150,53 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
+    /* Deferred pre-Wonder memory (v18). A corrupt tail loses only questions
+     * that were never yet spoken; the School map, open Wonder, Flow, shadow,
+     * and calibration ledgers remain intact. */
+    if (version >= 18) {
+        int32_t n = 0;
+        int deferred_ok = st_r32(f, &n) &&
+                          n >= 0 && n <= LEO_DEFERRED_WONDER_MAX;
+        if (deferred_ok && n > 0 &&
+            fread(leo->school.deferred, sizeof(LeoDeferredWonder),
+                  (size_t)n, f) != (size_t)n) deferred_ok = 0;
+        if (deferred_ok) {
+            leo->school.n_deferred = n;
+            for (int i = 0; i < n; i++) {
+                LeoDeferredWonder *entry = &leo->school.deferred[i];
+                entry->word[LEO_HEARD_WORDLEN - 1] = 0;
+                if (!entry->word[0] ||
+                    entry->offered_glyph < -1 ||
+                    entry->offered_glyph >= GLYPH_COUNT ||
+                    entry->offered_alt_glyph < -1 ||
+                    entry->offered_alt_glyph >= GLYPH_COUNT ||
+                    (entry->offered_glyph >= 0 &&
+                     entry->offered_alt_glyph == entry->offered_glyph) ||
+                    entry->heard_at_birth <= 0 || entry->blocks == 0 ||
+                    entry->born_turn == 0 ||
+                    entry->born_turn > entry->last_seen_turn ||
+                    entry->last_seen_turn >
+                        (uint64_t)leo->school.turn_clock) {
+                    deferred_ok = 0;
+                    break;
+                }
+                for (int j = 0; j < i; j++)
+                    if (!strcmp(entry->word,
+                                leo->school.deferred[j].word)) {
+                        deferred_ok = 0;
+                        break;
+                    }
+                if (!deferred_ok) break;
+            }
+        }
+        if (!deferred_ok) {
+            fprintf(stderr, "[leo] WARNING: v18 deferred-Wonder tail truncated/corrupt — organism lives without withheld questions.\n");
+            memset(leo->school.deferred, 0,
+                   sizeof leo->school.deferred);
+            leo->school.n_deferred = 0;
+        }
+    }
+
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
     leo_build_chamber_tags(leo);
@@ -7275,7 +7455,8 @@ static void print_flow_stats(const Leo *leo) {
         leo->curiosity.outcome < LEO_CURIOSITY_OUTCOME_COUNT) {
         static const char *outcomes[LEO_CURIOSITY_OUTCOME_COUNT] = {
             "none", "asked", "reasked", "resolved", "continued",
-            "blocked-distress", "no-candidate", "disabled"
+            "blocked-distress", "asked-deferred", "blocked-deferred",
+            "no-candidate", "disabled"
         };
         printf("     [curiosity: turn=%llu outcome=%s candidate=%s deferred=%s heard=%d distress=%.3f gate=%.3f]\n",
                (unsigned long long)leo->curiosity.turn,
@@ -7455,6 +7636,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-rae")) g_leo_rae_on = 0;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
+        else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
         else if (!strcmp(argv[i], "--no-flow")) g_leo_flow_on = 0;
         else if (!strcmp(argv[i], "--no-shadow")) g_leo_shadow_on = 0;

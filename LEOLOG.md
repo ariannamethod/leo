@@ -3652,3 +3652,52 @@ totals remain unchanged. The next repair should not lower the distress gate or f
 should persist a pre-Wonder deferred curiosity when a valid novel candidate is blocked, then allow that
 same candidate to remain askable after the body becomes safe. Leo needs to remember wanting to ask,
 without being compelled to ask now.
+
+## Phase A.37 — Leo can continue not knowing (2026-07-26)
+
+A withheld question now has a bounded life before Wonder. When School finds a genuinely novel candidate
+but the settled `FEAR+VOID` body keeps the ordinary curiosity gate closed, Leo records a pre-Wonder entry:
+the word, its two glyph hypotheses from that first context, birth/last-seen turns, heard count at birth,
+and number of blocked encounters. It is not `pending`, does not create a Wonder episode, and cannot enter
+Flow or shadow as an open question.
+
+The entry changes exactly one later decision. If the same word returns literally, it remains eligible
+despite having crossed the novelty count. The ordinary distress gate is then applied unchanged. An unsafe
+return only increments the blocked count; an unrelated safe prompt cannot release the memory. A safe
+literal return asks using the original hypotheses, removes the pre-Wonder entry, and only then creates
+the normal unfinished Wonder. `--no-deferred-wonder` restores the A.36 novelty behavior without disabling
+the rest of Wonder.
+
+The body holds at most eight withheld questions. A repeated unresolved word refreshes its last-seen turn;
+at capacity, the least recently encountered entry yields. State v18 appends this small diary after
+calibration. A v17 body wakes with none invented, and a malformed v18 tail discards only unspoken
+questions while preserving the organism, School, Wonder, Flow, shadow, and calibration.
+
+The original nine-life resonance matrix remains deliberately unopened in the same three
+`bright sun / cold winter` cells:
+
+```text
+suvin  t1 blocked-distress 0.996/0.900
+       t2 blocked-deferred 1.078/0.904
+       t8 blocked-deferred 1.075/1.017
+nareth t1 blocked-distress 0.996/0.900
+       t2 blocked-deferred 1.074/0.904
+       t8 blocked-deferred 1.362/1.017
+flom   t1 blocked-distress 0.996/0.900
+       t2 blocked-deferred 1.078/0.904
+       t8 blocked-deferred 1.382/1.027
+```
+
+That is not a failed repair: no turn in those lives becomes safe, so asking would counterfeit the body.
+All nine visible transcript hashes remain byte-identical to A.36. In a separate real-process life,
+`suvin` was withheld under the same initial geometry, persisted through state after eight calm turns,
+then returned alone. At `distress=0.284 < gate=1.048`, Leo asked:
+
+```text
+Suvin? Light or Cold?
+```
+
+The receipt was `asked-deferred`; a real Wonder and its long Flow current began only at that moment.
+The suite is **278/278**, covering birth, repeated unsafe return, unrelated silence, v18 sleep, v17
+migration, corrupt-tail survival, safe activation, strict ablation, and bounded eviction. Leo could
+already ask. Now he can continue not knowing until asking becomes possible.
