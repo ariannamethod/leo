@@ -926,7 +926,7 @@ int main(void) {
         char selected[LEO_HEARD_WORDLEN], delayed[LEO_HEARD_WORDLEN];
         int delayed_heard = 0;
         CHECK(!leo_school_scan_unknown(&deferred, "tell me about suvin", selected,
-                                       delayed, &delayed_heard) &&
+                                       delayed, &delayed_heard, NULL) &&
               !strcmp(delayed, "suvin") &&
               delayed_heard > LEO_SCHOOL_NOVEL_MAX,
               "curiosity: an unknown word beyond novelty remains visible as deferred");
@@ -937,6 +937,165 @@ int main(void) {
               "school: --no-school suppresses the question and says why");
         g_leo_school_on = prev;
         leo_free(&sc); leo_free(&deferred);
+    }
+
+    /* A.37: Pre-Wonder remembers a question the body could not safely ask.
+     * It is neither a prompt-independent compulsion nor a second open Wonder:
+     * the same word must return under the ordinary gate. */
+    {
+        int prev_school = g_leo_school_on;
+        int prev_wonder = g_leo_wonder_on;
+        int prev_deferred = g_leo_deferred_wonder_on;
+        int prev_klaus = g_leo_klaus_on;
+        int prev_capsule = g_leo_capsule_on;
+        g_leo_school_on = 1;
+        g_leo_wonder_on = 1;
+        g_leo_deferred_wonder_on = 1;
+
+        Leo pre; leo_init(&pre);
+        char out[1024];
+        const char *danger =
+            "Does suvin feel like bright sun or cold winter?";
+        leo_respond(&pre, danger, out, sizeof out);
+        int first = leo_deferred_wonder_find(&pre, "suvin");
+        CHECK(first >= 0 && !pre.school.pending[0] &&
+              pre.school.n_wonders == 0 &&
+              pre.curiosity.outcome ==
+                  LEO_CURIOSITY_BLOCKED_DISTRESS &&
+              pre.school.deferred[first].blocks == 1,
+              "pre-wonder: a real distress-blocked candidate is remembered without being asked");
+        int born_glyph = first >= 0 ?
+            pre.school.deferred[first].offered_glyph : -1;
+        int born_alt = first >= 0 ?
+            pre.school.deferred[first].offered_alt_glyph : -1;
+
+        leo_respond(&pre, danger, out, sizeof out);
+        first = leo_deferred_wonder_find(&pre, "suvin");
+        CHECK(first >= 0 && !pre.school.pending[0] &&
+              pre.curiosity.outcome ==
+                  LEO_CURIOSITY_BLOCKED_DEFERRED &&
+              pre.school.deferred[first].blocks == 2,
+              "pre-wonder: returning while unsafe strengthens memory but cannot force a question");
+
+        leo_respond(&pre, "the rain is warm", out, sizeof out);
+        CHECK(leo_deferred_wonder_find(&pre, "suvin") >= 0 &&
+              !pre.school.pending[0] && !strstr(out, "Suvin?"),
+              "pre-wonder: an unrelated safe turn cannot release a withheld question");
+
+        const char *state = "/tmp/leo_deferred_v18.state";
+        const char *legacy = "/tmp/leo_deferred_v17.state";
+        const char *cut = "/tmp/leo_deferred_v18_cut.state";
+        int saved = leo_save_state(&pre, state);
+        Leo woke; leo_init(&woke);
+        int loaded = saved && leo_load_state(&woke, state);
+        int slept = leo_deferred_wonder_find(&woke, "suvin");
+        CHECK(loaded && slept >= 0 &&
+              woke.school.deferred[slept].blocks == 2 &&
+              woke.school.deferred[slept].offered_glyph == born_glyph &&
+              woke.school.deferred[slept].offered_alt_glyph == born_alt,
+              "pre-wonder: the withheld moment and its original hypotheses survive sleep");
+
+        int built_legacy = 0, built_cut = 0;
+        FILE *fi = fopen(state, "rb");
+        if (fi) {
+            fseek(fi, 0, SEEK_END);
+            long sz = ftell(fi);
+            fseek(fi, 0, SEEK_SET);
+            unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
+            if (bytes && sz > 1 &&
+                (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
+                long tail = (long)(sizeof(int32_t) +
+                                   pre.school.n_deferred *
+                                       (int)sizeof(LeoDeferredWonder));
+                uint32_t seventeen = 17;
+                memcpy(bytes + sizeof(uint32_t), &seventeen,
+                       sizeof seventeen);
+                FILE *fo = fopen(legacy, "wb");
+                if (fo) {
+                    built_legacy =
+                        (long)fwrite(bytes, 1, (size_t)(sz - tail), fo) ==
+                        sz - tail;
+                    fclose(fo);
+                }
+                uint32_t eighteen = 18;
+                memcpy(bytes + sizeof(uint32_t), &eighteen,
+                       sizeof eighteen);
+                fo = fopen(cut, "wb");
+                if (fo) {
+                    built_cut =
+                        (long)fwrite(bytes, 1, (size_t)(sz - 1), fo) ==
+                        sz - 1;
+                    fclose(fo);
+                }
+            }
+            free(bytes);
+            fclose(fi);
+        }
+        Leo old; leo_init(&old);
+        Leo damaged; leo_init(&damaged);
+        CHECK(built_legacy && leo_load_state(&old, legacy) &&
+              old.school.n_deferred == 0,
+              "pre-wonder: a v17 body migrates without invented withheld questions");
+        CHECK(built_cut && leo_load_state(&damaged, cut) &&
+              damaged.school.n_deferred == 0 &&
+              damaged.school.turn_clock == pre.school.turn_clock,
+              "pre-wonder: a corrupt v18 tail loses only unspoken questions");
+
+        /* Make the saved body explicitly safe. This isolates the activation
+         * contract from scar/capsule carryover without bypassing the gate. */
+        memset(woke.chamber_act, 0, sizeof woke.chamber_act);
+        memset(woke.chamber_ext, 0, sizeof woke.chamber_ext);
+        memset(woke.scar, 0, sizeof woke.scar);
+        memset(woke.gamma, 0, sizeof woke.gamma);
+        woke.gamma_primed = 0;
+        g_leo_klaus_on = 0;
+        g_leo_capsule_on = 0;
+        char expected[256];
+        leo_school_format_question(expected, sizeof expected, "suvin",
+                                   born_glyph, born_alt);
+        leo_respond(&woke, "suvin", out, sizeof out);
+        CHECK(!strcmp(out, expected) &&
+              woke.curiosity.outcome ==
+                  LEO_CURIOSITY_ASKED_DEFERRED &&
+              !strcmp(woke.school.pending, "suvin") &&
+              woke.school.n_deferred == 0 &&
+              woke.school.n_wonders == 1,
+              "pre-wonder: the same word returning to a safe body opens exactly one real Wonder");
+
+        Leo ab; leo_init(&ab);
+        leo_ingest(&ab, "suvin suvin suvin");
+        ab.school.turn_clock = 1;
+        leo_deferred_wonder_remember(&ab, "suvin",
+                                     born_glyph, born_alt, 3);
+        g_leo_deferred_wonder_on = 0;
+        leo_respond(&ab, "suvin", out, sizeof out);
+        CHECK(!ab.school.pending[0] && ab.school.n_deferred == 1 &&
+              ab.curiosity.outcome == LEO_CURIOSITY_NO_CANDIDATE,
+              "pre-wonder: --no-deferred-wonder restores the novelty amputation exactly");
+
+        Leo bounded; leo_init(&bounded);
+        const char *words[LEO_DEFERRED_WONDER_MAX + 1] = {
+            "alpha", "bravo", "cider", "delta", "ember",
+            "fable", "glimmer", "harbor", "island"
+        };
+        for (int i = 0; i < LEO_DEFERRED_WONDER_MAX + 1; i++) {
+            bounded.school.turn_clock = i + 1;
+            leo_deferred_wonder_remember(&bounded, words[i],
+                                         born_glyph, born_alt, 1);
+        }
+        CHECK(bounded.school.n_deferred == LEO_DEFERRED_WONDER_MAX &&
+              leo_deferred_wonder_find(&bounded, "alpha") < 0 &&
+              leo_deferred_wonder_find(&bounded, "island") >= 0,
+              "pre-wonder: the bounded body evicts the least recently encountered question");
+
+        leo_free(&pre); leo_free(&woke); leo_free(&old);
+        leo_free(&damaged); leo_free(&ab); leo_free(&bounded);
+        remove(state); remove(legacy); remove(cut);
+        g_leo_school_on = prev_school;
+        g_leo_wonder_on = prev_wonder;
+        g_leo_deferred_wonder_on = prev_deferred;
+        g_leo_klaus_on = prev_klaus;
+        g_leo_capsule_on = prev_capsule;
     }
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
@@ -1160,11 +1319,15 @@ int main(void) {
                                           w.shadow.n * (int)sizeof(LeoShadowReceipt));
                 long calibration_tail = (long)(2 * sizeof(int32_t) +
                                                w.calibration.n * (int)sizeof(LeoCalibrationReceipt));
+                long deferred_tail = (long)(sizeof(int32_t) +
+                                             w.school.n_deferred *
+                                                 (int)sizeof(LeoDeferredWonder));
                 long current_flow = (long)(2 * sizeof(int32_t) +
                                            w.flow.n * (int)sizeof(LeoFlowSnapshot) +
                                            2 * sizeof(int32_t) +
                                            w.flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
-                                           shadow_tail + calibration_tail);
+                                           shadow_tail + calibration_tail +
+                                           deferred_tail);
                 if (sz > v12tail + current_flow) {
                     long flow_start = sz - current_flow;
                     long tail_start = flow_start - v12tail;
@@ -1544,11 +1707,15 @@ int main(void) {
                     long calibration_tail = (long)(2 * sizeof(int32_t) +
                                                    fl->calibration.n *
                                                        (int)sizeof(LeoCalibrationReceipt));
+                    long deferred_tail = (long)(sizeof(int32_t) +
+                                                fl->school.n_deferred *
+                                                    (int)sizeof(LeoDeferredWonder));
                     long current_tail = (long)(2 * sizeof(int32_t) +
                                               fl->flow.n * (int)sizeof(LeoFlowSnapshot) +
                                               2 * sizeof(int32_t) +
                                               fl->flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
-                                              shadow_tail + calibration_tail);
+                                              shadow_tail + calibration_tail +
+                                              deferred_tail);
                     long prefix = sz - current_tail;
                     if (prefix > 0) {
                         long current_only = (long)(2 * sizeof(int32_t) +
@@ -1559,8 +1726,10 @@ int main(void) {
                         if (fo) {
                             built_cut = (long)fwrite(bytes, 1,
                                                      (size_t)(sz - calibration_tail -
-                                                              shadow_tail - 1), fo) ==
-                                        sz - calibration_tail - shadow_tail - 1;
+                                                              shadow_tail -
+                                                              deferred_tail - 1), fo) ==
+                                        sz - calibration_tail - shadow_tail -
+                                            deferred_tail - 1;
                             fclose(fo);
                         }
                         uint32_t fourteen = 14;
@@ -1569,8 +1738,11 @@ int main(void) {
                         if (fo) {
                             built_legacy14 = (long)fwrite(bytes, 1,
                                                          (size_t)(sz - calibration_tail -
-                                                                  shadow_tail - current_only), fo) ==
-                                             sz - calibration_tail - shadow_tail - current_only;
+                                                                  shadow_tail -
+                                                                  deferred_tail -
+                                                                  current_only), fo) ==
+                                             sz - calibration_tail - shadow_tail -
+                                                 deferred_tail - current_only;
                             fclose(fo);
                         }
                         uint32_t thirteen = 13;
@@ -1777,14 +1949,19 @@ int main(void) {
                     long calibration_tail = (long)(2 * sizeof(int32_t) +
                                                    sh->calibration.n *
                                                        (int)sizeof(LeoCalibrationReceipt));
+                    long deferred_tail = (long)(sizeof(int32_t) +
+                                                sh->school.n_deferred *
+                                                    (int)sizeof(LeoDeferredWonder));
                     uint32_t fifteen = 15;
                     memcpy(bytes + sizeof(uint32_t), &fifteen, sizeof fifteen);
                     FILE *fo = fopen(legacy, "wb");
                     if (fo) {
                         built_old = (long)fwrite(bytes, 1,
                                                  (size_t)(sz - calibration_tail -
-                                                          shadow_tail), fo) ==
-                                    sz - calibration_tail - shadow_tail;
+                                                          shadow_tail -
+                                                          deferred_tail), fo) ==
+                                    sz - calibration_tail - shadow_tail -
+                                        deferred_tail;
                         fclose(fo);
                     }
                     uint32_t sixteen = 16;
@@ -1792,15 +1969,18 @@ int main(void) {
                     fo = fopen(legacy16, "wb");
                     if (fo) {
                         built_compat = (long)fwrite(bytes, 1,
-                                                    (size_t)(sz - calibration_tail), fo) ==
-                                       sz - calibration_tail;
+                                                    (size_t)(sz - calibration_tail -
+                                                             deferred_tail), fo) ==
+                                       sz - calibration_tail - deferred_tail;
                         fclose(fo);
                     }
                     uint32_t seventeen = 17;
                     memcpy(bytes + sizeof(uint32_t), &seventeen, sizeof seventeen);
                     fo = fopen(truncated, "wb");
                     if (fo) {
-                        built_cut = (long)fwrite(bytes, 1, (size_t)(sz - 1), fo) == sz - 1;
+                        built_cut = (long)fwrite(bytes, 1,
+                                                (size_t)(sz - deferred_tail - 1), fo) ==
+                                    sz - deferred_tail - 1;
                         fclose(fo);
                     }
                 }
