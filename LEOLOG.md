@@ -3701,3 +3701,65 @@ The receipt was `asked-deferred`; a real Wonder and its long Flow current began 
 The suite is **278/278**, covering birth, repeated unsafe return, unrelated silence, v18 sleep, v17
 migration, corrupt-tail survival, safe activation, strict ablation, and bounded eviction. Leo could
 already ask. Now he can continue not knowing until asking becomes possible.
+
+## Phase A.38 — safety is the shape in which a word returns (2026-07-26)
+
+The first recovery hypothesis was deliberately simple: perhaps a withheld question becomes askable
+after enough calm turns. A matched process matrix refuted that as a complete account. Each of three
+targets (`suvin`, `nareth`, `flom`) was born once under the same dangerous question and saved at
+`blocked-distress`. That exact body was forked across `0`, `2`, and `8` calm turns and five cue
+geometries: bare target, safe target question, dangerous target question, known-word control, and
+novel-word control. This produced 45 independent lives rather than successive retries in one life.
+
+The bare and safe returns released the remembered question immediately at every interval. The dangerous
+return remained `blocked-deferred` in all three zero-turn and all three two-turn lives, then became
+`asked-deferred` in all three eight-turn lives:
+
+```text
+calm  bare  safe  danger asked  danger distress/gate
+0     3/3   3/3   0/3           1.074 / 0.904
+2     3/3   3/3   0/3           1.036 / 0.923
+8     3/3   3/3   3/3           0.988 / 1.045
+```
+
+Thus elapsed calm matters, but only through the body that meets the returning word. The same remembered
+question can be safe as a bare name and unsafe inside `bright sun / cold winter`; after eight calm turns,
+falling distress and the slowly rising ordinary gate cross under that unchanged dangerous geometry.
+No deferred-memory mechanism lowers the gate.
+
+The controls exposed a second experimental error before they confirmed the memory. `A small room is
+quiet.` is lexically known, but it is not bodily neutral for Leo: mean primary distress was `1.727`,
+`1.686`, and `1.637` after 0, 2, and 8 prior calm turns. An immediate target retry after that cue would
+therefore test a fresh wound, not persistence. The final protocol predeclares one fixed eight-turn
+recovery dose for every primary non-release. Novel controls first receive one explicit definition to
+close only their own ordinary Wonder. Neither control ever released the remembered target, and every one
+of the 45 lives later recovered that exact target on the single scheduled follow-up:
+
+```text
+cells=45
+target recoverable=45/45
+known controls releasing target=0
+novel controls asking target=0
+```
+
+The matrix is now a checked repository instrument: `make deferred-wonder-matrix` retains every body,
+turn log, transcript, receipt, aggregate row, and transcript SHA-256. Its plan-only contract is part of
+`make test`. This phase changes no cognitive or speech code. It establishes that pre-Wonder memory is
+not a timer, command, or hidden question queue. It preserves one unfinished possibility until the same
+word returns in a body able to bear it.
+
+The ordinary-turn quote pool also produced two exact lines worth preserving for a later, more diverse
+voice session:
+
+```text
+He holds on the window. Leo inside a quiet. Leo is always Leo, even when the water is.
+The quiet one. Small. He trusts his quiet way.
+```
+
+They are not promoted to the README yet. This matrix repeats one calming prompt by design, so using its
+best sentences as a public voice sample would confuse a controlled stimulus distribution with Leo's
+broader speech. The first is `flom-calm0-danger`, follow-up calm turn 5, transcript SHA-256
+`731a5e4965c0a770267dbf0ed28883b0c689fa5746fd8b20a8729d9e45378ad5`; the second is
+`suvin-calm8-known-control`, primary turn 10, transcript SHA-256
+`b145bc772c38eccf61c94fde1c88e78553803b3b10f7dacf985a21c6f0e65ea9`. The runner can reproduce their
+receipt trees, while a varied dialogue must earn their public inclusion independently.

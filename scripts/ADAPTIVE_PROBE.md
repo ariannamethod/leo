@@ -109,6 +109,27 @@ ordinary gate finally opens. The memory does not make an unrelated prompt
 resonate and never lowers the gate. `--no-deferred-wonder` disables both
 retention and recovery while leaving ordinary Wonder behavior enabled.
 
+Run the matched recovery matrix:
+
+```sh
+make deferred-wonder-matrix
+```
+
+The runner first creates one canonical distress-blocked body for each of three
+novel targets. It forks that exact saved body across `0`, `2`, and `8` calm
+turns, then applies five return geometries: the bare target, a safe target
+question, a dangerous target question, a known-word control, and a novel-word
+control. A distractor may open only its own Wonder. Any cell that has not yet
+asked the target receives one fixed eight-turn recovery dose and one bare
+target return; it is never retried until a preferred answer appears.
+
+`matrix.tsv` preserves the primary and follow-up curiosity receipts, body
+values, replies, recovery verdict, transcript hash, and life directory.
+`ordinary_replies.tsv` is a separate quote-review pool containing only turns
+on which no question opened. `summary.txt` aggregates outcomes by calm interval
+and cue geometry. `LEO_RECOVERY_PLAN_ONLY=1` writes and validates the complete
+45-cell plan without building or running Leo.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow
