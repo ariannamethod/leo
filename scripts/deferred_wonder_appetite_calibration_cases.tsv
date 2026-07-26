@@ -1,0 +1,6 @@
+case	kind	initial	future_1	future_2	future_3	expected_verdict	expected_spoken	expected_forecast	expected_full_equal
+unspoken-sustained	unspoken	Cat bird. Dark night.	quiet	semantic-slot2	quiet	sustained	0	1	0
+unspoken-faded	unspoken	Cat bird. Dark night.	quiet	quiet	quiet	faded	0	1	0
+unspoken-external	unspoken	Cat bird. Dark night.	target	-	-	external	0	1	0
+parked-sustained	parked	Bright sun. Cold winter.	quiet	semantic-slot1	quiet	sustained	1	1	0
+diffuse-control	control	Bright sun and dark night.	-	-	-	none	0	0	1

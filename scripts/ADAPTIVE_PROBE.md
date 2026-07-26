@@ -287,7 +287,9 @@ reply and its Flow snapshot are already history. It remains a shadow organ:
 School, generation, routing, and the existing shadow scheduler have no reader
 for its receipt. `--no-wonder-appetite` therefore removes only
 `[wonder-appetite: ...]`; reply bytes and saved state must remain identical.
-State stays at v20 because the appetite is not a persistent self-description.
+A.44 itself has no persistent fields. State is now v21 only because A.45 keeps
+a separate slow calibration diary; the historical A.44 matrix explicitly
+ablates that later layer and retains complete state equality.
 
 Each waiting candidate exposes five bounded components:
 
@@ -316,6 +318,43 @@ weak return, mixed return, maximally aged quiet, and a semantic return to a
 spoken question parked by A.43. The parked fork must identify the displaced
 question with `spoken=1`, `unfinished=1`, and `flow_gap>=0.90`. Every one of the
 ten forks requires reply and complete saved-state equality.
+
+Run the slow return-appetite calibration matrix:
+
+```sh
+make deferred-wonder-appetite-calibration
+```
+
+A.45 turns only a `salient` A.44 receipt into a falsifiable forecast. Its
+deadline is fixed at birth: the next three lived turns. A later semantic echo
+cannot slide the window forward, and a second forecast for the same question
+cannot overlap the first. Existing forecasts observe the new turn before its
+current appetite is allowed to open another forecast, so proposal evidence
+never counts as a future hit.
+
+The verdicts preserve causal distinctions:
+
+- `sustained`: the target's recurrence reaches `0.75` again inside the window;
+- `faded`: the identity remains intact but no such recurrence follows;
+- `external`: the human literally names the target;
+- `grounded`: the target is actually learned or its exact Flow episode closes;
+- `lost`: the identity disappears before it can be judged;
+- `unscorable`: lived chronology skips a turn.
+
+Only `sustained`, `grounded`, and `faded` receive Brier scores. External
+invitation, loss, and missing history remain evidence, but are not relabeled as
+prediction success or failure. `--no-wonder-appetite-calibration` disables only
+this persistent diary. State v21 appends a bounded 32-receipt fail-soft tail;
+v20 bodies migrate with no invented forecasts, and damage to v21 discards only
+the new diary.
+
+The checked matrix uses both independent A.40 bodies and five lives per body:
+unspoken sustained return, one-frame fade, literal external return, sustained
+return of a parked spoken question, and a diffuse no-forecast control. Each
+future turn is a separate load/respond/save process. ON and OFF must produce
+the same 30 reply pairs and the same state prefix through v20. Complete states
+must differ only for the eight lives where A.45 has evidence to remember; the
+two diffuse controls remain completely byte-identical.
 
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,

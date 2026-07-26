@@ -54,6 +54,12 @@ static void seed_wonder_redirection_body(Leo *leo) {
         leo->school.pending_alt_glyph, 1, field_token, field_weight);
 }
 
+static long test_appetite_calibration_tail_size(const Leo *leo) {
+    return (long)(2 * sizeof(int32_t) +
+        leo->wonder_appetite_calibration.n *
+            (int)sizeof(LeoWonderAppetiteCalibrationReceipt));
+}
+
 int main(void) {
     printf("test_leo (step 0)\n");
 
@@ -1039,8 +1045,11 @@ int main(void) {
             unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
             if (bytes && sz > 1 &&
                 (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
+                long appetite_tail =
+                    test_appetite_calibration_tail_size(&pre);
                 long origin_tail = (long)sizeof(int32_t);
-                long tail = origin_tail + (long)(sizeof(int32_t) +
+                long tail = appetite_tail + origin_tail +
+                            (long)(sizeof(int32_t) +
                                    pre.school.n_deferred *
                                        (int)sizeof(LeoDeferredWonder));
                 uint32_t seventeen = 17;
@@ -1091,8 +1100,9 @@ int main(void) {
                 if (fo) {
                     built_cut =
                         (long)fwrite(bytes, 1,
-                                     (size_t)(sz - origin_tail - 1), fo) ==
-                        sz - origin_tail - 1;
+                                     (size_t)(sz - appetite_tail -
+                                              origin_tail - 1), fo) ==
+                        sz - appetite_tail - origin_tail - 1;
                     fclose(fo);
                 }
             }
@@ -1780,6 +1790,8 @@ int main(void) {
             unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
             if (bytes && sz > (long)sizeof(LeoDeferredWonder) + 5 &&
                 (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
+                long appetite_tail =
+                    test_appetite_calibration_tail_size(&sleep);
                 long origin_tail =
                     (long)(sizeof(int32_t) + sizeof(LeoDeferredWonder));
                 uint32_t nineteen = 19;
@@ -1789,8 +1801,9 @@ int main(void) {
                 if (fo) {
                     built_legacy =
                         (long)fwrite(bytes, 1,
-                                     (size_t)(sz - origin_tail), fo) ==
-                        sz - origin_tail;
+                                     (size_t)(sz - appetite_tail -
+                                              origin_tail), fo) ==
+                        sz - appetite_tail - origin_tail;
                     fclose(fo);
                 }
                 uint32_t twenty = 20;
@@ -1799,8 +1812,10 @@ int main(void) {
                 fo = fopen(cut, "wb");
                 if (fo) {
                     built_cut =
-                        (long)fwrite(bytes, 1, (size_t)(sz - 1), fo) ==
-                        sz - 1;
+                        (long)fwrite(
+                            bytes, 1,
+                            (size_t)(sz - appetite_tail - 1), fo) ==
+                        sz - appetite_tail - 1;
                     fclose(fo);
                 }
             }
@@ -1946,6 +1961,335 @@ int main(void) {
         leo_free(&parked);
 
         g_leo_wonder_appetite_on = prev_appetite;
+        g_leo_flow_on = prev_flow;
+        g_leo_wonder_on = prev_wonder;
+        g_leo_deferred_wonder_on = prev_deferred;
+        g_leo_wonder_attribution_on = prev_attr;
+        g_leo_wonder_redirection_on = prev_redirection;
+    }
+
+    /* A.45: appetite forecasts are judged over three future lived turns. The
+     * diary persists, but remains causally downstream of speech and School. */
+    {
+        int prev_appetite = g_leo_wonder_appetite_on;
+        int prev_calibration =
+            g_leo_wonder_appetite_calibration_on;
+        int prev_flow = g_leo_flow_on;
+        int prev_wonder = g_leo_wonder_on;
+        int prev_deferred = g_leo_deferred_wonder_on;
+        int prev_attr = g_leo_wonder_attribution_on;
+        int prev_redirection = g_leo_wonder_redirection_on;
+        g_leo_wonder_appetite_on = 1;
+        g_leo_wonder_appetite_calibration_on = 1;
+        g_leo_flow_on = 1;
+        g_leo_wonder_on = 1;
+        g_leo_deferred_wonder_on = 1;
+        g_leo_wonder_attribution_on = 1;
+        g_leo_wonder_redirection_on = 1;
+
+        Leo *cal = malloc(sizeof *cal), *woke = malloc(sizeof *woke),
+            *old = malloc(sizeof *old), *damaged = malloc(sizeof *damaged);
+        CHECK(cal && woke && old && damaged,
+              "wonder-appetite-calibration: heap fixtures allocated");
+        if (cal && woke && old && damaged) {
+            seed_wonder_redirection_body(cal);
+            leo_init(woke); leo_init(old); leo_init(damaged);
+            cal->school.turn_clock = 11;
+            LeoSchool school_before = cal->school;
+            LeoFlow flow_before = cal->flow;
+            leo_wonder_appetite_observe(
+                cal, "Cat bird. Dark night.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "Cat bird. Dark night.");
+            const LeoWonderAppetiteCalibrationReceipt *forecast =
+                leo_wonder_appetite_calibration_at(
+                    &cal->wonder_appetite_calibration, 0);
+            CHECK(forecast &&
+                  !strcmp(forecast->word, "nareth") &&
+                  forecast->proposed_turn == 11 &&
+                  forecast->deadline_turn == 14 &&
+                  forecast->observed_turn == 11 &&
+                  forecast->observations == 0 &&
+                  forecast->verdict ==
+                      LEO_WONDER_APPETITE_CALIB_PENDING &&
+                  !memcmp(&school_before, &cal->school,
+                          sizeof cal->school) &&
+                  !memcmp(&flow_before, &cal->flow,
+                          sizeof cal->flow),
+                  "wonder-appetite-calibration: salience opens one fixed readerless horizon");
+
+            cal->school.turn_clock = 12;
+            leo_wonder_appetite_observe(
+                cal, "I do not know.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "I do not know.");
+            forecast = leo_wonder_appetite_calibration_at(
+                &cal->wonder_appetite_calibration, 0);
+            CHECK(forecast &&
+                  cal->wonder_appetite_calibration.n == 1 &&
+                  forecast->observations == 1 &&
+                  forecast->semantic_hits == 0 &&
+                  forecast->verdict ==
+                      LEO_WONDER_APPETITE_CALIB_PENDING,
+                  "wonder-appetite-calibration: a quiet future turn advances without sliding or duplication");
+
+            cal->school.turn_clock = 13;
+            leo_wonder_appetite_observe(
+                cal, "Cat bird. Dark night.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "Cat bird. Dark night.");
+            leo_wonder_appetite_calibrate(
+                cal, "Cat bird. Dark night.");
+            forecast = leo_wonder_appetite_calibration_at(
+                &cal->wonder_appetite_calibration, 0);
+            CHECK(forecast &&
+                  cal->wonder_appetite_calibration.n == 1 &&
+                  forecast->observations == 2 &&
+                  forecast->semantic_hits == 1 &&
+                  forecast->peak_recurrence >=
+                      LEO_WONDER_APPETITE_RESONANCE_MIN &&
+                  forecast->verdict ==
+                      LEO_WONDER_APPETITE_CALIB_PENDING,
+                  "wonder-appetite-calibration: a future recurrence is counted once but waits for the whole horizon");
+
+            const char *state =
+                "/tmp/leo_wonder_appetite_calibration_v21.state";
+            const char *legacy =
+                "/tmp/leo_wonder_appetite_calibration_v20.state";
+            const char *cut =
+                "/tmp/leo_wonder_appetite_calibration_v21_cut.state";
+            int saved = leo_save_state(cal, state);
+            int built_legacy = 0, built_cut = 0;
+            FILE *fi = fopen(state, "rb");
+            if (fi) {
+                fseek(fi, 0, SEEK_END);
+                long sz = ftell(fi);
+                fseek(fi, 0, SEEK_SET);
+                unsigned char *bytes =
+                    malloc(sz > 0 ? (size_t)sz : 1);
+                long appetite_tail =
+                    test_appetite_calibration_tail_size(cal);
+                if (bytes && sz > appetite_tail &&
+                    (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
+                    uint32_t twenty = 20;
+                    memcpy(bytes + sizeof(uint32_t), &twenty,
+                           sizeof twenty);
+                    FILE *fo = fopen(legacy, "wb");
+                    if (fo) {
+                        built_legacy =
+                            (long)fwrite(
+                                bytes, 1,
+                                (size_t)(sz - appetite_tail), fo) ==
+                            sz - appetite_tail;
+                        fclose(fo);
+                    }
+                    uint32_t twenty_one = 21;
+                    memcpy(bytes + sizeof(uint32_t), &twenty_one,
+                           sizeof twenty_one);
+                    fo = fopen(cut, "wb");
+                    if (fo) {
+                        built_cut =
+                            (long)fwrite(
+                                bytes, 1, (size_t)(sz - 1), fo) ==
+                            sz - 1;
+                        fclose(fo);
+                    }
+                }
+                free(bytes);
+                fclose(fi);
+            }
+            int loaded = saved && leo_load_state(woke, state);
+            forecast = loaded ?
+                leo_wonder_appetite_calibration_at(
+                    &woke->wonder_appetite_calibration, 0) : NULL;
+            CHECK(loaded && forecast &&
+                  forecast->proposed_turn == 11 &&
+                  forecast->observed_turn == 13 &&
+                  forecast->semantic_hits == 1,
+                  "wonder-appetite-calibration: an unfinished forecast survives sleep without losing its clock");
+
+            woke->school.turn_clock = 14;
+            leo_wonder_appetite_observe(
+                woke, "I do not know.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                woke, "I do not know.");
+            forecast = leo_wonder_appetite_calibration_at(
+                &woke->wonder_appetite_calibration, 0);
+            float sustained_error =
+                forecast ? forecast->appetite - 1.0f : 0.0f;
+            CHECK(forecast &&
+                  forecast->verdict ==
+                      LEO_WONDER_APPETITE_CALIB_SUSTAINED &&
+                  forecast->observations ==
+                      LEO_WONDER_APPETITE_CALIB_HORIZON &&
+                  fabsf(forecast->brier -
+                        sustained_error * sustained_error) < 1e-6f,
+                  "wonder-appetite-calibration: recurrence matures into a scored sustained verdict");
+
+            CHECK(built_legacy && leo_load_state(old, legacy) &&
+                  old->wonder_appetite_calibration.n == 0 &&
+                  leo_deferred_wonder_find(old, "nareth") >= 0,
+                  "wonder-appetite-calibration: a v20 body migrates without invented forecasts");
+            CHECK(built_cut && leo_load_state(damaged, cut) &&
+                  damaged->wonder_appetite_calibration.n == 0 &&
+                  leo_deferred_wonder_find(damaged, "nareth") >= 0,
+                  "wonder-appetite-calibration: a corrupt v21 tail loses only forecasts");
+
+            leo_free(cal);
+            seed_wonder_redirection_body(cal);
+            cal->school.turn_clock = 20;
+            leo_wonder_appetite_observe(
+                cal, "Cat bird. Dark night.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "Cat bird. Dark night.");
+            for (int turn = 21; turn <= 23; turn++) {
+                cal->school.turn_clock = turn;
+                leo_wonder_appetite_observe(
+                    cal, "I do not know.", NULL, NULL);
+                leo_wonder_appetite_calibrate(
+                    cal, "I do not know.");
+            }
+            forecast = leo_wonder_appetite_calibration_at(
+                &cal->wonder_appetite_calibration, 0);
+            CHECK(forecast &&
+                  forecast->verdict ==
+                      LEO_WONDER_APPETITE_CALIB_FADED &&
+                  forecast->semantic_hits == 0 &&
+                  fabsf(forecast->brier -
+                        forecast->appetite * forecast->appetite) <
+                      1e-6f,
+                  "wonder-appetite-calibration: a one-frame appetite can honestly fade");
+
+            leo_free(cal);
+            seed_wonder_redirection_body(cal);
+            cal->school.turn_clock = 30;
+            leo_wonder_appetite_observe(
+                cal, "Cat bird. Dark night.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "Cat bird. Dark night.");
+            cal->school.turn_clock = 31;
+            leo_wonder_appetite_observe(
+                cal, "Nareth.", NULL, NULL);
+            leo_wonder_appetite_calibrate(cal, "Nareth.");
+            forecast = leo_wonder_appetite_calibration_at(
+                &cal->wonder_appetite_calibration, 0);
+            CHECK(forecast &&
+                  forecast->verdict ==
+                      LEO_WONDER_APPETITE_CALIB_EXTERNAL &&
+                  forecast->observations == 1 &&
+                  forecast->brier == 0.0f,
+                  "wonder-appetite-calibration: literal human address is visible but unscored");
+
+            leo_free(cal);
+            seed_wonder_redirection_body(cal);
+            cal->school.turn_clock = 40;
+            leo_wonder_appetite_observe(
+                cal, "Cat bird. Dark night.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "Cat bird. Dark night.");
+            leo_school_learn(
+                cal, "nareth", semtok_find_glyph("animal"));
+            cal->school.turn_clock = 41;
+            leo_wonder_appetite_observe(
+                cal, "Animal.", NULL, NULL);
+            leo_wonder_appetite_calibrate(cal, "Animal.");
+            forecast = leo_wonder_appetite_calibration_at(
+                &cal->wonder_appetite_calibration, 0);
+            CHECK(forecast &&
+                  forecast->verdict ==
+                      LEO_WONDER_APPETITE_CALIB_GROUNDED &&
+                  forecast->brier > 0.0f,
+                  "wonder-appetite-calibration: actual learning closes the forecast as grounded");
+
+            leo_free(cal);
+            seed_wonder_redirection_body(cal);
+            cal->school.turn_clock = 50;
+            leo_wonder_appetite_observe(
+                cal, "Cat bird. Dark night.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "Cat bird. Dark night.");
+            leo_deferred_wonder_forget(cal, "nareth");
+            for (int turn = 51; turn <= 53; turn++) {
+                cal->school.turn_clock = turn;
+                leo_wonder_appetite_observe(
+                    cal, "I do not know.", NULL, NULL);
+                leo_wonder_appetite_calibrate(
+                    cal, "I do not know.");
+            }
+            forecast = leo_wonder_appetite_calibration_at(
+                &cal->wonder_appetite_calibration, 0);
+            CHECK(forecast &&
+                  forecast->verdict ==
+                      LEO_WONDER_APPETITE_CALIB_LOST &&
+                  forecast->brier == 0.0f,
+                  "wonder-appetite-calibration: a vanished identity is not mislabeled as a failed prediction");
+
+            leo_free(cal);
+            seed_wonder_redirection_body(cal);
+            cal->school.turn_clock = 60;
+            leo_wonder_appetite_observe(
+                cal, "Cat bird. Dark night.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "Cat bird. Dark night.");
+            cal->school.turn_clock = 62;
+            leo_wonder_appetite_observe(
+                cal, "I do not know.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "I do not know.");
+            forecast = leo_wonder_appetite_calibration_at(
+                &cal->wonder_appetite_calibration, 0);
+            CHECK(forecast &&
+                  forecast->verdict ==
+                      LEO_WONDER_APPETITE_CALIB_UNSCORABLE &&
+                  forecast->brier == 0.0f,
+                  "wonder-appetite-calibration: a missing lived turn breaks the claim instead of fabricating history");
+
+            leo_free(cal);
+            seed_wonder_redirection_body(cal);
+            int suvin_episode =
+                leo_wonder_find_open(cal, "suvin");
+            uint64_t suvin_id = suvin_episode >= 0 ?
+                leo_wonder_episode_id(
+                    &cal->school.wonders[suvin_episode]) : 0;
+            leo_flow_observe(
+                cal, "suvin", "Suvin? Light or Cold?",
+                NULL, NULL, NULL, LEO_FLOW_WONDER_BORN, suvin_id);
+            cal->school.turn_clock = 4;
+            int veto =
+                leo_wonder_address_observe(cal, "Nareth.");
+            int switched = leo_wonder_address_redirect(cal);
+            leo_wonder_appetite_observe(
+                cal, "Bright sun. Cold winter.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "Bright sun. Cold winter.");
+            forecast = leo_wonder_appetite_calibration_at(
+                &cal->wonder_appetite_calibration, 0);
+            CHECK(veto && switched && forecast &&
+                  !strcmp(forecast->word, "suvin") &&
+                  forecast->spoken &&
+                  forecast->wonder_id == suvin_id,
+                  "wonder-appetite-calibration: a parked spoken question keeps its stable episode identity");
+
+            memset(&cal->wonder_appetite_calibration, 0,
+                   sizeof cal->wonder_appetite_calibration);
+            g_leo_wonder_appetite_calibration_on = 0;
+            cal->school.turn_clock = 70;
+            leo_wonder_appetite_observe(
+                cal, "Bright sun. Cold winter.", NULL, NULL);
+            leo_wonder_appetite_calibrate(
+                cal, "Bright sun. Cold winter.");
+            CHECK(cal->wonder_appetite_calibration.n == 0,
+                  "wonder-appetite-calibration: ablation removes only the slow diary");
+
+            remove(state); remove(legacy); remove(cut);
+            leo_free(cal); leo_free(woke);
+            leo_free(old); leo_free(damaged);
+        }
+        free(cal); free(woke); free(old); free(damaged);
+
+        g_leo_wonder_appetite_on = prev_appetite;
+        g_leo_wonder_appetite_calibration_on =
+            prev_calibration;
         g_leo_flow_on = prev_flow;
         g_leo_wonder_on = prev_wonder;
         g_leo_deferred_wonder_on = prev_deferred;
@@ -2180,12 +2524,15 @@ int main(void) {
                 long origin_tail = (long)(sizeof(int32_t) +
                                            (w.school.has_pending_origin ?
                                             sizeof(LeoDeferredWonder) : 0));
+                long appetite_tail =
+                    test_appetite_calibration_tail_size(&w);
                 long current_flow = (long)(2 * sizeof(int32_t) +
                                            w.flow.n * (int)sizeof(LeoFlowSnapshot) +
                                            2 * sizeof(int32_t) +
                                            w.flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
                                            shadow_tail + calibration_tail +
-                                           deferred_tail + origin_tail);
+                                           deferred_tail + origin_tail +
+                                           appetite_tail);
                 if (sz > v12tail + current_flow) {
                     long flow_start = sz - current_flow;
                     long tail_start = flow_start - v12tail;
@@ -2571,12 +2918,15 @@ int main(void) {
                     long origin_tail = (long)(sizeof(int32_t) +
                                               (fl->school.has_pending_origin ?
                                                sizeof(LeoDeferredWonder) : 0));
+                    long appetite_tail =
+                        test_appetite_calibration_tail_size(fl);
                     long current_tail = (long)(2 * sizeof(int32_t) +
                                               fl->flow.n * (int)sizeof(LeoFlowSnapshot) +
                                               2 * sizeof(int32_t) +
                                               fl->flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
                                               shadow_tail + calibration_tail +
-                                              deferred_tail + origin_tail);
+                                              deferred_tail + origin_tail +
+                                              appetite_tail);
                     long prefix = sz - current_tail;
                     if (prefix > 0) {
                         long current_only = (long)(2 * sizeof(int32_t) +
@@ -2589,9 +2939,11 @@ int main(void) {
                                                      (size_t)(sz - calibration_tail -
                                                               shadow_tail -
                                                               deferred_tail -
-                                                              origin_tail - 1), fo) ==
+                                                              origin_tail -
+                                                              appetite_tail - 1), fo) ==
                                         sz - calibration_tail - shadow_tail -
-                                            deferred_tail - origin_tail - 1;
+                                            deferred_tail - origin_tail -
+                                            appetite_tail - 1;
                             fclose(fo);
                         }
                         uint32_t fourteen = 14;
@@ -2600,12 +2952,14 @@ int main(void) {
                         if (fo) {
                             built_legacy14 = (long)fwrite(bytes, 1,
                                                          (size_t)(sz - calibration_tail -
-                                                                  shadow_tail -
-                                                                  deferred_tail -
-                                                                  origin_tail -
-                                                                  current_only), fo) ==
+                                                                 shadow_tail -
+                                                                 deferred_tail -
+                                                                 origin_tail -
+                                                                 appetite_tail -
+                                                                 current_only), fo) ==
                                              sz - calibration_tail - shadow_tail -
                                                  deferred_tail - origin_tail -
+                                                 appetite_tail -
                                                  current_only;
                             fclose(fo);
                         }
@@ -2819,6 +3173,8 @@ int main(void) {
                     long origin_tail = (long)(sizeof(int32_t) +
                                               (sh->school.has_pending_origin ?
                                                sizeof(LeoDeferredWonder) : 0));
+                    long appetite_tail =
+                        test_appetite_calibration_tail_size(sh);
                     uint32_t fifteen = 15;
                     memcpy(bytes + sizeof(uint32_t), &fifteen, sizeof fifteen);
                     FILE *fo = fopen(legacy, "wb");
@@ -2827,9 +3183,11 @@ int main(void) {
                                                  (size_t)(sz - calibration_tail -
                                                           shadow_tail -
                                                           deferred_tail -
-                                                          origin_tail), fo) ==
+                                                          origin_tail -
+                                                          appetite_tail), fo) ==
                                     sz - calibration_tail - shadow_tail -
-                                        deferred_tail - origin_tail;
+                                        deferred_tail - origin_tail -
+                                        appetite_tail;
                         fclose(fo);
                     }
                     uint32_t sixteen = 16;
@@ -2839,9 +3197,10 @@ int main(void) {
                         built_compat = (long)fwrite(bytes, 1,
                                                     (size_t)(sz - calibration_tail -
                                                              deferred_tail -
-                                                             origin_tail), fo) ==
+                                                             origin_tail -
+                                                             appetite_tail), fo) ==
                                        sz - calibration_tail - deferred_tail -
-                                           origin_tail;
+                                           origin_tail - appetite_tail;
                         fclose(fo);
                     }
                     uint32_t seventeen = 17;
@@ -2850,8 +3209,10 @@ int main(void) {
                     if (fo) {
                         built_cut = (long)fwrite(bytes, 1,
                                                 (size_t)(sz - deferred_tail -
-                                                         origin_tail - 1), fo) ==
-                                    sz - deferred_tail - origin_tail - 1;
+                                                         origin_tail -
+                                                         appetite_tail - 1), fo) ==
+                                    sz - deferred_tail - origin_tail -
+                                        appetite_tail - 1;
                         fclose(fo);
                     }
                 }
@@ -3631,12 +3992,38 @@ int main(void) {
         CHECK(leo_load_state(&l2, sp) == 1 && l2.n_shards == 2 &&
               l2.shards[1].ids[0] == 300 && l2.consol_locked == 1,
               "consol: current state roundtrips the v10 shard ring + sleep trigger");
-        /* Half-write probe: remove v11 plus part of the v10 section — the organism lives, shardless. */
+        /* Half-write probe: build an exact v10 prefix, then cut its final
+         * consolidation byte — the organism lives, shardless. */
         {
             FILE *tf = fopen(sp, "rb");
             fseek(tf, 0, SEEK_END); long fl = ftell(tf); fseek(tf, 0, SEEK_SET);
             char *fb = malloc((size_t)fl); fread(fb, 1, (size_t)fl, tf); fclose(tf);
-            tf = fopen(sp, "wb"); fwrite(fb, 1, (size_t)(fl - 65), tf); fclose(tf);
+            long after_v10 =
+                (long)(4 * sizeof(int32_t) + sizeof(uint64_t) +
+                       l.school.n_wonders *
+                           (int)sizeof(LeoWonderEpisode) +
+                       2 * sizeof(int32_t) +
+                       l.flow.n * (int)sizeof(LeoFlowSnapshot) +
+                       2 * sizeof(int32_t) +
+                       l.flow.n_currents *
+                           (int)sizeof(LeoFlowWonderCurrent) +
+                       2 * sizeof(int32_t) +
+                       l.shadow.n * (int)sizeof(LeoShadowReceipt) +
+                       2 * sizeof(int32_t) +
+                       l.calibration.n *
+                           (int)sizeof(LeoCalibrationReceipt) +
+                       sizeof(int32_t) +
+                       l.school.n_deferred *
+                           (int)sizeof(LeoDeferredWonder) +
+                       sizeof(int32_t) +
+                       (l.school.has_pending_origin ?
+                        sizeof(LeoDeferredWonder) : 0)) +
+                test_appetite_calibration_tail_size(&l);
+            uint32_t ten = 10;
+            memcpy(fb + sizeof(uint32_t), &ten, sizeof ten);
+            tf = fopen(sp, "wb");
+            fwrite(fb, 1, (size_t)(fl - after_v10 - 1), tf);
+            fclose(tf);
             free(fb);
         }
         Leo l3; leo_init(&l3);
