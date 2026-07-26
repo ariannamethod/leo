@@ -60,6 +60,71 @@ static long test_appetite_calibration_tail_size(const Leo *leo) {
             (int)sizeof(LeoWonderAppetiteCalibrationReceipt));
 }
 
+static void test_add_appetite_calibration(
+        Leo *leo, float appetite, int spoken, int verdict) {
+    if (!leo ||
+        leo->wonder_appetite_calibration.n >=
+            LEO_WONDER_APPETITE_CALIB_RING)
+        return;
+    LeoWonderAppetiteCalibration *calibration =
+        &leo->wonder_appetite_calibration;
+    int slot = calibration->n;
+    LeoWonderAppetiteCalibrationReceipt receipt;
+    memset(&receipt, 0, sizeof receipt);
+    receipt.proposed_turn = (uint64_t)(10 + slot * 4);
+    receipt.deadline_turn =
+        receipt.proposed_turn +
+            LEO_WONDER_APPETITE_CALIB_HORIZON;
+    receipt.observed_turn = receipt.proposed_turn;
+    receipt.appetite = appetite;
+    receipt.spoken = spoken ? 1 : 0;
+    receipt.wonder_id = spoken ? (uint64_t)(slot + 1) : 0;
+    receipt.verdict = (uint8_t)verdict;
+    snprintf(receipt.word, sizeof receipt.word, "r%02d", slot);
+
+    if (verdict == LEO_WONDER_APPETITE_CALIB_SUSTAINED) {
+        receipt.observed_turn = receipt.deadline_turn;
+        receipt.observations =
+            LEO_WONDER_APPETITE_CALIB_HORIZON;
+        receipt.semantic_hits = 1;
+        receipt.peak_recurrence =
+            LEO_WONDER_APPETITE_RESONANCE_MIN;
+        float error = appetite - 1.0f;
+        receipt.brier = error * error;
+    } else if (
+        verdict == LEO_WONDER_APPETITE_CALIB_GROUNDED) {
+        receipt.observed_turn++;
+        receipt.observations = 1;
+        float error = appetite - 1.0f;
+        receipt.brier = error * error;
+    } else if (
+        verdict == LEO_WONDER_APPETITE_CALIB_FADED) {
+        receipt.observed_turn = receipt.deadline_turn;
+        receipt.observations =
+            LEO_WONDER_APPETITE_CALIB_HORIZON;
+        receipt.brier = appetite * appetite;
+    } else if (
+        verdict == LEO_WONDER_APPETITE_CALIB_EXTERNAL) {
+        receipt.observed_turn++;
+        receipt.observations = 1;
+    } else if (
+        verdict == LEO_WONDER_APPETITE_CALIB_LOST) {
+        receipt.observed_turn = receipt.deadline_turn;
+        receipt.observations =
+            LEO_WONDER_APPETITE_CALIB_HORIZON;
+    } else if (
+        verdict == LEO_WONDER_APPETITE_CALIB_UNSCORABLE) {
+        receipt.observed_turn += 2;
+    }
+
+    calibration->receipts[slot] = receipt;
+    calibration->n++;
+    calibration->ptr =
+        calibration->n % LEO_WONDER_APPETITE_CALIB_RING;
+    if ((uint64_t)leo->school.turn_clock < receipt.observed_turn)
+        leo->school.turn_clock = (long)receipt.observed_turn;
+}
+
 int main(void) {
     printf("test_leo (step 0)\n");
 
@@ -2295,6 +2360,166 @@ int main(void) {
         g_leo_deferred_wonder_on = prev_deferred;
         g_leo_wonder_attribution_on = prev_attr;
         g_leo_wonder_redirection_on = prev_redirection;
+    }
+
+    /* A.46: the forecast diary yields a stratified reliability surface without
+     * becoming another stateful organ or a permission to schedule speech. */
+    {
+        Leo *rel = malloc(sizeof *rel);
+        CHECK(rel != NULL,
+              "wonder-appetite-reliability: heap fixture allocated");
+        if (rel) {
+            leo_init(rel);
+            LeoWonderAppetiteReliability surface;
+            leo_wonder_appetite_reliability(rel, &surface);
+            CHECK(surface.scored == 0 &&
+                  surface.pending == 0 &&
+                  surface.cells[0].status ==
+                      LEO_WONDER_APPETITE_RELIABILITY_EMPTY,
+                  "wonder-appetite-reliability: an empty diary claims no confidence");
+            CHECK(
+                leo_wonder_appetite_reliability_bin(0.62f) == 0 &&
+                leo_wonder_appetite_reliability_bin(0.699f) == 0 &&
+                leo_wonder_appetite_reliability_bin(0.70f) == 1 &&
+                leo_wonder_appetite_reliability_bin(0.799f) == 1 &&
+                leo_wonder_appetite_reliability_bin(0.80f) == 2 &&
+                leo_wonder_appetite_reliability_bin(0.899f) == 2 &&
+                leo_wonder_appetite_reliability_bin(0.90f) == 3 &&
+                leo_wonder_appetite_reliability_bin(1.0f) == 3 &&
+                leo_wonder_appetite_reliability_bin(0.619f) == -1,
+                "wonder-appetite-reliability: fixed appetite bands have exact boundaries");
+
+            for (int i = 0; i < 3; i++)
+                test_add_appetite_calibration(
+                    rel, 0.65f, 0,
+                    LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+            leo_wonder_appetite_reliability(rel, &surface);
+            const LeoWonderAppetiteReliabilityCell *cell =
+                &surface.cells[0];
+            CHECK(surface.scored == 3 &&
+                  surface.positives == 3 &&
+                  cell->n == 3 && cell->positives == 3 &&
+                  cell->status ==
+                      LEO_WONDER_APPETITE_RELIABILITY_FORMING,
+                  "wonder-appetite-reliability: three beautiful successes are still only forming");
+
+            test_add_appetite_calibration(
+                rel, 0.65f, 0,
+                LEO_WONDER_APPETITE_CALIB_FADED);
+            leo_wonder_appetite_reliability(rel, &surface);
+            cell = &surface.cells[0];
+            CHECK(cell->n == 4 && cell->positives == 3 &&
+                  fabsf(cell->mean_appetite - 0.65f) < 1e-6f &&
+                  fabsf(cell->outcome_rate - 0.75f) < 1e-6f &&
+                  fabsf(cell->gap - 0.10f) < 1e-6f &&
+                  fabsf(cell->mean_brier - 0.1975f) < 1e-6f &&
+                  cell->status ==
+                      LEO_WONDER_APPETITE_RELIABILITY_ALIGNED,
+                  "wonder-appetite-reliability: a measured cell keeps prediction, outcome, Brier, and gap distinct");
+            CHECK(cell->lower < cell->mean_appetite &&
+                  cell->upper > cell->mean_appetite,
+                  "wonder-appetite-reliability: Wilson uncertainty contains an aligned forecast");
+
+            test_add_appetite_calibration(
+                rel, 0.65f, 0,
+                LEO_WONDER_APPETITE_CALIB_PENDING);
+            test_add_appetite_calibration(
+                rel, 0.65f, 0,
+                LEO_WONDER_APPETITE_CALIB_EXTERNAL);
+            test_add_appetite_calibration(
+                rel, 0.65f, 0,
+                LEO_WONDER_APPETITE_CALIB_LOST);
+            test_add_appetite_calibration(
+                rel, 0.65f, 0,
+                LEO_WONDER_APPETITE_CALIB_UNSCORABLE);
+            test_add_appetite_calibration(
+                rel, 0.85f, 1,
+                LEO_WONDER_APPETITE_CALIB_GROUNDED);
+            leo_wonder_appetite_reliability(rel, &surface);
+            const LeoWonderAppetiteReliabilityCell *spoken =
+                &surface.cells[
+                    LEO_WONDER_APPETITE_RELIABILITY_BINS + 2];
+            CHECK(surface.scored == 5 &&
+                  surface.sustained == 3 &&
+                  surface.grounded == 1 &&
+                  surface.faded == 1 &&
+                  surface.pending == 1 &&
+                  surface.external == 1 &&
+                  surface.lost == 1 &&
+                  surface.unscorable == 1,
+                  "wonder-appetite-reliability: causal confounds remain visible but unscored");
+            CHECK(spoken->n == 1 && spoken->positives == 1 &&
+                  spoken->spoken && spoken->bin == 2 &&
+                  spoken->status ==
+                      LEO_WONDER_APPETITE_RELIABILITY_FORMING,
+                  "wonder-appetite-reliability: spoken forecasts keep their own evidence stratum");
+            CHECK(fabsf(surface.mean_brier - 0.1625f) < 1e-6f &&
+                  fabsf(surface.ece - 0.11f) < 1e-6f,
+                  "wonder-appetite-reliability: aggregate Brier and ECE weight only scored lives");
+
+            LeoWonderAppetiteCalibration diary_before =
+                rel->wonder_appetite_calibration;
+            LeoSchool school_before = rel->school;
+            LeoFlow flow_before = rel->flow;
+            leo_wonder_appetite_reliability(rel, &surface);
+            CHECK(!memcmp(
+                      &diary_before,
+                      &rel->wonder_appetite_calibration,
+                      sizeof diary_before) &&
+                  !memcmp(&school_before, &rel->school,
+                          sizeof school_before) &&
+                  !memcmp(&flow_before, &rel->flow,
+                          sizeof flow_before),
+                  "wonder-appetite-reliability: observing confidence cannot rewrite evidence, School, or Flow");
+
+            leo_free(rel);
+            leo_init(rel);
+            for (int i = 0; i < 4; i++)
+                test_add_appetite_calibration(
+                    rel, 0.65f, 0,
+                    LEO_WONDER_APPETITE_CALIB_FADED);
+            leo_wonder_appetite_reliability(rel, &surface);
+            cell = &surface.cells[0];
+            CHECK(cell->status ==
+                      LEO_WONDER_APPETITE_RELIABILITY_OVER &&
+                  cell->upper < cell->mean_appetite,
+                  "wonder-appetite-reliability: repeated fade exposes overconfidence");
+
+            leo_free(rel);
+            leo_init(rel);
+            for (int i = 0; i < 9; i++)
+                test_add_appetite_calibration(
+                    rel, 0.65f, 0,
+                    LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+            leo_wonder_appetite_reliability(rel, &surface);
+            cell = &surface.cells[0];
+            CHECK(cell->status ==
+                      LEO_WONDER_APPETITE_RELIABILITY_UNDER &&
+                  cell->lower > cell->mean_appetite,
+                  "wonder-appetite-reliability: repeated return exposes underconfidence");
+
+            leo_free(rel);
+            leo_init(rel);
+            test_add_appetite_calibration(
+                rel, 0.85f, 0,
+                LEO_WONDER_APPETITE_CALIB_FADED);
+            test_add_appetite_calibration(
+                rel, 0.85f, 1,
+                LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+            leo_wonder_appetite_reliability(rel, &surface);
+            const LeoWonderAppetiteReliabilityCell *unspoken =
+                &surface.cells[2];
+            spoken = &surface.cells[
+                LEO_WONDER_APPETITE_RELIABILITY_BINS + 2];
+            CHECK(unspoken->n == 1 &&
+                  unspoken->positives == 0 &&
+                  spoken->n == 1 &&
+                  spoken->positives == 1,
+                  "wonder-appetite-reliability: one score band cannot merge spoken and unspoken lives");
+
+            leo_free(rel);
+        }
+        free(rel);
     }
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
