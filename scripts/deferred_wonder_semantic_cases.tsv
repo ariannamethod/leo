@@ -1,0 +1,9 @@
+case	kind	target_slot	prompt	expected_status	expected_winner_slot	expected_curiosity	expected_count	expected_pending_slot	expected_resolved	cross_attribution
+semantic-1	semantic	1	Bright sun. Cold winter.	confident	1	no-candidate	3	0	0	0
+semantic-2	semantic	2	Cat bird. Dark night.	confident	2	no-candidate	3	0	0	0
+semantic-3	semantic	3	Angry fire. Empty and alone.	confident	3	no-candidate	3	0	0	0
+weak-1	weak	1	Bright.	ambiguous	0	no-candidate	3	0	0	0
+mixed-12	mixed	0	Bright sun and dark night.	ambiguous	0	no-candidate	3	0	0	0
+quiet	quiet	0	The table holds a quiet cup.	quiet	0	no-candidate	3	0	0	0
+literal-1	literal	1	{target}	literal	0	asked-deferred	2	1	0	0
+occupied-2	occupied	2	Cat bird. Dark night.	confident	2	resolved	2	0	1	1

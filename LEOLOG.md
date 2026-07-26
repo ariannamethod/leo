@@ -3874,3 +3874,76 @@ values, common birth/life receipts, permutation receipts, summaries, and every t
 matched. The result is permutation-invariant. Pre-Wonder is not a hidden FIFO and `pending` is not a
 destructive lock. Not-knowing can form a constellation; speech gives one question a mouth without
 taking the others' identities away.
+
+## Phase A.41 — the constellation can echo before it speaks (2026-07-26)
+
+A.40 proved that several withheld questions preserve separate identities, but their only route back
+was still an exact surface word. The next question was narrower than activation: can the body recognize
+which unspoken question a present meaning resembles without granting that recognition control over
+School or speech?
+
+The naive own-field route failed immediately. Re-encoding a rare name and reading gravity on its BPE
+fragments made shared pieces such as `re/th` dominate; in the saved A.40 body, `nareth` spuriously
+outscored the other names under several unrelated contexts. That signal was rejected rather than
+renamed semantic.
+
+State v19 therefore extends each v18 pre-Wonder record with eight contrastive own-field coordinates
+captured at birth. They are whole words from Leo's prompt-raised co-occurrence field, never direct
+prompt words. Each raw gravity is divided by `sqrt(unigram_frequency + 1)` so ubiquitous attractors do
+not erase a rarer local identity, then the sparse vector is L2-normalized. A v18 body migrates with its
+questions intact and all field coordinates empty; it never receives invented history. A corrupt v19
+tail still loses only unspoken questions.
+
+The one-turn observer compares that birth vector with the present contrastive field and also measures
+coverage of the entry's two original glyph hypotheses:
+
+```text
+glyph = min(1, matched_glyph_votes / 2) * matched_glyph_votes / all_glyph_votes
+score = 0.8 * glyph + 0.2 * sparse_field_cosine
+confident iff glyph >= 0.75, score >= 0.65, margin >= 0.20
+```
+
+Thus Leo-grown field identity can shape a tie, but cannot counterfeit grounded meaning. Literal names
+are excluded from semantic ranking and left to the exact School return. The complete sibling vector is
+printed only under `--debug-field`:
+
+```text
+[pre-wonder-shadow: turn=12 status=confident winner=suvin margin=0.911
+ entries=suvin:1.000/0.554/0.911/0|nareth:0.000/0.000/0.000/0|flom:0.000/0.000/0.000/0]
+```
+
+The physical receipt is one line; it is wrapped above only for readability. The four candidate values
+are `glyph/field/combined/literal`. `--no-prewonder-shadow` removes this transient receipt. Neither the
+winner nor any score is persisted or read by School, Flow, shadow scheduling, generation, or another
+threshold.
+
+Seven direct contracts raised the suite from **284/284** to **292/292**: exact semantic recognition,
+mixed ambiguity, refusal of field-only authority, unrelated quiet, literal handoff to School, visibility
+while another Wonder is occupied, and strict receipt ablation. State tests additionally cover v18
+migration and corrupt v19 fail-soft behavior.
+
+The process matrix rebuilt both A.40 cohorts, preserving its **12/12** permutation result, then forked
+eight semantic geometries from each exact ready body:
+
+```text
+cells=16
+confident=8
+ambiguous=4
+quiet=2
+literal=2
+reply ON/OFF equal=16/16
+complete saved state ON/OFF equal=16/16
+```
+
+All six ordinary unnamed meanings selected the intended sibling while leaving all three pre-Wonders
+unopened. Weak `Bright.` and mixed `Bright sun and dark night.` contexts received no winner. The
+literal target still opened its exact original question. A second complete run reproduced every
+normalized matrix row, receipt, state hash, and summary byte-for-byte.
+
+The occupied geometry found the next load-bearing boundary. With `suvin` open, the phrase
+`Cat bird. Dark night.` made the observer identify waiting `nareth`, but current School simultaneously
+treated that phrase as the grounding of `suvin` and closed the wrong conversational address. Both
+cohorts reproduce this cross-attribution, and shadow ON/OFF states remain identical, proving that A.41
+did not cause it. The observer now sees an address that School cannot yet preserve. Fixing that requires
+a separate turn-attribution contract; allowing this diagnostic winner to intervene would falsify the
+read-only plateau.

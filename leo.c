@@ -1410,6 +1410,7 @@ static int semtok_word(const char *word) {
 #define LEO_SCHOOL_SURPRISE 0.4f /* I3b: COMPLEX bump when a guess misses the answer (being wrong is felt) */
 #define LEO_WONDER_RING 32
 #define LEO_DEFERRED_WONDER_MAX 8
+#define LEO_PREWONDER_FIELD 8
 #define LEO_WONDER_REASK_GAP 2   /* silent turns before a resonant theme may reopen the question */
 #define LEO_WONDER_RETURN_COOLDOWN 2L  /* lived-turn distance before one resolved episode may re-enter attention */
 #define LEO_WONDER_RETURN_ANSWER  0.35f
@@ -1451,6 +1452,17 @@ typedef struct {
     uint32_t blocks;
     uint64_t born_turn;
     uint64_t last_seen_turn;
+} LeoDeferredWonderV18;
+typedef struct {
+    char     word[LEO_HEARD_WORDLEN];
+    int8_t   offered_glyph;
+    int8_t   offered_alt_glyph;
+    int32_t  heard_at_birth;
+    uint32_t blocks;
+    uint64_t born_turn;
+    uint64_t last_seen_turn;
+    int32_t  field_token[LEO_PREWONDER_FIELD];
+    float    field_weight[LEO_PREWONDER_FIELD];
 } LeoDeferredWonder;
 typedef struct {
     char   learned[LEO_SCHOOL_MAX][LEO_HEARD_WORDLEN];
@@ -1652,6 +1664,35 @@ typedef struct {
     uint8_t  outcome;
 } LeoCuriosityReceipt;
 
+/* A one-turn semantic echo over questions that have not yet been spoken.
+ * Every candidate remains visible so a confident winner can be audited
+ * against its siblings. The receipt is transient and has no cognitive reader. */
+#define LEO_PREWONDER_SHADOW_GLYPH_MIN 0.75f
+#define LEO_PREWONDER_SHADOW_SCORE_MIN 0.65f
+#define LEO_PREWONDER_SHADOW_MARGIN    0.20f
+enum {
+    LEO_PREWONDER_SHADOW_EMPTY = 0,
+    LEO_PREWONDER_SHADOW_QUIET,
+    LEO_PREWONDER_SHADOW_AMBIGUOUS,
+    LEO_PREWONDER_SHADOW_CONFIDENT,
+    LEO_PREWONDER_SHADOW_LITERAL
+};
+typedef struct {
+    char    word[LEO_HEARD_WORDLEN];
+    float   glyph;
+    float   field;
+    float   score;
+    uint8_t literal;
+} LeoPreWonderShadowCandidate;
+typedef struct {
+    uint64_t turn;
+    LeoPreWonderShadowCandidate candidates[LEO_DEFERRED_WONDER_MAX];
+    int     n_candidates;
+    int     winner;
+    float   margin;
+    uint8_t status;
+} LeoPreWonderShadowReceipt;
+
 enum {
     LEO_FLOW_QUIET = 0,
     LEO_FLOW_EMERGING,
@@ -1776,6 +1817,9 @@ typedef struct {
     /* A.36: one-turn School decision receipt. Runtime diagnostic only; never
      * persisted and never read by cognition or generation. */
     LeoCuriosityReceipt curiosity;
+    /* A.41: one-turn semantic echo among withheld questions. Diagnostic only;
+     * neither School nor generation reads it. */
+    LeoPreWonderShadowReceipt prewonder_shadow;
     /* passive temporal proprioception (state v13): a bounded archaeological
      * record of what has been flowing through lived replies. No speech reader. */
     LeoFlow flow;
@@ -2045,6 +2089,7 @@ static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
+static int g_leo_prewonder_shadow_on = 1; /* read-only semantic echo among withheld questions; no speech reader. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
 static int g_leo_flow_on = 1;           /* passive temporal proprioception. --no-flow stops snapshots; no generation path reads them. */
 static int g_leo_shadow_on = 1;         /* counterfactual next-turn proposals. --no-shadow keeps Flow but writes no receipts. */
@@ -4551,6 +4596,104 @@ static void leo_flow_field_constellation(const Leo *leo, const char *prompt,
     free(direct);
 }
 
+/* Pre-Wonder keeps a contrastive sample of the field that surrounded its
+ * unspoken birth. Raw gravity overvalues Leo's common attractors, so inverse
+ * sqrt unigram frequency lets rarer lived associations carry identity. The
+ * selected words are still Leo's own co-occurrence neighbours, never prompt
+ * words, and the final sparse vector is L2-normalized for later comparison. */
+static void leo_prewonder_field_constellation(
+        const Leo *leo, const char *prompt, const float *gravity,
+        int32_t out_id[LEO_PREWONDER_FIELD],
+        float out_weight[LEO_PREWONDER_FIELD]) {
+    char words[LEO_PREWONDER_FIELD][LEO_HEARD_WORDLEN];
+    memset(words, 0, sizeof words);
+    for (int i = 0; i < LEO_PREWONDER_FIELD; i++) {
+        out_id[i] = -1;
+        out_weight[i] = 0.0f;
+    }
+    if (!leo || !prompt || !gravity) return;
+
+    for (int id = 0; id < leo->bpe.vocab_size; id++) {
+        char word[LEO_HEARD_WORDLEN];
+        if (gravity[id] <= 0.0f ||
+            !leo_token_is_gravity_target(&leo->bpe, id) ||
+            !leo_flow_token_word(&leo->bpe, id, word) ||
+            leo_heard_count(&leo->heard, word) <= 0 ||
+            leo_flow_prompt_has_word(prompt, word))
+            continue;
+        float freq = id < leo->cooc.freq_size ? leo->cooc.freq[id] : 0.0f;
+        float weight = gravity[id] / sqrtf(freq + 1.0f);
+
+        int duplicate = -1;
+        for (int k = 0; k < LEO_PREWONDER_FIELD; k++)
+            if (out_id[k] >= 0 && !strcmp(words[k], word)) {
+                duplicate = k;
+                break;
+            }
+        if (duplicate >= 0) {
+            if (weight <= out_weight[duplicate]) continue;
+            out_id[duplicate] = id;
+            out_weight[duplicate] = weight;
+            while (duplicate > 0 &&
+                   (out_weight[duplicate] > out_weight[duplicate - 1] ||
+                    (out_weight[duplicate] == out_weight[duplicate - 1] &&
+                     out_id[duplicate] < out_id[duplicate - 1]))) {
+                int32_t ti = out_id[duplicate - 1];
+                float tw = out_weight[duplicate - 1];
+                char ts[LEO_HEARD_WORDLEN];
+                memcpy(ts, words[duplicate - 1], sizeof ts);
+                out_id[duplicate - 1] = out_id[duplicate];
+                out_weight[duplicate - 1] = out_weight[duplicate];
+                memcpy(words[duplicate - 1], words[duplicate],
+                       sizeof words[0]);
+                out_id[duplicate] = ti;
+                out_weight[duplicate] = tw;
+                memcpy(words[duplicate], ts, sizeof words[0]);
+                duplicate--;
+            }
+            continue;
+        }
+
+        int at = LEO_PREWONDER_FIELD;
+        for (int k = 0; k < LEO_PREWONDER_FIELD; k++)
+            if (out_id[k] < 0 || weight > out_weight[k] ||
+                (weight == out_weight[k] && id < out_id[k])) {
+                at = k;
+                break;
+            }
+        if (at == LEO_PREWONDER_FIELD) continue;
+        for (int k = LEO_PREWONDER_FIELD - 1; k > at; k--) {
+            out_id[k] = out_id[k - 1];
+            out_weight[k] = out_weight[k - 1];
+            memcpy(words[k], words[k - 1], sizeof words[k]);
+        }
+        out_id[at] = id;
+        out_weight[at] = weight;
+        memcpy(words[at], word, sizeof words[at]);
+    }
+
+    float norm = 0.0f;
+    for (int i = 0; i < LEO_PREWONDER_FIELD; i++)
+        norm += out_weight[i] * out_weight[i];
+    norm = sqrtf(norm);
+    if (norm > 0.0f)
+        for (int i = 0; i < LEO_PREWONDER_FIELD; i++)
+            out_weight[i] /= norm;
+}
+
+static float leo_prewonder_field_similarity(
+        const int32_t a_id[LEO_PREWONDER_FIELD],
+        const float a_weight[LEO_PREWONDER_FIELD],
+        const int32_t b_id[LEO_PREWONDER_FIELD],
+        const float b_weight[LEO_PREWONDER_FIELD]) {
+    float dot = 0.0f;
+    for (int i = 0; i < LEO_PREWONDER_FIELD; i++)
+        for (int j = 0; j < LEO_PREWONDER_FIELD; j++)
+            if (a_id[i] >= 0 && a_id[i] == b_id[j])
+                dot += a_weight[i] * b_weight[j];
+    return clampf(dot, 0.0f, 1.0f);
+}
+
 /* dissonance: how far the prompt's CONTENT words are from Leo's world.
  * 0 = he knows them (settle, drift to theme); 1 = alien (grope). Per
  * content token, knownness = min(1, freq/scale). All-function prompt or
@@ -4796,7 +4939,9 @@ static void leo_deferred_wonder_forget(Leo *leo, const char *word) {
  * encountered entry: the body is bounded, but repeated unresolved not-knowing
  * protects itself better than a word that never returned. */
 static LeoDeferredWonder *leo_deferred_wonder_remember(
-        Leo *leo, const char *word, int glyph, int alt_glyph, int heard) {
+        Leo *leo, const char *word, int glyph, int alt_glyph, int heard,
+        const int32_t field_token[LEO_PREWONDER_FIELD],
+        const float field_weight[LEO_PREWONDER_FIELD]) {
     if (!leo || !word || !word[0]) return NULL;
     int idx = leo_deferred_wonder_find(leo, word);
     if (idx < 0) {
@@ -4824,6 +4969,8 @@ static LeoDeferredWonder *leo_deferred_wonder_remember(
                      alt_glyph != glyph ? alt_glyph : -1);
         entry->heard_at_birth = heard > 0 ? heard : 0;
         entry->born_turn = (uint64_t)leo->school.turn_clock;
+        for (int k = 0; k < LEO_PREWONDER_FIELD; k++)
+            entry->field_token[k] = -1;
     }
     LeoDeferredWonder *entry = &leo->school.deferred[idx];
     /* If the first frightened context carried no hypothesis, a later blocked
@@ -4833,9 +4980,104 @@ static LeoDeferredWonder *leo_deferred_wonder_remember(
     if (entry->offered_alt_glyph < 0 && alt_glyph >= 0 &&
         alt_glyph < GLYPH_COUNT && alt_glyph != entry->offered_glyph)
         entry->offered_alt_glyph = (int8_t)alt_glyph;
+    if (entry->field_token[0] < 0 && field_token && field_weight) {
+        for (int k = 0; k < LEO_PREWONDER_FIELD; k++) {
+            entry->field_token[k] = field_token[k];
+            entry->field_weight[k] = field_weight[k];
+        }
+    }
     if (entry->blocks < UINT32_MAX) entry->blocks++;
     entry->last_seen_turn = (uint64_t)leo->school.turn_clock;
     return entry;
+}
+
+/* Observe which withheld question the present meaning resembles without
+ * granting it any authority. Glyph evidence supplies semantic grounding; the
+ * contrastive field constellation supplies Leo-grown identity and tie shape.
+ * Literal names are reported but excluded: their real activation belongs to
+ * School's exact-return contract, not to this shadow. */
+static void leo_prewonder_shadow_observe(
+        Leo *leo, const char *prompt,
+        const int32_t field_token[LEO_PREWONDER_FIELD],
+        const float field_weight[LEO_PREWONDER_FIELD]) {
+    LeoPreWonderShadowReceipt receipt;
+    memset(&receipt, 0, sizeof receipt);
+    receipt.turn = (uint64_t)leo->school.turn_clock;
+    receipt.winner = -1;
+    receipt.status = LEO_PREWONDER_SHADOW_EMPTY;
+    if (!g_leo_prewonder_shadow_on || !g_leo_wonder_on ||
+        !g_leo_deferred_wonder_on || !prompt) {
+        leo->prewonder_shadow = receipt;
+        return;
+    }
+
+    int hist[GLYPH_COUNT];
+    int total = leo_school_glyph_votes(leo, prompt, hist, 1);
+    int top = -1, second = -1, literals = 0;
+    for (int i = 0; i < leo->school.n_deferred; i++) {
+        const LeoDeferredWonder *entry = &leo->school.deferred[i];
+        LeoPreWonderShadowCandidate *candidate =
+            &receipt.candidates[receipt.n_candidates++];
+        strncpy(candidate->word, entry->word, LEO_HEARD_WORDLEN - 1);
+        candidate->word[LEO_HEARD_WORDLEN - 1] = 0;
+        candidate->literal =
+            (uint8_t)leo_flow_prompt_has_word(prompt, entry->word);
+        if (candidate->literal) literals++;
+
+        int matched = 0;
+        int g = entry->offered_glyph;
+        int a = entry->offered_alt_glyph;
+        if (g >= 0 && g < GLYPH_COUNT) matched += hist[g];
+        if (a >= 0 && a < GLYPH_COUNT && a != g) matched += hist[a];
+        float evidence = fminf(1.0f, (float)matched / 2.0f);
+        float coverage = total > 0 ? (float)matched / (float)total : 0.0f;
+        candidate->glyph = clampf(evidence * coverage, 0.0f, 1.0f);
+        if (field_token && field_weight)
+            candidate->field = leo_prewonder_field_similarity(
+                entry->field_token, entry->field_weight,
+                field_token, field_weight);
+        candidate->score =
+            0.8f * candidate->glyph + 0.2f * candidate->field;
+
+        if (candidate->literal) continue;
+        if (top < 0 ||
+            candidate->score > receipt.candidates[top].score ||
+            (candidate->score == receipt.candidates[top].score &&
+             strcmp(candidate->word, receipt.candidates[top].word) < 0)) {
+            second = top;
+            top = i;
+        } else if (second < 0 ||
+                   candidate->score > receipt.candidates[second].score ||
+                   (candidate->score == receipt.candidates[second].score &&
+                    strcmp(candidate->word,
+                           receipt.candidates[second].word) < 0)) {
+            second = i;
+        }
+    }
+
+    if (top < 0) {
+        receipt.status = literals ?
+            LEO_PREWONDER_SHADOW_LITERAL : LEO_PREWONDER_SHADOW_EMPTY;
+        leo->prewonder_shadow = receipt;
+        return;
+    }
+    float runner = second >= 0 ? receipt.candidates[second].score : 0.0f;
+    receipt.margin = clampf(receipt.candidates[top].score - runner,
+                            0.0f, 1.0f);
+    if (receipt.candidates[top].glyph >= LEO_PREWONDER_SHADOW_GLYPH_MIN &&
+        receipt.candidates[top].score >= LEO_PREWONDER_SHADOW_SCORE_MIN &&
+        receipt.margin >= LEO_PREWONDER_SHADOW_MARGIN) {
+        receipt.winner = top;
+        receipt.status = LEO_PREWONDER_SHADOW_CONFIDENT;
+    } else if (receipt.candidates[top].glyph > 0.0f ||
+               receipt.candidates[top].field >= 0.10f) {
+        receipt.status = LEO_PREWONDER_SHADOW_AMBIGUOUS;
+    } else if (literals) {
+        receipt.status = LEO_PREWONDER_SHADOW_LITERAL;
+    } else {
+        receipt.status = LEO_PREWONDER_SHADOW_QUIET;
+    }
+    leo->prewonder_shadow = receipt;
 }
 
 /* I2: bind a taught word to the answer's concept (its dominant glyph), growing
@@ -6139,9 +6381,15 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     int      chain_len = LEO_CHAIN_MIN;
     int32_t  flow_field_token[LEO_FLOW_CONSTELLATION];
     float    flow_field_weight[LEO_FLOW_CONSTELLATION];
+    int32_t  prewonder_field_token[LEO_PREWONDER_FIELD];
+    float    prewonder_field_weight[LEO_PREWONDER_FIELD];
     for (int i = 0; i < LEO_FLOW_CONSTELLATION; i++) {
         flow_field_token[i] = -1;
         flow_field_weight[i] = 0.0f;
+    }
+    for (int i = 0; i < LEO_PREWONDER_FIELD; i++) {
+        prewonder_field_token[i] = -1;
+        prewonder_field_weight[i] = 0.0f;
     }
     if (g_leo_presence_on) {
         int p_ids[1024];
@@ -6151,6 +6399,11 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         if (g_leo_flow_on)
             leo_flow_field_constellation(leo, prompt, p_ids, p_n, g,
                                          flow_field_token, flow_field_weight);
+        if (g_leo_wonder_on && g_leo_deferred_wonder_on &&
+            leo->school.n_deferred > 0)
+            leo_prewonder_field_constellation(
+                leo, prompt, g,
+                prewonder_field_token, prewonder_field_weight);
         pieces = calloc((size_t)leo->bpe.vocab_size, sizeof(uint8_t));
         leo_gravity_mark_prompt_words(leo, prompt, g, pieces);  /* self-attractor + multi-token pieces */
         leo->gravity = g;                    /* transient theme tilt */
@@ -6251,6 +6504,12 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     int has_unknown = g_leo_school_on && !was_answer && !wonder_reask &&
                       leo_school_scan_unknown(leo, prompt, unk, deferred,
                                               &deferred_heard, &from_deferred);
+    if (g && g_leo_wonder_on && g_leo_deferred_wonder_on &&
+        prewonder_field_token[0] < 0 && has_unknown)
+        leo_prewonder_field_constellation(
+            leo, prompt, g, prewonder_field_token, prewonder_field_weight);
+    leo_prewonder_shadow_observe(
+        leo, prompt, prewonder_field_token, prewonder_field_weight);
     int question_glyphs[2] = {-1, -1};
     if (has_unknown && g_leo_wonder_on) {
         int remembered = from_deferred ?
@@ -6268,7 +6527,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         g_leo_deferred_wonder_on) {
         leo_deferred_wonder_remember(
             leo, unk, question_glyphs[0], question_glyphs[1],
-            leo_heard_count(&leo->heard, unk));
+            leo_heard_count(&leo->heard, unk),
+            prewonder_field_token, prewonder_field_weight);
     }
 
     LeoCuriosityReceipt curiosity;
@@ -6398,9 +6658,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v16      : bounded counterfactual shadow-scheduler receipts
  *   v17      : next-turn calibration verdicts over shadow receipts
  *   v18      : bounded pre-Wonder memory for distress-deferred questions
+ *   v19      : contrastive own-field birth anchors for pre-Wonder semantics
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 18  /* deferred Wonder appends a fail-soft tail; v5..v17 soft-migrate */
+#define LEO_STATE_VERSION 19  /* pre-Wonder field anchors extend the fail-soft tail; v5..v18 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -6602,9 +6863,9 @@ static int leo_save_state(const Leo *leo, const char *path) {
         fwrite(leo->calibration.receipts, sizeof(LeoCalibrationReceipt),
                (size_t)leo->calibration.n, f);
 
-    /* Deferred Wonder (v18): remembered withheld questions are part of School,
-     * but remain a separate fail-soft tail so every v5..v17 body is a clean
-     * prefix and can wake with no invented curiosity. */
+    /* Deferred Wonder (v19): remembered withheld questions and their
+     * contrastive own-field birth anchors remain a separate fail-soft tail.
+     * v18 records migrate through the frozen pre-anchor layout below. */
     st_w32(f, (int32_t)leo->school.n_deferred);
     if (leo->school.n_deferred > 0)
         fwrite(leo->school.deferred, sizeof(LeoDeferredWonder),
@@ -7150,16 +7411,39 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
-    /* Deferred pre-Wonder memory (v18). A corrupt tail loses only questions
+    /* Deferred pre-Wonder memory (v18/v19). A corrupt tail loses only questions
      * that were never yet spoken; the School map, open Wonder, Flow, shadow,
-     * and calibration ledgers remain intact. */
+     * and calibration ledgers remain intact. v18 wakes with empty field anchors
+     * rather than invented semantic coordinates. */
     if (version >= 18) {
         int32_t n = 0;
         int deferred_ok = st_r32(f, &n) &&
                           n >= 0 && n <= LEO_DEFERRED_WONDER_MAX;
-        if (deferred_ok && n > 0 &&
-            fread(leo->school.deferred, sizeof(LeoDeferredWonder),
-                  (size_t)n, f) != (size_t)n) deferred_ok = 0;
+        if (deferred_ok && n > 0) {
+            if (version >= 19) {
+                if (fread(leo->school.deferred, sizeof(LeoDeferredWonder),
+                          (size_t)n, f) != (size_t)n) deferred_ok = 0;
+            } else {
+                for (int i = 0; i < n; i++) {
+                    LeoDeferredWonderV18 old;
+                    if (fread(&old, sizeof old, 1, f) != 1) {
+                        deferred_ok = 0;
+                        break;
+                    }
+                    LeoDeferredWonder *entry = &leo->school.deferred[i];
+                    memset(entry, 0, sizeof *entry);
+                    memcpy(entry->word, old.word, sizeof entry->word);
+                    entry->offered_glyph = old.offered_glyph;
+                    entry->offered_alt_glyph = old.offered_alt_glyph;
+                    entry->heard_at_birth = old.heard_at_birth;
+                    entry->blocks = old.blocks;
+                    entry->born_turn = old.born_turn;
+                    entry->last_seen_turn = old.last_seen_turn;
+                    for (int k = 0; k < LEO_PREWONDER_FIELD; k++)
+                        entry->field_token[k] = -1;
+                }
+            }
+        }
         if (deferred_ok) {
             leo->school.n_deferred = n;
             for (int i = 0; i < n; i++) {
@@ -7180,6 +7464,32 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
                     deferred_ok = 0;
                     break;
                 }
+                float norm = 0.0f, previous = 2.0f;
+                for (int k = 0; k < LEO_PREWONDER_FIELD; k++) {
+                    int id = entry->field_token[k];
+                    float weight = entry->field_weight[k];
+                    if (id < -1 || id >= leo->bpe.vocab_size ||
+                        !isfinite(weight) || weight < 0.0f ||
+                        weight > 1.0f || weight > previous + 1e-6f ||
+                        (id < 0 && weight != 0.0f)) {
+                        deferred_ok = 0;
+                        break;
+                    }
+                    for (int j = 0; j < k; j++)
+                        if (id >= 0 && entry->field_token[j] == id) {
+                            deferred_ok = 0;
+                            break;
+                        }
+                    if (!deferred_ok) break;
+                    norm += weight * weight;
+                    previous = weight;
+                }
+                if (!deferred_ok ||
+                    (entry->field_token[0] >= 0 &&
+                     fabsf(norm - 1.0f) > 1e-3f)) {
+                    deferred_ok = 0;
+                    break;
+                }
                 for (int j = 0; j < i; j++)
                     if (!strcmp(entry->word,
                                 leo->school.deferred[j].word)) {
@@ -7190,7 +7500,7 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
             }
         }
         if (!deferred_ok) {
-            fprintf(stderr, "[leo] WARNING: v18 deferred-Wonder tail truncated/corrupt — organism lives without withheld questions.\n");
+            fprintf(stderr, "[leo] WARNING: v18/v19 deferred-Wonder tail truncated/corrupt — organism lives without withheld questions.\n");
             memset(leo->school.deferred, 0,
                    sizeof leo->school.deferred);
             leo->school.n_deferred = 0;
@@ -7461,6 +7771,36 @@ static void print_deferred_wonder_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_prewonder_shadow_stats(const Leo *leo) {
+    if (!g_leo_prewonder_shadow_on || !leo) return;
+    const LeoPreWonderShadowReceipt *receipt = &leo->prewonder_shadow;
+    static const char *statuses[] = {
+        "empty", "quiet", "ambiguous", "confident", "literal"
+    };
+    int status = receipt->status <= LEO_PREWONDER_SHADOW_LITERAL ?
+        receipt->status : LEO_PREWONDER_SHADOW_EMPTY;
+    const char *winner =
+        receipt->winner >= 0 && receipt->winner < receipt->n_candidates ?
+            receipt->candidates[receipt->winner].word : "none";
+    printf("     [pre-wonder-shadow: turn=%llu status=%s winner=%s margin=%.3f pending=%s entries=",
+           (unsigned long long)receipt->turn, statuses[status], winner,
+           (double)receipt->margin,
+           leo->school.pending[0] ? leo->school.pending : "none");
+    if (receipt->n_candidates == 0) {
+        printf("none");
+    } else {
+        for (int i = 0; i < receipt->n_candidates; i++) {
+            const LeoPreWonderShadowCandidate *candidate =
+                &receipt->candidates[i];
+            printf("%s%s:%.3f/%.3f/%.3f/%u", i ? "|" : "",
+                   candidate->word, (double)candidate->glyph,
+                   (double)candidate->field, (double)candidate->score,
+                   (unsigned)candidate->literal);
+        }
+    }
+    printf("]\n");
+}
+
 static void print_flow_stats(const Leo *leo) {
     if (!g_leo_flow_on || !leo || leo->flow.n <= 0) return;
     const LeoFlowSnapshot *s = leo_flow_at(&leo->flow, leo->flow.n - 1);
@@ -7662,6 +8002,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
+        else if (!strcmp(argv[i], "--no-prewonder-shadow")) g_leo_prewonder_shadow_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
         else if (!strcmp(argv[i], "--no-flow")) g_leo_flow_on = 0;
         else if (!strcmp(argv[i], "--no-shadow")) g_leo_shadow_on = 0;
@@ -7872,6 +8213,7 @@ int main(int argc, char **argv) {
                 printf("             mean>  top=%s(%.2f) gap=%.2f\n",
                        GLYPH_NAMES[top], leo.gamma_meaning[top], leo.gamma_gap);
             }
+            print_prewonder_shadow_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -7927,6 +8269,7 @@ int main(int argc, char **argv) {
                 printf("     [wonder-return: %s -> %s, recalls=%d]\n",
                        ep->word, GLYPH_NAMES[(int)ep->answer_glyph], ep->recalls);
             }
+            print_prewonder_shadow_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */

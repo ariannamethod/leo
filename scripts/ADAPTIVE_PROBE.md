@@ -102,7 +102,8 @@ that count. The matrix joins only target-naming human turns into
 `unopened_curiosity.tsv`; this exposes why a target did not open without making
 the diagnostic a reader, persisting it, or changing a gate.
 
-State v18 adds a separate active pre-Wonder memory. `blocked-distress` is the
+State v19 carries the active pre-Wonder memory introduced in v18 plus a sparse
+contrastive own-field anchor for each withheld birth. `blocked-distress` is the
 birth of a withheld question; later exact encounters report
 `blocked-deferred` while the body remains unsafe, or `asked-deferred` when the
 ordinary gate finally opens. The memory does not make an unrelated prompt
@@ -175,6 +176,40 @@ surface; generation and cognition have no reader for it. The matrix retains
 common birth/life receipts separately from every permutation's receipts,
 transcripts, states, hashes, and summary. `LEO_CONSTELLATION_PLAN_ONLY=1`
 validates all 12 group/order cells without running Leo.
+
+Run the semantic constellation shadow:
+
+```sh
+make deferred-wonder-semantics
+```
+
+At a withheld birth, v19 stores eight L2-normalized whole-word coordinates
+from Leo's prompt-raised co-occurrence field. Prompt words are excluded, and
+inverse-sqrt unigram weighting prevents common attractors from erasing the
+birth's identity. On later turns a transient observer compares the current
+contrastive constellation with every waiting entry and combines that field
+similarity with the entry's two original glyph hypotheses.
+
+The observer names a winner only when glyph evidence is at least `0.75`, the
+combined score is at least `0.65`, and the margin is at least `0.20`.
+Field-only, one-glyph, and mixed contexts remain `ambiguous`; a literal name is
+reported as `literal` and left to the ordinary exact-return School path.
+`--no-prewonder-shadow` removes only this receipt.
+
+The checked matrix uses two independent three-question bodies and eight
+geometries per body: three semantic returns without names, weak, mixed,
+unrelated, literal, and a semantic return for a waiting sibling while another
+Wonder is open. Every cell runs from the same saved body with the observer on
+and off, then compares the reply and complete persisted state byte-for-byte.
+The occupied case is deliberately retained as a boundary receipt: current
+School grounds the open question from the sibling's semantic phrase even
+though the observer identifies the sibling. A.41 records that attribution
+problem; it does not let a diagnostic score alter School.
+
+`--debug-field` emits `[pre-wonder-shadow: ...]` with status, winner, margin,
+pending word, and every candidate's `glyph/field/combined/literal` values.
+`prewonder_shadow_dialogue_report.awk` is the only parser. The receipt is
+transient and has no persisted or cognitive reader.
 
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
