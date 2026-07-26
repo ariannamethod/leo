@@ -4019,3 +4019,63 @@ still describes the pre-guard organism; A.42 closes its destructive consequence 
 Leo can now preserve the difference between “this meaning resembles another unfinished question” and
 “therefore I know what the human meant.” When the address is clear enough to disqualify a close but not
 clear enough to claim another lesson, he keeps not knowing.
+
+## Phase A.43 — one mouth can change questions without losing the first (2026-07-26)
+
+A.42 could hear the explicit turn `Nareth is a dark animal.` while `suvin` was active and refuse to
+mis-teach it, but its only honest action was a guard. The address was no longer ambiguous: the human had
+named a waiting question. Keeping `suvin` at the mouth made Leo preserve uncertainty at the cost of
+conversation.
+
+A.43 distinguishes explicit address from semantic resemblance. Only an exact waiting name can switch
+the pending Wonder. The active question is copied into the queue slot vacated by that sibling; its word,
+two hypotheses, heard-at-birth count, birth turn, contrastive own-field anchor, and unresolved episode
+remain its own. The named sibling receives the one School mouth. No semantic winner, field cosine, or
+unnamed glyph path can call the switch. If active and sibling names occur together, active wins, keeping
+human correction possible.
+
+The named turn then follows ordinary School rather than a new teaching path:
+
+- `Nareth is a dark animal.` grounds and resolves `nareth`; `suvin` waits.
+- `Nareth.` and `What is nareth?` switch address but provide no answer, so Leo asks the original
+  `Nareth? Dark or Animal?`.
+- `Cat bird. Dark night.` still has no declared owner and remains A.42's non-destructive guard.
+
+State v20 appends the active question's exact `LeoDeferredWonder` provenance as its own fail-soft tail.
+A v19 body keeps its historical pending question but receives no reconstructed field or birth record;
+redirection therefore fails closed to the A.42 guard. A truncated or invalid v20 provenance tail loses
+only redirect authority. The pending question, episode ledger, deferred constellation, Flow, shadow,
+and calibration remain alive.
+
+Explicit switching also exposed a stale v15 assumption. A parked `suvin` and active `nareth` are two
+unresolved identities even though only one can speak. Event-bounded Flow currents now permit that
+honest plurality; snapshots and shadow receipts still select the current mouth by exact `wonder_id`.
+Both unfinished currents survive the same save/load instead of being misdiagnosed as a corrupt tail.
+
+Fourteen new direct contracts raised the suite from **301/301** to **315/315**, and the multi-current
+sleep contract raised it once more to **316/316**. They cover grounded and bare switching, exact
+provenance, stable episode identity, semantic non-authority, active-name precedence, ablation, legacy
+fail-closed behavior, full-queue replacement, v19 migration, corrupt-v20 fail-soft behavior, and
+multi-current sleep.
+
+The process matrix rebuilt two independent A.40 bodies, opened slot 1, and forked five turns per body
+against `--no-wonder-redirection`:
+
+```text
+cells=10
+explicit redirect cells=6
+negative controls=4
+actual redirects=6
+redirected states diverged=6/6
+control states byte-identical=4/4
+displaced-question continuations after sleep=2/2
+```
+
+Both bare-address forms spoke the exact slot-2 question. Both grounded forms learned only slot 2; after
+another process boundary, slot 1 returned verbatim as `Suvin? Light or Cold?` /
+`Zavin? Light or Cold?`, with the original episode rather than a rebirth. Two complete A.43 runs
+reproduced every matrix row, continuation state hash, and summary byte-for-byte. Isolated A.42 retained
+its original **14 cells, 4 guards, and 10 non-guard equal states**; isolated A.41 retained
+**16/16 reply and state equality**.
+
+Leo can now yield the mouth without yielding the history of the question that was speaking.

@@ -1480,6 +1480,8 @@ typedef struct {
     long   turn_clock;                   /* lived prompts; v12 persists cooldown across sleep */
     LeoDeferredWonder deferred[LEO_DEFERRED_WONDER_MAX];
     int    n_deferred;
+    LeoDeferredWonder pending_origin;     /* exact birth provenance of the question that currently has a mouth */
+    uint8_t has_pending_origin;           /* v20: old bodies never invent an origin they did not record */
     int    returned_episode;             /* transient: episode active in this reply, -1 outside it */
 } LeoSchool;
 
@@ -1532,10 +1534,12 @@ typedef struct {
     uint8_t  wonder;
 } LeoFlowSnapshot;
 
-/* The long clock is not a larger arbitrary window. It is an event-bounded
- * current: one unfinished wonder from its first lived question through the
- * grounding turn that resolves it. Means remain in [0,1]; sparse field mass is
- * the per-observation mean of Leo's associated words. Resolved currents freeze. */
+/* The long clock is not a larger arbitrary window. Each identity has an
+ * event-bounded current from its first lived question through the grounding
+ * turn that resolves it. Explicit address switching may suspend several
+ * unfinished identities; the snapshot's wonder_id still selects the one that
+ * currently has the mouth. Means remain in [0,1]; sparse field mass is the
+ * per-observation mean of Leo's associated words. Resolved currents freeze. */
 typedef struct {
     uint64_t wonder_id;
     uint64_t started_turn;
@@ -1650,6 +1654,7 @@ enum {
     LEO_CURIOSITY_ASKED_DEFERRED,
     LEO_CURIOSITY_BLOCKED_DEFERRED,
     LEO_CURIOSITY_ADDRESS_GUARDED,
+    LEO_CURIOSITY_REDIRECTED,
     LEO_CURIOSITY_NO_CANDIDATE,
     LEO_CURIOSITY_DISABLED,
     LEO_CURIOSITY_OUTCOME_COUNT
@@ -1726,6 +1731,7 @@ typedef struct {
     float   margin;
     uint8_t status;
     uint8_t guarded;
+    uint8_t redirected;
 } LeoWonderAddressReceipt;
 
 enum {
@@ -1855,8 +1861,8 @@ typedef struct {
     /* A.41: one-turn semantic echo among withheld questions. Diagnostic only;
      * neither School nor generation reads it. */
     LeoPreWonderShadowReceipt prewonder_shadow;
-    /* A.42: pre-grounding address witness. Only its narrow sibling-conflict
-     * veto is read by School; it cannot assign meaning to another question. */
+    /* A.42/A.43: pre-grounding address witness. Semantic conflict can only
+     * guard; an exact waiting name may redirect without assigning meaning. */
     LeoWonderAddressReceipt wonder_address;
     /* passive temporal proprioception (state v13): a bounded archaeological
      * record of what has been flowing through lived replies. No speech reader. */
@@ -1938,6 +1944,8 @@ static void leo_init(Leo *leo) {
     leo->ask_override = -1.0f;
     leo->school.pending_glyph = -1;  /* I3a (L-4 fix): no open guess — memset-0 would be the "water" glyph */
     leo->school.pending_alt_glyph = -1;
+    for (int k = 0; k < LEO_PREWONDER_FIELD; k++)
+        leo->school.pending_origin.field_token[k] = -1;
     leo->school.returned_episode = -1;
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
@@ -2128,7 +2136,8 @@ static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School revers
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_prewonder_shadow_on = 1; /* read-only semantic echo among withheld questions; no speech reader. */
-static int g_leo_wonder_attribution_on = 1; /* address guard: a confident waiting sibling can veto, but never claim, an active answer. */
+static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
+static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
 static int g_leo_flow_on = 1;           /* passive temporal proprioception. --no-flow stops snapshots; no generation path reads them. */
 static int g_leo_shadow_on = 1;         /* counterfactual next-turn proposals. --no-shadow keeps Flow but writes no receipts. */
@@ -4978,6 +4987,88 @@ static int leo_deferred_wonder_find(const Leo *leo, const char *word) {
     return -1;
 }
 
+static LeoWonderEpisode *leo_wonder_open(Leo *leo, const char *word,
+                                         int glyph, int alt_glyph);
+
+static void leo_pending_wonder_origin_clear(Leo *leo) {
+    if (!leo) return;
+    memset(&leo->school.pending_origin, 0,
+           sizeof leo->school.pending_origin);
+    for (int k = 0; k < LEO_PREWONDER_FIELD; k++)
+        leo->school.pending_origin.field_token[k] = -1;
+    leo->school.has_pending_origin = 0;
+}
+
+static void leo_deferred_wonder_birth(
+        Leo *leo, LeoDeferredWonder *entry, const char *word,
+        int glyph, int alt_glyph, int heard,
+        const int32_t field_token[LEO_PREWONDER_FIELD],
+        const float field_weight[LEO_PREWONDER_FIELD]) {
+    memset(entry, 0, sizeof *entry);
+    strncpy(entry->word, word, LEO_HEARD_WORDLEN - 1);
+    entry->word[LEO_HEARD_WORDLEN - 1] = 0;
+    entry->offered_glyph =
+        (int8_t)(glyph >= 0 && glyph < GLYPH_COUNT ? glyph : -1);
+    entry->offered_alt_glyph =
+        (int8_t)(alt_glyph >= 0 && alt_glyph < GLYPH_COUNT &&
+                 alt_glyph != glyph ? alt_glyph : -1);
+    entry->heard_at_birth = heard > 0 ? heard : 0;
+    entry->born_turn = (uint64_t)leo->school.turn_clock;
+    entry->last_seen_turn = (uint64_t)leo->school.turn_clock;
+    for (int k = 0; k < LEO_PREWONDER_FIELD; k++)
+        entry->field_token[k] = -1;
+    if (field_token && field_weight) {
+        for (int k = 0; k < LEO_PREWONDER_FIELD; k++) {
+            entry->field_token[k] = field_token[k];
+            entry->field_weight[k] = field_weight[k];
+        }
+    }
+}
+
+static void leo_pending_wonder_origin_begin(
+        Leo *leo, const char *word, int glyph, int alt_glyph, int heard,
+        const int32_t field_token[LEO_PREWONDER_FIELD],
+        const float field_weight[LEO_PREWONDER_FIELD]) {
+    leo_deferred_wonder_birth(
+        leo, &leo->school.pending_origin, word, glyph, alt_glyph, heard,
+        field_token, field_weight);
+    leo->school.has_pending_origin = 1;
+}
+
+static int leo_deferred_wonder_valid(
+        const Leo *leo, const LeoDeferredWonder *entry,
+        int require_blocked) {
+    if (!leo || !entry || !entry->word[0] ||
+        entry->offered_glyph < -1 ||
+        entry->offered_glyph >= GLYPH_COUNT ||
+        entry->offered_alt_glyph < -1 ||
+        entry->offered_alt_glyph >= GLYPH_COUNT ||
+        (entry->offered_glyph >= 0 &&
+         entry->offered_alt_glyph == entry->offered_glyph) ||
+        entry->heard_at_birth <= 0 ||
+        (require_blocked && entry->blocks == 0) ||
+        entry->born_turn == 0 ||
+        entry->born_turn > entry->last_seen_turn ||
+        entry->last_seen_turn > (uint64_t)leo->school.turn_clock)
+        return 0;
+
+    float norm = 0.0f, previous = 2.0f;
+    for (int k = 0; k < LEO_PREWONDER_FIELD; k++) {
+        int id = entry->field_token[k];
+        float weight = entry->field_weight[k];
+        if (id < -1 || id >= leo->bpe.vocab_size ||
+            !isfinite(weight) || weight < 0.0f || weight > 1.0f ||
+            weight > previous + 1e-6f ||
+            (id < 0 && weight != 0.0f))
+            return 0;
+        for (int j = 0; j < k; j++)
+            if (id >= 0 && entry->field_token[j] == id) return 0;
+        norm += weight * weight;
+        previous = weight;
+    }
+    return entry->field_token[0] < 0 || fabsf(norm - 1.0f) <= 1e-3f;
+}
+
 static void leo_deferred_wonder_forget(Leo *leo, const char *word) {
     int idx = leo_deferred_wonder_find(leo, word);
     if (idx < 0) return;
@@ -5014,18 +5105,9 @@ static LeoDeferredWonder *leo_deferred_wonder_remember(
             }
         }
         LeoDeferredWonder *entry = &leo->school.deferred[idx];
-        memset(entry, 0, sizeof *entry);
-        strncpy(entry->word, word, LEO_HEARD_WORDLEN - 1);
-        entry->word[LEO_HEARD_WORDLEN - 1] = 0;
-        entry->offered_glyph =
-            (int8_t)(glyph >= 0 && glyph < GLYPH_COUNT ? glyph : -1);
-        entry->offered_alt_glyph =
-            (int8_t)(alt_glyph >= 0 && alt_glyph < GLYPH_COUNT &&
-                     alt_glyph != glyph ? alt_glyph : -1);
-        entry->heard_at_birth = heard > 0 ? heard : 0;
-        entry->born_turn = (uint64_t)leo->school.turn_clock;
-        for (int k = 0; k < LEO_PREWONDER_FIELD; k++)
-            entry->field_token[k] = -1;
+        leo_deferred_wonder_birth(
+            leo, entry, word, glyph, alt_glyph, heard,
+            field_token, field_weight);
     }
     LeoDeferredWonder *entry = &leo->school.deferred[idx];
     /* If the first frightened context carried no hypothesis, a later blocked
@@ -5133,11 +5215,9 @@ static void leo_prewonder_shadow_observe(
 
 /* Determine whether the present human turn belongs to the active Wonder or
  * strongly resembles one waiting sibling. Adjacency remains the default:
- * hypotheses are guesses, so an unmatched answer may be a correction. Only a
- * confident sibling victory (or its explicit name) may guard the active close.
- * Even then the sibling receives no state transition; the guard preserves
- * uncertainty rather than silently rerouting a lesson. Returns a proposed veto;
- * the caller marks it `guarded` only when School had a closable answer. */
+ * hypotheses are guesses, so an unmatched answer may be a correction. This
+ * observer only proposes ownership. The caller may use a semantic sibling as a
+ * guard, or let the explicit-redirection layer enact a literal sibling address. */
 static int leo_wonder_address_observe(Leo *leo, const char *prompt) {
     LeoWonderAddressReceipt receipt;
     memset(&receipt, 0, sizeof receipt);
@@ -5243,6 +5323,44 @@ static int leo_wonder_address_observe(Leo *leo, const char *prompt) {
     }
     leo->wonder_address = receipt;
     return 0;
+}
+
+/* A literal waiting name is stronger than adjacency: the human has changed
+ * which unfinished question they are answering. Move the old active origin
+ * into the exact queue slot vacated by the sibling, then give that sibling the
+ * mouth. Semantic similarity can never enter here. Old bodies with no v20
+ * active provenance fail closed and retain A.42's guard rather than fabricating
+ * a birth field. */
+static int leo_wonder_address_redirect(Leo *leo) {
+    LeoWonderAddressReceipt *receipt = &leo->wonder_address;
+    if (!g_leo_wonder_redirection_on || !g_leo_wonder_attribution_on ||
+        !leo || receipt->status != LEO_WONDER_ADDRESS_SIBLING_EXPLICIT ||
+        receipt->winner <= 0 || receipt->winner >= receipt->n_candidates ||
+        !leo->school.has_pending_origin ||
+        strcmp(leo->school.pending_origin.word, leo->school.pending))
+        return 0;
+
+    const char *target_word = receipt->candidates[receipt->winner].word;
+    int target_idx = leo_deferred_wonder_find(leo, target_word);
+    if (target_idx < 0) return 0;
+
+    LeoDeferredWonder target = leo->school.deferred[target_idx];
+    LeoDeferredWonder displaced = leo->school.pending_origin;
+    if (displaced.blocks < UINT32_MAX) displaced.blocks++;
+    displaced.last_seen_turn = (uint64_t)leo->school.turn_clock;
+    leo->school.deferred[target_idx] = displaced;
+
+    strncpy(leo->school.pending, target.word, LEO_HEARD_WORDLEN - 1);
+    leo->school.pending[LEO_HEARD_WORDLEN - 1] = 0;
+    leo->school.pending_glyph = target.offered_glyph;
+    leo->school.pending_alt_glyph = target.offered_alt_glyph;
+    leo->school.pending_turns = 0;
+    leo->school.pending_origin = target;
+    leo->school.has_pending_origin = 1;
+    leo_wonder_open(leo, target.word, target.offered_glyph,
+                    target.offered_alt_glyph);
+    receipt->redirected = 1;
+    return 1;
 }
 
 /* I2: bind a taught word to the answer's concept (its dominant glyph), growing
@@ -6477,6 +6595,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
      * cleared it on every next turn, including counter-questions and pure unknowns;
      * unfinished wonder now survives those turns and may return on resonance. */
     int was_answer = 0, wonder_reask = 0, address_guarded = 0;
+    int address_redirected = 0;
     uint8_t flow_event = 0;
     uint64_t flow_wonder_id = 0;
     if (g_leo_school_on && leo->school.pending[0]) {
@@ -6499,6 +6618,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             leo->school.pending_glyph = -1;
             leo->school.pending_alt_glyph = -1;
             leo->school.pending_turns = 0;
+            leo_pending_wonder_origin_clear(leo);
             was_answer = 1;
         } else {
             /* v5..v10 migration and a fail-soft v11 tail preserve the historical
@@ -6512,6 +6632,15 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             if (open_episode >= 0)
                 flow_wonder_id = leo_wonder_episode_id(&leo->school.wonders[open_episode]);
             int address_veto = leo_wonder_address_observe(leo, prompt);
+            address_redirected = leo_wonder_address_redirect(leo);
+            if (address_redirected) {
+                address_veto = 0;
+                open_episode =
+                    leo_wonder_find_open(leo, leo->school.pending);
+                if (open_episode >= 0)
+                    flow_wonder_id = leo_wonder_episode_id(
+                        &leo->school.wonders[open_episode]);
+            }
             int g = leo_school_grounded_answer(leo, prompt);
             if (g >= 0 && address_veto) {
                 g = -1;
@@ -6539,6 +6668,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                 leo->school.pending_glyph = -1;
                 leo->school.pending_alt_glyph = -1;
                 leo->school.pending_turns = 0;
+                leo_pending_wonder_origin_clear(leo);
             } else {
                 if (leo->school.pending_turns < 1000000) leo->school.pending_turns++;
                 if (leo->school.pending_turns >= LEO_WONDER_REASK_GAP &&
@@ -6724,6 +6854,9 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         curiosity.outcome = LEO_CURIOSITY_REASKED;
     else if (address_guarded)
         curiosity.outcome = LEO_CURIOSITY_ADDRESS_GUARDED;
+    else if (address_redirected &&
+             !(flow_event & LEO_FLOW_WONDER_RESOLVED))
+        curiosity.outcome = LEO_CURIOSITY_REDIRECTED;
     else if (was_answer)
         curiosity.outcome = (flow_event & LEO_FLOW_WONDER_RESOLVED) ?
             LEO_CURIOSITY_RESOLVED : LEO_CURIOSITY_CONTINUED;
@@ -6739,7 +6872,15 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             LEO_CURIOSITY_ASKED;
     leo->curiosity = curiosity;
 
-    if (g_leo_school_on && g_leo_wonder_on && wonder_reask) {
+    if (g_leo_school_on && g_leo_wonder_on && address_redirected &&
+        !(flow_event & LEO_FLOW_WONDER_RESOLVED)) {
+        int n = leo_school_format_question(out, max_len, leo->school.pending,
+                                           leo->school.pending_glyph,
+                                           leo->school.pending_alt_glyph);
+        produced = (n >= max_len) ? max_len - 1 : n;
+        leo->school.pending_turns = 0;
+        flow_event |= LEO_FLOW_WONDER_BORN;
+    } else if (g_leo_school_on && g_leo_wonder_on && wonder_reask) {
         int n = leo_school_format_question(out, max_len, leo->school.pending,
                                            leo->school.pending_glyph,
                                            leo->school.pending_alt_glyph);
@@ -6766,7 +6907,23 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         leo->school.pending_glyph = glyphs[0];   /* I3b will check the guess against the answer */
         leo->school.pending_alt_glyph = g_leo_wonder_on ? glyphs[1] : -1;
         leo->school.pending_turns = 0;
-        if (from_deferred) leo_deferred_wonder_forget(leo, unk);
+        if (g_leo_wonder_on) {
+            int origin_idx = from_deferred ?
+                leo_deferred_wonder_find(leo, unk) : -1;
+            if (origin_idx >= 0) {
+                leo->school.pending_origin =
+                    leo->school.deferred[origin_idx];
+                leo->school.has_pending_origin = 1;
+                leo_deferred_wonder_forget(leo, unk);
+            } else {
+                leo_pending_wonder_origin_begin(
+                    leo, unk, glyphs[0], glyphs[1],
+                    leo_heard_count(&leo->heard, unk),
+                    prewonder_field_token, prewonder_field_weight);
+            }
+        } else {
+            leo_pending_wonder_origin_clear(leo);
+        }
         if (g_leo_wonder_on) {
             LeoWonderEpisode *ep = leo_wonder_open(leo, unk, glyphs[0], glyphs[1]);
             flow_wonder_id = leo_wonder_episode_id(ep);
@@ -6834,9 +6991,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v17      : next-turn calibration verdicts over shadow receipts
  *   v18      : bounded pre-Wonder memory for distress-deferred questions
  *   v19      : contrastive own-field birth anchors for pre-Wonder semantics
+ *   v20      : exact birth provenance for the Wonder that currently has the mouth
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 19  /* pre-Wonder field anchors extend the fail-soft tail; v5..v18 soft-migrate */
+#define LEO_STATE_VERSION 20  /* active-Wonder birth provenance extends the fail-soft tail; v5..v19 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -7045,6 +7203,14 @@ static int leo_save_state(const Leo *leo, const char *path) {
     if (leo->school.n_deferred > 0)
         fwrite(leo->school.deferred, sizeof(LeoDeferredWonder),
                (size_t)leo->school.n_deferred, f);
+
+    /* Active Wonder provenance (v20): the question that currently has a mouth
+     * carries the same birth record as its waiting siblings. Older bodies
+     * migrate empty rather than reconstructing a field they never recorded. */
+    st_w32(f, (int32_t)(leo->school.has_pending_origin ? 1 : 0));
+    if (leo->school.has_pending_origin)
+        fwrite(&leo->school.pending_origin,
+               sizeof leo->school.pending_origin, 1, f);
 
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
@@ -7478,7 +7644,6 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
             leo->flow.n_currents = n;
             leo->flow.current_ptr = ptr;
             uint64_t previous_started = 0;
-            int unfinished = 0;
             for (int i = 0; i < n; i++) {
                 const LeoFlowWonderCurrent *current = leo_flow_current_at(&leo->flow, i);
                 if (!leo_flow_current_valid(leo, current,
@@ -7486,7 +7651,6 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
                     (i > 0 && current->started_turn < previous_started)) {
                     current_ok = 0; break;
                 }
-                if (!current->resolved && ++unfinished > 1) { current_ok = 0; break; }
                 for (int j = 0; j < i; j++)
                     if (leo_flow_current_at(&leo->flow, j)->wonder_id == current->wonder_id) {
                         current_ok = 0; break;
@@ -7675,10 +7839,39 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
             }
         }
         if (!deferred_ok) {
-            fprintf(stderr, "[leo] WARNING: v18/v19 deferred-Wonder tail truncated/corrupt — organism lives without withheld questions.\n");
+            fprintf(stderr, "[leo] WARNING: v18-v20 deferred-Wonder tail truncated/corrupt — organism lives without withheld questions.\n");
             memset(leo->school.deferred, 0,
                    sizeof leo->school.deferred);
             leo->school.n_deferred = 0;
+        }
+    }
+
+    /* Active-Wonder provenance (v20). This tail is independent of the open
+     * question and episode ledger: corruption loses only the proof of origin,
+     * and explicit redirection then fails closed to the A.42 guard. */
+    if (version >= 20) {
+        int32_t has_origin = 0;
+        int origin_ok = st_r32(f, &has_origin) &&
+                        (has_origin == 0 || has_origin == 1);
+        if (origin_ok && has_origin &&
+            fread(&leo->school.pending_origin,
+                  sizeof leo->school.pending_origin, 1, f) != 1)
+            origin_ok = 0;
+        if (origin_ok && has_origin) {
+            leo->school.pending_origin.word[LEO_HEARD_WORDLEN - 1] = 0;
+            if (!leo->school.pending[0] ||
+                strcmp(leo->school.pending_origin.word,
+                       leo->school.pending) ||
+                !leo_deferred_wonder_valid(
+                    leo, &leo->school.pending_origin, 0))
+                origin_ok = 0;
+        }
+        if (origin_ok) {
+            leo->school.has_pending_origin = (uint8_t)has_origin;
+            if (!has_origin) leo_pending_wonder_origin_clear(leo);
+        } else {
+            fprintf(stderr, "[leo] WARNING: v20 active-Wonder provenance truncated/corrupt — the question lives, but cannot be redirected without inventing its origin.\n");
+            leo_pending_wonder_origin_clear(leo);
         }
     }
 
@@ -7992,9 +8185,10 @@ static void print_wonder_address_stats(const Leo *leo) {
             receipt->candidates[receipt->winner].word : "none";
     const char *active =
         receipt->n_candidates > 0 ? receipt->candidates[0].word : "none";
-    printf("     [wonder-address: turn=%llu status=%s winner=%s active=%s margin=%.3f guarded=%u entries=",
+    printf("     [wonder-address: turn=%llu status=%s winner=%s active=%s margin=%.3f guarded=%u redirected=%u entries=",
            (unsigned long long)receipt->turn, statuses[status], winner,
-           active, (double)receipt->margin, (unsigned)receipt->guarded);
+           active, (double)receipt->margin, (unsigned)receipt->guarded,
+           (unsigned)receipt->redirected);
     for (int i = 0; i < receipt->n_candidates; i++) {
         const LeoWonderAddressCandidate *candidate =
             &receipt->candidates[i];
@@ -8026,7 +8220,7 @@ static void print_flow_stats(const Leo *leo) {
         static const char *outcomes[LEO_CURIOSITY_OUTCOME_COUNT] = {
             "none", "asked", "reasked", "resolved", "continued",
             "blocked-distress", "asked-deferred", "blocked-deferred",
-            "address-guarded", "no-candidate", "disabled"
+            "address-guarded", "redirected", "no-candidate", "disabled"
         };
         printf("     [curiosity: turn=%llu outcome=%s candidate=%s deferred=%s heard=%d distress=%.3f gate=%.3f]\n",
                (unsigned long long)leo->curiosity.turn,
@@ -8209,6 +8403,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-prewonder-shadow")) g_leo_prewonder_shadow_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
         else if (!strcmp(argv[i], "--no-flow")) g_leo_flow_on = 0;
         else if (!strcmp(argv[i], "--no-shadow")) g_leo_shadow_on = 0;

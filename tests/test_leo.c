@@ -40,6 +40,20 @@ static void seed_wonder_address_body(Leo *leo) {
                     leo->school.pending_alt_glyph);
 }
 
+static void seed_wonder_redirection_body(Leo *leo) {
+    seed_wonder_address_body(leo);
+    int32_t field_token[LEO_PREWONDER_FIELD];
+    float field_weight[LEO_PREWONDER_FIELD] = {0};
+    for (int k = 0; k < LEO_PREWONDER_FIELD; k++) field_token[k] = -1;
+    field_token[0] = 's';
+    field_token[1] = 'u';
+    field_weight[0] = 0.8f;
+    field_weight[1] = 0.6f;
+    leo_pending_wonder_origin_begin(
+        leo, leo->school.pending, leo->school.pending_glyph,
+        leo->school.pending_alt_glyph, 1, field_token, field_weight);
+}
+
 int main(void) {
     printf("test_leo (step 0)\n");
 
@@ -1025,7 +1039,8 @@ int main(void) {
             unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
             if (bytes && sz > 1 &&
                 (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
-                long tail = (long)(sizeof(int32_t) +
+                long origin_tail = (long)sizeof(int32_t);
+                long tail = origin_tail + (long)(sizeof(int32_t) +
                                    pre.school.n_deferred *
                                        (int)sizeof(LeoDeferredWonder));
                 uint32_t seventeen = 17;
@@ -1075,8 +1090,9 @@ int main(void) {
                 fo = fopen(cut, "wb");
                 if (fo) {
                     built_cut =
-                        (long)fwrite(bytes, 1, (size_t)(sz - 1), fo) ==
-                        sz - 1;
+                        (long)fwrite(bytes, 1,
+                                     (size_t)(sz - origin_tail - 1), fo) ==
+                        sz - origin_tail - 1;
                     fclose(fo);
                 }
             }
@@ -1167,11 +1183,13 @@ int main(void) {
         int prev_school = g_leo_school_on;
         int prev_wonder = g_leo_wonder_on;
         int prev_deferred = g_leo_deferred_wonder_on;
+        int prev_redirection = g_leo_wonder_redirection_on;
         int prev_klaus = g_leo_klaus_on;
         int prev_capsule = g_leo_capsule_on;
         g_leo_school_on = 1;
         g_leo_wonder_on = 1;
         g_leo_deferred_wonder_on = 1;
+        g_leo_wonder_redirection_on = 0;
         g_leo_klaus_on = 0;
         g_leo_capsule_on = 0;
 
@@ -1275,6 +1293,7 @@ int main(void) {
         g_leo_school_on = prev_school;
         g_leo_wonder_on = prev_wonder;
         g_leo_deferred_wonder_on = prev_deferred;
+        g_leo_wonder_redirection_on = prev_redirection;
         g_leo_klaus_on = prev_klaus;
         g_leo_capsule_on = prev_capsule;
     }
@@ -1401,9 +1420,11 @@ int main(void) {
      * claim the answer; explicit active naming keeps correction possible. */
     {
         int prev_attr = g_leo_wonder_attribution_on;
+        int prev_redirection = g_leo_wonder_redirection_on;
         int prev_school = g_leo_school_on;
         int prev_wonder = g_leo_wonder_on;
         g_leo_wonder_attribution_on = 1;
+        g_leo_wonder_redirection_on = 0;
         g_leo_school_on = 1;
         g_leo_wonder_on = 1;
 
@@ -1513,8 +1534,305 @@ int main(void) {
         leo_free(&ablated);
 
         g_leo_wonder_attribution_on = prev_attr;
+        g_leo_wonder_redirection_on = prev_redirection;
         g_leo_school_on = prev_school;
         g_leo_wonder_on = prev_wonder;
+    }
+
+    /* A.43: a literal waiting name may redirect the one available mouth. The
+     * displaced active Wonder returns to the bounded queue with its exact birth
+     * provenance; semantic resemblance still has no routing authority. */
+    {
+        int prev_attr = g_leo_wonder_attribution_on;
+        int prev_redirection = g_leo_wonder_redirection_on;
+        int prev_school = g_leo_school_on;
+        int prev_wonder = g_leo_wonder_on;
+        int prev_klaus = g_leo_klaus_on;
+        int prev_capsule = g_leo_capsule_on;
+        g_leo_wonder_attribution_on = 1;
+        g_leo_wonder_redirection_on = 1;
+        g_leo_school_on = 1;
+        g_leo_wonder_on = 1;
+        g_leo_klaus_on = 0;
+        g_leo_capsule_on = 0;
+
+        char out[512], expected[128];
+        Leo redirected;
+        seed_wonder_redirection_body(&redirected);
+        LeoDeferredWonder suvin_origin =
+            redirected.school.pending_origin;
+        int suvin_episode = leo_wonder_find_open(&redirected, "suvin");
+        long suvin_opened = suvin_episode >= 0 ?
+            redirected.school.wonders[suvin_episode].opened_step : -1;
+        srand(4301);
+        leo_respond(&redirected, "Nareth is a dark animal.",
+                    out, sizeof out);
+        int parked = leo_deferred_wonder_find(&redirected, "suvin");
+        int nareth_episode = leo_wonder_find_open(&redirected, "nareth");
+        CHECK(redirected.wonder_address.redirected &&
+              !redirected.wonder_address.guarded &&
+              redirected.curiosity.outcome == LEO_CURIOSITY_RESOLVED &&
+              !redirected.school.pending[0] &&
+              !redirected.school.has_pending_origin &&
+              leo_school_is_learned(&redirected, "nareth") &&
+              !leo_school_is_learned(&redirected, "suvin") &&
+              parked >= 0 && nareth_episode < 0,
+              "wonder-redirection: an explicitly addressed sibling receives its own grounded answer");
+        CHECK(parked >= 0 &&
+              redirected.school.deferred[parked].offered_glyph ==
+                  suvin_origin.offered_glyph &&
+              redirected.school.deferred[parked].offered_alt_glyph ==
+                  suvin_origin.offered_alt_glyph &&
+              redirected.school.deferred[parked].born_turn ==
+                  suvin_origin.born_turn &&
+              !memcmp(redirected.school.deferred[parked].field_token,
+                      suvin_origin.field_token,
+                      sizeof suvin_origin.field_token) &&
+              !memcmp(redirected.school.deferred[parked].field_weight,
+                      suvin_origin.field_weight,
+                      sizeof suvin_origin.field_weight) &&
+              redirected.school.deferred[parked].blocks ==
+                  suvin_origin.blocks + 1,
+              "wonder-redirection: the displaced question keeps hypotheses, birth, and own-field provenance");
+        suvin_episode = leo_wonder_find_open(&redirected, "suvin");
+        CHECK(suvin_episode >= 0 &&
+              redirected.school.wonders[suvin_episode].opened_step ==
+                  suvin_opened &&
+              !redirected.school.wonders[suvin_episode].resolved,
+              "wonder-redirection: parking preserves the first Wonder episode instead of rebirthing it");
+
+        memset(redirected.chamber_act, 0,
+               sizeof redirected.chamber_act);
+        memset(redirected.chamber_ext, 0,
+               sizeof redirected.chamber_ext);
+        leo_school_format_question(expected, sizeof expected, "suvin",
+                                   suvin_origin.offered_glyph,
+                                   suvin_origin.offered_alt_glyph);
+        leo_respond(&redirected, "suvin", out, sizeof out);
+        suvin_episode = leo_wonder_find_open(&redirected, "suvin");
+        CHECK(!strcmp(out, expected) &&
+              redirected.curiosity.outcome ==
+                  LEO_CURIOSITY_ASKED_DEFERRED &&
+              !strcmp(redirected.school.pending, "suvin") &&
+              redirected.school.has_pending_origin &&
+              redirected.school.pending_origin.offered_glyph ==
+                  suvin_origin.offered_glyph &&
+              redirected.school.pending_origin.offered_alt_glyph ==
+                  suvin_origin.offered_alt_glyph &&
+              redirected.school.pending_origin.born_turn ==
+                  suvin_origin.born_turn &&
+              !memcmp(redirected.school.pending_origin.field_token,
+                      suvin_origin.field_token,
+                      sizeof suvin_origin.field_token) &&
+              !memcmp(redirected.school.pending_origin.field_weight,
+                      suvin_origin.field_weight,
+                      sizeof suvin_origin.field_weight) &&
+              suvin_episode >= 0 &&
+              redirected.school.wonders[suvin_episode].opened_step ==
+                  suvin_opened,
+              "wonder-redirection: the first question later returns with its original voice and episode");
+        leo_free(&redirected);
+
+        Leo bare;
+        seed_wonder_redirection_body(&bare);
+        int bare_suvin_episode = leo_wonder_find_open(&bare, "suvin");
+        uint64_t bare_suvin_id = bare_suvin_episode >= 0 ?
+            leo_wonder_episode_id(
+                &bare.school.wonders[bare_suvin_episode]) : 0;
+        leo_flow_observe(&bare, "suvin", "Suvin?", NULL, NULL, NULL,
+                         LEO_FLOW_WONDER_BORN, bare_suvin_id);
+        LeoDeferredWonder nareth_origin =
+            bare.school.deferred[leo_deferred_wonder_find(&bare, "nareth")];
+        leo_school_format_question(expected, sizeof expected, "nareth",
+                                   nareth_origin.offered_glyph,
+                                   nareth_origin.offered_alt_glyph);
+        srand(4302);
+        leo_respond(&bare, "Nareth.", out, sizeof out);
+        parked = leo_deferred_wonder_find(&bare, "suvin");
+        CHECK(!strcmp(out, expected) &&
+              bare.curiosity.outcome == LEO_CURIOSITY_REDIRECTED &&
+              bare.wonder_address.redirected &&
+              !strcmp(bare.school.pending, "nareth") &&
+              bare.school.has_pending_origin &&
+              !memcmp(&bare.school.pending_origin, &nareth_origin,
+                      sizeof nareth_origin) &&
+              parked >= 0 && bare.school.n_wonders == 2 &&
+              !leo_school_is_learned(&bare, "nareth"),
+              "wonder-redirection: a bare sibling address switches questions without inventing an answer");
+        int bare_nareth_episode = leo_wonder_find_open(&bare, "nareth");
+        uint64_t bare_nareth_id = bare_nareth_episode >= 0 ?
+            leo_wonder_episode_id(
+                &bare.school.wonders[bare_nareth_episode]) : 0;
+        const char *multi_current =
+            "/tmp/leo_wonder_redirect_currents_v20.state";
+        Leo bare_woke; leo_init(&bare_woke);
+        CHECK(bare.flow.n_currents == 2 &&
+              leo_save_state(&bare, multi_current) &&
+              leo_load_state(&bare_woke, multi_current) &&
+              bare_woke.flow.n_currents == 2 &&
+              leo_flow_current_find_const(
+                  &bare_woke.flow, bare_suvin_id) &&
+              !leo_flow_current_find_const(
+                  &bare_woke.flow, bare_suvin_id)->resolved &&
+              leo_flow_current_find_const(
+                  &bare_woke.flow, bare_nareth_id) &&
+              !leo_flow_current_find_const(
+                  &bare_woke.flow, bare_nareth_id)->resolved,
+              "wonder-redirection: suspended and active Flow currents survive the same sleep");
+        leo_free(&bare_woke);
+        remove(multi_current);
+        leo_free(&bare);
+
+        Leo semantic;
+        seed_wonder_redirection_body(&semantic);
+        srand(4303);
+        leo_respond(&semantic, "Cat bird. Dark night.",
+                    out, sizeof out);
+        CHECK(!semantic.wonder_address.redirected &&
+              semantic.wonder_address.guarded &&
+              semantic.curiosity.outcome ==
+                  LEO_CURIOSITY_ADDRESS_GUARDED &&
+              !strcmp(semantic.school.pending, "suvin") &&
+              leo_deferred_wonder_find(&semantic, "nareth") >= 0,
+              "wonder-redirection: semantic sibling evidence can guard but cannot switch address");
+        leo_free(&semantic);
+
+        Leo active;
+        seed_wonder_redirection_body(&active);
+        srand(4304);
+        leo_respond(&active,
+                    "Suvin and Nareth are a dark animal.",
+                    out, sizeof out);
+        CHECK(!active.wonder_address.redirected &&
+              active.wonder_address.status ==
+                  LEO_WONDER_ADDRESS_ACTIVE_EXPLICIT &&
+              leo_school_is_learned(&active, "suvin") &&
+              !leo_school_is_learned(&active, "nareth") &&
+              leo_deferred_wonder_find(&active, "nareth") >= 0,
+              "wonder-redirection: explicitly naming the active question wins over a sibling name");
+        leo_free(&active);
+
+        Leo ablated;
+        seed_wonder_redirection_body(&ablated);
+        g_leo_wonder_redirection_on = 0;
+        srand(4305);
+        leo_respond(&ablated, "Nareth is a dark animal.",
+                    out, sizeof out);
+        CHECK(!ablated.wonder_address.redirected &&
+              ablated.wonder_address.guarded &&
+              !strcmp(ablated.school.pending, "suvin") &&
+              !leo_school_is_learned(&ablated, "nareth"),
+              "wonder-redirection: ablation restores A.42's explicit-sibling guard");
+        leo_free(&ablated);
+        g_leo_wonder_redirection_on = 1;
+
+        Leo legacy;
+        seed_wonder_address_body(&legacy);
+        srand(4306);
+        leo_respond(&legacy, "Nareth is a dark animal.",
+                    out, sizeof out);
+        CHECK(!legacy.wonder_address.redirected &&
+              legacy.wonder_address.guarded &&
+              !strcmp(legacy.school.pending, "suvin"),
+              "wonder-redirection: an originless active question fails closed instead of fabricating provenance");
+        leo_free(&legacy);
+
+        Leo full;
+        seed_wonder_redirection_body(&full);
+        const char *extra[] =
+            {"cinder", "dovel", "ember", "frost", "glint", "harbor"};
+        for (int i = 0; i < 6; i++) {
+            full.school.turn_clock++;
+            leo_deferred_wonder_remember(
+                &full, extra[i], semtok_find_glyph("water"),
+                semtok_find_glyph("fire"), 1, NULL, NULL);
+        }
+        CHECK(full.school.n_deferred == LEO_DEFERRED_WONDER_MAX,
+              "wonder-redirection: capacity fixture fills all waiting slots");
+        srand(4307);
+        leo_respond(&full, "Nareth.", out, sizeof out);
+        CHECK(full.school.n_deferred == LEO_DEFERRED_WONDER_MAX &&
+              leo_deferred_wonder_find(&full, "suvin") >= 0 &&
+              leo_deferred_wonder_find(&full, "nareth") < 0,
+              "wonder-redirection: a full queue swaps in place without evicting another question");
+        leo_free(&full);
+
+        Leo sleep;
+        seed_wonder_redirection_body(&sleep);
+        LeoDeferredWonder sleep_origin = sleep.school.pending_origin;
+        const char *state = "/tmp/leo_wonder_origin_v20.state";
+        const char *legacy19 = "/tmp/leo_wonder_origin_v19.state";
+        const char *cut = "/tmp/leo_wonder_origin_v20_cut.state";
+        int saved = leo_save_state(&sleep, state);
+        Leo woke; leo_init(&woke);
+        CHECK(saved && leo_load_state(&woke, state) &&
+              woke.school.has_pending_origin &&
+              !memcmp(&woke.school.pending_origin, &sleep_origin,
+                      sizeof sleep_origin),
+              "wonder-redirection: active provenance survives v20 sleep exactly");
+
+        int built_legacy = 0, built_cut = 0;
+        FILE *fi = fopen(state, "rb");
+        if (fi) {
+            fseek(fi, 0, SEEK_END);
+            long sz = ftell(fi);
+            fseek(fi, 0, SEEK_SET);
+            unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
+            if (bytes && sz > (long)sizeof(LeoDeferredWonder) + 5 &&
+                (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
+                long origin_tail =
+                    (long)(sizeof(int32_t) + sizeof(LeoDeferredWonder));
+                uint32_t nineteen = 19;
+                memcpy(bytes + sizeof(uint32_t), &nineteen,
+                       sizeof nineteen);
+                FILE *fo = fopen(legacy19, "wb");
+                if (fo) {
+                    built_legacy =
+                        (long)fwrite(bytes, 1,
+                                     (size_t)(sz - origin_tail), fo) ==
+                        sz - origin_tail;
+                    fclose(fo);
+                }
+                uint32_t twenty = 20;
+                memcpy(bytes + sizeof(uint32_t), &twenty,
+                       sizeof twenty);
+                fo = fopen(cut, "wb");
+                if (fo) {
+                    built_cut =
+                        (long)fwrite(bytes, 1, (size_t)(sz - 1), fo) ==
+                        sz - 1;
+                    fclose(fo);
+                }
+            }
+            free(bytes);
+            fclose(fi);
+        }
+        Leo old; leo_init(&old);
+        CHECK(built_legacy && leo_load_state(&old, legacy19) &&
+              !strcmp(old.school.pending, "suvin") &&
+              !old.school.has_pending_origin &&
+              old.school.n_deferred == sleep.school.n_deferred,
+              "wonder-redirection: v19 preserves the question but invents no active provenance");
+        Leo damaged; leo_init(&damaged);
+        CHECK(built_cut && leo_load_state(&damaged, cut) &&
+              !strcmp(damaged.school.pending, "suvin") &&
+              !damaged.school.has_pending_origin &&
+              damaged.school.n_deferred == sleep.school.n_deferred,
+              "wonder-redirection: corrupt v20 provenance loses only redirect authority");
+
+        leo_free(&sleep);
+        leo_free(&woke);
+        leo_free(&old);
+        leo_free(&damaged);
+        remove(state);
+        remove(legacy19);
+        remove(cut);
+        g_leo_wonder_attribution_on = prev_attr;
+        g_leo_wonder_redirection_on = prev_redirection;
+        g_leo_school_on = prev_school;
+        g_leo_wonder_on = prev_wonder;
+        g_leo_klaus_on = prev_klaus;
+        g_leo_capsule_on = prev_capsule;
     }
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
@@ -1741,12 +2059,15 @@ int main(void) {
                 long deferred_tail = (long)(sizeof(int32_t) +
                                              w.school.n_deferred *
                                                  (int)sizeof(LeoDeferredWonder));
+                long origin_tail = (long)(sizeof(int32_t) +
+                                           (w.school.has_pending_origin ?
+                                            sizeof(LeoDeferredWonder) : 0));
                 long current_flow = (long)(2 * sizeof(int32_t) +
                                            w.flow.n * (int)sizeof(LeoFlowSnapshot) +
                                            2 * sizeof(int32_t) +
                                            w.flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
                                            shadow_tail + calibration_tail +
-                                           deferred_tail);
+                                           deferred_tail + origin_tail);
                 if (sz > v12tail + current_flow) {
                     long flow_start = sz - current_flow;
                     long tail_start = flow_start - v12tail;
@@ -2129,12 +2450,15 @@ int main(void) {
                     long deferred_tail = (long)(sizeof(int32_t) +
                                                 fl->school.n_deferred *
                                                     (int)sizeof(LeoDeferredWonder));
+                    long origin_tail = (long)(sizeof(int32_t) +
+                                              (fl->school.has_pending_origin ?
+                                               sizeof(LeoDeferredWonder) : 0));
                     long current_tail = (long)(2 * sizeof(int32_t) +
                                               fl->flow.n * (int)sizeof(LeoFlowSnapshot) +
                                               2 * sizeof(int32_t) +
                                               fl->flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
                                               shadow_tail + calibration_tail +
-                                              deferred_tail);
+                                              deferred_tail + origin_tail);
                     long prefix = sz - current_tail;
                     if (prefix > 0) {
                         long current_only = (long)(2 * sizeof(int32_t) +
@@ -2146,9 +2470,10 @@ int main(void) {
                             built_cut = (long)fwrite(bytes, 1,
                                                      (size_t)(sz - calibration_tail -
                                                               shadow_tail -
-                                                              deferred_tail - 1), fo) ==
+                                                              deferred_tail -
+                                                              origin_tail - 1), fo) ==
                                         sz - calibration_tail - shadow_tail -
-                                            deferred_tail - 1;
+                                            deferred_tail - origin_tail - 1;
                             fclose(fo);
                         }
                         uint32_t fourteen = 14;
@@ -2159,9 +2484,11 @@ int main(void) {
                                                          (size_t)(sz - calibration_tail -
                                                                   shadow_tail -
                                                                   deferred_tail -
+                                                                  origin_tail -
                                                                   current_only), fo) ==
                                              sz - calibration_tail - shadow_tail -
-                                                 deferred_tail - current_only;
+                                                 deferred_tail - origin_tail -
+                                                 current_only;
                             fclose(fo);
                         }
                         uint32_t thirteen = 13;
@@ -2371,6 +2698,9 @@ int main(void) {
                     long deferred_tail = (long)(sizeof(int32_t) +
                                                 sh->school.n_deferred *
                                                     (int)sizeof(LeoDeferredWonder));
+                    long origin_tail = (long)(sizeof(int32_t) +
+                                              (sh->school.has_pending_origin ?
+                                               sizeof(LeoDeferredWonder) : 0));
                     uint32_t fifteen = 15;
                     memcpy(bytes + sizeof(uint32_t), &fifteen, sizeof fifteen);
                     FILE *fo = fopen(legacy, "wb");
@@ -2378,9 +2708,10 @@ int main(void) {
                         built_old = (long)fwrite(bytes, 1,
                                                  (size_t)(sz - calibration_tail -
                                                           shadow_tail -
-                                                          deferred_tail), fo) ==
+                                                          deferred_tail -
+                                                          origin_tail), fo) ==
                                     sz - calibration_tail - shadow_tail -
-                                        deferred_tail;
+                                        deferred_tail - origin_tail;
                         fclose(fo);
                     }
                     uint32_t sixteen = 16;
@@ -2389,8 +2720,10 @@ int main(void) {
                     if (fo) {
                         built_compat = (long)fwrite(bytes, 1,
                                                     (size_t)(sz - calibration_tail -
-                                                             deferred_tail), fo) ==
-                                       sz - calibration_tail - deferred_tail;
+                                                             deferred_tail -
+                                                             origin_tail), fo) ==
+                                       sz - calibration_tail - deferred_tail -
+                                           origin_tail;
                         fclose(fo);
                     }
                     uint32_t seventeen = 17;
@@ -2398,8 +2731,9 @@ int main(void) {
                     fo = fopen(truncated, "wb");
                     if (fo) {
                         built_cut = (long)fwrite(bytes, 1,
-                                                (size_t)(sz - deferred_tail - 1), fo) ==
-                                    sz - deferred_tail - 1;
+                                                (size_t)(sz - deferred_tail -
+                                                         origin_tail - 1), fo) ==
+                                    sz - deferred_tail - origin_tail - 1;
                         fclose(fo);
                     }
                 }
@@ -3184,7 +3518,7 @@ int main(void) {
             FILE *tf = fopen(sp, "rb");
             fseek(tf, 0, SEEK_END); long fl = ftell(tf); fseek(tf, 0, SEEK_SET);
             char *fb = malloc((size_t)fl); fread(fb, 1, (size_t)fl, tf); fclose(tf);
-            tf = fopen(sp, "wb"); fwrite(fb, 1, (size_t)(fl - 64), tf); fclose(tf);
+            tf = fopen(sp, "wb"); fwrite(fb, 1, (size_t)(fl - 65), tf); fclose(tf);
             free(fb);
         }
         Leo l3; leo_init(&l3);
