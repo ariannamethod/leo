@@ -1098,6 +1098,126 @@ int main(void) {
         g_leo_capsule_on = prev_capsule;
     }
 
+    /* A.40: multiple withheld questions coexist without becoming multiple
+     * open Wonders. Opening one consumes only its own pre-Wonder identity;
+     * another exact return waits while pending is occupied, then opens with
+     * its own original hypotheses after the first question is grounded. */
+    {
+        int prev_school = g_leo_school_on;
+        int prev_wonder = g_leo_wonder_on;
+        int prev_deferred = g_leo_deferred_wonder_on;
+        int prev_klaus = g_leo_klaus_on;
+        int prev_capsule = g_leo_capsule_on;
+        g_leo_school_on = 1;
+        g_leo_wonder_on = 1;
+        g_leo_deferred_wonder_on = 1;
+        g_leo_klaus_on = 0;
+        g_leo_capsule_on = 0;
+
+        int light = semtok_find_glyph("light");
+        int cold = semtok_find_glyph("cold");
+        int dark = semtok_find_glyph("dark");
+        int animal = semtok_find_glyph("animal");
+        int water = semtok_find_glyph("water");
+        int fire = semtok_find_glyph("fire");
+        Leo constellation; leo_init(&constellation);
+        constellation.school.turn_clock = 1;
+        leo_deferred_wonder_remember(&constellation, "suvin",
+                                     light, cold, 1);
+        constellation.school.turn_clock = 2;
+        leo_deferred_wonder_remember(&constellation, "nareth",
+                                     dark, animal, 1);
+        constellation.school.turn_clock = 3;
+        leo_deferred_wonder_remember(&constellation, "flom",
+                                     water, fire, 1);
+        CHECK(constellation.school.n_deferred == 3 &&
+              leo_deferred_wonder_find(&constellation, "suvin") >= 0 &&
+              leo_deferred_wonder_find(&constellation, "nareth") >= 0 &&
+              leo_deferred_wonder_find(&constellation, "flom") >= 0,
+              "pre-wonder constellation: three withheld questions coexist without opening");
+
+        memset(constellation.chamber_act, 0,
+               sizeof constellation.chamber_act);
+        memset(constellation.chamber_ext, 0,
+               sizeof constellation.chamber_ext);
+        memset(constellation.scar, 0, sizeof constellation.scar);
+        char out[1024];
+        leo_respond(&constellation, "nareth", out, sizeof out);
+        CHECK(constellation.curiosity.outcome ==
+                  LEO_CURIOSITY_ASKED_DEFERRED &&
+              !strcmp(constellation.school.pending, "nareth") &&
+              constellation.school.pending_glyph == dark &&
+              constellation.school.pending_alt_glyph == animal &&
+              constellation.school.n_deferred == 2 &&
+              leo_deferred_wonder_find(&constellation, "nareth") < 0 &&
+              leo_deferred_wonder_find(&constellation, "suvin") >= 0 &&
+              leo_deferred_wonder_find(&constellation, "flom") >= 0,
+              "pre-wonder constellation: opening one consumes only its own identity and hypotheses");
+
+        int flom = leo_deferred_wonder_find(&constellation, "flom");
+        LeoDeferredWonder flom_before =
+            flom >= 0 ? constellation.school.deferred[flom] :
+                        (LeoDeferredWonder){0};
+        leo_respond(&constellation, "flom", out, sizeof out);
+        flom = leo_deferred_wonder_find(&constellation, "flom");
+        CHECK(constellation.curiosity.outcome ==
+                  LEO_CURIOSITY_CONTINUED &&
+              !strcmp(constellation.school.pending, "nareth") &&
+              flom >= 0 &&
+              constellation.school.deferred[flom].offered_glyph ==
+                  flom_before.offered_glyph &&
+              constellation.school.deferred[flom].offered_alt_glyph ==
+                  flom_before.offered_alt_glyph &&
+              constellation.school.n_deferred == 2,
+              "pre-wonder constellation: an occupied Wonder makes another exact return wait unchanged");
+
+        leo_respond(&constellation, "A nareth is dark night.",
+                    out, sizeof out);
+        CHECK(constellation.curiosity.outcome ==
+                  LEO_CURIOSITY_RESOLVED &&
+              !constellation.school.pending[0] &&
+              constellation.school.n_deferred == 2 &&
+              leo_school_is_learned(&constellation, "nareth"),
+              "pre-wonder constellation: grounding the open question preserves its waiting siblings");
+
+        memset(constellation.chamber_act, 0,
+               sizeof constellation.chamber_act);
+        memset(constellation.chamber_ext, 0,
+               sizeof constellation.chamber_ext);
+        leo_respond(&constellation, "flom", out, sizeof out);
+        CHECK(constellation.curiosity.outcome ==
+                  LEO_CURIOSITY_ASKED_DEFERRED &&
+              !strcmp(constellation.school.pending, "flom") &&
+              constellation.school.pending_glyph == water &&
+              constellation.school.pending_alt_glyph == fire &&
+              constellation.school.n_deferred == 1 &&
+              leo_deferred_wonder_find(&constellation, "suvin") >= 0,
+              "pre-wonder constellation: the next question opens later with its own hypotheses");
+
+        leo_respond(&constellation, "A flom is water.",
+                    out, sizeof out);
+        memset(constellation.chamber_act, 0,
+               sizeof constellation.chamber_act);
+        memset(constellation.chamber_ext, 0,
+               sizeof constellation.chamber_ext);
+        leo_respond(&constellation, "suvin", out, sizeof out);
+        CHECK(constellation.curiosity.outcome ==
+                  LEO_CURIOSITY_ASKED_DEFERRED &&
+              !strcmp(constellation.school.pending, "suvin") &&
+              constellation.school.pending_glyph == light &&
+              constellation.school.pending_alt_glyph == cold &&
+              constellation.school.n_deferred == 0 &&
+              constellation.school.n_wonders == 3,
+              "pre-wonder constellation: every sibling can become one real Wonder exactly once");
+
+        leo_free(&constellation);
+        g_leo_school_on = prev_school;
+        g_leo_wonder_on = prev_wonder;
+        g_leo_deferred_wonder_on = prev_deferred;
+        g_leo_klaus_on = prev_klaus;
+        g_leo_capsule_on = prev_capsule;
+    }
+
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the
      * grown map survives save/load. */
