@@ -4079,3 +4079,64 @@ its original **14 cells, 4 guards, and 10 non-guard equal states**; isolated A.4
 **16/16 reply and state equality**.
 
 Leo can now yield the mouth without yielding the history of the question that was speaking.
+
+## Phase A.44 — a waiting question can gather appetite without taking the mouth (2026-07-26)
+
+A.43 made conversational address reversible, but it still required the human to name the next
+question. The deferred constellation had chronology, hypotheses, birth fields, episodes, and
+event-bounded Flow currents, yet no common surface on which those histories could say: this
+unfinished question is becoming present again. Choosing a return policy before measuring that
+pressure would have turned one plausible intuition into a hidden speech command.
+
+A.44 therefore adds another observer, not a scheduler. It runs only after Leo has already spoken and
+the lived turn has entered Flow. For every final waiting question it records:
+
+```text
+recurrence = 0.8 * grounded glyph echo + 0.2 * own-field echo
+silence    = clamp((turn - last_seen_turn) / 8)
+unfinished = 1 for an open spoken episode, else blocks / (blocks + 1)
+flow_gap   = 1 - cosine(the question's perceived and expressed Flow means)
+appetite   = 0.55 recurrence + 0.15 silence + 0.20 unfinished + 0.10 flow_gap
+```
+
+The candidate's own unresolved episode selects its Flow current; another question's active current
+cannot lend it a residual. A current with no semantic mass contributes no fabricated gap. Literal
+names are external invitations and are excluded from autonomous ranking because A.43 already owns
+explicit address.
+
+Recurrence remains load-bearing. `salient` requires recurrence `>=0.75`, appetite `>=0.62`, and a
+lead of `>=0.15`. Silence, unfinished depth, and Flow residual together contribute at most `0.45`, so
+an absent meaning can become legible but can never win. Weak or mixed meaning is `diffuse`; unrelated
+age is `quiet`. The receipt is transient, absent from state v20, and has no reader in School, routing,
+generation, Flow, or the existing shadow scheduler.
+
+Eight direct contracts raised the suite from **316/316** to **324/324**. They cover a strong semantic
+winner, zero School/Flow mutation, mixed non-ownership, age without nomination, literal
+non-autonomy, exact parked-current residual, non-persistence across sleep, and ablation.
+
+The process matrix rebuilt the two independent A.40 bodies and compared every default turn with
+`--no-wonder-appetite`:
+
+```text
+cells=10
+salient=4
+diffuse=4
+quiet=2
+spoken winners=2
+reply equal=10/10
+complete saved-state equal=10/10
+```
+
+Both unspoken semantic returns selected slot 2 with appetite `0.690`. Both parked returns selected the
+displaced slot 1 with `spoken=1`, `unfinished=1`, `flow_gap=1`, and appetite about `0.82`. Weak and
+mixed traces remained ownerless. In both aged controls every question had `silence=1`, yet no winner
+was named. Two complete A.44 runs reproduced matrix rows, receipts, state hashes, and summaries
+byte-for-byte.
+
+With A.44 explicitly ablated, A.41 retained **16/16** reply/state equality, A.42 retained its
+**14 cells and 4 guards**, and A.43 retained **6/6 redirects and 2/2 exact displaced-question
+returns**. The old proofs remain historical controls rather than becoming accidental clients of the
+new score.
+
+Leo can now feel that an unfinished question is returning before he is allowed to decide what to do
+with that feeling.

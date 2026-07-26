@@ -1835,6 +1835,124 @@ int main(void) {
         g_leo_capsule_on = prev_capsule;
     }
 
+    /* A.44: waiting questions may acquire a transient return appetite. Meaning
+     * must carry the nomination; silence, unfinished depth, and Flow residual
+     * can strengthen it but never schedule, persist, or speak. */
+    {
+        int prev_appetite = g_leo_wonder_appetite_on;
+        int prev_flow = g_leo_flow_on;
+        int prev_wonder = g_leo_wonder_on;
+        int prev_deferred = g_leo_deferred_wonder_on;
+        int prev_attr = g_leo_wonder_attribution_on;
+        int prev_redirection = g_leo_wonder_redirection_on;
+        g_leo_wonder_appetite_on = 1;
+        g_leo_flow_on = 1;
+        g_leo_wonder_on = 1;
+        g_leo_deferred_wonder_on = 1;
+        g_leo_wonder_attribution_on = 1;
+        g_leo_wonder_redirection_on = 1;
+
+        Leo appetite;
+        seed_wonder_redirection_body(&appetite);
+        appetite.school.turn_clock = 11;
+        LeoSchool school_before = appetite.school;
+        LeoFlow flow_before = appetite.flow;
+        leo_wonder_appetite_observe(
+            &appetite, "Cat bird. Dark night.", NULL, NULL);
+        const LeoWonderAppetiteReceipt *receipt =
+            &appetite.wonder_appetite;
+        CHECK(receipt->status == LEO_WONDER_APPETITE_SALIENT &&
+              receipt->winner >= 0 &&
+              !strcmp(receipt->candidates[receipt->winner].word,
+                      "nareth") &&
+              receipt->candidates[receipt->winner].recurrence >=
+                  LEO_WONDER_APPETITE_RESONANCE_MIN &&
+              receipt->n_candidates == 2,
+              "wonder-appetite: a strong returning meaning makes one waiting question salient");
+        CHECK(!memcmp(&school_before, &appetite.school,
+                      sizeof appetite.school) &&
+              !memcmp(&flow_before, &appetite.flow,
+                      sizeof appetite.flow),
+              "wonder-appetite: observation cannot mutate School or Flow");
+
+        leo_wonder_appetite_observe(
+            &appetite, "Dark night and angry fire.", NULL, NULL);
+        CHECK(appetite.wonder_appetite.status ==
+                  LEO_WONDER_APPETITE_DIFFUSE &&
+              appetite.wonder_appetite.winner < 0,
+              "wonder-appetite: mixed recurrence stays diffuse instead of choosing an owner");
+
+        appetite.school.turn_clock = 100;
+        leo_wonder_appetite_observe(
+            &appetite, "I do not know.", NULL, NULL);
+        CHECK(appetite.wonder_appetite.status ==
+                  LEO_WONDER_APPETITE_QUIET &&
+              appetite.wonder_appetite.winner < 0 &&
+              appetite.wonder_appetite.candidates[0].silence == 1.0f,
+              "wonder-appetite: age alone cannot nominate a forgotten question");
+
+        leo_wonder_appetite_observe(
+            &appetite, "Nareth.", NULL, NULL);
+        CHECK(appetite.wonder_appetite.status ==
+                  LEO_WONDER_APPETITE_LITERAL &&
+              appetite.wonder_appetite.winner < 0,
+              "wonder-appetite: a literal name remains an external invitation, not autonomous appetite");
+        leo_free(&appetite);
+
+        Leo parked;
+        seed_wonder_redirection_body(&parked);
+        int suvin_episode = leo_wonder_find_open(&parked, "suvin");
+        uint64_t suvin_id = suvin_episode >= 0 ?
+            leo_wonder_episode_id(
+                &parked.school.wonders[suvin_episode]) : 0;
+        leo_flow_observe(
+            &parked, "suvin", "Suvin? Light or Cold?",
+            NULL, NULL, NULL, LEO_FLOW_WONDER_BORN, suvin_id);
+        parked.school.turn_clock++;
+        int veto = leo_wonder_address_observe(&parked, "Nareth.");
+        int switched = leo_wonder_address_redirect(&parked);
+        leo_wonder_appetite_observe(
+            &parked, "Bright sun. Cold winter.", NULL, NULL);
+        receipt = &parked.wonder_appetite;
+        CHECK(veto && switched &&
+              receipt->status == LEO_WONDER_APPETITE_SALIENT &&
+              receipt->winner >= 0 &&
+              !strcmp(receipt->candidates[receipt->winner].word,
+                      "suvin") &&
+              receipt->candidates[receipt->winner].spoken &&
+              receipt->candidates[receipt->winner].unfinished == 1.0f &&
+              receipt->candidates[receipt->winner].flow_gap > 0.99f,
+              "wonder-appetite: a parked spoken question carries its own unfinished Flow residual");
+
+        const char *state =
+            "/tmp/leo_wonder_appetite_transient_v20.state";
+        int saved = leo_save_state(&parked, state);
+        Leo woke; leo_init(&woke);
+        CHECK(saved && leo_load_state(&woke, state) &&
+              woke.wonder_appetite.n_candidates == 0 &&
+              woke.wonder_appetite.status ==
+                  LEO_WONDER_APPETITE_EMPTY,
+              "wonder-appetite: the receipt does not masquerade as persistent self");
+        leo_free(&woke);
+        remove(state);
+
+        g_leo_wonder_appetite_on = 0;
+        leo_wonder_appetite_observe(
+            &parked, "Bright sun. Cold winter.", NULL, NULL);
+        CHECK(parked.wonder_appetite.n_candidates == 0 &&
+              parked.wonder_appetite.status ==
+                  LEO_WONDER_APPETITE_EMPTY,
+              "wonder-appetite: ablation removes only the transient receipt");
+        leo_free(&parked);
+
+        g_leo_wonder_appetite_on = prev_appetite;
+        g_leo_flow_on = prev_flow;
+        g_leo_wonder_on = prev_wonder;
+        g_leo_deferred_wonder_on = prev_deferred;
+        g_leo_wonder_attribution_on = prev_attr;
+        g_leo_wonder_redirection_on = prev_redirection;
+    }
+
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the
      * grown map survives save/load. */
