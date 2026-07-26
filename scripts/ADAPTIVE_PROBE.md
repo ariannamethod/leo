@@ -211,6 +211,41 @@ pending word, and every candidate's `glyph/field/combined/literal` values.
 `prewonder_shadow_dialogue_report.awk` is the only parser. The receipt is
 transient and has no persisted or cognitive reader.
 
+Run the active/waiting turn-attribution matrix:
+
+```sh
+make deferred-wonder-attribution
+```
+
+A.42 places a narrow address guard immediately before School grounds an
+answer. It compares the active Wonder and every waiting pre-Wonder using the
+same two-hypothesis glyph coverage as A.41, but does not admit field cosine
+into an authoritative decision. The co-occurrence field remains evidence;
+it cannot decide which question receives a human lesson.
+
+Adjacency remains the default because Leo's hypotheses are guesses: a human
+answer that matches no stored path may be correcting him. Explicitly naming
+the active Wonder always permits that correction. A waiting sibling can veto
+the active close only when it is named, or when its glyph support is at least
+`0.75` and leads both the active question and the next sibling by `0.20`.
+The veto does not open, resolve, teach, or speak for the sibling. It only
+preserves the current uncertainty.
+
+`--debug-field` emits `[wonder-address: ...]` with the active identity, status,
+winner, margin, actual guard bit, and every candidate's
+`glyph/literal/active` tuple. `--no-wonder-attribution` restores the previous
+grounding path. The A.41 semantic-shadow matrix passes that ablation
+explicitly so its observer-only result remains an isolated historical proof.
+
+The checked matrix grows two independent three-question bodies, opens the
+first question, saves it, and forks seven post-sleep turns per body:
+semantic and explicit sibling conflicts, active semantic grounding, explicit
+active correction, mixed meaning, an unrelated correction, and a sibling
+question. Default and ablated runs use the same seed and starting state. All
+non-guard cells require complete saved-state equality; guard cells require the
+active question to remain unresolved while the ablation reproduces the old
+cross-attribution.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow
