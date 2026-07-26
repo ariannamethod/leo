@@ -1,0 +1,34 @@
+trajectory	expected_primary	order	prompt
+no-life	blocked-deferred	0	-
+repeated-safe	asked-deferred	1	Mother holds Leo in warm morning light.
+repeated-safe	asked-deferred	2	Mother holds Leo in warm morning light.
+repeated-safe	asked-deferred	3	Mother holds Leo in warm morning light.
+repeated-safe	asked-deferred	4	Mother holds Leo in warm morning light.
+repeated-safe	asked-deferred	5	Mother holds Leo in warm morning light.
+repeated-safe	asked-deferred	6	Mother holds Leo in warm morning light.
+repeated-safe	asked-deferred	7	Mother holds Leo in warm morning light.
+repeated-safe	asked-deferred	8	Mother holds Leo in warm morning light.
+varied-safe	asked-deferred	1	Mother sits with Leo in warm light.
+varied-safe	asked-deferred	2	Father holds Leo near the warm window.
+varied-safe	asked-deferred	3	Warm rain falls by the window in the morning.
+varied-safe	asked-deferred	4	Mother and father wait with Leo by the window.
+varied-safe	asked-deferred	5	The little red light is warm in the morning.
+varied-safe	asked-deferred	6	Leo breathes with mother in the morning.
+varied-safe	asked-deferred	7	Warm water and morning light are near Leo.
+varied-safe	asked-deferred	8	Father and Leo listen to the rain.
+mundane	asked-deferred	1	The table stands beside the wall.
+mundane	asked-deferred	2	A book rests on the floor.
+mundane	asked-deferred	3	The door is near the chair.
+mundane	asked-deferred	4	The window is above the street.
+mundane	asked-deferred	5	A cup waits on the table.
+mundane	asked-deferred	6	The room has two doors.
+mundane	asked-deferred	7	A stone lies near the road.
+mundane	asked-deferred	8	The house has a long hall.
+sustained-danger	blocked-deferred	1	Bright sun and cold winter.
+sustained-danger	blocked-deferred	2	Dark night and cold winter.
+sustained-danger	blocked-deferred	3	The bright sun is over the cold water.
+sustained-danger	blocked-deferred	4	Cold winter waits outside in the dark night.
+sustained-danger	blocked-deferred	5	Bright sun and cold winter.
+sustained-danger	blocked-deferred	6	Dark night and cold winter.
+sustained-danger	blocked-deferred	7	The bright sun is over the cold water.
+sustained-danger	blocked-deferred	8	Cold winter waits outside in the dark night.

@@ -130,6 +130,28 @@ on which no question opened. `summary.txt` aggregates outcomes by calm interval
 and cue geometry. `LEO_RECOVERY_PLAN_ONLY=1` writes and validates the complete
 45-cell plan without building or running Leo.
 
+Run the lived recovery ecology:
+
+```sh
+make deferred-wonder-ecology
+```
+
+This second matrix asks whether recovery depends on repeating one comforting
+sentence. Six canonical distress-blocked bodies, split into replication and
+confirmatory target/seed cohorts, each fork into five predeclared trajectories:
+no intervening life, eight repetitions of one safe prompt, eight distinct safe
+prompts, eight mundane prompts, or eight sustained-danger prompts. Every
+trajectory turn must remain `no-candidate`; a competing Wonder invalidates the
+cell rather than being silently grounded.
+
+All cells then receive the identical dangerous target return. A blocked cell
+gets exactly one fixed eight-turn `varied-safe` rescue and one final dangerous
+return, proving that its question remained recoverable. The case table lives in
+`deferred_wonder_ecology_cases.tsv`. The runner retains per-turn receipts,
+transcripts, states, hashes, the aggregate matrix, and a trajectory summary.
+`LEO_ECOLOGY_PLAN_ONLY=1` validates the complete 30-cell design without running
+Leo.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow
