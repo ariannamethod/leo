@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# A.41: read-only semantic echoes among withheld questions.
+# A.41: read-only semantic echoes among withheld questions. A.42 attribution
+# is explicitly ablated below so this remains the historical observer proof.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -162,6 +163,7 @@ while IFS=$'\t' read -r cell group cohort seed case kind target prompt \
         cp "$base" "$cell_dir/pre.state"
         "$ROOT/leo" --load "$cell_dir/pre.state" --seed "$((seed + 700))" \
             --respond "$opened" --debug-field --no-prewonder-shadow \
+            --no-wonder-attribution \
             --save "$cell_dir/pre.state" > "$cell_dir/pre.log" 2>&1
         [ "$(reply_from_log "$cell_dir/pre.log")" = "$expected_question" ] || {
             printf '%s failed to open occupied control\n' "$cell" >&2
@@ -174,10 +176,12 @@ while IFS=$'\t' read -r cell group cohort seed case kind target prompt \
     cp "$run_base" "$cell_dir/off.state"
     run_seed=$((seed + 1000 + case_index))
     "$ROOT/leo" --load "$cell_dir/on.state" --seed "$run_seed" \
-        --respond "$prompt" --debug-field --save "$cell_dir/on.state" \
+        --respond "$prompt" --debug-field --no-wonder-attribution \
+        --save "$cell_dir/on.state" \
         > "$cell_dir/on.log" 2>&1
     "$ROOT/leo" --load "$cell_dir/off.state" --seed "$run_seed" \
         --respond "$prompt" --debug-field --no-prewonder-shadow \
+        --no-wonder-attribution \
         --save "$cell_dir/off.state" > "$cell_dir/off.log" 2>&1
 
     shadow="$(shadow_from_log "$cell_dir/on.log" "$cell" "$run_seed")"

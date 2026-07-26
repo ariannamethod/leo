@@ -1649,6 +1649,7 @@ enum {
     LEO_CURIOSITY_BLOCKED_DISTRESS,
     LEO_CURIOSITY_ASKED_DEFERRED,
     LEO_CURIOSITY_BLOCKED_DEFERRED,
+    LEO_CURIOSITY_ADDRESS_GUARDED,
     LEO_CURIOSITY_NO_CANDIDATE,
     LEO_CURIOSITY_DISABLED,
     LEO_CURIOSITY_OUTCOME_COUNT
@@ -1692,6 +1693,40 @@ typedef struct {
     float   margin;
     uint8_t status;
 } LeoPreWonderShadowReceipt;
+
+/* A.42: before School grounds an adjacent answer, compare its semantic address
+ * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
+ * A confident sibling may veto a destructive close, but can never learn, open,
+ * or speak through this layer. Explicitly naming the active Wonder preserves
+ * the human's ability to correct Leo's original hypotheses. */
+#define LEO_WONDER_ADDRESS_MAX (LEO_DEFERRED_WONDER_MAX + 1)
+#define LEO_WONDER_ADDRESS_GLYPH_MIN 0.75f
+#define LEO_WONDER_ADDRESS_MARGIN    0.20f
+enum {
+    LEO_WONDER_ADDRESS_EMPTY = 0,
+    LEO_WONDER_ADDRESS_ACTIVE_EXPLICIT,
+    LEO_WONDER_ADDRESS_ACTIVE_SEMANTIC,
+    LEO_WONDER_ADDRESS_SIBLING_EXPLICIT,
+    LEO_WONDER_ADDRESS_SIBLING_CONFLICT,
+    LEO_WONDER_ADDRESS_AMBIGUOUS,
+    LEO_WONDER_ADDRESS_ADJACENT,
+    LEO_WONDER_ADDRESS_STATUS_COUNT
+};
+typedef struct {
+    char    word[LEO_HEARD_WORDLEN];
+    float   glyph;
+    uint8_t literal;
+    uint8_t active;
+} LeoWonderAddressCandidate;
+typedef struct {
+    uint64_t turn;
+    LeoWonderAddressCandidate candidates[LEO_WONDER_ADDRESS_MAX];
+    int     n_candidates;
+    int     winner;
+    float   margin;
+    uint8_t status;
+    uint8_t guarded;
+} LeoWonderAddressReceipt;
 
 enum {
     LEO_FLOW_QUIET = 0,
@@ -1820,6 +1855,9 @@ typedef struct {
     /* A.41: one-turn semantic echo among withheld questions. Diagnostic only;
      * neither School nor generation reads it. */
     LeoPreWonderShadowReceipt prewonder_shadow;
+    /* A.42: pre-grounding address witness. Only its narrow sibling-conflict
+     * veto is read by School; it cannot assign meaning to another question. */
+    LeoWonderAddressReceipt wonder_address;
     /* passive temporal proprioception (state v13): a bounded archaeological
      * record of what has been flowing through lived replies. No speech reader. */
     LeoFlow flow;
@@ -2090,6 +2128,7 @@ static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School revers
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_prewonder_shadow_on = 1; /* read-only semantic echo among withheld questions; no speech reader. */
+static int g_leo_wonder_attribution_on = 1; /* address guard: a confident waiting sibling can veto, but never claim, an active answer. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
 static int g_leo_flow_on = 1;           /* passive temporal proprioception. --no-flow stops snapshots; no generation path reads them. */
 static int g_leo_shadow_on = 1;         /* counterfactual next-turn proposals. --no-shadow keeps Flow but writes no receipts. */
@@ -4877,6 +4916,22 @@ static int leo_school_glyph_votes(const Leo *leo, const char *text,
     return total;
 }
 
+/* Shared semantic support for one unfinished question. Two matching votes are
+ * needed for full evidence, and they must cover the prompt rather than hide in
+ * a mixed list of meanings. Field identity is deliberately absent here: it may
+ * shape an A.41 diagnostic tie, but cannot acquire authority over grounding. */
+static float leo_wonder_glyph_evidence(const int hist[GLYPH_COUNT], int total,
+                                       int glyph, int alt_glyph) {
+    int matched = 0;
+    if (glyph >= 0 && glyph < GLYPH_COUNT) matched += hist[glyph];
+    if (alt_glyph >= 0 && alt_glyph < GLYPH_COUNT &&
+        alt_glyph != glyph)
+        matched += hist[alt_glyph];
+    float evidence = fminf(1.0f, (float)matched / 2.0f);
+    float coverage = total > 0 ? (float)matched / (float)total : 0.0f;
+    return clampf(evidence * coverage, 0.0f, 1.0f);
+}
+
 /* I2: the dominant glyph of a text — its concept-slot. Histogram over content
  * words via the SEED map; the most-frequent CONCEPT glyph, or -1 if the text
  * grounds in no concept (a non-answer: pure unknowns, a copula, a counter-question). */
@@ -5024,14 +5079,10 @@ static void leo_prewonder_shadow_observe(
             (uint8_t)leo_flow_prompt_has_word(prompt, entry->word);
         if (candidate->literal) literals++;
 
-        int matched = 0;
         int g = entry->offered_glyph;
         int a = entry->offered_alt_glyph;
-        if (g >= 0 && g < GLYPH_COUNT) matched += hist[g];
-        if (a >= 0 && a < GLYPH_COUNT && a != g) matched += hist[a];
-        float evidence = fminf(1.0f, (float)matched / 2.0f);
-        float coverage = total > 0 ? (float)matched / (float)total : 0.0f;
-        candidate->glyph = clampf(evidence * coverage, 0.0f, 1.0f);
+        candidate->glyph =
+            leo_wonder_glyph_evidence(hist, total, g, a);
         if (field_token && field_weight)
             candidate->field = leo_prewonder_field_similarity(
                 entry->field_token, entry->field_weight,
@@ -5078,6 +5129,120 @@ static void leo_prewonder_shadow_observe(
         receipt.status = LEO_PREWONDER_SHADOW_QUIET;
     }
     leo->prewonder_shadow = receipt;
+}
+
+/* Determine whether the present human turn belongs to the active Wonder or
+ * strongly resembles one waiting sibling. Adjacency remains the default:
+ * hypotheses are guesses, so an unmatched answer may be a correction. Only a
+ * confident sibling victory (or its explicit name) may guard the active close.
+ * Even then the sibling receives no state transition; the guard preserves
+ * uncertainty rather than silently rerouting a lesson. Returns a proposed veto;
+ * the caller marks it `guarded` only when School had a closable answer. */
+static int leo_wonder_address_observe(Leo *leo, const char *prompt) {
+    LeoWonderAddressReceipt receipt;
+    memset(&receipt, 0, sizeof receipt);
+    receipt.turn = (uint64_t)leo->school.turn_clock;
+    receipt.winner = -1;
+    receipt.status = LEO_WONDER_ADDRESS_EMPTY;
+    if (!g_leo_wonder_attribution_on || !g_leo_school_on ||
+        !g_leo_wonder_on || !prompt || !leo->school.pending[0]) {
+        leo->wonder_address = receipt;
+        return 0;
+    }
+
+    int hist[GLYPH_COUNT];
+    int total = leo_school_glyph_votes(leo, prompt, hist, 1);
+    LeoWonderAddressCandidate *active =
+        &receipt.candidates[receipt.n_candidates++];
+    strncpy(active->word, leo->school.pending, LEO_HEARD_WORDLEN - 1);
+    active->word[LEO_HEARD_WORDLEN - 1] = 0;
+    active->active = 1;
+    active->literal =
+        (uint8_t)leo_flow_prompt_has_word(prompt, active->word);
+    active->glyph = leo_wonder_glyph_evidence(
+        hist, total, leo->school.pending_glyph,
+        leo->school.pending_alt_glyph);
+
+    int top_sibling = -1, second_sibling = -1;
+    int literal_sibling = -1;
+    for (int i = 0; i < leo->school.n_deferred; i++) {
+        const LeoDeferredWonder *entry = &leo->school.deferred[i];
+        LeoWonderAddressCandidate *candidate =
+            &receipt.candidates[receipt.n_candidates++];
+        strncpy(candidate->word, entry->word, LEO_HEARD_WORDLEN - 1);
+        candidate->word[LEO_HEARD_WORDLEN - 1] = 0;
+        candidate->literal =
+            (uint8_t)leo_flow_prompt_has_word(prompt, candidate->word);
+        candidate->glyph = leo_wonder_glyph_evidence(
+            hist, total, entry->offered_glyph,
+            entry->offered_alt_glyph);
+        int at = receipt.n_candidates - 1;
+        if (candidate->literal &&
+            (literal_sibling < 0 ||
+             strcmp(candidate->word,
+                    receipt.candidates[literal_sibling].word) < 0))
+            literal_sibling = at;
+        if (top_sibling < 0 ||
+            candidate->glyph > receipt.candidates[top_sibling].glyph ||
+            (candidate->glyph == receipt.candidates[top_sibling].glyph &&
+             strcmp(candidate->word,
+                    receipt.candidates[top_sibling].word) < 0)) {
+            second_sibling = top_sibling;
+            top_sibling = at;
+        } else if (second_sibling < 0 ||
+                   candidate->glyph >
+                       receipt.candidates[second_sibling].glyph ||
+                   (candidate->glyph ==
+                        receipt.candidates[second_sibling].glyph &&
+                    strcmp(candidate->word,
+                           receipt.candidates[second_sibling].word) < 0)) {
+            second_sibling = at;
+        }
+    }
+
+    if (active->literal) {
+        receipt.winner = 0;
+        receipt.margin = 1.0f;
+        receipt.status = LEO_WONDER_ADDRESS_ACTIVE_EXPLICIT;
+        leo->wonder_address = receipt;
+        return 0;
+    }
+    if (literal_sibling >= 0) {
+        receipt.winner = literal_sibling;
+        receipt.margin = 1.0f;
+        receipt.status = LEO_WONDER_ADDRESS_SIBLING_EXPLICIT;
+        leo->wonder_address = receipt;
+        return 1;
+    }
+
+    float sibling = top_sibling >= 0 ?
+        receipt.candidates[top_sibling].glyph : 0.0f;
+    float second = second_sibling >= 0 ?
+        receipt.candidates[second_sibling].glyph : 0.0f;
+    float sibling_runner = fmaxf(active->glyph, second);
+    float sibling_margin = clampf(sibling - sibling_runner, 0.0f, 1.0f);
+    float active_margin = clampf(active->glyph - sibling, 0.0f, 1.0f);
+    if (top_sibling >= 0 &&
+        sibling >= LEO_WONDER_ADDRESS_GLYPH_MIN &&
+        sibling_margin >= LEO_WONDER_ADDRESS_MARGIN) {
+        receipt.winner = top_sibling;
+        receipt.margin = sibling_margin;
+        receipt.status = LEO_WONDER_ADDRESS_SIBLING_CONFLICT;
+        leo->wonder_address = receipt;
+        return 1;
+    }
+    if (active->glyph >= LEO_WONDER_ADDRESS_GLYPH_MIN &&
+        active_margin >= LEO_WONDER_ADDRESS_MARGIN) {
+        receipt.winner = 0;
+        receipt.margin = active_margin;
+        receipt.status = LEO_WONDER_ADDRESS_ACTIVE_SEMANTIC;
+    } else if (active->glyph > 0.0f || sibling > 0.0f) {
+        receipt.status = LEO_WONDER_ADDRESS_AMBIGUOUS;
+    } else {
+        receipt.status = LEO_WONDER_ADDRESS_ADJACENT;
+    }
+    leo->wonder_address = receipt;
+    return 0;
 }
 
 /* I2: bind a taught word to the answer's concept (its dominant glyph), growing
@@ -6269,6 +6434,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (!prompt || !*prompt) return leo_chain(leo, LEO_CHAIN_MIN, out, max_len);
 
     leo->school.returned_episode = -1;       /* one-reply diagnostic; meaning itself is local below */
+    memset(&leo->wonder_address, 0, sizeof leo->wonder_address);
+    leo->wonder_address.winner = -1;
     if (leo->school.turn_clock < LONG_MAX) leo->school.turn_clock++;
     leo_ingest(leo, prompt);                 /* Leo hears you */
     leo_field_chambers_feel_text(leo, prompt); /* prompt drives the chamber EXT inputs */
@@ -6309,7 +6476,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     /* A.5/W-2: a question closes only on a grounded human answer. The old School
      * cleared it on every next turn, including counter-questions and pure unknowns;
      * unfinished wonder now survives those turns and may return on resonance. */
-    int was_answer = 0, wonder_reask = 0;
+    int was_answer = 0, wonder_reask = 0, address_guarded = 0;
     uint8_t flow_event = 0;
     uint64_t flow_wonder_id = 0;
     if (g_leo_school_on && leo->school.pending[0]) {
@@ -6344,7 +6511,13 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             int open_episode = leo_wonder_find_open(leo, leo->school.pending);
             if (open_episode >= 0)
                 flow_wonder_id = leo_wonder_episode_id(&leo->school.wonders[open_episode]);
+            int address_veto = leo_wonder_address_observe(leo, prompt);
             int g = leo_school_grounded_answer(leo, prompt);
+            if (g >= 0 && address_veto) {
+                g = -1;
+                address_guarded = 1;
+                leo->wonder_address.guarded = 1;
+            }
             if (g >= 0) {
                 if (leo->school.pending_glyph >= 0) {
                     leo->school.guesses++;
@@ -6549,6 +6722,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         curiosity.outcome = LEO_CURIOSITY_DISABLED;
     else if (wonder_reask)
         curiosity.outcome = LEO_CURIOSITY_REASKED;
+    else if (address_guarded)
+        curiosity.outcome = LEO_CURIOSITY_ADDRESS_GUARDED;
     else if (was_answer)
         curiosity.outcome = (flow_event & LEO_FLOW_WONDER_RESOLVED) ?
             LEO_CURIOSITY_RESOLVED : LEO_CURIOSITY_CONTINUED;
@@ -7801,6 +7976,36 @@ static void print_prewonder_shadow_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_address_stats(const Leo *leo) {
+    if (!g_leo_wonder_attribution_on || !leo ||
+        leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
+        return;
+    const LeoWonderAddressReceipt *receipt = &leo->wonder_address;
+    static const char *statuses[LEO_WONDER_ADDRESS_STATUS_COUNT] = {
+        "empty", "active-explicit", "active-semantic",
+        "sibling-explicit", "sibling-conflict", "ambiguous", "adjacent"
+    };
+    int status = receipt->status < LEO_WONDER_ADDRESS_STATUS_COUNT ?
+        receipt->status : LEO_WONDER_ADDRESS_EMPTY;
+    const char *winner =
+        receipt->winner >= 0 && receipt->winner < receipt->n_candidates ?
+            receipt->candidates[receipt->winner].word : "none";
+    const char *active =
+        receipt->n_candidates > 0 ? receipt->candidates[0].word : "none";
+    printf("     [wonder-address: turn=%llu status=%s winner=%s active=%s margin=%.3f guarded=%u entries=",
+           (unsigned long long)receipt->turn, statuses[status], winner,
+           active, (double)receipt->margin, (unsigned)receipt->guarded);
+    for (int i = 0; i < receipt->n_candidates; i++) {
+        const LeoWonderAddressCandidate *candidate =
+            &receipt->candidates[i];
+        printf("%s%s:%.3f/%u/%u", i ? "|" : "", candidate->word,
+               (double)candidate->glyph, (unsigned)candidate->literal,
+               (unsigned)candidate->active);
+    }
+    if (receipt->n_candidates == 0) printf("none");
+    printf("]\n");
+}
+
 static void print_flow_stats(const Leo *leo) {
     if (!g_leo_flow_on || !leo || leo->flow.n <= 0) return;
     const LeoFlowSnapshot *s = leo_flow_at(&leo->flow, leo->flow.n - 1);
@@ -7821,7 +8026,7 @@ static void print_flow_stats(const Leo *leo) {
         static const char *outcomes[LEO_CURIOSITY_OUTCOME_COUNT] = {
             "none", "asked", "reasked", "resolved", "continued",
             "blocked-distress", "asked-deferred", "blocked-deferred",
-            "no-candidate", "disabled"
+            "address-guarded", "no-candidate", "disabled"
         };
         printf("     [curiosity: turn=%llu outcome=%s candidate=%s deferred=%s heard=%d distress=%.3f gate=%.3f]\n",
                (unsigned long long)leo->curiosity.turn,
@@ -8003,6 +8208,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-prewonder-shadow")) g_leo_prewonder_shadow_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
         else if (!strcmp(argv[i], "--no-flow")) g_leo_flow_on = 0;
         else if (!strcmp(argv[i], "--no-shadow")) g_leo_shadow_on = 0;
@@ -8213,6 +8419,7 @@ int main(int argc, char **argv) {
                 printf("             mean>  top=%s(%.2f) gap=%.2f\n",
                        GLYPH_NAMES[top], leo.gamma_meaning[top], leo.gamma_gap);
             }
+            print_wonder_address_stats(&leo);
             print_prewonder_shadow_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
@@ -8269,6 +8476,7 @@ int main(int argc, char **argv) {
                 printf("     [wonder-return: %s -> %s, recalls=%d]\n",
                        ep->word, GLYPH_NAMES[(int)ep->answer_glyph], ep->recalls);
             }
+            print_wonder_address_stats(&leo);
             print_prewonder_shadow_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);

@@ -20,6 +20,26 @@ static int succ_cb(int dst, float count, void *ud) {
     (void)dst; (void)count; (*(int *)ud)++; return 0;
 }
 
+static void seed_wonder_address_body(Leo *leo) {
+    leo_init(leo);
+    leo->school.turn_clock = 1;
+    leo_deferred_wonder_remember(
+        leo, "nareth", semtok_find_glyph("dark"),
+        semtok_find_glyph("animal"), 1, NULL, NULL);
+    leo->school.turn_clock = 2;
+    leo_deferred_wonder_remember(
+        leo, "flom", semtok_find_glyph("fire"),
+        semtok_find_glyph("anger"), 1, NULL, NULL);
+    leo->school.turn_clock = 3;
+    strncpy(leo->school.pending, "suvin",
+            sizeof leo->school.pending - 1);
+    leo->school.pending_glyph = semtok_find_glyph("light");
+    leo->school.pending_alt_glyph = semtok_find_glyph("cold");
+    leo_wonder_open(leo, leo->school.pending,
+                    leo->school.pending_glyph,
+                    leo->school.pending_alt_glyph);
+}
+
 int main(void) {
     printf("test_leo (step 0)\n");
 
@@ -1374,6 +1394,127 @@ int main(void) {
         g_leo_prewonder_shadow_on = prev_shadow;
         g_leo_wonder_on = prev_wonder;
         g_leo_deferred_wonder_on = prev_deferred;
+    }
+
+    /* A.42: semantic address is checked before an adjacent answer can close
+     * the active Wonder. A sibling conflict may preserve uncertainty, never
+     * claim the answer; explicit active naming keeps correction possible. */
+    {
+        int prev_attr = g_leo_wonder_attribution_on;
+        int prev_school = g_leo_school_on;
+        int prev_wonder = g_leo_wonder_on;
+        g_leo_wonder_attribution_on = 1;
+        g_leo_school_on = 1;
+        g_leo_wonder_on = 1;
+
+        Leo address;
+        seed_wonder_address_body(&address);
+        LeoSchool school_before = address.school;
+        int veto = leo_wonder_address_observe(
+            &address, "Cat bird. Dark night.");
+        const LeoWonderAddressReceipt *receipt = &address.wonder_address;
+        CHECK(veto &&
+              receipt->status ==
+                  LEO_WONDER_ADDRESS_SIBLING_CONFLICT &&
+              receipt->winner > 0 &&
+              !strcmp(receipt->candidates[receipt->winner].word,
+                      "nareth") &&
+              !memcmp(&school_before, &address.school,
+                      sizeof address.school),
+              "wonder-address: a confident sibling conflict is visible before grounding without mutating School");
+
+        veto = leo_wonder_address_observe(
+            &address, "Bright sun. Cold winter.");
+        CHECK(!veto &&
+              address.wonder_address.status ==
+                  LEO_WONDER_ADDRESS_ACTIVE_SEMANTIC &&
+              address.wonder_address.winner == 0,
+              "wonder-address: grounded active meaning keeps the adjacent answer");
+
+        veto = leo_wonder_address_observe(
+            &address, "Bright sun and dark night.");
+        CHECK(!veto &&
+              address.wonder_address.status ==
+                  LEO_WONDER_ADDRESS_AMBIGUOUS &&
+              address.wonder_address.winner < 0,
+              "wonder-address: mixed meaning cannot choose an owner");
+
+        veto = leo_wonder_address_observe(
+            &address, "Suvin is a dark animal.");
+        CHECK(!veto &&
+              address.wonder_address.status ==
+                  LEO_WONDER_ADDRESS_ACTIVE_EXPLICIT &&
+              address.wonder_address.winner == 0,
+              "wonder-address: naming the active Wonder permits correction of Leo's hypotheses");
+
+        veto = leo_wonder_address_observe(
+            &address, "Nareth is a dark animal.");
+        CHECK(veto &&
+              address.wonder_address.status ==
+                  LEO_WONDER_ADDRESS_SIBLING_EXPLICIT &&
+              address.wonder_address.winner > 0,
+              "wonder-address: naming a waiting sibling cannot close the active Wonder");
+        leo_free(&address);
+
+        Leo guarded;
+        seed_wonder_address_body(&guarded);
+        char out[512];
+        srand(4201);
+        leo_respond(&guarded, "Cat bird. Dark night.", out, sizeof out);
+        int open = leo_wonder_find_open(&guarded, "suvin");
+        CHECK(!strcmp(guarded.school.pending, "suvin") &&
+              open >= 0 && !guarded.school.wonders[open].resolved &&
+              !leo_school_is_learned(&guarded, "suvin") &&
+              guarded.curiosity.outcome ==
+                  LEO_CURIOSITY_ADDRESS_GUARDED &&
+              guarded.wonder_address.guarded,
+              "wonder-address: the live guard preserves the active question and teaches neither identity");
+        leo_free(&guarded);
+
+        Leo legacy;
+        seed_wonder_address_body(&legacy);
+        g_leo_wonder_attribution_on = 0;
+        srand(4201);
+        leo_respond(&legacy, "Cat bird. Dark night.", out, sizeof out);
+        CHECK(!legacy.school.pending[0] &&
+              leo_school_is_learned(&legacy, "suvin") &&
+              legacy.curiosity.outcome == LEO_CURIOSITY_RESOLVED &&
+              legacy.wonder_address.status ==
+                  LEO_WONDER_ADDRESS_EMPTY,
+              "wonder-address: ablation reproduces the prior cross-attribution exactly");
+        leo_free(&legacy);
+
+        Leo correction;
+        seed_wonder_address_body(&correction);
+        g_leo_wonder_attribution_on = 1;
+        srand(4202);
+        leo_respond(&correction, "Suvin is a dark animal.",
+                    out, sizeof out);
+        CHECK(!correction.school.pending[0] &&
+              leo_school_is_learned(&correction, "suvin") &&
+              correction.curiosity.outcome ==
+                  LEO_CURIOSITY_RESOLVED &&
+              correction.wonder_address.status ==
+                  LEO_WONDER_ADDRESS_ACTIVE_EXPLICIT &&
+              !correction.wonder_address.guarded,
+              "wonder-address: an explicit human correction still resolves the active question");
+        leo_free(&correction);
+
+        Leo ablated;
+        seed_wonder_address_body(&ablated);
+        g_leo_wonder_attribution_on = 0;
+        veto = leo_wonder_address_observe(
+            &ablated, "Cat bird. Dark night.");
+        CHECK(!veto &&
+              ablated.wonder_address.status ==
+                  LEO_WONDER_ADDRESS_EMPTY &&
+              ablated.wonder_address.n_candidates == 0,
+              "wonder-address: ablation removes the transient address witness");
+        leo_free(&ablated);
+
+        g_leo_wonder_attribution_on = prev_attr;
+        g_leo_school_on = prev_school;
+        g_leo_wonder_on = prev_wonder;
     }
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the

@@ -14,7 +14,7 @@ ifneq ($(wildcard $(AML_SRC)),)   # the ONLY AML source is the vendored copy in 
   AML_FLAGS := -DHAVE_AML -Iariannamethod
 endif
 
-.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics
+.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics deferred-wonder-attribution
 
 all: leo
 
@@ -58,6 +58,9 @@ deferred-wonder-constellation: leo
 deferred-wonder-semantics: leo
 	./scripts/deferred_wonder_semantic_matrix.sh
 
+deferred-wonder-attribution: leo
+	./scripts/deferred_wonder_attribution_matrix.sh
+
 # unit tests — test_leo.c #includes leo.c with LEO_NO_MAIN
 test: tests/test_leo.c leo.c
 	$(CC) -DLEO_NO_MAIN tests/test_leo.c $(CFLAGS) -o tests/test_leo
@@ -65,10 +68,12 @@ test: tests/test_leo.c leo.c
 	./scripts/test_shadow_dialogue_report.sh
 	./scripts/test_prewonder_dialogue_report.sh
 	./scripts/test_prewonder_shadow_dialogue_report.sh
+	./scripts/test_wonder_address_dialogue_report.sh
 	./scripts/test_deferred_wonder_recovery_matrix.sh
 	./scripts/test_deferred_wonder_ecology_matrix.sh
 	./scripts/test_deferred_wonder_constellation_matrix.sh
 	./scripts/test_deferred_wonder_semantic_matrix.sh
+	./scripts/test_deferred_wonder_attribution_matrix.sh
 
 # address + undefined behaviour sanitizers on the smoke run
 asan: leo.c

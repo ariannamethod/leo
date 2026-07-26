@@ -1,0 +1,8 @@
+case	kind	prompt	expected_status	expected_winner_slot	expected_guarded	on_curiosity	on_pending_slot	on_resolved	off_curiosity	off_pending_slot	off_resolved	expect_reply_equal	expect_state_equal
+sibling-semantic	guard	Cat bird. Dark night.	sibling-conflict	2	1	address-guarded	1	0	resolved	0	1	any	0
+sibling-explicit	guard	{slot2} is a dark animal.	sibling-explicit	2	1	address-guarded	1	0	resolved	0	1	any	0
+active-semantic	active	Bright sun. Cold winter.	active-semantic	1	0	resolved	0	1	resolved	0	1	1	1
+active-correction	correction	{slot1} is a dark animal.	active-explicit	1	0	resolved	0	1	resolved	0	1	1	1
+mixed	ambiguous	Bright sun and dark night.	ambiguous	0	0	resolved	0	1	resolved	0	1	1	1
+adjacent-correction	correction	Water sea.	adjacent	0	0	resolved	0	1	resolved	0	1	1	1
+sibling-question	question	Cat bird. Dark night?	sibling-conflict	2	0	continued	1	0	continued	1	0	1	1

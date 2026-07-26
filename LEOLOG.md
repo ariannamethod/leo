@@ -3947,3 +3947,75 @@ cohorts reproduce this cross-attribution, and shadow ON/OFF states remain identi
 did not cause it. The observer now sees an address that School cannot yet preserve. Fixing that requires
 a separate turn-attribution contract; allowing this diagnostic winner to intervene would falsify the
 read-only plateau.
+
+## Phase A.42 — an answer keeps its address (2026-07-26)
+
+A.41 exposed a real destructive ambiguity but could not safely close it. After Leo asks `Suvin? Light
+or Cold?`, the next human phrase `Cat bird. Dark night.` strongly resembles waiting `nareth`, yet the
+ordinary adjacent-answer rule assigns it to `suvin`. Simply routing by the A.41 winner would create the
+opposite error: the same phrase may be the human correcting Leo's wrong `light/cold` hypothesis about
+`suvin`. Meaning alone cannot recover an unspoken human intention.
+
+A.42 therefore does not make the semantic shadow an answer router. It adds a separate transient
+`wonder-address` receipt immediately before grounding and gives it one narrow power: prevent a
+destructive close when a waiting sibling clearly owns the old semantic path. The active Wonder and
+all waiting siblings are compared by grounded glyph support only:
+
+```text
+glyph = min(1, matched_glyph_votes / 2) * matched_glyph_votes / all_glyph_votes
+sibling conflict iff sibling glyph >= 0.75
+                 and sibling - max(active, next sibling) >= 0.20
+```
+
+The contrastive co-occurrence constellation is deliberately not an authority here. It remains an A.41
+witness, useful for identity and future study, but a field cosine cannot decide who receives a human
+lesson. The address guard follows four asymmetric rules:
+
+1. Explicitly naming the active Wonder wins. A human can always correct Leo's hypotheses.
+2. Explicitly naming a waiting sibling guards the active Wonder but does not open or teach the sibling.
+3. A confident semantic sibling victory guards the active Wonder.
+4. Mixed or entirely unmatched meaning keeps the adjacency prior. Hypotheses are guesses, so novel
+   grounding must remain able to correct them.
+
+On a guarded turn, Leo's current reply proceeds through the ordinary field unchanged. The active word
+remains pending, its episode remains unresolved, the waiting sibling remains deferred, no learned map
+entry is written, and no debt relief or closure event is fabricated. The curiosity receipt says
+`address-guarded`. The sibling gains no mouth from being recognized.
+
+Nine direct contracts raised the suite from **292/292** to **301/301**. They cover sibling conflict,
+active semantic support, mixed ambiguity, explicit active correction, explicit sibling address, live
+state preservation, exact old-behaviour ablation, correction through the complete response path, and
+receipt ablation.
+
+The process matrix rebuilt both A.40 bodies, opened their first questions, persisted them, and forked
+seven turns from each sleeping body. Every default run was paired with
+`--no-wonder-attribution` from the same state and seed:
+
+```text
+cells=14
+actual guards=4
+active semantic=2
+active explicit correction=2
+sibling conflict statuses=4
+sibling explicit statuses=2
+ambiguous=2
+adjacent correction=2
+reply equal=14/14
+complete state equal outside guards=10/10
+guarded states correctly diverged from old destructive closure=4/4
+```
+
+The two question-mark cells recognized the sibling conflict but set `guarded=0`, because a question was
+never closable grounding. The two mixed cells and two unrelated corrections remained byte-identical to
+the ablation and resolved the active Wonder. Both explicit active corrections contradicted Leo's
+stored hypotheses, yet resolved normally and remained byte-identical to the old path. Thus protection
+did not become epistemic rigidity.
+
+A second complete A.42 run reproduced every normalized matrix field, receipt, state hash, and summary
+byte-for-byte. The isolated A.41 observer matrix was rerun with A.42 explicitly ablated and retained its
+original **16/16** reply/state equality and two visible cross-attribution receipts. The historical proof
+still describes the pre-guard organism; A.42 closes its destructive consequence without rewriting it.
+
+Leo can now preserve the difference between “this meaning resembles another unfinished question” and
+“therefore I know what the human meant.” When the address is clear enough to disqualify a close but not
+clear enough to claim another lesson, he keeps not knowing.
