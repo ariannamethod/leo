@@ -14,7 +14,7 @@ ifneq ($(wildcard $(AML_SRC)),)   # the ONLY AML source is the vendored copy in 
   AML_FLAGS := -DHAVE_AML -Iariannamethod
 endif
 
-.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics deferred-wonder-attribution deferred-wonder-redirection deferred-wonder-appetite
+.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics deferred-wonder-attribution deferred-wonder-redirection deferred-wonder-appetite deferred-wonder-appetite-calibration
 
 all: leo
 
@@ -67,6 +67,9 @@ deferred-wonder-redirection: leo
 deferred-wonder-appetite: leo
 	./scripts/deferred_wonder_appetite_matrix.sh
 
+deferred-wonder-appetite-calibration: leo
+	./scripts/deferred_wonder_appetite_calibration_matrix.sh
+
 # unit tests — test_leo.c #includes leo.c with LEO_NO_MAIN
 test: tests/test_leo.c leo.c
 	$(CC) -DLEO_NO_MAIN tests/test_leo.c $(CFLAGS) -o tests/test_leo
@@ -76,6 +79,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_prewonder_shadow_dialogue_report.sh
 	./scripts/test_wonder_address_dialogue_report.sh
 	./scripts/test_wonder_appetite_dialogue_report.sh
+	./scripts/test_wonder_appetite_calibration_dialogue_report.sh
 	./scripts/test_deferred_wonder_recovery_matrix.sh
 	./scripts/test_deferred_wonder_ecology_matrix.sh
 	./scripts/test_deferred_wonder_constellation_matrix.sh
@@ -83,6 +87,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_deferred_wonder_attribution_matrix.sh
 	./scripts/test_deferred_wonder_redirection_matrix.sh
 	./scripts/test_deferred_wonder_appetite_matrix.sh
+	./scripts/test_deferred_wonder_appetite_calibration_matrix.sh
 
 # address + undefined behaviour sanitizers on the smoke run
 asan: leo.c

@@ -1734,6 +1734,44 @@ typedef struct {
     uint8_t status;
 } LeoWonderAppetiteReceipt;
 
+/* A.45: a salient appetite becomes a falsifiable forecast over the next three
+ * lived turns, never a scheduling command. The window is fixed at birth so a
+ * returning trace cannot keep moving its own deadline. Literal address and
+ * missing chronology remain visible but do not masquerade as calibration. */
+#define LEO_WONDER_APPETITE_CALIB_RING 32
+#define LEO_WONDER_APPETITE_CALIB_HORIZON 3
+enum {
+    LEO_WONDER_APPETITE_CALIB_NONE = 0,
+    LEO_WONDER_APPETITE_CALIB_PENDING,
+    LEO_WONDER_APPETITE_CALIB_SUSTAINED,
+    LEO_WONDER_APPETITE_CALIB_EXTERNAL,
+    LEO_WONDER_APPETITE_CALIB_GROUNDED,
+    LEO_WONDER_APPETITE_CALIB_FADED,
+    LEO_WONDER_APPETITE_CALIB_LOST,
+    LEO_WONDER_APPETITE_CALIB_UNSCORABLE,
+    LEO_WONDER_APPETITE_CALIB_VERDICT_COUNT
+};
+typedef struct {
+    uint64_t proposed_turn;
+    uint64_t deadline_turn;
+    uint64_t observed_turn;
+    uint64_t wonder_id;
+    char     word[LEO_HEARD_WORDLEN];
+    float    appetite;
+    float    peak_recurrence;
+    float    brier;
+    uint8_t  observations;
+    uint8_t  semantic_hits;
+    uint8_t  spoken;
+    uint8_t  verdict;
+} LeoWonderAppetiteCalibrationReceipt;
+typedef struct {
+    LeoWonderAppetiteCalibrationReceipt
+        receipts[LEO_WONDER_APPETITE_CALIB_RING];
+    int n;
+    int ptr;
+} LeoWonderAppetiteCalibration;
+
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
  * A confident sibling may veto a destructive close, but can never learn, open,
@@ -1899,6 +1937,9 @@ typedef struct {
     /* A.44: future-return appetite over the final waiting constellation. It is
      * written after speech and Flow, and read only by diagnostics. */
     LeoWonderAppetiteReceipt wonder_appetite;
+    /* A.45/state v21: slow verdicts over salient appetite forecasts. The diary
+     * survives sleep but remains evidence-only and has no speech reader. */
+    LeoWonderAppetiteCalibration wonder_appetite_calibration;
     /* A.42/A.43: pre-grounding address witness. Semantic conflict can only
      * guard; an exact waiting name may redirect without assigning meaning. */
     LeoWonderAddressReceipt wonder_address;
@@ -2175,6 +2216,7 @@ static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternati
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_prewonder_shadow_on = 1; /* read-only semantic echo among withheld questions; no speech reader. */
 static int g_leo_wonder_appetite_on = 1; /* read-only return appetite over waiting questions; no scheduler or speech reader. */
+static int g_leo_wonder_appetite_calibration_on = 1; /* persistent slow verdicts over appetite; still no scheduler or speech reader. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -6109,6 +6151,277 @@ static void leo_wonder_appetite_observe(
     leo->wonder_appetite = receipt;
 }
 
+static const LeoWonderAppetiteCalibrationReceipt *
+leo_wonder_appetite_calibration_at(
+        const LeoWonderAppetiteCalibration *calibration, int pos) {
+    if (!calibration || pos < 0 || pos >= calibration->n) return NULL;
+    int start = calibration->n == LEO_WONDER_APPETITE_CALIB_RING ?
+        calibration->ptr : 0;
+    return &calibration->receipts[
+        (start + pos) % LEO_WONDER_APPETITE_CALIB_RING];
+}
+
+static LeoWonderAppetiteCalibrationReceipt *
+leo_wonder_appetite_calibration_at_mut(
+        LeoWonderAppetiteCalibration *calibration, int pos) {
+    if (!calibration || pos < 0 || pos >= calibration->n) return NULL;
+    int start = calibration->n == LEO_WONDER_APPETITE_CALIB_RING ?
+        calibration->ptr : 0;
+    return &calibration->receipts[
+        (start + pos) % LEO_WONDER_APPETITE_CALIB_RING];
+}
+
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_wonder_appetite_calibration_verdict_name(int verdict) {
+    static const char *names[LEO_WONDER_APPETITE_CALIB_VERDICT_COUNT] = {
+        "none", "pending", "sustained", "external", "grounded",
+        "faded", "lost", "unscorable"
+    };
+    return verdict >= 0 &&
+           verdict < LEO_WONDER_APPETITE_CALIB_VERDICT_COUNT ?
+        names[verdict] : "unscorable";
+}
+
+static const LeoWonderAppetiteCandidate *
+leo_wonder_appetite_candidate(
+        const LeoWonderAppetiteReceipt *receipt, const char *word) {
+    if (!receipt || !word || !word[0]) return NULL;
+    for (int i = 0; i < receipt->n_candidates; i++)
+        if (!strcmp(receipt->candidates[i].word, word))
+            return &receipt->candidates[i];
+    return NULL;
+}
+
+static int leo_wonder_appetite_target_exists(
+        const Leo *leo, const char *word) {
+    return leo && word && word[0] &&
+        (leo_deferred_wonder_find(leo, word) >= 0 ||
+         !strcmp(leo->school.pending, word) ||
+         leo_wonder_find_open(leo, word) >= 0 ||
+         leo_school_is_learned(leo, word));
+}
+
+static void leo_wonder_appetite_calibration_score(
+        LeoWonderAppetiteCalibrationReceipt *receipt, float target) {
+    float error = receipt->appetite - target;
+    receipt->brier = error * error;
+}
+
+/* Evaluate every open forecast against this already-lived turn, then open at
+ * most one new fixed-window forecast from A.44's current salient receipt.
+ * Existing forecasts see the turn before a new one is born, so no forecast can
+ * count its own proposal evidence as a future hit. */
+static void leo_wonder_appetite_calibrate(
+        Leo *leo, const char *prompt) {
+    if (!leo || !prompt || !g_leo_wonder_appetite_calibration_on ||
+        !g_leo_wonder_appetite_on || !g_leo_wonder_on ||
+        !g_leo_deferred_wonder_on || !g_leo_flow_on)
+        return;
+    uint64_t turn = (uint64_t)leo->school.turn_clock;
+    LeoWonderAppetiteCalibration *calibration =
+        &leo->wonder_appetite_calibration;
+    const LeoFlowSnapshot *snapshot =
+        leo_flow_at(&leo->flow, leo->flow.n - 1);
+
+    for (int i = 0; i < calibration->n; i++) {
+        LeoWonderAppetiteCalibrationReceipt *forecast =
+            leo_wonder_appetite_calibration_at_mut(calibration, i);
+        if (!forecast ||
+            forecast->verdict != LEO_WONDER_APPETITE_CALIB_PENDING ||
+            turn <= forecast->observed_turn)
+            continue;
+
+        if (forecast->observed_turn == UINT64_MAX ||
+            turn != forecast->observed_turn + 1) {
+            forecast->observed_turn = turn;
+            forecast->verdict =
+                LEO_WONDER_APPETITE_CALIB_UNSCORABLE;
+            forecast->brier = 0.0f;
+            continue;
+        }
+
+        forecast->observed_turn = turn;
+        if (forecast->observations < UINT8_MAX)
+            forecast->observations++;
+
+        if (leo_flow_prompt_has_word(prompt, forecast->word)) {
+            forecast->verdict =
+                LEO_WONDER_APPETITE_CALIB_EXTERNAL;
+            forecast->brier = 0.0f;
+            continue;
+        }
+
+        int grounded = leo_school_is_learned(leo, forecast->word);
+        if (!grounded && forecast->wonder_id && snapshot &&
+            snapshot->wonder_id == forecast->wonder_id &&
+            (snapshot->wonder & LEO_FLOW_WONDER_RESOLVED))
+            grounded = 1;
+        if (grounded) {
+            forecast->verdict =
+                LEO_WONDER_APPETITE_CALIB_GROUNDED;
+            leo_wonder_appetite_calibration_score(forecast, 1.0f);
+            continue;
+        }
+
+        const LeoWonderAppetiteCandidate *candidate =
+            leo_wonder_appetite_candidate(
+                &leo->wonder_appetite, forecast->word);
+        if (candidate && !candidate->literal) {
+            forecast->peak_recurrence = fmaxf(
+                forecast->peak_recurrence, candidate->recurrence);
+            if (candidate->recurrence >=
+                LEO_WONDER_APPETITE_RESONANCE_MIN &&
+                forecast->semantic_hits < UINT8_MAX)
+                forecast->semantic_hits++;
+        }
+
+        if (turn < forecast->deadline_turn) continue;
+        if (forecast->semantic_hits > 0) {
+            forecast->verdict =
+                LEO_WONDER_APPETITE_CALIB_SUSTAINED;
+            leo_wonder_appetite_calibration_score(forecast, 1.0f);
+        } else if (
+            leo_wonder_appetite_target_exists(
+                leo, forecast->word)) {
+            forecast->verdict =
+                LEO_WONDER_APPETITE_CALIB_FADED;
+            leo_wonder_appetite_calibration_score(forecast, 0.0f);
+        } else {
+            forecast->verdict =
+                LEO_WONDER_APPETITE_CALIB_LOST;
+            forecast->brier = 0.0f;
+        }
+    }
+
+    const LeoWonderAppetiteReceipt *appetite =
+        &leo->wonder_appetite;
+    if (appetite->status != LEO_WONDER_APPETITE_SALIENT ||
+        appetite->winner < 0 ||
+        appetite->winner >= appetite->n_candidates ||
+        turn > UINT64_MAX - LEO_WONDER_APPETITE_CALIB_HORIZON)
+        return;
+    const LeoWonderAppetiteCandidate *winner =
+        &appetite->candidates[appetite->winner];
+    for (int i = 0; i < calibration->n; i++) {
+        const LeoWonderAppetiteCalibrationReceipt *old =
+            leo_wonder_appetite_calibration_at(calibration, i);
+        if (!old || strcmp(old->word, winner->word)) continue;
+        if (old->verdict == LEO_WONDER_APPETITE_CALIB_PENDING ||
+            old->observed_turn == turn)
+            return;
+    }
+    if (calibration->n == LEO_WONDER_APPETITE_CALIB_RING &&
+        calibration->receipts[calibration->ptr].verdict ==
+            LEO_WONDER_APPETITE_CALIB_PENDING)
+        return;
+
+    LeoWonderAppetiteCalibrationReceipt forecast;
+    memset(&forecast, 0, sizeof forecast);
+    forecast.proposed_turn = turn;
+    forecast.deadline_turn =
+        turn + LEO_WONDER_APPETITE_CALIB_HORIZON;
+    forecast.observed_turn = turn;
+    strncpy(forecast.word, winner->word, LEO_HEARD_WORDLEN - 1);
+    forecast.word[LEO_HEARD_WORDLEN - 1] = 0;
+    forecast.appetite = winner->appetite;
+    forecast.spoken = winner->spoken;
+    forecast.verdict = LEO_WONDER_APPETITE_CALIB_PENDING;
+    if (winner->spoken) {
+        int episode = leo_wonder_find_open(leo, winner->word);
+        if (episode >= 0)
+            forecast.wonder_id =
+                leo_wonder_episode_id(
+                    &leo->school.wonders[episode]);
+    }
+
+    calibration->receipts[calibration->ptr] = forecast;
+    calibration->ptr =
+        (calibration->ptr + 1) %
+            LEO_WONDER_APPETITE_CALIB_RING;
+    if (calibration->n < LEO_WONDER_APPETITE_CALIB_RING)
+        calibration->n++;
+}
+
+static int leo_wonder_appetite_calibration_valid(
+        const LeoWonderAppetiteCalibrationReceipt *receipt,
+        uint64_t turn_clock) {
+    if (!receipt || !receipt->word[0] ||
+        receipt->word[LEO_HEARD_WORDLEN - 1] != 0 ||
+        receipt->proposed_turn == 0 ||
+        receipt->proposed_turn >
+            UINT64_MAX - LEO_WONDER_APPETITE_CALIB_HORIZON ||
+        receipt->deadline_turn !=
+            receipt->proposed_turn +
+                LEO_WONDER_APPETITE_CALIB_HORIZON ||
+        receipt->observed_turn < receipt->proposed_turn ||
+        receipt->observed_turn > turn_clock ||
+        !isfinite(receipt->appetite) ||
+        receipt->appetite < LEO_WONDER_APPETITE_SCORE_MIN ||
+        receipt->appetite > 1.0f ||
+        !isfinite(receipt->peak_recurrence) ||
+        receipt->peak_recurrence < 0.0f ||
+        receipt->peak_recurrence > 1.0f ||
+        !isfinite(receipt->brier) ||
+        receipt->brier < 0.0f || receipt->brier > 1.0f ||
+        receipt->observations >
+            LEO_WONDER_APPETITE_CALIB_HORIZON ||
+        receipt->semantic_hits > receipt->observations ||
+        receipt->spoken > 1 ||
+        receipt->verdict <= LEO_WONDER_APPETITE_CALIB_NONE ||
+        receipt->verdict >=
+            LEO_WONDER_APPETITE_CALIB_VERDICT_COUNT ||
+        (receipt->spoken && !receipt->wonder_id) ||
+        (!receipt->spoken && receipt->wonder_id))
+        return 0;
+    if (receipt->semantic_hits > 0 &&
+        receipt->peak_recurrence <
+            LEO_WONDER_APPETITE_RESONANCE_MIN)
+        return 0;
+
+    if (receipt->verdict ==
+        LEO_WONDER_APPETITE_CALIB_UNSCORABLE)
+        return receipt->brier == 0.0f;
+    if (receipt->observed_turn - receipt->proposed_turn !=
+        receipt->observations)
+        return 0;
+    if (receipt->verdict ==
+        LEO_WONDER_APPETITE_CALIB_PENDING)
+        return receipt->observed_turn < receipt->deadline_turn &&
+               receipt->brier == 0.0f;
+    if (receipt->verdict ==
+        LEO_WONDER_APPETITE_CALIB_EXTERNAL)
+        return receipt->brier == 0.0f;
+    if (receipt->verdict ==
+        LEO_WONDER_APPETITE_CALIB_LOST)
+        return receipt->observed_turn ==
+                   receipt->deadline_turn &&
+               receipt->observations ==
+                   LEO_WONDER_APPETITE_CALIB_HORIZON &&
+               receipt->semantic_hits == 0 &&
+               receipt->brier == 0.0f;
+
+    float target =
+        receipt->verdict ==
+            LEO_WONDER_APPETITE_CALIB_FADED ? 0.0f : 1.0f;
+    float error = receipt->appetite - target;
+    if (fabsf(receipt->brier - error * error) > 1e-6f)
+        return 0;
+    if (receipt->verdict ==
+        LEO_WONDER_APPETITE_CALIB_GROUNDED)
+        return receipt->observed_turn <=
+            receipt->deadline_turn;
+    if (receipt->observed_turn != receipt->deadline_turn ||
+        receipt->observations !=
+            LEO_WONDER_APPETITE_CALIB_HORIZON)
+        return 0;
+    if (receipt->verdict ==
+        LEO_WONDER_APPETITE_CALIB_SUSTAINED)
+        return receipt->semantic_hits > 0;
+    return receipt->verdict ==
+               LEO_WONDER_APPETITE_CALIB_FADED &&
+           receipt->semantic_hits == 0;
+}
+
 static int leo_flow_kind(const LeoFlow *flow, int glyph, int window, int face) {
     if (!flow || flow->n <= 0 || glyph < 0 || glyph >= GLYPH_COUNT) return LEO_FLOW_QUIET;
     if (window < 3) window = 3;
@@ -7127,6 +7440,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                      flow_event, flow_wonder_id);  /* observation only: no generation path reads flow */
     leo_wonder_appetite_observe(
         leo, prompt, prewonder_field_token, prewonder_field_weight);
+    leo_wonder_appetite_calibrate(leo, prompt);
     leo_shadow_calibrate(leo, prompt);            /* judge t-1 only after t has become history */
     leo_shadow_observe(leo);                      /* after speech: a proposal for the next turn, never a reader */
     leo->gravity = NULL;
@@ -7175,9 +7489,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v18      : bounded pre-Wonder memory for distress-deferred questions
  *   v19      : contrastive own-field birth anchors for pre-Wonder semantics
  *   v20      : exact birth provenance for the Wonder that currently has the mouth
+ *   v21      : slow calibration diary over three-turn appetite forecasts
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 20  /* active-Wonder birth provenance extends the fail-soft tail; v5..v19 soft-migrate */
+#define LEO_STATE_VERSION 21  /* appetite calibration extends the fail-soft tail; v5..v20 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -7394,6 +7709,15 @@ static int leo_save_state(const Leo *leo, const char *path) {
     if (leo->school.has_pending_origin)
         fwrite(&leo->school.pending_origin,
                sizeof leo->school.pending_origin, 1, f);
+
+    /* A.45 (v21): fixed-horizon forecasts and their later verdicts. This
+     * evidence is independently disposable and grants no scheduling right. */
+    st_w32(f, (int32_t)leo->wonder_appetite_calibration.n);
+    st_w32(f, (int32_t)leo->wonder_appetite_calibration.ptr);
+    if (leo->wonder_appetite_calibration.n > 0)
+        fwrite(leo->wonder_appetite_calibration.receipts,
+               sizeof(LeoWonderAppetiteCalibrationReceipt),
+               (size_t)leo->wonder_appetite_calibration.n, f);
 
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
@@ -8058,6 +8382,64 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
+    /* Slow appetite calibration (v21). Older bodies wake without forecasts;
+     * a damaged diary loses only its claims about the future. */
+    if (version >= 21) {
+        int32_t n = 0, ptr = 0;
+        int appetite_calibration_ok =
+            st_r32(f, &n) && st_r32(f, &ptr) &&
+            n >= 0 && n <= LEO_WONDER_APPETITE_CALIB_RING &&
+            ptr >= 0 && ptr < LEO_WONDER_APPETITE_CALIB_RING &&
+            ((n < LEO_WONDER_APPETITE_CALIB_RING && ptr == n) ||
+             n == LEO_WONDER_APPETITE_CALIB_RING);
+        if (appetite_calibration_ok && n > 0 &&
+            fread(leo->wonder_appetite_calibration.receipts,
+                  sizeof(LeoWonderAppetiteCalibrationReceipt),
+                  (size_t)n, f) != (size_t)n)
+            appetite_calibration_ok = 0;
+        if (appetite_calibration_ok) {
+            LeoWonderAppetiteCalibration *calibration =
+                &leo->wonder_appetite_calibration;
+            calibration->n = n;
+            calibration->ptr = ptr;
+            uint64_t previous_turn = 0;
+            for (int i = 0; i < n; i++) {
+                const LeoWonderAppetiteCalibrationReceipt *receipt =
+                    leo_wonder_appetite_calibration_at(
+                        calibration, i);
+                if (!leo_wonder_appetite_calibration_valid(
+                        receipt,
+                        (uint64_t)leo->school.turn_clock) ||
+                    (i > 0 &&
+                     receipt->proposed_turn <= previous_turn)) {
+                    appetite_calibration_ok = 0;
+                    break;
+                }
+                if (receipt->verdict ==
+                    LEO_WONDER_APPETITE_CALIB_PENDING)
+                    for (int j = 0; j < i; j++) {
+                        const LeoWonderAppetiteCalibrationReceipt *old =
+                            leo_wonder_appetite_calibration_at(
+                                calibration, j);
+                        if (old &&
+                            old->verdict ==
+                                LEO_WONDER_APPETITE_CALIB_PENDING &&
+                            !strcmp(old->word, receipt->word)) {
+                            appetite_calibration_ok = 0;
+                            break;
+                        }
+                    }
+                if (!appetite_calibration_ok) break;
+                previous_turn = receipt->proposed_turn;
+            }
+        }
+        if (!appetite_calibration_ok) {
+            fprintf(stderr, "[leo] WARNING: v21 appetite-calibration tail truncated/corrupt — organism lives without forecasts.\n");
+            memset(&leo->wonder_appetite_calibration, 0,
+                   sizeof leo->wonder_appetite_calibration);
+        }
+    }
+
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
     leo_build_chamber_tags(leo);
@@ -8388,6 +8770,87 @@ static void print_wonder_appetite_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_appetite_calibration_stats(
+        const Leo *leo) {
+    if (!g_leo_wonder_appetite_calibration_on || !leo ||
+        leo->wonder_appetite_calibration.n == 0)
+        return;
+    uint64_t turn = (uint64_t)leo->school.turn_clock;
+    int visible = 0, pending = 0, scored = 0, confirmed = 0;
+    int external = 0, lost = 0, unscorable = 0;
+    float brier_sum = 0.0f;
+    for (int i = 0;
+         i < leo->wonder_appetite_calibration.n; i++) {
+        const LeoWonderAppetiteCalibrationReceipt *item =
+            leo_wonder_appetite_calibration_at(
+                &leo->wonder_appetite_calibration, i);
+        if (!item) continue;
+        if (item->verdict ==
+            LEO_WONDER_APPETITE_CALIB_PENDING)
+            pending++;
+        if (item->verdict ==
+                LEO_WONDER_APPETITE_CALIB_SUSTAINED ||
+            item->verdict ==
+                LEO_WONDER_APPETITE_CALIB_GROUNDED ||
+            item->verdict ==
+                LEO_WONDER_APPETITE_CALIB_FADED) {
+            scored++;
+            brier_sum += item->brier;
+            if (item->verdict !=
+                LEO_WONDER_APPETITE_CALIB_FADED)
+                confirmed++;
+        } else if (item->verdict ==
+                   LEO_WONDER_APPETITE_CALIB_EXTERNAL) {
+            external++;
+        } else if (item->verdict ==
+                   LEO_WONDER_APPETITE_CALIB_LOST) {
+            lost++;
+        } else if (item->verdict ==
+                   LEO_WONDER_APPETITE_CALIB_UNSCORABLE) {
+            unscorable++;
+        }
+        if (item->verdict ==
+                LEO_WONDER_APPETITE_CALIB_PENDING ||
+            item->observed_turn == turn ||
+            item->proposed_turn == turn)
+            visible++;
+    }
+    if (!visible) return;
+
+    printf("     [wonder-appetite-calibration: turn=%llu pending=%d scored=%d confirmed=%d external=%d lost=%d unscorable=%d brier=%.3f entries=",
+           (unsigned long long)turn, pending, scored, confirmed,
+           external, lost, unscorable,
+           scored ? (double)(brier_sum / (float)scored) : 0.0);
+    const char *sep = "";
+    for (int i = 0;
+         i < leo->wonder_appetite_calibration.n; i++) {
+        const LeoWonderAppetiteCalibrationReceipt *item =
+            leo_wonder_appetite_calibration_at(
+                &leo->wonder_appetite_calibration, i);
+        if (!item ||
+            (item->verdict !=
+                 LEO_WONDER_APPETITE_CALIB_PENDING &&
+             item->observed_turn != turn &&
+             item->proposed_turn != turn))
+            continue;
+        printf("%s%s:%llu/%llu/%llu/%.3f/%.3f/%u/%u/%u/%s/%.3f",
+               sep, item->word,
+               (unsigned long long)item->proposed_turn,
+               (unsigned long long)item->deadline_turn,
+               (unsigned long long)item->observed_turn,
+               (double)item->appetite,
+               (double)item->peak_recurrence,
+               (unsigned)item->semantic_hits,
+               (unsigned)item->observations,
+               (unsigned)item->spoken,
+               leo_wonder_appetite_calibration_verdict_name(
+                   item->verdict),
+               (double)item->brier);
+        sep = "|";
+    }
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -8622,6 +9085,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-prewonder-shadow")) g_leo_prewonder_shadow_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite")) g_leo_wonder_appetite_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite-calibration")) g_leo_wonder_appetite_calibration_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -8837,6 +9301,7 @@ int main(int argc, char **argv) {
             print_wonder_address_stats(&leo);
             print_prewonder_shadow_stats(&leo);
             print_wonder_appetite_stats(&leo);
+            print_wonder_appetite_calibration_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -8895,6 +9360,7 @@ int main(int argc, char **argv) {
             print_wonder_address_stats(&leo);
             print_prewonder_shadow_stats(&leo);
             print_wonder_appetite_stats(&leo);
+            print_wonder_appetite_calibration_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */

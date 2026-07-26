@@ -165,7 +165,8 @@ while IFS=$'\t' read -r group cohort seed; do
     cp "$ready" "$group_dir/parked-base.state"
     "$ROOT/leo" --load "$group_dir/parked-base.state" \
         --seed "$((seed + 4100))" --respond "$active" --debug-field \
-        --no-wonder-appetite --save "$group_dir/parked-base.state" \
+        --no-wonder-appetite --no-wonder-appetite-calibration \
+        --save "$group_dir/parked-base.state" \
         > "$group_dir/parked-open.log" 2>&1
     [ "$(reply_from_log "$group_dir/parked-open.log")" = "$active_question" ] || {
         printf '%s failed to open parked control\n' "$group" >&2
@@ -173,7 +174,8 @@ while IFS=$'\t' read -r group cohort seed; do
     }
     "$ROOT/leo" --load "$group_dir/parked-base.state" \
         --seed "$((seed + 4101))" --respond "$sibling" --debug-field \
-        --no-wonder-appetite --save "$group_dir/parked-base.state" \
+        --no-wonder-appetite --no-wonder-appetite-calibration \
+        --save "$group_dir/parked-base.state" \
         > "$group_dir/parked-switch.log" 2>&1
     [ "$(reply_from_log "$group_dir/parked-switch.log")" = "$sibling_question" ] || {
         printf '%s failed to switch the parked control\n' "$group" >&2
@@ -208,10 +210,12 @@ while IFS=$'\t' read -r group cohort seed; do
         cp "$base" "$cell_dir/off.state"
         run_seed=$((seed + 4400 + group_index * 100 + case_index))
         "$ROOT/leo" --load "$cell_dir/on.state" --seed "$run_seed" \
-            --respond "$prompt" --debug-field --save "$cell_dir/on.state" \
+            --respond "$prompt" --debug-field \
+            --no-wonder-appetite-calibration --save "$cell_dir/on.state" \
             > "$cell_dir/on.log" 2>&1
         "$ROOT/leo" --load "$cell_dir/off.state" --seed "$run_seed" \
             --respond "$prompt" --debug-field --no-wonder-appetite \
+            --no-wonder-appetite-calibration \
             --save "$cell_dir/off.state" > "$cell_dir/off.log" 2>&1
 
         appetite="$(

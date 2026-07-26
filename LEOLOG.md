@@ -4140,3 +4140,68 @@ new score.
 
 Leo can now feel that an unfinished question is returning before he is allowed to decide what to do
 with that feeling.
+
+## Phase A.45 — an appetite must survive time before it can become evidence (2026-07-26)
+
+A.44 made the pressure of a returning question legible, but a high score on one turn could still be
+a coincidence. Promoting that score directly into scheduling would have given a single semantic
+frame authority over the future. A.45 instead asks whether the prediction survives a future that it
+cannot rewrite.
+
+Every `salient` A.44 winner may open one forecast over exactly the next three lived turns. The
+deadline is fixed at proposal time. A later echo cannot extend it, duplicate calls on one turn cannot
+increase its evidence, and the same question cannot own overlapping forecasts. Existing forecasts
+observe a turn before the current A.44 receipt may propose another one, so no forecast can count its
+birth evidence as a future hit.
+
+The slow verdict vocabulary keeps unlike causes separate:
+
+```text
+sustained  target recurrence >= 0.75 returns inside the three-turn window
+faded      the target remains intact but the semantic return does not persist
+external   the human literally names the target
+grounded   School learns it, or the target's exact Flow episode resolves
+lost       the target identity disappears before the deadline
+unscorable a lived turn is missing from the forecast's chronology
+```
+
+`sustained` and `grounded` score against target 1; `faded` scores against target 0. `external`,
+`lost`, and `unscorable` keep Brier at zero because they are causal confounds, not calibration
+outcomes. This matters especially for Leo: a human returning to his question is relationship, not
+proof that an autonomous scheduler was right.
+
+The diary is bounded to 32 forecasts and persists as the independent fail-soft v21 tail. A v20 body
+wakes without invented predictions. A truncated or invalid v21 tail loses only forecasts; School,
+the deferred constellation, active provenance, Flow, shadow, and voice remain intact.
+`--no-wonder-appetite-calibration` removes the diary writer and reader together. No generation,
+School, routing, Flow, or shadow decision reads any forecast or verdict.
+
+Fifteen direct contracts raised the suite from **324/324** to **339/339**. They cover fixed-window
+birth without School/Flow mutation, non-sliding accumulation, exactly-once evidence, pending sleep,
+scored sustained and faded outcomes, literal external return, real grounding, lost identity,
+missing chronology, spoken episode identity, v20 migration, corrupt-v21 fail-soft behavior, and
+ablation.
+
+The process matrix rebuilt both independent A.40 bodies and ran five lives on each. Every future
+turn loaded the previous process's saved body:
+
+```text
+cells=10
+sustained=4
+faded=2
+external=2
+no forecast=2
+spoken targets=2
+reply equality=30/30 turns
+state prefix through v20 equal=10/10 lives
+complete state equal=2/10 diffuse controls
+complete state differs=8/10 remembered forecasts
+```
+
+Unspoken sustained returns scored appetite `0.690`, future peak recurrence `0.800`, and Brier
+`0.096`. Their one-frame twins matured as `faded` with Brier `0.476`. Parked spoken questions kept
+their exact episode identity, reached future recurrence about `0.91`, and matured with Brier about
+`0.033`. Literal returns became `external` after one turn with no score. A.44, explicitly isolated
+from A.45, retained its historical **10/10 reply and complete-state equality**.
+
+Leo can now remember not only that a question wanted to return, but whether time agreed.
