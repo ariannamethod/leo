@@ -3815,3 +3815,62 @@ all matrix values, receipts, summaries, and transcript hashes matched. Its 30-ce
 under `make test`. This phase changes no cognitive or speech code. The existing v18 mechanism already
 has the desired foundation: a question is neither forced by age nor erased by danger, and ordinary life
 can make room for it without being told what to ask.
+
+## Phase A.40 — not-knowing forms a constellation (2026-07-26)
+
+A.37-A.39 followed one withheld question at a time. The bounded v18 body could hold eight entries, but a
+unit eviction test did not establish the important property: whether several real questions can coexist,
+survive one another's openings, and retain distinct meanings while the single spoken Wonder is occupied.
+
+A read-only inventory receipt now makes that boundary observable under `--debug-field`:
+
+```text
+[pre-wonder: turn=3 count=3 pending=none episodes=0 resolved=0
+ entries=suvin@1:light/cold|nareth@1:dark/animal|flom@1:fire/anger]
+```
+
+The physical receipt is one line; it is wrapped above only for readability. It reports ordered entries,
+block counts, original hypotheses, the current pending word, and episode/resolution totals.
+`prewonder_dialogue_report.awk` is its only parser. No generator, School decision, Flow path, shadow
+policy, threshold, or persisted field reads this diagnostic.
+
+The direct contract first placed three different entries in one body. Opening the middle one removed
+only that identity and copied its own `dark/animal` hypotheses into `pending`. Returning `flom` while
+`nareth` occupied the Wonder produced `continued`; `flom@1:water/fire` remained unchanged. Grounding
+`nareth` preserved both siblings, after which `flom` and then `suvin` each opened with their own
+hypotheses. These six contracts raised the suite from **278/278** to **284/284**.
+
+The process matrix then used two independent constellations:
+
+```text
+replication:  suvin, nareth, flom     seed 83
+confirmatory: zavin, mireth, pelun    seed 307
+```
+
+Within each body the three questions were born successively under distinct geometries:
+`light/cold`, `dark/animal`, and `fire/anger`. All six entries in both cohorts began as real
+`blocked-distress` decisions. Each constellation crossed the same eight varied-safe lived turns and
+process deaths with all identities, hypotheses, and block counts unchanged. That exact ready state then
+forked into every one of the six opening permutations.
+
+For each selected word the matrix required an exact question, then returned the next scheduled word
+before grounding the current one. The second word had to wait as `continued` without changing inventory,
+pending identity, hypotheses, or episode counts. One explicit answer then resolved only the current
+Wonder. After all three questions had opened and resolved, all three learned words returned once more
+and had to remain quiet:
+
+```text
+cells=12 complete=12
+exact questions=36/36
+occupied returns preserved=24/24
+groundings resolved one=36/36
+learned returns quiet=36/36
+final state in every cell:
+  deferred=0 pending=none episodes=3 resolved=3
+```
+
+An immediate second full run was byte-identical after removing only temporary output paths: matrix
+values, common birth/life receipts, permutation receipts, summaries, and every transcript SHA-256
+matched. The result is permutation-invariant. Pre-Wonder is not a hidden FIFO and `pending` is not a
+destructive lock. Not-knowing can form a constellation; speech gives one question a mouth without
+taking the others' identities away.

@@ -152,6 +152,30 @@ transcripts, states, hashes, the aggregate matrix, and a trajectory summary.
 `LEO_ECOLOGY_PLAN_ONLY=1` validates the complete 30-cell design without running
 Leo.
 
+Run the three-question constellation:
+
+```sh
+make deferred-wonder-constellation
+```
+
+Two three-word bodies are born under distinct hypothesis geometries
+(`light/cold`, `dark/animal`, and `fire/anger`), cross eight common varied-safe
+turns and process deaths, then fork across all six possible opening orders.
+Every opening must use the selected word's original hypotheses and remove only
+that pre-Wonder entry. Before grounding it, the next scheduled word returns
+once; the occupied Wonder must report `continued` while the waiting inventory
+remains byte-for-byte unchanged. Grounding may resolve only the open question.
+After all three resolve, literal returns of every learned word must remain
+`no-candidate`.
+
+`--debug-field` emits a read-only `[pre-wonder: ...]` inventory receipt with the
+current pending word, episode counts, resolved count, and ordered entries with
+their block counts and hypotheses. `prewonder_dialogue_report.awk` parses this
+surface; generation and cognition have no reader for it. The matrix retains
+common birth/life receipts separately from every permutation's receipts,
+transcripts, states, hashes, and summary. `LEO_CONSTELLATION_PLAN_ONLY=1`
+validates all 12 group/order cells without running Leo.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow

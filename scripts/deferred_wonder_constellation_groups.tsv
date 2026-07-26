@@ -1,0 +1,7 @@
+group	cohort	seed	slot	target	birth_prompt	primary_glyph	alt_glyph	expected_question	grounding
+old	replication	83	1	suvin	Does suvin feel like bright sun or cold winter?	light	cold	Suvin? Light or Cold?	A suvin is light.
+old	replication	83	2	nareth	Does nareth feel like cat bird or dark night?	dark	animal	Nareth? Dark or Animal?	A nareth is animal.
+old	replication	83	3	flom	Does flom feel like angry fire or empty alone?	fire	anger	Flom? Fire or Anger?	A flom is fire.
+new	confirmatory	307	1	zavin	Does zavin feel like bright sun or cold winter?	light	cold	Zavin? Light or Cold?	A zavin is light.
+new	confirmatory	307	2	mireth	Does mireth feel like cat bird or dark night?	dark	animal	Mireth? Dark or Animal?	A mireth is animal.
+new	confirmatory	307	3	pelun	Does pelun feel like angry fire or empty alone?	fire	anger	Pelun? Fire or Anger?	A pelun is fire.

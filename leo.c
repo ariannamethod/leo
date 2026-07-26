@@ -7436,6 +7436,31 @@ static void print_field_stats(const char *tag, const Leo *leo) {
            leo->trigrams.n_entries, leo->cooc.total_tokens);
 }
 
+static void print_deferred_wonder_stats(const Leo *leo) {
+    if (!g_leo_wonder_on || !g_leo_deferred_wonder_on || !leo) return;
+    int resolved = 0;
+    for (int i = 0; i < leo->school.n_wonders; i++)
+        if (leo->school.wonders[i].resolved) resolved++;
+    printf("     [pre-wonder: turn=%ld count=%d pending=%s episodes=%d resolved=%d entries=",
+           leo->school.turn_clock, leo->school.n_deferred,
+           leo->school.pending[0] ? leo->school.pending : "none",
+           leo->school.n_wonders, resolved);
+    if (leo->school.n_deferred == 0) {
+        printf("none");
+    } else {
+        for (int i = 0; i < leo->school.n_deferred; i++) {
+            const LeoDeferredWonder *entry = &leo->school.deferred[i];
+            int g = entry->offered_glyph;
+            int a = entry->offered_alt_glyph;
+            printf("%s%s@%u:%s/%s", i ? "|" : "", entry->word,
+                   entry->blocks,
+                   g >= 0 && g < GLYPH_COUNT ? GLYPH_NAMES[g] : "none",
+                   a >= 0 && a < GLYPH_COUNT ? GLYPH_NAMES[a] : "none");
+        }
+    }
+    printf("]\n");
+}
+
 static void print_flow_stats(const Leo *leo) {
     if (!g_leo_flow_on || !leo || leo->flow.n <= 0) return;
     const LeoFlowSnapshot *s = leo_flow_at(&leo->flow, leo->flow.n - 1);
@@ -7847,6 +7872,7 @@ int main(int argc, char **argv) {
                 printf("             mean>  top=%s(%.2f) gap=%.2f\n",
                        GLYPH_NAMES[top], leo.gamma_meaning[top], leo.gamma_gap);
             }
+            print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
     }
@@ -7901,6 +7927,7 @@ int main(int argc, char **argv) {
                 printf("     [wonder-return: %s -> %s, recalls=%d]\n",
                        ep->word, GLYPH_NAMES[(int)ep->answer_glyph], ep->recalls);
             }
+            print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */
                 printf("     [async: rings lived=%ld]\n", async.rings_done);
