@@ -982,9 +982,10 @@ int main(void) {
               !pre.school.pending[0] && !strstr(out, "Suvin?"),
               "pre-wonder: an unrelated safe turn cannot release a withheld question");
 
-        const char *state = "/tmp/leo_deferred_v18.state";
+        const char *state = "/tmp/leo_deferred_v19.state";
         const char *legacy = "/tmp/leo_deferred_v17.state";
-        const char *cut = "/tmp/leo_deferred_v18_cut.state";
+        const char *legacy18 = "/tmp/leo_deferred_v18_legacy.state";
+        const char *cut = "/tmp/leo_deferred_v19_cut.state";
         int saved = leo_save_state(&pre, state);
         Leo woke; leo_init(&woke);
         int loaded = saved && leo_load_state(&woke, state);
@@ -995,7 +996,7 @@ int main(void) {
               woke.school.deferred[slept].offered_alt_glyph == born_alt,
               "pre-wonder: the withheld moment and its original hypotheses survive sleep");
 
-        int built_legacy = 0, built_cut = 0;
+        int built_legacy = 0, built_v18 = 0, built_cut = 0;
         FILE *fi = fopen(state, "rb");
         if (fi) {
             fseek(fi, 0, SEEK_END);
@@ -1020,6 +1021,37 @@ int main(void) {
                 uint32_t eighteen = 18;
                 memcpy(bytes + sizeof(uint32_t), &eighteen,
                        sizeof eighteen);
+                fo = fopen(legacy18, "wb");
+                if (fo) {
+                    built_v18 =
+                        (long)fwrite(bytes, 1, (size_t)(sz - tail), fo) ==
+                        sz - tail;
+                    if (built_v18)
+                        built_v18 =
+                            fwrite(&pre.school.n_deferred,
+                                   sizeof(int32_t), 1, fo) == 1;
+                    for (int i = 0; built_v18 &&
+                         i < pre.school.n_deferred; i++) {
+                        const LeoDeferredWonder *entry =
+                            &pre.school.deferred[i];
+                        LeoDeferredWonderV18 old_entry = {0};
+                        memcpy(old_entry.word, entry->word,
+                               sizeof old_entry.word);
+                        old_entry.offered_glyph = entry->offered_glyph;
+                        old_entry.offered_alt_glyph =
+                            entry->offered_alt_glyph;
+                        old_entry.heard_at_birth = entry->heard_at_birth;
+                        old_entry.blocks = entry->blocks;
+                        old_entry.born_turn = entry->born_turn;
+                        old_entry.last_seen_turn = entry->last_seen_turn;
+                        built_v18 =
+                            fwrite(&old_entry, sizeof old_entry, 1, fo) == 1;
+                    }
+                    fclose(fo);
+                }
+                uint32_t nineteen = 19;
+                memcpy(bytes + sizeof(uint32_t), &nineteen,
+                       sizeof nineteen);
                 fo = fopen(cut, "wb");
                 if (fo) {
                     built_cut =
@@ -1032,14 +1064,22 @@ int main(void) {
             fclose(fi);
         }
         Leo old; leo_init(&old);
+        Leo old18; leo_init(&old18);
         Leo damaged; leo_init(&damaged);
         CHECK(built_legacy && leo_load_state(&old, legacy) &&
               old.school.n_deferred == 0,
               "pre-wonder: a v17 body migrates without invented withheld questions");
+        int migrated18 = built_v18 &&
+            leo_load_state(&old18, legacy18);
+        int old18_idx = migrated18 ?
+            leo_deferred_wonder_find(&old18, "suvin") : -1;
+        CHECK(migrated18 && old18_idx >= 0 &&
+              old18.school.deferred[old18_idx].field_token[0] == -1,
+              "pre-wonder: a v18 question migrates without invented field coordinates");
         CHECK(built_cut && leo_load_state(&damaged, cut) &&
               damaged.school.n_deferred == 0 &&
               damaged.school.turn_clock == pre.school.turn_clock,
-              "pre-wonder: a corrupt v18 tail loses only unspoken questions");
+              "pre-wonder: a corrupt v19 tail loses only unspoken questions");
 
         /* Make the saved body explicitly safe. This isolates the activation
          * contract from scar/capsule carryover without bypassing the gate. */
@@ -1066,7 +1106,7 @@ int main(void) {
         leo_ingest(&ab, "suvin suvin suvin");
         ab.school.turn_clock = 1;
         leo_deferred_wonder_remember(&ab, "suvin",
-                                     born_glyph, born_alt, 3);
+                                     born_glyph, born_alt, 3, NULL, NULL);
         g_leo_deferred_wonder_on = 0;
         leo_respond(&ab, "suvin", out, sizeof out);
         CHECK(!ab.school.pending[0] && ab.school.n_deferred == 1 &&
@@ -1081,7 +1121,7 @@ int main(void) {
         for (int i = 0; i < LEO_DEFERRED_WONDER_MAX + 1; i++) {
             bounded.school.turn_clock = i + 1;
             leo_deferred_wonder_remember(&bounded, words[i],
-                                         born_glyph, born_alt, 1);
+                                         born_glyph, born_alt, 1, NULL, NULL);
         }
         CHECK(bounded.school.n_deferred == LEO_DEFERRED_WONDER_MAX &&
               leo_deferred_wonder_find(&bounded, "alpha") < 0 &&
@@ -1089,8 +1129,9 @@ int main(void) {
               "pre-wonder: the bounded body evicts the least recently encountered question");
 
         leo_free(&pre); leo_free(&woke); leo_free(&old);
+        leo_free(&old18);
         leo_free(&damaged); leo_free(&ab); leo_free(&bounded);
-        remove(state); remove(legacy); remove(cut);
+        remove(state); remove(legacy); remove(legacy18); remove(cut);
         g_leo_school_on = prev_school;
         g_leo_wonder_on = prev_wonder;
         g_leo_deferred_wonder_on = prev_deferred;
@@ -1123,13 +1164,13 @@ int main(void) {
         Leo constellation; leo_init(&constellation);
         constellation.school.turn_clock = 1;
         leo_deferred_wonder_remember(&constellation, "suvin",
-                                     light, cold, 1);
+                                     light, cold, 1, NULL, NULL);
         constellation.school.turn_clock = 2;
         leo_deferred_wonder_remember(&constellation, "nareth",
-                                     dark, animal, 1);
+                                     dark, animal, 1, NULL, NULL);
         constellation.school.turn_clock = 3;
         leo_deferred_wonder_remember(&constellation, "flom",
-                                     water, fire, 1);
+                                     water, fire, 1, NULL, NULL);
         CHECK(constellation.school.n_deferred == 3 &&
               leo_deferred_wonder_find(&constellation, "suvin") >= 0 &&
               leo_deferred_wonder_find(&constellation, "nareth") >= 0 &&
@@ -1216,6 +1257,123 @@ int main(void) {
         g_leo_deferred_wonder_on = prev_deferred;
         g_leo_klaus_on = prev_klaus;
         g_leo_capsule_on = prev_capsule;
+    }
+
+    /* A.41: semantic shadow can recognize which withheld question the present
+     * meaning resembles, but cannot open it. Glyph grounding is load-bearing;
+     * the own-field birth anchor supplies identity/tie shape, never authority. */
+    {
+        int prev_shadow = g_leo_prewonder_shadow_on;
+        int prev_wonder = g_leo_wonder_on;
+        int prev_deferred = g_leo_deferred_wonder_on;
+        g_leo_prewonder_shadow_on = 1;
+        g_leo_wonder_on = 1;
+        g_leo_deferred_wonder_on = 1;
+
+        Leo semantic; leo_init(&semantic);
+        int32_t suvin_field[LEO_PREWONDER_FIELD];
+        int32_t nareth_field[LEO_PREWONDER_FIELD];
+        int32_t flom_field[LEO_PREWONDER_FIELD];
+        float unit_field[LEO_PREWONDER_FIELD] = {0};
+        for (int i = 0; i < LEO_PREWONDER_FIELD; i++) {
+            suvin_field[i] = -1;
+            nareth_field[i] = -1;
+            flom_field[i] = -1;
+        }
+        suvin_field[0] = 's';
+        nareth_field[0] = 'n';
+        flom_field[0] = 'f';
+        unit_field[0] = 1.0f;
+        semantic.school.turn_clock = 1;
+        leo_deferred_wonder_remember(
+            &semantic, "suvin", semtok_find_glyph("light"),
+            semtok_find_glyph("cold"), 1, suvin_field, unit_field);
+        semantic.school.turn_clock = 2;
+        leo_deferred_wonder_remember(
+            &semantic, "nareth", semtok_find_glyph("dark"),
+            semtok_find_glyph("animal"), 1, nareth_field, unit_field);
+        semantic.school.turn_clock = 3;
+        leo_deferred_wonder_remember(
+            &semantic, "flom", semtok_find_glyph("fire"),
+            semtok_find_glyph("anger"), 1, flom_field, unit_field);
+
+        LeoSchool school_before = semantic.school;
+        leo_prewonder_shadow_observe(
+            &semantic, "bright sun meets cold winter",
+            suvin_field, unit_field);
+        const LeoPreWonderShadowReceipt *receipt =
+            &semantic.prewonder_shadow;
+        CHECK(receipt->status == LEO_PREWONDER_SHADOW_CONFIDENT &&
+              receipt->winner >= 0 &&
+              !strcmp(receipt->candidates[receipt->winner].word, "suvin") &&
+              receipt->n_candidates == 3 &&
+              !memcmp(&school_before, &semantic.school,
+                      sizeof semantic.school),
+              "pre-wonder shadow: grounded meaning identifies one sibling without touching School");
+
+        leo_prewonder_shadow_observe(
+            &semantic, "bright sun crosses dark night",
+            suvin_field, unit_field);
+        CHECK(semantic.prewonder_shadow.status ==
+                  LEO_PREWONDER_SHADOW_AMBIGUOUS &&
+              semantic.prewonder_shadow.winner < 0,
+              "pre-wonder shadow: mixed semantic evidence remains unnamed");
+
+        leo_prewonder_shadow_observe(
+            &semantic, "moss", suvin_field, unit_field);
+        CHECK(semantic.prewonder_shadow.status ==
+                  LEO_PREWONDER_SHADOW_AMBIGUOUS &&
+              semantic.prewonder_shadow.winner < 0 &&
+              semantic.prewonder_shadow.candidates[0].glyph == 0.0f &&
+              semantic.prewonder_shadow.candidates[0].field == 1.0f,
+              "pre-wonder shadow: field identity alone cannot counterfeit grounded meaning");
+
+        int32_t quiet_id[LEO_PREWONDER_FIELD];
+        float quiet_weight[LEO_PREWONDER_FIELD] = {0};
+        for (int i = 0; i < LEO_PREWONDER_FIELD; i++) quiet_id[i] = -1;
+        leo_prewonder_shadow_observe(
+            &semantic, "the table holds a quiet cup",
+            quiet_id, quiet_weight);
+        CHECK(semantic.prewonder_shadow.status ==
+                  LEO_PREWONDER_SHADOW_QUIET &&
+              semantic.prewonder_shadow.winner < 0,
+              "pre-wonder shadow: unrelated life stays quiet");
+
+        leo_prewonder_shadow_observe(
+            &semantic, "suvin", quiet_id, quiet_weight);
+        CHECK(semantic.prewonder_shadow.status ==
+                  LEO_PREWONDER_SHADOW_LITERAL &&
+              semantic.prewonder_shadow.winner < 0 &&
+              semantic.prewonder_shadow.candidates[0].literal,
+              "pre-wonder shadow: a literal return belongs to School, not semantic inference");
+
+        strncpy(semantic.school.pending, "nareth",
+                sizeof semantic.school.pending - 1);
+        school_before = semantic.school;
+        leo_prewonder_shadow_observe(
+            &semantic, "angry fire waits empty and alone",
+            flom_field, unit_field);
+        receipt = &semantic.prewonder_shadow;
+        CHECK(receipt->status == LEO_PREWONDER_SHADOW_CONFIDENT &&
+              receipt->winner >= 0 &&
+              !strcmp(receipt->candidates[receipt->winner].word, "flom") &&
+              !memcmp(&school_before, &semantic.school,
+                      sizeof semantic.school),
+              "pre-wonder shadow: an occupied Wonder does not blind or activate a waiting sibling");
+
+        g_leo_prewonder_shadow_on = 0;
+        leo_prewonder_shadow_observe(
+            &semantic, "bright sun meets cold winter",
+            suvin_field, unit_field);
+        CHECK(semantic.prewonder_shadow.status ==
+                  LEO_PREWONDER_SHADOW_EMPTY &&
+              semantic.prewonder_shadow.n_candidates == 0,
+              "pre-wonder shadow: ablation removes only the transient receipt");
+
+        leo_free(&semantic);
+        g_leo_prewonder_shadow_on = prev_shadow;
+        g_leo_wonder_on = prev_wonder;
+        g_leo_deferred_wonder_on = prev_deferred;
     }
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
