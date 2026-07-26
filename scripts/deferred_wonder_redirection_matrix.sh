@@ -152,6 +152,7 @@ while IFS=$'\t' read -r group cohort seed; do
     cp "$ready" "$group_dir/open.state"
     "$ROOT/leo" --load "$group_dir/open.state" \
         --seed "$((seed + 2700))" --respond "$active" --debug-field \
+        --no-wonder-appetite \
         --save "$group_dir/open.state" > "$group_dir/open.log" 2>&1
     [ "$(reply_from_log "$group_dir/open.log")" = "$expected_active_question" ] || {
         printf '%s failed to open the active control\n' "$group" >&2
@@ -197,10 +198,12 @@ while IFS=$'\t' read -r group cohort seed; do
         cp "$group_dir/open.state" "$cell_dir/off.state"
         run_seed=$((seed + 3000 + group_index * 100 + case_index))
         "$ROOT/leo" --load "$cell_dir/on.state" --seed "$run_seed" \
-            --respond "$prompt" --debug-field --save "$cell_dir/on.state" \
+            --respond "$prompt" --debug-field --no-wonder-appetite \
+            --save "$cell_dir/on.state" \
             > "$cell_dir/on.log" 2>&1
         "$ROOT/leo" --load "$cell_dir/off.state" --seed "$run_seed" \
             --respond "$prompt" --debug-field --no-wonder-redirection \
+            --no-wonder-appetite \
             --save "$cell_dir/off.state" > "$cell_dir/off.log" 2>&1
 
         address="$(address_from_log "$cell_dir/on.log" "$cell" "$run_seed")"
@@ -285,7 +288,8 @@ while IFS=$'\t' read -r group cohort seed; do
             cp "$cell_dir/on.state" "$cell_dir/continuation.state"
             "$ROOT/leo" --load "$cell_dir/continuation.state" \
                 --seed "$continuation_seed" --respond "$active" \
-                --debug-field --save "$cell_dir/continuation.state" \
+                --debug-field --no-wonder-appetite \
+                --save "$cell_dir/continuation.state" \
                 > "$cell_dir/continuation.log" 2>&1
             continuation_reply="$(
                 reply_from_log "$cell_dir/continuation.log"

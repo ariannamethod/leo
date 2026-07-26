@@ -149,7 +149,7 @@ while IFS=$'\t' read -r group cohort seed; do
     cp "$ready" "$group_dir/open.state"
     "$ROOT/leo" --load "$group_dir/open.state" \
         --seed "$((seed + 1700))" --respond "$active" --debug-field \
-        --no-wonder-redirection \
+        --no-wonder-redirection --no-wonder-appetite \
         --save "$group_dir/open.state" > "$group_dir/open.log" 2>&1
     [ "$(reply_from_log "$group_dir/open.log")" = "$expected_question" ] || {
         printf '%s failed to open the active control\n' "$group" >&2
@@ -192,11 +192,12 @@ while IFS=$'\t' read -r group cohort seed; do
         run_seed=$((seed + 2000 + group_index * 100 + case_index))
         "$ROOT/leo" --load "$cell_dir/on.state" --seed "$run_seed" \
             --respond "$prompt" --debug-field --no-wonder-redirection \
+            --no-wonder-appetite \
             --save "$cell_dir/on.state" \
             > "$cell_dir/on.log" 2>&1
         "$ROOT/leo" --load "$cell_dir/off.state" --seed "$run_seed" \
             --respond "$prompt" --debug-field --no-wonder-attribution \
-            --no-wonder-redirection \
+            --no-wonder-redirection --no-wonder-appetite \
             --save "$cell_dir/off.state" > "$cell_dir/off.log" 2>&1
 
         address="$(address_from_log "$cell_dir/on.log" "$cell" "$run_seed")"

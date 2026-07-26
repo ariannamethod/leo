@@ -163,7 +163,7 @@ while IFS=$'\t' read -r cell group cohort seed case kind target prompt \
         cp "$base" "$cell_dir/pre.state"
         "$ROOT/leo" --load "$cell_dir/pre.state" --seed "$((seed + 700))" \
             --respond "$opened" --debug-field --no-prewonder-shadow \
-            --no-wonder-attribution \
+            --no-wonder-attribution --no-wonder-appetite \
             --save "$cell_dir/pre.state" > "$cell_dir/pre.log" 2>&1
         [ "$(reply_from_log "$cell_dir/pre.log")" = "$expected_question" ] || {
             printf '%s failed to open occupied control\n' "$cell" >&2
@@ -177,11 +177,12 @@ while IFS=$'\t' read -r cell group cohort seed case kind target prompt \
     run_seed=$((seed + 1000 + case_index))
     "$ROOT/leo" --load "$cell_dir/on.state" --seed "$run_seed" \
         --respond "$prompt" --debug-field --no-wonder-attribution \
+        --no-wonder-appetite \
         --save "$cell_dir/on.state" \
         > "$cell_dir/on.log" 2>&1
     "$ROOT/leo" --load "$cell_dir/off.state" --seed "$run_seed" \
         --respond "$prompt" --debug-field --no-prewonder-shadow \
-        --no-wonder-attribution \
+        --no-wonder-attribution --no-wonder-appetite \
         --save "$cell_dir/off.state" > "$cell_dir/off.log" 2>&1
 
     shadow="$(shadow_from_log "$cell_dir/on.log" "$cell" "$run_seed")"

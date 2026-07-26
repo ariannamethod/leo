@@ -276,6 +276,47 @@ The grounded switch additionally sleeps, then returns slot 1 and requires its
 original question verbatim. `LEO_REDIRECTION_PLAN_ONLY=1` validates the ten-cell
 design without running Leo.
 
+Run the deferred-Wonder return-appetite matrix:
+
+```sh
+make deferred-wonder-appetite
+```
+
+A.44 observes which waiting question is gathering pressure to return, after the
+reply and its Flow snapshot are already history. It remains a shadow organ:
+School, generation, routing, and the existing shadow scheduler have no reader
+for its receipt. `--no-wonder-appetite` therefore removes only
+`[wonder-appetite: ...]`; reply bytes and saved state must remain identical.
+State stays at v20 because the appetite is not a persistent self-description.
+
+Each waiting candidate exposes five bounded components:
+
+```text
+recurrence = 0.8 * grounded glyph echo + 0.2 * own-field echo
+silence    = clamp((turn - last_seen_turn) / 8)
+unfinished = 1 when the question has an open spoken episode,
+             otherwise blocks / (blocks + 1)
+flow_gap   = 1 - cosine(perceived_mean, expressed_mean)
+appetite   = 0.55 * recurrence + 0.15 * silence
+           + 0.20 * unfinished + 0.10 * flow_gap
+```
+
+`flow_gap` belongs to the candidate's exact event-bounded Flow current and is
+zero when no such current has meaningful mass. A candidate becomes `salient`
+only when recurrence is at least `0.75`, appetite at least `0.62`, and its lead
+at least `0.15`. Thus maximal silence, unfinished depth, and Flow residual still
+cannot nominate a question whose meaning did not return. Weak and mixed echoes
+remain `diffuse`; old unrelated questions remain `quiet`. Literal names are
+marked `literal` and excluded from autonomous ranking because A.43 already
+treats them as human address.
+
+The checked matrix grows the two independent A.40 bodies and compares default
+against `--no-wonder-appetite` in five forks per body: strong semantic return,
+weak return, mixed return, maximally aged quiet, and a semantic return to a
+spoken question parked by A.43. The parked fork must identify the displaced
+question with `spoken=1`, `unfinished=1`, and `flow_gap>=0.90`. Every one of the
+ten forks requires reply and complete saved-state equality.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow

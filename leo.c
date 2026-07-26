@@ -1699,6 +1699,41 @@ typedef struct {
     uint8_t status;
 } LeoPreWonderShadowReceipt;
 
+/* A.44: a deferred question may gather a measurable appetite to return without
+ * receiving a scheduling right. Recurrence must carry the result: silence and
+ * unfinished depth can strengthen a returning meaning, but age alone cannot
+ * nominate a question. The receipt is one-turn and has no persistent reader. */
+#define LEO_WONDER_APPETITE_SILENCE_HORIZON 8.0f
+#define LEO_WONDER_APPETITE_RESONANCE_MIN   0.75f
+#define LEO_WONDER_APPETITE_SCORE_MIN       0.62f
+#define LEO_WONDER_APPETITE_MARGIN          0.15f
+enum {
+    LEO_WONDER_APPETITE_EMPTY = 0,
+    LEO_WONDER_APPETITE_QUIET,
+    LEO_WONDER_APPETITE_DIFFUSE,
+    LEO_WONDER_APPETITE_SALIENT,
+    LEO_WONDER_APPETITE_LITERAL,
+    LEO_WONDER_APPETITE_STATUS_COUNT
+};
+typedef struct {
+    char    word[LEO_HEARD_WORDLEN];
+    float   recurrence;
+    float   silence;
+    float   unfinished;
+    float   flow_gap;
+    float   appetite;
+    uint8_t spoken;
+    uint8_t literal;
+} LeoWonderAppetiteCandidate;
+typedef struct {
+    uint64_t turn;
+    LeoWonderAppetiteCandidate candidates[LEO_DEFERRED_WONDER_MAX];
+    int     n_candidates;
+    int     winner;
+    float   margin;
+    uint8_t status;
+} LeoWonderAppetiteReceipt;
+
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
  * A confident sibling may veto a destructive close, but can never learn, open,
@@ -1861,6 +1896,9 @@ typedef struct {
     /* A.41: one-turn semantic echo among withheld questions. Diagnostic only;
      * neither School nor generation reads it. */
     LeoPreWonderShadowReceipt prewonder_shadow;
+    /* A.44: future-return appetite over the final waiting constellation. It is
+     * written after speech and Flow, and read only by diagnostics. */
+    LeoWonderAppetiteReceipt wonder_appetite;
     /* A.42/A.43: pre-grounding address witness. Semantic conflict can only
      * guard; an exact waiting name may redirect without assigning meaning. */
     LeoWonderAddressReceipt wonder_address;
@@ -2136,6 +2174,7 @@ static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School revers
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_prewonder_shadow_on = 1; /* read-only semantic echo among withheld questions; no speech reader. */
+static int g_leo_wonder_appetite_on = 1; /* read-only return appetite over waiting questions; no scheduler or speech reader. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -5930,6 +5969,146 @@ static int leo_flow_current_valid(const Leo *leo,
     return 1;
 }
 
+static float leo_wonder_appetite_flow_gap(
+        const Leo *leo, const char *word, uint8_t *spoken) {
+    if (spoken) *spoken = 0;
+    int episode = leo_wonder_find_open(leo, word);
+    if (episode < 0) return 0.0f;
+    if (spoken) *spoken = 1;
+
+    uint64_t wonder_id =
+        leo_wonder_episode_id(&leo->school.wonders[episode]);
+    const LeoFlowWonderCurrent *current =
+        leo_flow_current_find_const(&leo->flow, wonder_id);
+    if (!current || current->resolved) return 0.0f;
+
+    float mass = 0.0f;
+    for (int g = 0; g < GLYPH_COUNT; g++)
+        mass += current->perceived_mean[g] +
+                current->expressed_mean[g];
+    if (mass <= 1e-6f) return 0.0f;
+    return clampf(
+        1.0f - leo_vec_cosine(
+            current->perceived_mean, current->expressed_mean,
+            GLYPH_COUNT),
+        0.0f, 1.0f);
+}
+
+/* Read the final waiting constellation after this turn has already spoken and
+ * entered Flow. Recurrence carries most of the score. Silence, unfinished
+ * depth, and a question's own perception/expression residual can strengthen a
+ * recurrence, but their combined maximum cannot make an absent meaning
+ * salient. Literal names are external invitations and are excluded from the
+ * autonomous ranking. Nothing outside diagnostics reads this receipt. */
+static void leo_wonder_appetite_observe(
+        Leo *leo, const char *prompt,
+        const int32_t field_token[LEO_PREWONDER_FIELD],
+        const float field_weight[LEO_PREWONDER_FIELD]) {
+    LeoWonderAppetiteReceipt receipt;
+    memset(&receipt, 0, sizeof receipt);
+    receipt.turn = leo ? (uint64_t)leo->school.turn_clock : 0;
+    receipt.winner = -1;
+    receipt.status = LEO_WONDER_APPETITE_EMPTY;
+    if (!leo || !prompt || !g_leo_wonder_appetite_on ||
+        !g_leo_wonder_on || !g_leo_deferred_wonder_on ||
+        !g_leo_flow_on) {
+        if (leo) leo->wonder_appetite = receipt;
+        return;
+    }
+
+    int hist[GLYPH_COUNT];
+    int total = leo_school_glyph_votes(leo, prompt, hist, 1);
+    int top = -1, second = -1, literals = 0;
+    for (int i = 0; i < leo->school.n_deferred; i++) {
+        const LeoDeferredWonder *entry = &leo->school.deferred[i];
+        LeoWonderAppetiteCandidate *candidate =
+            &receipt.candidates[receipt.n_candidates++];
+        strncpy(candidate->word, entry->word, LEO_HEARD_WORDLEN - 1);
+        candidate->word[LEO_HEARD_WORDLEN - 1] = 0;
+        candidate->literal =
+            (uint8_t)leo_flow_prompt_has_word(prompt, entry->word);
+        if (candidate->literal) literals++;
+
+        float glyph = leo_wonder_glyph_evidence(
+            hist, total, entry->offered_glyph,
+            entry->offered_alt_glyph);
+        float field = 0.0f;
+        if (field_token && field_weight)
+            field = leo_prewonder_field_similarity(
+                entry->field_token, entry->field_weight,
+                field_token, field_weight);
+        candidate->recurrence = clampf(
+            0.8f * glyph + 0.2f * field, 0.0f, 1.0f);
+
+        uint64_t silence = receipt.turn >= entry->last_seen_turn ?
+            receipt.turn - entry->last_seen_turn : 0;
+        candidate->silence = clampf(
+            (float)silence / LEO_WONDER_APPETITE_SILENCE_HORIZON,
+            0.0f, 1.0f);
+        candidate->flow_gap = leo_wonder_appetite_flow_gap(
+            leo, entry->word, &candidate->spoken);
+        candidate->unfinished = candidate->spoken ? 1.0f :
+            (float)entry->blocks / ((float)entry->blocks + 1.0f);
+        candidate->appetite = clampf(
+            0.55f * candidate->recurrence +
+            0.15f * candidate->silence +
+            0.20f * candidate->unfinished +
+            0.10f * candidate->flow_gap,
+            0.0f, 1.0f);
+
+        if (candidate->literal) continue;
+        int at = receipt.n_candidates - 1;
+        if (top < 0 ||
+            candidate->appetite >
+                receipt.candidates[top].appetite ||
+            (candidate->appetite ==
+                 receipt.candidates[top].appetite &&
+             strcmp(candidate->word,
+                    receipt.candidates[top].word) < 0)) {
+            second = top;
+            top = at;
+        } else if (second < 0 ||
+                   candidate->appetite >
+                       receipt.candidates[second].appetite ||
+                   (candidate->appetite ==
+                        receipt.candidates[second].appetite &&
+                    strcmp(candidate->word,
+                           receipt.candidates[second].word) < 0)) {
+            second = at;
+        }
+    }
+
+    if (top < 0) {
+        receipt.status = literals ?
+            LEO_WONDER_APPETITE_LITERAL :
+            LEO_WONDER_APPETITE_EMPTY;
+        leo->wonder_appetite = receipt;
+        return;
+    }
+    float runner = second >= 0 ?
+        receipt.candidates[second].appetite : 0.0f;
+    receipt.margin = clampf(
+        receipt.candidates[top].appetite - runner, 0.0f, 1.0f);
+    if (literals) {
+        receipt.status = LEO_WONDER_APPETITE_LITERAL;
+    } else if (
+        receipt.candidates[top].recurrence >=
+            LEO_WONDER_APPETITE_RESONANCE_MIN &&
+        receipt.candidates[top].appetite >=
+            LEO_WONDER_APPETITE_SCORE_MIN &&
+        receipt.margin >= LEO_WONDER_APPETITE_MARGIN) {
+        receipt.winner = top;
+        receipt.status = LEO_WONDER_APPETITE_SALIENT;
+    } else if (
+        receipt.candidates[top].recurrence >= 0.15f ||
+        receipt.candidates[top].appetite >= 0.45f) {
+        receipt.status = LEO_WONDER_APPETITE_DIFFUSE;
+    } else {
+        receipt.status = LEO_WONDER_APPETITE_QUIET;
+    }
+    leo->wonder_appetite = receipt;
+}
+
 static int leo_flow_kind(const LeoFlow *flow, int glyph, int window, int face) {
     if (!flow || flow->n <= 0 || glyph < 0 || glyph >= GLYPH_COUNT) return LEO_FLOW_QUIET;
     if (window < 3) window = 3;
@@ -6554,6 +6733,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     leo->school.returned_episode = -1;       /* one-reply diagnostic; meaning itself is local below */
     memset(&leo->wonder_address, 0, sizeof leo->wonder_address);
     leo->wonder_address.winner = -1;
+    memset(&leo->wonder_appetite, 0, sizeof leo->wonder_appetite);
+    leo->wonder_appetite.winner = -1;
     if (leo->school.turn_clock < LONG_MAX) leo->school.turn_clock++;
     leo_ingest(leo, prompt);                 /* Leo hears you */
     leo_field_chambers_feel_text(leo, prompt); /* prompt drives the chamber EXT inputs */
@@ -6944,6 +7125,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (leo->school.returned_episode >= 0) flow_event |= LEO_FLOW_WONDER_RECALLED;
     leo_flow_observe(leo, prompt, out, pm, flow_field_token, flow_field_weight,
                      flow_event, flow_wonder_id);  /* observation only: no generation path reads flow */
+    leo_wonder_appetite_observe(
+        leo, prompt, prewonder_field_token, prewonder_field_weight);
     leo_shadow_calibrate(leo, prompt);            /* judge t-1 only after t has become history */
     leo_shadow_observe(leo);                      /* after speech: a proposal for the next turn, never a reader */
     leo->gravity = NULL;
@@ -8169,6 +8352,42 @@ static void print_prewonder_shadow_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_appetite_stats(const Leo *leo) {
+    if (!g_leo_wonder_appetite_on || !leo ||
+        leo->wonder_appetite.n_candidates == 0)
+        return;
+    const LeoWonderAppetiteReceipt *receipt =
+        &leo->wonder_appetite;
+    static const char *statuses[LEO_WONDER_APPETITE_STATUS_COUNT] = {
+        "empty", "quiet", "diffuse", "salient", "literal"
+    };
+    int status =
+        receipt->status < LEO_WONDER_APPETITE_STATUS_COUNT ?
+            receipt->status : LEO_WONDER_APPETITE_EMPTY;
+    const char *winner =
+        receipt->winner >= 0 &&
+        receipt->winner < receipt->n_candidates ?
+            receipt->candidates[receipt->winner].word : "none";
+    printf("     [wonder-appetite: turn=%llu status=%s winner=%s margin=%.3f pending=%s entries=",
+           (unsigned long long)receipt->turn, statuses[status], winner,
+           (double)receipt->margin,
+           leo->school.pending[0] ? leo->school.pending : "none");
+    for (int i = 0; i < receipt->n_candidates; i++) {
+        const LeoWonderAppetiteCandidate *candidate =
+            &receipt->candidates[i];
+        printf("%s%s:%.3f/%.3f/%.3f/%.3f/%.3f/%u/%u",
+               i ? "|" : "", candidate->word,
+               (double)candidate->recurrence,
+               (double)candidate->silence,
+               (double)candidate->unfinished,
+               (double)candidate->flow_gap,
+               (double)candidate->appetite,
+               (unsigned)candidate->spoken,
+               (unsigned)candidate->literal);
+    }
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -8402,6 +8621,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-prewonder-shadow")) g_leo_prewonder_shadow_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite")) g_leo_wonder_appetite_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -8616,6 +8836,7 @@ int main(int argc, char **argv) {
             }
             print_wonder_address_stats(&leo);
             print_prewonder_shadow_stats(&leo);
+            print_wonder_appetite_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -8673,6 +8894,7 @@ int main(int argc, char **argv) {
             }
             print_wonder_address_stats(&leo);
             print_prewonder_shadow_stats(&leo);
+            print_wonder_appetite_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */
