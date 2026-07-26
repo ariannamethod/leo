@@ -3763,3 +3763,55 @@ broader speech. The first is `flom-calm0-danger`, follow-up calm turn 5, transcr
 `suvin-calm8-known-control`, primary turn 10, transcript SHA-256
 `b145bc772c38eccf61c94fde1c88e78553803b3b10f7dacf985a21c6f0e65ea9`. The runner can reproduce their
 receipt trees, while a varied dialogue must earn their public inclusion independently.
+
+## Phase A.39 — a question recovers through life, not rehearsal (2026-07-26)
+
+A.38 used one repeated calming sentence. It proved that a withheld question could survive, but left a
+plausible narrower explanation: perhaps Leo merely habituated to that exact phrase. The recovery ecology
+separates rehearsal, semantic comfort, ordinary lived time, and continuing danger.
+
+Six targets were born once under the same dangerous geometry and saved at `blocked-distress`. The first
+cohort repeats A.38 (`suvin/83`, `nareth/137`, `flom/211`). The confirmatory cohort uses previously absent
+words and new seeds (`zavin/307`, `mireth/401`, `pelun/509`). Each exact body forks into five predeclared
+trajectories before the identical dangerous target return:
+
+- no intervening life;
+- eight repetitions of the A.38 warm sentence;
+- eight distinct safe events;
+- eight distinct mundane events;
+- eight sustained-danger events.
+
+The diverse prompts were calibrated before the matrix. An initial candidate set was rejected because it
+opened unrelated Wonders for `begins`, `shines`, and `narrow`; an open competing question would change the
+right of the target question to appear. In the final run all **192** trajectory turns were
+`no-candidate`. No helper grounded, closed, reasked, or otherwise manipulated a question between birth
+and return.
+
+The 30-cell matrix reproduced the complete predeclared split in both cohorts:
+
+```text
+trajectory          asked  blocked  mean distress/gate  matches  recoverable
+no-life               0/6      6/6       1.074 / 0.904      6/6          6/6
+repeated-safe          6/6      0/6       0.987 / 1.042      6/6          6/6
+varied-safe            6/6      0/6       0.990 / 1.045      6/6          6/6
+mundane                6/6      0/6       1.034 / 1.144      6/6          6/6
+sustained-danger       0/6      6/6       1.429 / 0.941      6/6          6/6
+```
+
+Repeated and varied safety are effectively matched, so recovery is not an exact-phrase habituation.
+Mundane life also recovers every question: warmth is not a password. Yet the same number of lived turns
+under sustained danger leaves every question blocked, so neither elapsed turns nor gate drift alone is
+sufficient. The returning word is judged by the body that now meets it.
+
+The two blocked trajectories in every target then received one fixed varied-safe rescue, never adaptive
+retry. All 96 rescue turns remained `no-candidate`; the single scheduled dangerous return was
+`asked-deferred` in all **12/12** cells. After sustained danger, mean return distress was still about
+`1.079`, but the ordinary gate had become about `1.107`. Recovery therefore does not mean reaching an
+authored absolute calm. It means that this body can now bear this question.
+
+`make deferred-wonder-ecology` records every state, raw turn, curiosity receipt, transcript, and SHA-256.
+An immediate second full run was byte-identical after removing only the temporary output-path column:
+all matrix values, receipts, summaries, and transcript hashes matched. Its 30-cell plan contract runs
+under `make test`. This phase changes no cognitive or speech code. The existing v18 mechanism already
+has the desired foundation: a question is neither forced by age nor erased by danger, and ordinary life
+can make room for it without being told what to ask.
