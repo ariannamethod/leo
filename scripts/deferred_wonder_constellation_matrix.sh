@@ -209,10 +209,12 @@ while IFS=$'\t' read -r group cohort seed; do
         log="$group_dir/turns/turn-$(printf '%02d' "$turn")-birth.log"
         if [ "$turn" -eq 1 ]; then
             "$ROOT/leo" --seed "$seed" --respond "$prompt" --debug-field \
+                --no-wonder-redirection \
                 --save "$state" > "$log" 2>&1
         else
             "$ROOT/leo" --load "$state" --seed "$((seed + turn - 1))" \
-                --respond "$prompt" --debug-field --save "$state" \
+                --respond "$prompt" --debug-field --no-wonder-redirection \
+                --save "$state" \
                 > "$log" 2>&1
         fi
         curiosity="$(curiosity_from_log "$log" "$group-birth" "$seed")"
@@ -249,7 +251,8 @@ while IFS=$'\t' read -r group cohort seed; do
         turn=$((turn + 1))
         log="$group_dir/turns/turn-$(printf '%02d' "$turn")-life.log"
         "$ROOT/leo" --load "$state" --seed "$((seed + turn - 1))" \
-            --respond "$prompt" --debug-field --save "$state" \
+            --respond "$prompt" --debug-field --no-wonder-redirection \
+            --save "$state" \
             > "$log" 2>&1
         curiosity="$(curiosity_from_log "$log" "$group-life" "$seed")"
         inventory="$(inventory_from_log "$log" "$group-life" "$seed")"
@@ -312,7 +315,8 @@ while IFS=$'\t' read -r cell group cohort seed order target_order; do
         turn=$((turn + 1))
         log="$life/turns/turn-$(printf '%02d' "$turn")-open.log"
         "$ROOT/leo" --load "$state" --seed "$((seed + 100 + turn))" \
-            --respond "$target" --debug-field --save "$state" \
+            --respond "$target" --debug-field --no-wonder-redirection \
+            --save "$state" \
             > "$log" 2>&1
         curiosity="$(curiosity_from_log "$log" "$cell-open" "$seed")"
         inventory="$(inventory_from_log "$log" "$cell-open" "$seed")"
@@ -347,7 +351,8 @@ while IFS=$'\t' read -r cell group cohort seed order target_order; do
             turn=$((turn + 1))
             log="$life/turns/turn-$(printf '%02d' "$turn")-occupied.log"
             "$ROOT/leo" --load "$state" --seed "$((seed + 100 + turn))" \
-                --respond "$next_target" --debug-field --save "$state" \
+                --respond "$next_target" --debug-field \
+                --no-wonder-redirection --save "$state" \
                 > "$log" 2>&1
             curiosity="$(curiosity_from_log "$log" "$cell-occupied" "$seed")"
             inventory="$(inventory_from_log "$log" "$cell-occupied" "$seed")"
@@ -376,7 +381,8 @@ while IFS=$'\t' read -r cell group cohort seed order target_order; do
         turn=$((turn + 1))
         log="$life/turns/turn-$(printf '%02d' "$turn")-ground.log"
         "$ROOT/leo" --load "$state" --seed "$((seed + 100 + turn))" \
-            --respond "$grounding" --debug-field --save "$state" \
+            --respond "$grounding" --debug-field --no-wonder-redirection \
+            --save "$state" \
             > "$log" 2>&1
         curiosity="$(curiosity_from_log "$log" "$cell-ground" "$seed")"
         inventory="$(inventory_from_log "$log" "$cell-ground" "$seed")"
@@ -408,7 +414,8 @@ while IFS=$'\t' read -r cell group cohort seed order target_order; do
         turn=$((turn + 1))
         log="$life/turns/turn-$(printf '%02d' "$turn")-learned.log"
         "$ROOT/leo" --load "$state" --seed "$((seed + 100 + turn))" \
-            --respond "$target" --debug-field --save "$state" \
+            --respond "$target" --debug-field --no-wonder-redirection \
+            --save "$state" \
             > "$log" 2>&1
         curiosity="$(curiosity_from_log "$log" "$cell-learned" "$seed")"
         inventory="$(inventory_from_log "$log" "$cell-learned" "$seed")"

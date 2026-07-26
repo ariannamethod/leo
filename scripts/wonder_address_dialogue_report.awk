@@ -16,9 +16,10 @@ function value_after(line, key,    start, tail, parts) {
 }
 
 /\[wonder-address: turn=/ {
-    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
            clean(scenario), clean(seed), value_after($0, "turn"),
            value_after($0, "status"), value_after($0, "winner"),
            value_after($0, "active"), value_after($0, "margin"),
-           value_after($0, "guarded"), value_after($0, "entries")
+           value_after($0, "guarded"), value_after($0, "entries"),
+           value_after($0, "redirected")
 }

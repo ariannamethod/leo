@@ -1,0 +1,6 @@
+case	kind	prompt	expected_status	expected_winner_slot	expected_redirected	on_curiosity	on_pending_slot	on_resolved	off_curiosity	off_pending_slot	off_resolved	expect_reply_equal	expect_state_equal	expected_on_reply_slot	continuation
+sibling-grounded	redirect	{slot2} is a dark animal.	sibling-explicit	2	1	resolved	0	1	address-guarded	1	0	any	0	0	1
+sibling-bare	redirect	{slot2}.	sibling-explicit	2	1	redirected	2	0	continued	1	0	0	0	2	0
+sibling-question	redirect	What is {slot2}?	sibling-explicit	2	1	redirected	2	0	continued	1	0	0	0	2	0
+sibling-semantic	control	Cat bird. Dark night.	sibling-conflict	2	0	address-guarded	1	0	address-guarded	1	0	1	1	0	0
+active-and-sibling	control	{slot1} and {slot2} are a dark animal.	active-explicit	1	0	resolved	0	1	resolved	0	1	1	1	0	0

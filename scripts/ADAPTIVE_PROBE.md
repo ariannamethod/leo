@@ -232,7 +232,7 @@ The veto does not open, resolve, teach, or speak for the sibling. It only
 preserves the current uncertainty.
 
 `--debug-field` emits `[wonder-address: ...]` with the active identity, status,
-winner, margin, actual guard bit, and every candidate's
+winner, margin, actual guard and redirect bits, and every candidate's
 `glyph/literal/active` tuple. `--no-wonder-attribution` restores the previous
 grounding path. The A.41 semantic-shadow matrix passes that ablation
 explicitly so its observer-only result remains an isolated historical proof.
@@ -245,6 +245,36 @@ question. Default and ablated runs use the same seed and starting state. All
 non-guard cells require complete saved-state equality; guard cells require the
 active question to remain unresolved while the ablation reproduces the old
 cross-attribution.
+
+Run the explicit address-redirection matrix:
+
+```sh
+make deferred-wonder-redirection
+```
+
+A.43 gives one narrow meaning to an explicitly named waiting sibling: the human
+has changed which unfinished question they are addressing. The current active
+question returns to the exact queue slot vacated by that sibling, preserving its
+original hypotheses, birth turn, heard count, own-field coordinates, and Wonder
+episode. The named sibling then becomes the only School pending question.
+Semantic similarity alone can still only guard; it cannot enter this switch.
+If both names occur, the active name wins so a human correction remains possible.
+
+State v20 gives the active question a fail-soft provenance tail with the same
+record shape as a deferred Wonder. v19 bodies retain their pending question but
+receive no invented origin, so explicit switching fails closed to the A.42
+guard. A corrupt v20 provenance tail has the same behavior without discarding
+the open question or waiting constellation. Address switching can leave several
+unresolved Wonder episodes and event-bounded Flow currents, but the current
+snapshot identity still selects the single question that has the mouth.
+
+The checked matrix grows the same two independent three-question bodies and
+opens slot 1 before every fork. Three explicit slot-2 forms (grounded statement,
+bare name, and question) are compared with `--no-wonder-redirection`; a semantic
+sibling conflict and a turn naming both active and sibling are negative controls.
+The grounded switch additionally sleeps, then returns slot 1 and requires its
+original question verbatim. `LEO_REDIRECTION_PLAN_ONLY=1` validates the ten-cell
+design without running Leo.
 
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
