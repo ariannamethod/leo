@@ -4328,3 +4328,65 @@ retained its historical **30/30 reply equality**, **10/10 v20-prefix equality**,
 distribution; A.46 retained **2/2 reply and complete-state equality**.
 
 The same total evidence now retains an arrow.
+
+## Phase A.48 — restraint must also face the future (2026-07-27)
+
+A.47 gave confidence an arrow but still left the most consequential claim
+unwritten. If the evidence is thin, miscalibrated, or moving, abstention is
+prudent; if stable evidence predicts a return, eligibility may be justified.
+Neither claim is knowledge until the later life can disagree with it.
+
+A.48 freezes a shadow policy witness at the same instant A.45 opens a forecast,
+before the new forecast can count as its own evidence. It uses the exact
+A.46/A.47 spoken-and-appetite stratum:
+
+```text
+n < 8                                      -> forming
+n >= 8, reliability over/under             -> uncalibrated
+n >= 8, reliability aligned, drift moving  -> drifting
+n >= 8, reliability aligned, drift stable  -> eligible
+```
+
+The policy is intentionally conservative. A rising return life is not silently
+called progress and a falling one is not silently called damage; both are
+`drifting`, because a moving relation has not yet earned intervention.
+Spoken and unspoken histories remain separate, so eight silent forecasts
+cannot authorize a question that has already had the mouth.
+
+After the fixed A.45 horizon, the frozen decision receives a second verdict.
+An eligible forecast becomes `supported` on sustained/grounded return or
+`overreach` on fade. An abstained forecast becomes `missed` on return or
+`restraint` on fade. External mention, lost identity, and broken chronology are
+`confounded`; they cannot reward either policy. Thus Leo can measure not only
+whether an appetite was right, but whether his caution hid a living
+continuation.
+
+The witness adds four bytes to each bounded receipt: policy, birth-time
+reliability, birth-time drift, and support count. State advances 21 -> 22.
+Migration is explicit: v21 receipts become `legacy`, never retroactively
+`eligible`. Invalid or truncated v22 diaries still fail soft without damaging
+School, Flow, Wonders, or the rest of the organism.
+
+Eighteen new contracts raised the suite from **363/363** to **381/381**. They
+cover empty evidence, stable
+eligibility, rising abstention, over- and underconfidence, strict
+spoken/unspoken isolation, all four causal outcomes, ablation, real forecast
+birth, snapshot consistency, pending/confounded outcomes, v21 legacy migration,
+and corrupt-v22 recovery.
+
+The four-case process matrix then loaded the v22 bodies through the real Leo
+binary and crossed a reply/save boundary:
+
+```text
+stable + sustained -> eligible / supported
+stable + faded     -> eligible / overreach
+rising + sustained -> drifting / missed
+rising + faded     -> drifting / restraint
+
+reply equality=4/4
+complete-state equality=4/4
+```
+
+`--no-wonder-appetite-policy` suppresses the diagnostic and prevents new
+snapshots. No policy field is read by School, Flow, shadow, routing, sampling,
+or generation. A.48 has earned a falsifiable account of restraint, not a voice.
