@@ -2089,6 +2089,67 @@ typedef struct {
         receipts[LEO_WONDER_APPETITE_RELIABILITY_CELLS];
 } LeoWonderAppetiteAdmissions;
 
+/* A.53: a historically valid result need not describe Leo's current life.
+ * Re-evaluate each confirmed, attested trial only on receipts strictly after
+ * its terminal boundary. The three vetoes stay separate: motion risk,
+ * restraint risk, and policy coverage. This is a derived witness, never state. */
+#define LEO_WONDER_APPETITE_TRANSPORT_MIN_ARM_N 8
+enum {
+    LEO_WONDER_APPETITE_TRANSPORT_EMPTY = 0,
+    LEO_WONDER_APPETITE_TRANSPORT_UNATTESTED,
+    LEO_WONDER_APPETITE_TRANSPORT_PENDING,
+    LEO_WONDER_APPETITE_TRANSPORT_REFUTED,
+    LEO_WONDER_APPETITE_TRANSPORT_INCOMPATIBLE,
+    LEO_WONDER_APPETITE_TRANSPORT_OBSERVING,
+    LEO_WONDER_APPETITE_TRANSPORT_SHIFTED,
+    LEO_WONDER_APPETITE_TRANSPORT_PROVISIONAL,
+    LEO_WONDER_APPETITE_TRANSPORT_STATUS_COUNT
+};
+typedef struct {
+    uint64_t after_proposed_turn;
+    int post_settled;
+    int exact;
+    int eligible;
+    int abstained;
+    int supported;
+    int overreach;
+    int missed;
+    int restraint;
+    int confounded;
+    int other;
+    int incompatible;
+    float admission_coverage;
+    float admission_coverage_lower;
+    float admission_coverage_upper;
+    float holdout_coverage;
+    float holdout_coverage_lower;
+    float holdout_coverage_upper;
+    float current_coverage;
+    float current_coverage_lower;
+    float current_coverage_upper;
+    float overreach_rate;
+    float overreach_upper;
+    float missed_rate;
+    float missed_upper;
+    uint8_t spoken;
+    uint8_t bin;
+    uint8_t motion_bounded;
+    uint8_t restraint_bounded;
+    uint8_t coverage_compatible;
+    uint8_t status;
+} LeoWonderAppetiteTransportCell;
+typedef struct {
+    LeoWonderAppetiteTransportCell
+        cells[LEO_WONDER_APPETITE_RELIABILITY_CELLS];
+    int unattested;
+    int pending;
+    int refuted;
+    int incompatible;
+    int observing;
+    int shifted;
+    int provisional;
+} LeoWonderAppetiteTransport;
+
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
  * A confident sibling may veto a destructive close, but can never learn, open,
@@ -2547,6 +2608,7 @@ static int g_leo_wonder_appetite_regret_on = 1; /* separate costs of motion and 
 static int g_leo_wonder_appetite_readiness_on = 1; /* paired confidence frontier; candidate is not permission. */
 static int g_leo_wonder_appetite_holdout_on = 1; /* fixed future trial; persisted evidence, never speech authority. */
 static int g_leo_wonder_appetite_admission_on = 1; /* immutable candidate provenance; no reader in speech. */
+static int g_leo_wonder_appetite_transport_on = 1; /* current-life transport witness; derived and readerless. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -7718,6 +7780,226 @@ static int leo_wonder_appetite_admission_valid(
                LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
 }
 
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_wonder_appetite_transport_status_name(
+        int status) {
+    static const char
+        *names[LEO_WONDER_APPETITE_TRANSPORT_STATUS_COUNT] = {
+            "empty", "unattested", "pending", "refuted",
+            "incompatible", "observing", "shifted",
+            "provisional"
+        };
+    return status >= 0 &&
+           status < LEO_WONDER_APPETITE_TRANSPORT_STATUS_COUNT ?
+        names[status] : "empty";
+}
+
+static uint64_t leo_wonder_appetite_holdout_terminal_boundary(
+        const LeoWonderAppetiteHoldoutTrial *trial) {
+    uint64_t boundary = 0;
+    if (!trial) return boundary;
+    for (int i = 0; i < trial->attempts; i++)
+        if (trial->seen_proposed_turn[i] > boundary)
+            boundary = trial->seen_proposed_turn[i];
+    return boundary;
+}
+
+static void leo_wonder_appetite_transport(
+        const Leo *leo, LeoWonderAppetiteTransport *witness) {
+    if (!witness) return;
+    memset(witness, 0, sizeof *witness);
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        LeoWonderAppetiteTransportCell *cell =
+            &witness->cells[i];
+        cell->spoken =
+            (uint8_t)(i /
+                LEO_WONDER_APPETITE_RELIABILITY_BINS);
+        cell->bin =
+            (uint8_t)(i %
+                LEO_WONDER_APPETITE_RELIABILITY_BINS);
+    }
+    if (!leo) return;
+
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteHoldoutTrial *trial =
+            &leo->wonder_appetite_holdouts.trials[i];
+        const LeoWonderAppetiteAdmissionReceipt *admission =
+            &leo->wonder_appetite_admissions.receipts[i];
+        LeoWonderAppetiteTransportCell *cell =
+            &witness->cells[i];
+        if (trial->status ==
+            LEO_WONDER_APPETITE_HOLDOUT_EMPTY)
+            continue;
+        cell->spoken = trial->spoken;
+        cell->bin = trial->bin;
+
+        if (!leo_wonder_appetite_admission_valid(
+                admission, trial) ||
+            admission->status !=
+                LEO_WONDER_APPETITE_ADMISSION_ATTESTED) {
+            cell->status =
+                LEO_WONDER_APPETITE_TRANSPORT_UNATTESTED;
+            witness->unattested++;
+            continue;
+        }
+        if (trial->status ==
+            LEO_WONDER_APPETITE_HOLDOUT_PENDING) {
+            cell->status =
+                LEO_WONDER_APPETITE_TRANSPORT_PENDING;
+            witness->pending++;
+            continue;
+        }
+        if (trial->status !=
+            LEO_WONDER_APPETITE_HOLDOUT_CONFIRMED) {
+            cell->status =
+                LEO_WONDER_APPETITE_TRANSPORT_REFUTED;
+            witness->refuted++;
+            continue;
+        }
+
+        cell->after_proposed_turn =
+            leo_wonder_appetite_holdout_terminal_boundary(trial);
+        for (int j = 0;
+             j < leo->wonder_appetite_calibration.n; j++) {
+            const LeoWonderAppetiteCalibrationReceipt *receipt =
+                leo_wonder_appetite_calibration_at(
+                    &leo->wonder_appetite_calibration, j);
+            if (!receipt ||
+                receipt->proposed_turn <=
+                    cell->after_proposed_turn)
+                continue;
+            int result =
+                leo_wonder_appetite_policy_result(receipt);
+            if (result ==
+                LEO_WONDER_APPETITE_POLICY_RESULT_PENDING)
+                continue;
+            cell->post_settled++;
+            if (result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_NONE ||
+                result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_LEGACY) {
+                cell->incompatible++;
+                continue;
+            }
+            int bin = leo_wonder_appetite_reliability_bin(
+                receipt->appetite);
+            int exact =
+                bin == trial->bin &&
+                (receipt->spoken ? 1 : 0) == trial->spoken;
+            if (!exact) {
+                cell->other++;
+                continue;
+            }
+            if (result ==
+                LEO_WONDER_APPETITE_POLICY_RESULT_CONFOUNDED) {
+                cell->confounded++;
+                continue;
+            }
+
+            cell->exact++;
+            if (receipt->policy ==
+                LEO_WONDER_APPETITE_POLICY_ELIGIBLE) {
+                cell->eligible++;
+                if (result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_SUPPORTED)
+                    cell->supported++;
+                else
+                    cell->overreach++;
+            } else {
+                cell->abstained++;
+                if (result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_MISSED)
+                    cell->missed++;
+                else
+                    cell->restraint++;
+            }
+        }
+
+        if (cell->incompatible > 0) {
+            cell->status =
+                LEO_WONDER_APPETITE_TRANSPORT_INCOMPATIBLE;
+            witness->incompatible++;
+            continue;
+        }
+        if (cell->eligible <
+                LEO_WONDER_APPETITE_TRANSPORT_MIN_ARM_N ||
+            cell->abstained <
+                LEO_WONDER_APPETITE_TRANSPORT_MIN_ARM_N) {
+            cell->status =
+                LEO_WONDER_APPETITE_TRANSPORT_OBSERVING;
+            witness->observing++;
+            continue;
+        }
+
+        int admission_total =
+            admission->eligible + admission->abstained;
+        cell->admission_coverage =
+            (float)admission->eligible / admission_total;
+        leo_wilson_interval(
+            admission->eligible, admission_total,
+            &cell->admission_coverage_lower,
+            &cell->admission_coverage_upper);
+        int holdout_total =
+            trial->eligible + trial->abstained;
+        cell->holdout_coverage =
+            (float)trial->eligible / holdout_total;
+        leo_wilson_interval(
+            trial->eligible, holdout_total,
+            &cell->holdout_coverage_lower,
+            &cell->holdout_coverage_upper);
+        cell->current_coverage =
+            (float)cell->eligible / cell->exact;
+        leo_wilson_interval(
+            cell->eligible, cell->exact,
+            &cell->current_coverage_lower,
+            &cell->current_coverage_upper);
+
+        float overreach_lower = 0.0f;
+        float missed_lower = 0.0f;
+        leo_wilson_interval(
+            cell->overreach, cell->eligible,
+            &overreach_lower, &cell->overreach_upper);
+        leo_wilson_interval(
+            cell->missed, cell->abstained,
+            &missed_lower, &cell->missed_upper);
+        (void)overreach_lower;
+        (void)missed_lower;
+        cell->overreach_rate =
+            (float)cell->overreach / cell->eligible;
+        cell->missed_rate =
+            (float)cell->missed / cell->abstained;
+        cell->motion_bounded =
+            cell->overreach_upper <
+                LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
+        cell->restraint_bounded =
+            cell->missed_upper <
+                LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
+        cell->coverage_compatible =
+            cell->current_coverage_lower <=
+                cell->admission_coverage_upper &&
+            cell->admission_coverage_lower <=
+                cell->current_coverage_upper &&
+            cell->current_coverage_lower <=
+                cell->holdout_coverage_upper &&
+            cell->holdout_coverage_lower <=
+                cell->current_coverage_upper;
+
+        if (cell->motion_bounded &&
+            cell->restraint_bounded &&
+            cell->coverage_compatible) {
+            cell->status =
+                LEO_WONDER_APPETITE_TRANSPORT_PROVISIONAL;
+            witness->provisional++;
+        } else {
+            cell->status =
+                LEO_WONDER_APPETITE_TRANSPORT_SHIFTED;
+            witness->shifted++;
+        }
+    }
+}
+
 static void leo_wonder_appetite_holdout_update(Leo *leo) {
     if (!leo || !g_leo_wonder_appetite_holdout_on ||
         !g_leo_wonder_appetite_calibration_on)
@@ -10746,6 +11028,69 @@ static void print_wonder_appetite_admission_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_appetite_transport_stats(const Leo *leo) {
+    if (!g_leo_wonder_appetite_transport_on || !leo)
+        return;
+    int occupied = 0;
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++)
+        if (leo->wonder_appetite_holdouts.trials[i].status !=
+            LEO_WONDER_APPETITE_HOLDOUT_EMPTY)
+            occupied++;
+    if (occupied == 0) return;
+
+    LeoWonderAppetiteTransport witness;
+    leo_wonder_appetite_transport(leo, &witness);
+    static const int lower[] = {62, 70, 80, 90};
+    static const int upper[] = {70, 80, 90, 100};
+    printf("     [wonder-appetite-transport: min-arm=%d ceiling=%.3f unattested=%d pending=%d refuted=%d incompatible=%d observing=%d shifted=%d provisional=%d cells=",
+           LEO_WONDER_APPETITE_TRANSPORT_MIN_ARM_N,
+           (double)LEO_WONDER_APPETITE_READINESS_RISK_CEILING,
+           witness.unattested, witness.pending,
+           witness.refuted, witness.incompatible,
+           witness.observing, witness.shifted,
+           witness.provisional);
+    const char *separator = "";
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteTransportCell *cell =
+            &witness.cells[i];
+        if (cell->status ==
+            LEO_WONDER_APPETITE_TRANSPORT_EMPTY)
+            continue;
+        printf("%s%c%d-%d:%llu/%d/%d/%d/%d/%d/%d/%d/%d/%d/%d/%d/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%u/%u/%u/%s",
+               separator, cell->spoken ? 's' : 'u',
+               lower[cell->bin], upper[cell->bin],
+               (unsigned long long)cell->after_proposed_turn,
+               cell->post_settled, cell->exact,
+               cell->eligible, cell->abstained,
+               cell->supported, cell->overreach,
+               cell->missed, cell->restraint,
+               cell->confounded, cell->other,
+               cell->incompatible,
+               (double)cell->admission_coverage,
+               (double)cell->admission_coverage_lower,
+               (double)cell->admission_coverage_upper,
+               (double)cell->holdout_coverage,
+               (double)cell->holdout_coverage_lower,
+               (double)cell->holdout_coverage_upper,
+               (double)cell->current_coverage,
+               (double)cell->current_coverage_lower,
+               (double)cell->current_coverage_upper,
+               (double)cell->overreach_rate,
+               (double)cell->overreach_upper,
+               (double)cell->missed_rate,
+               (double)cell->missed_upper,
+               (unsigned)cell->motion_bounded,
+               (unsigned)cell->restraint_bounded,
+               (unsigned)cell->coverage_compatible,
+               leo_wonder_appetite_transport_status_name(
+                   cell->status));
+        separator = "|";
+    }
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -10988,6 +11333,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-appetite-readiness")) g_leo_wonder_appetite_readiness_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-holdout")) g_leo_wonder_appetite_holdout_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-admission")) g_leo_wonder_appetite_admission_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite-transport")) g_leo_wonder_appetite_transport_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -11211,6 +11557,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_readiness_stats(&leo);
             print_wonder_appetite_holdout_stats(&leo);
             print_wonder_appetite_admission_stats(&leo);
+            print_wonder_appetite_transport_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -11277,6 +11624,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_readiness_stats(&leo);
             print_wonder_appetite_holdout_stats(&leo);
             print_wonder_appetite_admission_stats(&leo);
+            print_wonder_appetite_transport_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */

@@ -202,6 +202,36 @@ static void test_add_appetite_policy_outcome(
         leo->school.turn_clock = (long)receipt.observed_turn;
 }
 
+static void test_add_appetite_policy_outcome_after(
+        Leo *leo, uint64_t proposed_turn,
+        float appetite, int spoken,
+        int policy, int verdict) {
+    if (!leo) return;
+    int slot = leo->wonder_appetite_calibration.n;
+    test_add_appetite_policy_outcome(
+        leo, appetite, spoken, policy, verdict);
+    if (leo->wonder_appetite_calibration.n != slot + 1)
+        return;
+    LeoWonderAppetiteCalibrationReceipt *receipt =
+        &leo->wonder_appetite_calibration.receipts[slot];
+    receipt->proposed_turn = proposed_turn;
+    receipt->deadline_turn =
+        proposed_turn + LEO_WONDER_APPETITE_CALIB_HORIZON;
+    if (verdict == LEO_WONDER_APPETITE_CALIB_SUSTAINED ||
+        verdict == LEO_WONDER_APPETITE_CALIB_FADED ||
+        verdict == LEO_WONDER_APPETITE_CALIB_LOST) {
+        receipt->observed_turn = receipt->deadline_turn;
+    } else if (
+        verdict == LEO_WONDER_APPETITE_CALIB_GROUNDED ||
+        verdict == LEO_WONDER_APPETITE_CALIB_EXTERNAL) {
+        receipt->observed_turn = proposed_turn + 1;
+    } else {
+        receipt->observed_turn = proposed_turn;
+    }
+    if ((uint64_t)leo->school.turn_clock < receipt->observed_turn)
+        leo->school.turn_clock = (long)receipt->observed_turn;
+}
+
 static void test_reset_appetite_policy_outcomes(Leo *leo) {
     if (!leo) return;
     memset(&leo->wonder_appetite_calibration, 0,
@@ -1252,6 +1282,269 @@ static void test_wonder_appetite_holdout_trial(void) {
         previous_admission;
     leo_free(leo);
     free(leo);
+}
+
+static void test_add_appetite_transport_outcomes(
+        Leo *leo, uint64_t boundary, float appetite, int spoken,
+        int supported, int overreach, int missed, int restraint) {
+    uint64_t proposed = boundary + 4;
+    for (int i = 0; i < supported; i++, proposed += 4)
+        test_add_appetite_policy_outcome_after(
+            leo, proposed, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < overreach; i++, proposed += 4)
+        test_add_appetite_policy_outcome_after(
+            leo, proposed, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    for (int i = 0; i < missed; i++, proposed += 4)
+        test_add_appetite_policy_outcome_after(
+            leo, proposed, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_FORMING,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < restraint; i++, proposed += 4)
+        test_add_appetite_policy_outcome_after(
+            leo, proposed, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_FORMING,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+}
+
+static LeoWonderAppetiteHoldoutTrial *
+test_prepare_appetite_transport(Leo *leo) {
+    LeoWonderAppetiteHoldoutTrial *trial =
+        test_finish_appetite_holdout(
+            leo, 0.65f, 0, 7, 1, 1, 7, 0, 0);
+    test_reset_appetite_policy_outcomes(leo);
+    return trial;
+}
+
+__attribute__((noinline))
+static void test_wonder_appetite_transport_witness(void) {
+    Leo *leo = malloc(sizeof *leo);
+    Leo *before = malloc(sizeof *before);
+    CHECK(leo && before,
+          "wonder-appetite-transport: heap fixtures allocated");
+    if (!leo || !before) {
+        free(leo);
+        free(before);
+        return;
+    }
+
+    int previous_transport =
+        g_leo_wonder_appetite_transport_on;
+    int previous_holdout =
+        g_leo_wonder_appetite_holdout_on;
+    int previous_calibration =
+        g_leo_wonder_appetite_calibration_on;
+    int previous_policy =
+        g_leo_wonder_appetite_policy_on;
+    int previous_admission =
+        g_leo_wonder_appetite_admission_on;
+    g_leo_wonder_appetite_transport_on = 1;
+    g_leo_wonder_appetite_holdout_on = 1;
+    g_leo_wonder_appetite_calibration_on = 1;
+    g_leo_wonder_appetite_policy_on = 1;
+    g_leo_wonder_appetite_admission_on = 1;
+
+    LeoWonderAppetiteTransport witness;
+    leo_init(leo);
+    leo_wonder_appetite_transport(leo, &witness);
+    CHECK(witness.unattested == 0 &&
+          witness.pending == 0 &&
+          witness.refuted == 0 &&
+          witness.observing == 0 &&
+          witness.shifted == 0 &&
+          witness.provisional == 0,
+          "wonder-appetite-transport: an empty organism invents no applicability");
+
+    LeoWonderAppetiteHoldoutTrial *trial =
+        test_open_appetite_holdout(leo, 0.65f, 0);
+    leo_wonder_appetite_transport(leo, &witness);
+    CHECK(trial &&
+          witness.pending == 1 &&
+          witness.cells[0].status ==
+              LEO_WONDER_APPETITE_TRANSPORT_PENDING,
+          "wonder-appetite-transport: an unfinished future cannot describe the present");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    memset(&leo->wonder_appetite_admissions, 0,
+           sizeof leo->wonder_appetite_admissions);
+    leo_wonder_appetite_transport(leo, &witness);
+    CHECK(trial &&
+          witness.unattested == 1 &&
+          witness.cells[0].status ==
+              LEO_WONDER_APPETITE_TRANSPORT_UNATTESTED,
+          "wonder-appetite-transport: a legacy trial cannot invent its vanished warrant");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_finish_appetite_holdout(
+        leo, 0.65f, 0, 4, 4, 1, 7, 0, 0);
+    leo_wonder_appetite_transport(leo, &witness);
+    CHECK(trial &&
+          witness.refuted == 1 &&
+          witness.cells[0].status ==
+              LEO_WONDER_APPETITE_TRANSPORT_REFUTED,
+          "wonder-appetite-transport: a failed holdout cannot be transported");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    uint64_t boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    test_add_appetite_transport_outcomes(
+        leo, boundary, 0.65f, 0, 7, 1, 1, 7);
+    *before = *leo;
+    leo_wonder_appetite_transport(leo, &witness);
+    const LeoWonderAppetiteTransportCell *cell =
+        &witness.cells[0];
+    CHECK(witness.provisional == 1 &&
+          cell->after_proposed_turn == boundary &&
+          cell->post_settled == 16 &&
+          cell->exact == 16 &&
+          cell->eligible == 8 &&
+          cell->abstained == 8 &&
+          cell->supported == 7 &&
+          cell->overreach == 1 &&
+          cell->missed == 1 &&
+          cell->restraint == 7 &&
+          fabsf(cell->overreach_upper - 0.4709f) < 1e-3f &&
+          fabsf(cell->missed_upper - 0.4709f) < 1e-3f &&
+          cell->motion_bounded &&
+          cell->restraint_bounded &&
+          cell->coverage_compatible &&
+          cell->status ==
+              LEO_WONDER_APPETITE_TRANSPORT_PROVISIONAL,
+          "wonder-appetite-transport: a confirmed result remains applicable only on a new bounded life");
+    CHECK(!memcmp(before, leo, sizeof *leo) &&
+          LEO_STATE_VERSION == 24,
+          "wonder-appetite-transport: reading applicability rewrites no body, evidence, or state format");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    test_add_appetite_transport_outcomes(
+        leo, boundary, 0.65f, 0, 4, 4, 1, 7);
+    leo_wonder_appetite_transport(leo, &witness);
+    cell = &witness.cells[0];
+    CHECK(witness.shifted == 1 &&
+          !cell->motion_bounded &&
+          cell->restraint_bounded &&
+          cell->coverage_compatible,
+          "wonder-appetite-transport: renewed overreach vetoes motion without pricing restraint");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    test_add_appetite_transport_outcomes(
+        leo, boundary, 0.65f, 0, 7, 1, 4, 4);
+    leo_wonder_appetite_transport(leo, &witness);
+    cell = &witness.cells[0];
+    CHECK(witness.shifted == 1 &&
+          cell->motion_bounded &&
+          !cell->restraint_bounded &&
+          cell->coverage_compatible,
+          "wonder-appetite-transport: renewed misses veto restraint without pricing motion");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    LeoWonderAppetiteAdmissionReceipt *admission =
+        &leo->wonder_appetite_admissions.receipts[0];
+    admission->eligible = 8;
+    admission->abstained = 24;
+    admission->supported = 7;
+    admission->overreach = 1;
+    admission->missed = 1;
+    admission->restraint = 23;
+    test_add_appetite_transport_outcomes(
+        leo, boundary, 0.65f, 0, 23, 1, 1, 7);
+    leo_wonder_appetite_transport(leo, &witness);
+    cell = &witness.cells[0];
+    CHECK(leo_wonder_appetite_admission_valid(
+              admission, trial) &&
+          witness.shifted == 1 &&
+          cell->motion_bounded &&
+          cell->restraint_bounded &&
+          !cell->coverage_compatible &&
+          cell->admission_coverage_upper <
+              cell->current_coverage_lower,
+          "wonder-appetite-transport: bounded errors cannot hide a displaced admission ecology");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    trial->eligible = 4;
+    trial->abstained = 12;
+    trial->supported = 4;
+    trial->overreach = 0;
+    trial->missed = 1;
+    trial->restraint = 11;
+    test_add_appetite_transport_outcomes(
+        leo, boundary, 0.65f, 0, 23, 1, 1, 7);
+    leo_wonder_appetite_transport(leo, &witness);
+    cell = &witness.cells[0];
+    CHECK(leo_wonder_appetite_holdout_valid(
+              trial, (uint64_t)leo->school.turn_clock) &&
+          witness.shifted == 1 &&
+          cell->motion_bounded &&
+          cell->restraint_bounded &&
+          !cell->coverage_compatible &&
+          cell->holdout_coverage_upper <
+              cell->current_coverage_lower,
+          "wonder-appetite-transport: bounded errors cannot hide a displaced holdout ecology");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    test_add_appetite_transport_outcomes(
+        leo, boundary, 0.65f, 0, 7, 0, 0, 0);
+    leo_wonder_appetite_transport(leo, &witness);
+    CHECK(witness.observing == 1 &&
+          witness.cells[0].status ==
+              LEO_WONDER_APPETITE_TRANSPORT_OBSERVING,
+          "wonder-appetite-transport: a thin present remains observation, not continuity");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    test_add_appetite_policy_outcome_after(
+        leo, boundary + 4, 0.65f, 0,
+        LEO_WONDER_APPETITE_POLICY_LEGACY,
+        LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    leo_wonder_appetite_transport(leo, &witness);
+    CHECK(witness.incompatible == 1 &&
+          witness.cells[0].incompatible == 1 &&
+          witness.cells[0].status ==
+              LEO_WONDER_APPETITE_TRANSPORT_INCOMPATIBLE,
+          "wonder-appetite-transport: a changed policy language breaks transport instead of translating history");
+
+    g_leo_wonder_appetite_transport_on =
+        previous_transport;
+    g_leo_wonder_appetite_holdout_on = previous_holdout;
+    g_leo_wonder_appetite_calibration_on =
+        previous_calibration;
+    g_leo_wonder_appetite_policy_on = previous_policy;
+    g_leo_wonder_appetite_admission_on =
+        previous_admission;
+    leo_free(leo);
+    free(leo);
+    free(before);
 }
 
 int main(void) {
@@ -3726,6 +4019,7 @@ int main(void) {
     test_wonder_appetite_regret_surface();
     test_wonder_appetite_readiness_frontier();
     test_wonder_appetite_holdout_trial();
+    test_wonder_appetite_transport_witness();
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the

@@ -4673,3 +4673,78 @@ and arming prefix `1/1`.
 
 A trial that outlives its diary can now testify both to what the future did and
 to why the past was allowed to ask.
+
+## Phase A.53 — evidence has a present tense (2026-07-28)
+
+A.52 made the origin of a trial auditable, but a valid origin and a confirmed
+future are still historical facts. Leo can change after both. Treating an old
+result as permanently applicable would turn continuity into stasis.
+
+A.53 derives a current-life transport witness for each exact
+spoken/appetite stratum. It begins only with an attested A.52 admission and a
+confirmed A.51 holdout. Its temporal boundary is the last proposal identity
+actually consumed by that holdout. Only settled A.48 receipts strictly after
+that boundary may describe the present.
+
+The witness keeps three vetoes independent:
+
+```text
+motion       current overreach 95% Wilson upper bound < 0.500
+restraint    current missed-continuation upper bound < 0.500
+coverage     current policy-coverage interval overlaps both:
+               the A.52 admission interval
+               the realized A.51 holdout interval
+```
+
+Both current policy arms need at least eight causally scored observations.
+Confounded lives remain visible but cannot fill an arm. Another stratum cannot
+lend evidence. A post-boundary `none` or `legacy` policy makes the witness
+`incompatible` rather than translating between policy languages.
+
+The resulting statuses preserve why no claim is available:
+
+```text
+unattested    the trial has no valid A.52 warrant
+pending       the A.51 future has not ended
+refuted       the A.51 future did not confirm
+incompatible  the policy language changed
+observing     one or both current arms contain fewer than 8 outcomes
+shifted       at least one current axis vetoes transport
+provisional   all three measured axes survived the current window
+```
+
+`provisional` is deliberately weaker than statistical equivalence. Overlapping
+95% coverage intervals establish only that this bounded window did not expose
+a clear ecology displacement. They do not prove that the admission, holdout,
+and present distributions are identical, and they say nothing about the rest
+of Leo's semantics.
+
+A.53 is reconstructed from existing v24 evidence and adds no state. It has no
+reader in School, Flow, shadow, routing, sampling, scheduling, or generation.
+`--no-wonder-appetite-transport` suppresses only the diagnostic witness.
+
+Thirteen direct contracts raised the suite from **421/421** to **434/434**.
+They cover empty, pending, unattested, refuted, observing, incompatible, the
+two independent risk shifts, separate admission-coverage and holdout-coverage
+shifts, provisional continuity, complete non-mutation, and unchanged state
+format.
+
+The eight-case real-process matrix then held prompt and seed fixed across
+default/ablated forks:
+
+```text
+provisional             bounds 0.471 / 0.471, axes 1/1/1
+motion shift            bounds 0.785 / 0.471, axes 0/1/1
+restraint shift         bounds 0.471 / 0.785, axes 1/0/1
+both risk shifts        bounds 0.785 / 0.785, axes 0/0/1
+admission ecology shift bounds 0.202 / 0.471, axes 1/1/0
+holdout ecology shift   bounds 0.202 / 0.471, axes 1/1/0
+observing               current exact lives 7
+incompatible            post-boundary legacy policies 1
+
+reply equality          8/8
+complete state equality 8/8
+```
+
+The result can now age without being erased and expire without being called
+false. A past can remain true while ceasing to be the present.
