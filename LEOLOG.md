@@ -4457,3 +4457,85 @@ state hashes byte-for-byte.
 
 Equal coverage now preserves unlike ways of being wrong. A.49 does not yet
 choose between them; it makes the future choice answerable.
+
+## Phase A.50 — candidacy is not permission (2026-07-27)
+
+A.49 exposed separate costs for motion and restraint, but a measured cost is
+not yet a safe boundary. A cell with four perfect observations on each arm can
+still have a 95% Wilson upper bound near one half. Calling it ready would turn
+small-sample optimism into architectural authority.
+
+A.50 derives a readiness frontier over each exact A.49 stratum. It refuses both
+a combined utility and a global readiness bit. The evidence contract is:
+
+```text
+eligible observations >= 8
+abstention observations >= 8
+overreach 95% Wilson upper bound < 0.500
+missed-continuation 95% Wilson upper bound < 0.500
+```
+
+The `0.500` boundary means only that, at 95% confidence, each error remains
+less common than its opposite outcome inside its own arm: overreach versus
+support, and missed continuation versus justified restraint. It is not a
+chance baseline and not an exchange rate between the errors. Coverage remains
+a third reported coordinate and is not optimized: A.50 has no warrant to
+prefer a Leo who moves more often or one who waits more often.
+
+Every occupied cell keeps the reason it cannot advance:
+
+```text
+forming               neither A.49 arm is mature
+unpaired               only one A.49 arm is mature
+observing              both arms have 4+, but at least one has fewer than 8
+motion-unbounded       only overreach crosses the confidence boundary
+restraint-unbounded    only missed continuation crosses it
+both-unbounded         both errors cross the boundary
+candidate              both errors are independently bounded
+```
+
+`candidate` means only that a stratum may be discussed for a later controlled
+experiment. The receipts are selection-conditioned shadow evidence, not a
+causal estimate of an action that has never entered speech.
+
+Like A.49, the frontier is a pure reconstruction. It adds no member to `Leo`,
+no state tail, and no reader in School, Flow, shadow, routing, sampling, or
+generation. `LEO_STATE_VERSION` remains 22.
+`--no-wonder-appetite-readiness` suppresses only the diagnostic projection.
+
+Eleven direct contracts raised the suite from **389/389** to **400/400**. They
+cover empty, forming, one-arm, paired-but-observing, candidate, all three
+unbounded-risk regions, strict spoken/unspoken non-pairing, separate positive
+headroom, and non-mutation of the diary, School, Flow, and state format.
+
+The process matrix then built four v22 lives with identical sample size,
+arm balance, and coverage:
+
+```text
+candidate:
+  upper bounds=0.471 / 0.471
+  headroom=+0.029 / +0.029
+
+motion-unbounded:
+  upper bounds=0.785 / 0.471
+  headroom=-0.285 / +0.029
+
+restraint-unbounded:
+  upper bounds=0.471 / 0.785
+  headroom=+0.029 / -0.285
+
+both-unbounded:
+  upper bounds=0.785 / 0.785
+  headroom=-0.285 / -0.285
+
+each life:
+  scored=16, eligible=8, abstained=8, coverage=0.500
+  reply equality=1/1
+  complete state equality=1/1
+```
+
+Two complete runs reproduced the frontier rows, headroom, replies, and state
+hashes byte-for-byte.
+
+The frontier can now say why a stratum is not ready without pretending that
+one kind of uncertainty pays for another.
