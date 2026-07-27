@@ -125,6 +125,167 @@ static void test_add_appetite_calibration(
         leo->school.turn_clock = (long)receipt.observed_turn;
 }
 
+__attribute__((noinline))
+static void test_wonder_appetite_drift_surface(void) {
+    Leo *drift = malloc(sizeof *drift);
+    static LeoWonderAppetiteDrift surface;
+    static LeoWonderAppetiteReliability pooled;
+    const LeoWonderAppetiteDriftCell *cell;
+    CHECK(drift != NULL,
+          "wonder-appetite-drift: heap fixture allocated");
+    if (!drift) return;
+
+    leo_init(drift);
+    leo_wonder_appetite_drift(drift, &surface);
+    CHECK(surface.measured == 0 &&
+          surface.forming == 0 &&
+          surface.cells[0].status ==
+              LEO_WONDER_APPETITE_DRIFT_EMPTY,
+          "wonder-appetite-drift: an empty diary invents no history");
+
+    for (int i = 0; i < 7; i++)
+        test_add_appetite_calibration(
+            drift, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    leo_wonder_appetite_drift(drift, &surface);
+    CHECK(surface.measured == 0 &&
+          surface.forming == 1 &&
+          surface.cells[0].n == 7 &&
+          surface.cells[0].status ==
+              LEO_WONDER_APPETITE_DRIFT_FORMING,
+          "wonder-appetite-drift: seven outcomes cannot impersonate two eras");
+
+    leo_free(drift);
+    leo_init(drift);
+    for (int i = 0; i < 5; i++)
+        test_add_appetite_calibration(
+            drift, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    for (int i = 0; i < 4; i++)
+        test_add_appetite_calibration(
+            drift, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    leo_wonder_appetite_drift(drift, &surface);
+    cell = &surface.cells[0];
+    CHECK(surface.measured == 1 &&
+          surface.rising == 1 &&
+          cell->n == 9 &&
+          cell->early_positives == 0 &&
+          cell->recent_positives == 4 &&
+          cell->status ==
+              LEO_WONDER_APPETITE_DRIFT_RISING &&
+          cell->recent_lower > cell->early_upper,
+          "wonder-appetite-drift: fixed endpoints expose a rising return life");
+    CHECK(fabsf(cell->return_shift - 1.0f) < 1e-6f &&
+          fabsf(cell->appetite_shift) < 1e-6f &&
+          fabsf(cell->gap_shift - 1.0f) < 1e-6f &&
+          fabsf(cell->brier_shift + 0.30f) < 1e-6f,
+          "wonder-appetite-drift: return, appetite, calibration, and Brier remain separate axes");
+
+    leo_wonder_appetite_reliability(drift, &pooled);
+    CHECK(pooled.cells[0].status ==
+              LEO_WONDER_APPETITE_RELIABILITY_ALIGNED &&
+          cell->status ==
+              LEO_WONDER_APPETITE_DRIFT_RISING,
+          "wonder-appetite-drift: chronology survives an aligned pooled cell");
+
+    LeoWonderAppetiteCalibration *diary_before =
+        malloc(sizeof *diary_before);
+    LeoSchool *school_before = malloc(sizeof *school_before);
+    LeoFlow *flow_before = malloc(sizeof *flow_before);
+    if (diary_before)
+        *diary_before = drift->wonder_appetite_calibration;
+    if (school_before) *school_before = drift->school;
+    if (flow_before) *flow_before = drift->flow;
+    leo_wonder_appetite_drift(drift, &surface);
+    CHECK(diary_before && school_before && flow_before &&
+          !memcmp(diary_before,
+                  &drift->wonder_appetite_calibration,
+                  sizeof *diary_before) &&
+          !memcmp(school_before, &drift->school,
+                  sizeof *school_before) &&
+          !memcmp(flow_before, &drift->flow,
+                  sizeof *flow_before),
+          "wonder-appetite-drift: reading change cannot rewrite Leo");
+    free(diary_before);
+    free(school_before);
+    free(flow_before);
+
+    leo_free(drift);
+    leo_init(drift);
+    for (int i = 0; i < 4; i++)
+        test_add_appetite_calibration(
+            drift, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < 4; i++)
+        test_add_appetite_calibration(
+            drift, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    leo_wonder_appetite_drift(drift, &surface);
+    cell = &surface.cells[0];
+    CHECK(surface.falling == 1 &&
+          cell->status ==
+              LEO_WONDER_APPETITE_DRIFT_FALLING &&
+          cell->recent_upper < cell->early_lower,
+          "wonder-appetite-drift: the same evidence reversed is a falling life");
+
+    leo_free(drift);
+    leo_init(drift);
+    for (int era = 0; era < 2; era++) {
+        for (int i = 0; i < 3; i++)
+            test_add_appetite_calibration(
+                drift, era ? 0.69f : 0.65f, 0,
+                LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+        test_add_appetite_calibration(
+            drift, era ? 0.69f : 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    }
+    leo_wonder_appetite_drift(drift, &surface);
+    cell = &surface.cells[0];
+    CHECK(surface.stable == 1 &&
+          cell->status ==
+              LEO_WONDER_APPETITE_DRIFT_STABLE &&
+          fabsf(cell->return_shift) < 1e-6f &&
+          fabsf(cell->appetite_shift - 0.04f) < 1e-6f &&
+          fabsf(cell->gap_shift + 0.04f) < 1e-6f,
+          "wonder-appetite-drift: confidence may move while observed return stays stable");
+
+    leo_free(drift);
+    leo_init(drift);
+    for (int i = 0; i < 4; i++) {
+        test_add_appetite_calibration(
+            drift, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+        test_add_appetite_calibration(
+            drift, 0.65f, 1,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    }
+    leo_wonder_appetite_drift(drift, &surface);
+    CHECK(surface.measured == 0 &&
+          surface.forming == 2 &&
+          surface.cells[0].n == 4 &&
+          surface.cells[
+              LEO_WONDER_APPETITE_RELIABILITY_BINS].n == 4,
+          "wonder-appetite-drift: spoken and unspoken chronology cannot lend each other evidence");
+
+    leo_free(drift);
+    leo_init(drift);
+    for (int i = 0; i < 8; i++)
+        test_add_appetite_calibration(
+            drift, 0.65f, 0,
+            i & 1 ?
+                LEO_WONDER_APPETITE_CALIB_EXTERNAL :
+                LEO_WONDER_APPETITE_CALIB_UNSCORABLE);
+    leo_wonder_appetite_drift(drift, &surface);
+    CHECK(surface.measured == 0 &&
+          surface.forming == 0 &&
+          surface.cells[0].n == 0,
+          "wonder-appetite-drift: causal confounds cannot become an era");
+
+    leo_free(drift);
+    free(drift);
+}
+
 int main(void) {
     printf("test_leo (step 0)\n");
 
@@ -2521,6 +2682,10 @@ int main(void) {
         }
         free(rel);
     }
+
+    /* A.47 lives in a separate function because Leo's long historical test
+     * body already owns a deliberately large stack frame. */
+    test_wonder_appetite_drift_surface();
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the
