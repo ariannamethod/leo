@@ -14,7 +14,7 @@ ifneq ($(wildcard $(AML_SRC)),)   # the ONLY AML source is the vendored copy in 
   AML_FLAGS := -DHAVE_AML -Iariannamethod
 endif
 
-.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics deferred-wonder-attribution deferred-wonder-redirection deferred-wonder-appetite deferred-wonder-appetite-calibration deferred-wonder-appetite-reliability deferred-wonder-appetite-drift deferred-wonder-appetite-policy deferred-wonder-appetite-regret deferred-wonder-appetite-readiness deferred-wonder-appetite-holdout
+.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics deferred-wonder-attribution deferred-wonder-redirection deferred-wonder-appetite deferred-wonder-appetite-calibration deferred-wonder-appetite-reliability deferred-wonder-appetite-drift deferred-wonder-appetite-policy deferred-wonder-appetite-regret deferred-wonder-appetite-readiness deferred-wonder-appetite-holdout deferred-wonder-appetite-admission
 
 all: leo
 
@@ -88,6 +88,9 @@ deferred-wonder-appetite-readiness: leo
 deferred-wonder-appetite-holdout: leo
 	./scripts/deferred_wonder_appetite_holdout_matrix.sh
 
+deferred-wonder-appetite-admission: leo
+	./scripts/deferred_wonder_appetite_admission_matrix.sh
+
 # unit tests — test_leo.c #includes leo.c with LEO_NO_MAIN
 test: tests/test_leo.c leo.c
 	$(CC) -DLEO_NO_MAIN tests/test_leo.c $(CFLAGS) -o tests/test_leo
@@ -104,6 +107,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_wonder_appetite_regret_dialogue_report.sh
 	./scripts/test_wonder_appetite_readiness_dialogue_report.sh
 	./scripts/test_wonder_appetite_holdout_dialogue_report.sh
+	./scripts/test_wonder_appetite_admission_dialogue_report.sh
 	./scripts/test_deferred_wonder_recovery_matrix.sh
 	./scripts/test_deferred_wonder_ecology_matrix.sh
 	./scripts/test_deferred_wonder_constellation_matrix.sh
@@ -118,6 +122,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_deferred_wonder_appetite_regret_matrix.sh
 	./scripts/test_deferred_wonder_appetite_readiness_matrix.sh
 	./scripts/test_deferred_wonder_appetite_holdout_matrix.sh
+	./scripts/test_deferred_wonder_appetite_admission_matrix.sh
 
 # address + undefined behaviour sanitizers on the smoke run
 asan: leo.c

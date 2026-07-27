@@ -4614,3 +4614,62 @@ all terminal lives:
 A separate CLI arming fork produced the same reply and a byte-identical state
 prefix; only the fixed v23 holdout tail differed. The future can now refute the
 frontier without being chosen by it. It still cannot move Leo's mouth.
+
+## Phase A.52 — the trial remembers its warrant (2026-07-28)
+
+A.51 remembered when a holdout began, but not why A.50 had admitted it. Once
+the 32-receipt forecast diary rotated, a surviving trial could still be graded
+but could no longer prove that both risk arms had actually crossed the
+readiness frontier at its origin. A later observer would have to trust a
+historical conclusion whose evidence had disappeared.
+
+A.52 freezes that evidence at the same instant as the trial. Each new holdout
+may carry one immutable admission receipt containing:
+
+```text
+exact spoken/appetite stratum
+opened turn and baseline proposal identity
+eligible / abstained sample counts
+supported / overreach / missed / restraint outcomes
+the two independently bounded Wilson risks
+```
+
+The receipt is valid only when both arms have at least eight observations,
+their outcome partitions are arithmetically exact, and both 95% upper bounds
+remain strictly below `0.500`. Its identity must match the A.51 trial. Later
+diary rotation, future holdout outcomes, and repeated updates cannot alter it.
+
+State v24 appends admission receipts after the unchanged v23 holdout tail.
+A valid v23 trial migrates alive but `legacy`: Leo does not reconstruct a
+warrant his older body did not preserve. A truncated or contradictory v24
+receipt discards only the admission ledger; the organism, forecast diary, and
+A.51 trial survive. An ablated admission is permanently unattested rather than
+backfilled from later evidence.
+
+`--no-wonder-appetite-admission` disables creation and its diagnostic. No
+School, Flow, shadow, route, sampler, scheduler, or generation path reads the
+receipt. An `attested` receipt proves only that the experiment was eligible to
+begin; even a later `confirmed` verdict still grants no permission to speak.
+
+Five direct contracts raised the suite from **416/416** to **421/421**. They
+cover exact capture, immutability, ablation, honest v23 migration, and
+truncated or semantically impossible v24 recovery.
+
+The real-process fork then opened the same A.51 trial with admission ON and
+OFF:
+
+```text
+reply equality                         1/1
+body plus A.51 trial prefix equality   1/1
+complete state equality                0/1
+attested / legacy                      1 / 0
+baseline outcomes                      7/1 | 1/7
+baseline Wilson upper bounds           0.471 / 0.471
+```
+
+The full states differed only in the fixed A.52 tail. The complete five-case
+A.51 matrix also remained green on v24: replies `5/5`, terminal states `5/5`,
+and arming prefix `1/1`.
+
+A trial that outlives its diary can now testify both to what the future did and
+to why the past was allowed to ask.
