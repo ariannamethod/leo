@@ -286,6 +286,172 @@ static void test_wonder_appetite_drift_surface(void) {
     free(drift);
 }
 
+__attribute__((noinline))
+static void test_wonder_appetite_shadow_policy(void) {
+    Leo *leo = malloc(sizeof *leo);
+    LeoWonderAppetiteCalibrationReceipt forecast;
+    CHECK(leo != NULL,
+          "wonder-appetite-policy: heap fixture allocated");
+    if (!leo) return;
+
+    leo_init(leo);
+    memset(&forecast, 0, sizeof forecast);
+    leo_wonder_appetite_policy_snapshot(leo, 0.65f, 0, &forecast);
+    CHECK(forecast.policy ==
+              LEO_WONDER_APPETITE_POLICY_FORMING &&
+          forecast.policy_n == 0 &&
+          forecast.policy_reliability ==
+              LEO_WONDER_APPETITE_RELIABILITY_EMPTY &&
+          forecast.policy_drift ==
+              LEO_WONDER_APPETITE_DRIFT_EMPTY,
+          "wonder-appetite-policy: an empty past abstains without inventing evidence");
+
+    for (int era = 0; era < 2; era++) {
+        for (int i = 0; i < 3; i++)
+            test_add_appetite_calibration(
+                leo, 0.65f, 0,
+                LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+        test_add_appetite_calibration(
+            leo, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    }
+    memset(&forecast, 0, sizeof forecast);
+    leo_wonder_appetite_policy_snapshot(leo, 0.65f, 0, &forecast);
+    CHECK(forecast.policy ==
+              LEO_WONDER_APPETITE_POLICY_ELIGIBLE &&
+          forecast.policy_n == 8 &&
+          forecast.policy_reliability ==
+              LEO_WONDER_APPETITE_RELIABILITY_ALIGNED &&
+          forecast.policy_drift ==
+              LEO_WONDER_APPETITE_DRIFT_STABLE,
+          "wonder-appetite-policy: only stable calibrated history becomes eligible");
+
+    memset(&leo->wonder_appetite, 0, sizeof leo->wonder_appetite);
+    leo->wonder_appetite.status = LEO_WONDER_APPETITE_SALIENT;
+    leo->wonder_appetite.winner = 0;
+    leo->wonder_appetite.n_candidates = 1;
+    strcpy(leo->wonder_appetite.candidates[0].word, "future");
+    leo->wonder_appetite.candidates[0].appetite = 0.65f;
+    leo->school.turn_clock = 100;
+    leo_wonder_appetite_calibrate(leo, "Quiet room.");
+    const LeoWonderAppetiteCalibrationReceipt *born =
+        leo_wonder_appetite_calibration_at(
+            &leo->wonder_appetite_calibration, 8);
+    CHECK(born &&
+          born->verdict == LEO_WONDER_APPETITE_CALIB_PENDING &&
+          born->policy == LEO_WONDER_APPETITE_POLICY_ELIGIBLE &&
+          born->policy_n == 8,
+          "wonder-appetite-policy: the real forecast birth freezes its prior evidence");
+    CHECK(born &&
+          leo_wonder_appetite_calibration_valid(born, 100),
+          "wonder-appetite-policy: a coherent birth snapshot is valid state");
+    LeoWonderAppetiteCalibrationReceipt corrupted =
+        born ? *born : forecast;
+    corrupted.policy_n = 7;
+    CHECK(!born ||
+          !leo_wonder_appetite_calibration_valid(&corrupted, 100),
+          "wonder-appetite-policy: state validation rejects a policy that contradicts its evidence");
+    CHECK(born &&
+          leo_wonder_appetite_policy_result(born) ==
+              LEO_WONDER_APPETITE_POLICY_RESULT_PENDING,
+          "wonder-appetite-policy: a decision cannot grade its own unfinished future");
+    corrupted = born ? *born : forecast;
+    corrupted.verdict = LEO_WONDER_APPETITE_CALIB_EXTERNAL;
+    corrupted.observed_turn++;
+    corrupted.observations = 1;
+    CHECK(born &&
+          leo_wonder_appetite_policy_result(&corrupted) ==
+              LEO_WONDER_APPETITE_POLICY_RESULT_CONFOUNDED,
+          "wonder-appetite-policy: human intervention cannot reward or punish restraint");
+
+    forecast.verdict = LEO_WONDER_APPETITE_CALIB_SUSTAINED;
+    CHECK(leo_wonder_appetite_policy_result(&forecast) ==
+              LEO_WONDER_APPETITE_POLICY_RESULT_SUPPORTED,
+          "wonder-appetite-policy: eligible return becomes support");
+    forecast.verdict = LEO_WONDER_APPETITE_CALIB_FADED;
+    CHECK(leo_wonder_appetite_policy_result(&forecast) ==
+              LEO_WONDER_APPETITE_POLICY_RESULT_OVERREACH,
+          "wonder-appetite-policy: eligible silence exposes overreach");
+
+    leo_free(leo);
+    leo_init(leo);
+    for (int i = 0; i < 4; i++)
+        test_add_appetite_calibration(
+            leo, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    for (int i = 0; i < 4; i++)
+        test_add_appetite_calibration(
+            leo, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    memset(&forecast, 0, sizeof forecast);
+    leo_wonder_appetite_policy_snapshot(leo, 0.65f, 0, &forecast);
+    CHECK(forecast.policy ==
+              LEO_WONDER_APPETITE_POLICY_DRIFTING &&
+          forecast.policy_reliability ==
+              LEO_WONDER_APPETITE_RELIABILITY_ALIGNED &&
+          forecast.policy_drift ==
+              LEO_WONDER_APPETITE_DRIFT_RISING,
+          "wonder-appetite-policy: aligned totals cannot hide a moving life");
+    forecast.verdict = LEO_WONDER_APPETITE_CALIB_SUSTAINED;
+    CHECK(leo_wonder_appetite_policy_result(&forecast) ==
+              LEO_WONDER_APPETITE_POLICY_RESULT_MISSED,
+          "wonder-appetite-policy: living return after abstention remains a visible miss");
+    forecast.verdict = LEO_WONDER_APPETITE_CALIB_FADED;
+    CHECK(leo_wonder_appetite_policy_result(&forecast) ==
+              LEO_WONDER_APPETITE_POLICY_RESULT_RESTRAINT,
+          "wonder-appetite-policy: fading after abstention records restraint");
+
+    leo_free(leo);
+    leo_init(leo);
+    for (int i = 0; i < 8; i++)
+        test_add_appetite_calibration(
+            leo, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    memset(&forecast, 0, sizeof forecast);
+    leo_wonder_appetite_policy_snapshot(leo, 0.65f, 0, &forecast);
+    CHECK(forecast.policy ==
+              LEO_WONDER_APPETITE_POLICY_UNCALIBRATED &&
+          forecast.policy_reliability ==
+              LEO_WONDER_APPETITE_RELIABILITY_OVER &&
+          forecast.policy_drift ==
+              LEO_WONDER_APPETITE_DRIFT_STABLE,
+          "wonder-appetite-policy: stable overconfidence is still abstention");
+
+    leo_free(leo);
+    leo_init(leo);
+    for (int i = 0; i < 8; i++)
+        test_add_appetite_calibration(
+            leo, 0.65f, 0,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    memset(&forecast, 0, sizeof forecast);
+    leo_wonder_appetite_policy_snapshot(leo, 0.65f, 0, &forecast);
+    CHECK(forecast.policy ==
+              LEO_WONDER_APPETITE_POLICY_UNCALIBRATED &&
+          forecast.policy_reliability ==
+              LEO_WONDER_APPETITE_RELIABILITY_UNDER,
+          "wonder-appetite-policy: stable underconfidence is measured, not silently promoted");
+
+    memset(&forecast, 0, sizeof forecast);
+    leo_wonder_appetite_policy_snapshot(leo, 0.65f, 1, &forecast);
+    CHECK(forecast.policy ==
+              LEO_WONDER_APPETITE_POLICY_FORMING &&
+          forecast.policy_n == 0,
+          "wonder-appetite-policy: unspoken evidence cannot authorize a spoken Wonder");
+
+    int previous_policy = g_leo_wonder_appetite_policy_on;
+    g_leo_wonder_appetite_policy_on = 0;
+    memset(&forecast, 0, sizeof forecast);
+    leo_wonder_appetite_policy_snapshot(leo, 0.65f, 0, &forecast);
+    CHECK(forecast.policy ==
+              LEO_WONDER_APPETITE_POLICY_NONE &&
+          forecast.policy_n == 0,
+          "wonder-appetite-policy: ablation leaves no hidden decision");
+    g_leo_wonder_appetite_policy_on = previous_policy;
+
+    leo_free(leo);
+    free(leo);
+}
+
 int main(void) {
     printf("test_leo (step 0)\n");
 
@@ -2279,13 +2445,15 @@ int main(void) {
                   "wonder-appetite-calibration: a future recurrence is counted once but waits for the whole horizon");
 
             const char *state =
+                "/tmp/leo_wonder_appetite_calibration_v22.state";
+            const char *v21 =
                 "/tmp/leo_wonder_appetite_calibration_v21.state";
             const char *legacy =
                 "/tmp/leo_wonder_appetite_calibration_v20.state";
             const char *cut =
-                "/tmp/leo_wonder_appetite_calibration_v21_cut.state";
+                "/tmp/leo_wonder_appetite_calibration_v22_cut.state";
             int saved = leo_save_state(cal, state);
-            int built_legacy = 0, built_cut = 0;
+            int built_v21 = 0, built_legacy = 0, built_cut = 0;
             FILE *fi = fopen(state, "rb");
             if (fi) {
                 fseek(fi, 0, SEEK_END);
@@ -2309,15 +2477,69 @@ int main(void) {
                             sz - appetite_tail;
                         fclose(fo);
                     }
-                    uint32_t twenty_one = 21;
-                    memcpy(bytes + sizeof(uint32_t), &twenty_one,
-                           sizeof twenty_one);
+                    uint32_t twenty_two = 22;
+                    memcpy(bytes + sizeof(uint32_t), &twenty_two,
+                           sizeof twenty_two);
                     fo = fopen(cut, "wb");
                     if (fo) {
                         built_cut =
                             (long)fwrite(
                                 bytes, 1, (size_t)(sz - 1), fo) ==
                             sz - 1;
+                        fclose(fo);
+                    }
+
+                    uint32_t twenty_one = 21;
+                    memcpy(bytes + sizeof(uint32_t), &twenty_one,
+                           sizeof twenty_one);
+                    fo = fopen(v21, "wb");
+                    if (fo) {
+                        long prefix = sz - appetite_tail;
+                        built_v21 =
+                            (long)fwrite(
+                                bytes, 1, (size_t)prefix, fo) ==
+                            prefix;
+                        int32_t n =
+                            cal->wonder_appetite_calibration.n;
+                        int32_t ptr =
+                            cal->wonder_appetite_calibration.ptr;
+                        built_v21 =
+                            built_v21 &&
+                            fwrite(&n, sizeof n, 1, fo) == 1 &&
+                            fwrite(&ptr, sizeof ptr, 1, fo) == 1;
+                        for (int i = 0;
+                             built_v21 && i < n; i++) {
+                            const LeoWonderAppetiteCalibrationReceipt
+                                *item =
+                                    &cal->wonder_appetite_calibration
+                                         .receipts[i];
+                            LeoWonderAppetiteCalibrationReceiptV21
+                                old_item;
+                            memset(&old_item, 0,
+                                   sizeof old_item);
+                            old_item.proposed_turn =
+                                item->proposed_turn;
+                            old_item.deadline_turn =
+                                item->deadline_turn;
+                            old_item.observed_turn =
+                                item->observed_turn;
+                            old_item.wonder_id = item->wonder_id;
+                            memcpy(old_item.word, item->word,
+                                   sizeof old_item.word);
+                            old_item.appetite = item->appetite;
+                            old_item.peak_recurrence =
+                                item->peak_recurrence;
+                            old_item.brier = item->brier;
+                            old_item.observations =
+                                item->observations;
+                            old_item.semantic_hits =
+                                item->semantic_hits;
+                            old_item.spoken = item->spoken;
+                            old_item.verdict = item->verdict;
+                            built_v21 =
+                                fwrite(&old_item,
+                                       sizeof old_item, 1, fo) == 1;
+                        }
                         fclose(fo);
                     }
                 }
@@ -2331,7 +2553,9 @@ int main(void) {
             CHECK(loaded && forecast &&
                   forecast->proposed_turn == 11 &&
                   forecast->observed_turn == 13 &&
-                  forecast->semantic_hits == 1,
+                  forecast->semantic_hits == 1 &&
+                  forecast->policy ==
+                      LEO_WONDER_APPETITE_POLICY_FORMING,
                   "wonder-appetite-calibration: an unfinished forecast survives sleep without losing its clock");
 
             woke->school.turn_clock = 14;
@@ -2352,6 +2576,12 @@ int main(void) {
                         sustained_error * sustained_error) < 1e-6f,
                   "wonder-appetite-calibration: recurrence matures into a scored sustained verdict");
 
+            CHECK(built_v21 && leo_load_state(old, v21) &&
+                  old->wonder_appetite_calibration.n == 1 &&
+                  leo_wonder_appetite_calibration_at(
+                      &old->wonder_appetite_calibration, 0)->policy ==
+                      LEO_WONDER_APPETITE_POLICY_LEGACY,
+                  "wonder-appetite-policy: a v21 forecast migrates without invented hindsight");
             CHECK(built_legacy && leo_load_state(old, legacy) &&
                   old->wonder_appetite_calibration.n == 0 &&
                   leo_deferred_wonder_find(old, "nareth") >= 0,
@@ -2359,7 +2589,7 @@ int main(void) {
             CHECK(built_cut && leo_load_state(damaged, cut) &&
                   damaged->wonder_appetite_calibration.n == 0 &&
                   leo_deferred_wonder_find(damaged, "nareth") >= 0,
-                  "wonder-appetite-calibration: a corrupt v21 tail loses only forecasts");
+                  "wonder-appetite-calibration: a corrupt v22 tail loses only forecasts");
 
             leo_free(cal);
             seed_wonder_redirection_body(cal);
@@ -2507,7 +2737,7 @@ int main(void) {
             CHECK(cal->wonder_appetite_calibration.n == 0,
                   "wonder-appetite-calibration: ablation removes only the slow diary");
 
-            remove(state); remove(legacy); remove(cut);
+            remove(state); remove(v21); remove(legacy); remove(cut);
             leo_free(cal); leo_free(woke);
             leo_free(old); leo_free(damaged);
         }
@@ -2686,6 +2916,7 @@ int main(void) {
     /* A.47 lives in a separate function because Leo's long historical test
      * body already owns a deliberately large stack frame. */
     test_wonder_appetite_drift_surface();
+    test_wonder_appetite_shadow_policy();
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the

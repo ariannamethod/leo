@@ -287,7 +287,9 @@ reply and its Flow snapshot are already history. It remains a shadow organ:
 School, generation, routing, and the existing shadow scheduler have no reader
 for its receipt. `--no-wonder-appetite` therefore removes only
 `[wonder-appetite: ...]`; reply bytes and saved state must remain identical.
-A.44 itself has no persistent fields. State is now v21 only because A.45 keeps
+A.44 itself has no persistent fields. A.45 introduced state v21 for its
+forecast diary; A.48 extends those records in v22 with a birth-time policy
+witness
 a separate slow calibration diary; the historical A.44 matrix explicitly
 ablates that later layer and retains complete state equality.
 
@@ -422,6 +424,43 @@ predicted appetite `0.690`, and observed rate `0.500`. One chronology is
 `sustained x4 -> faded x4` and becomes `falling`. Final ON/OFF replies and
 complete states must remain byte-identical. `--no-wonder-appetite-drift`
 removes only this projection; it does not remove or rewrite the v21 diary.
+
+Run the shadow abstention policy matrix:
+
+```sh
+make deferred-wonder-appetite-policy
+```
+
+A.48 asks a deliberately narrower question than "should Leo speak?": at the
+instant A.45 opens a forecast, did the exact spoken/appetite stratum have enough
+stable and calibrated history that a hypothetical policy could trust it?
+The answer is frozen into the forecast before that forecast can contribute its
+own outcome:
+
+```text
+fewer than 8 scored lives                         -> forming
+8+ lives, A.46 over/under                         -> uncalibrated
+8+ lives, A.46 aligned, A.47 rising/falling       -> drifting
+8+ lives, A.46 aligned, A.47 stable               -> eligible
+```
+
+When the future arrives, `eligible` becomes `supported` or `overreach`;
+abstention becomes `missed` or `restraint`. Literal human return, lost
+identity, and broken chronology remain `confounded`. These are retrospective
+policy receipts, not actions. No School, Flow, route, sampler, or generator
+reads them.
+
+State v22 appends the frozen policy, reliability status, drift status, and
+support count to each A.45 record. A v21 forecast migrates as `legacy`; Leo does
+not reconstruct confidence his older body never witnessed. A corrupt v22 tail
+still fails soft by discarding only the forecast diary.
+
+The checked four-case matrix crosses a real save/load/respond/save process for
+`eligible -> sustained`, `eligible -> faded`, `drifting -> sustained`, and
+`drifting -> faded`. The resulting labels are `supported`, `overreach`,
+`missed`, and `restraint`. `--no-wonder-appetite-policy` removes the diagnostic
+and prevents new policy snapshots; ON/OFF replies and complete states must
+remain byte-identical when no new forecast is born.
 
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,

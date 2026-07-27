@@ -1764,7 +1764,29 @@ typedef struct {
     uint8_t  semantic_hits;
     uint8_t  spoken;
     uint8_t  verdict;
+    /* A.48/state v22: the policy judgment is frozen at forecast birth.
+     * Later diary turnover must not rewrite what the shadow knew then. */
+    uint8_t  policy;
+    uint8_t  policy_reliability;
+    uint8_t  policy_drift;
+    uint8_t  policy_n;
 } LeoWonderAppetiteCalibrationReceipt;
+/* Frozen v21 record for honest migration: older forecasts had no policy
+ * witness, so loading them yields LEGACY rather than reconstructed confidence. */
+typedef struct {
+    uint64_t proposed_turn;
+    uint64_t deadline_turn;
+    uint64_t observed_turn;
+    uint64_t wonder_id;
+    char     word[LEO_HEARD_WORDLEN];
+    float    appetite;
+    float    peak_recurrence;
+    float    brier;
+    uint8_t  observations;
+    uint8_t  semantic_hits;
+    uint8_t  spoken;
+    uint8_t  verdict;
+} LeoWonderAppetiteCalibrationReceiptV21;
 typedef struct {
     LeoWonderAppetiteCalibrationReceipt
         receipts[LEO_WONDER_APPETITE_CALIB_RING];
@@ -1864,6 +1886,30 @@ typedef struct {
     int rising;
     int falling;
 } LeoWonderAppetiteDrift;
+
+/* A.48: the first policy is abstention, not intervention. It snapshots whether
+ * an A.44 appetite had enough stable, calibrated history to be trusted as a
+ * counterfactual decision. The result remains downstream of speech. */
+enum {
+    LEO_WONDER_APPETITE_POLICY_NONE = 0,
+    LEO_WONDER_APPETITE_POLICY_LEGACY,
+    LEO_WONDER_APPETITE_POLICY_FORMING,
+    LEO_WONDER_APPETITE_POLICY_UNCALIBRATED,
+    LEO_WONDER_APPETITE_POLICY_DRIFTING,
+    LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+    LEO_WONDER_APPETITE_POLICY_COUNT
+};
+enum {
+    LEO_WONDER_APPETITE_POLICY_RESULT_NONE = 0,
+    LEO_WONDER_APPETITE_POLICY_RESULT_PENDING,
+    LEO_WONDER_APPETITE_POLICY_RESULT_SUPPORTED,
+    LEO_WONDER_APPETITE_POLICY_RESULT_OVERREACH,
+    LEO_WONDER_APPETITE_POLICY_RESULT_MISSED,
+    LEO_WONDER_APPETITE_POLICY_RESULT_RESTRAINT,
+    LEO_WONDER_APPETITE_POLICY_RESULT_CONFOUNDED,
+    LEO_WONDER_APPETITE_POLICY_RESULT_LEGACY,
+    LEO_WONDER_APPETITE_POLICY_RESULT_COUNT
+};
 
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
@@ -2312,6 +2358,7 @@ static int g_leo_wonder_appetite_on = 1; /* read-only return appetite over waiti
 static int g_leo_wonder_appetite_calibration_on = 1; /* persistent slow verdicts over appetite; still no scheduler or speech reader. */
 static int g_leo_wonder_appetite_reliability_on = 1; /* derived confidence surface over scored forecasts; diagnostic only. */
 static int g_leo_wonder_appetite_drift_on = 1; /* derived endpoint drift over reliability cells; diagnostic only. */
+static int g_leo_wonder_appetite_policy_on = 1; /* frozen shadow abstention at forecast birth; never read by speech. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -6302,6 +6349,98 @@ static void leo_wonder_appetite_calibration_score(
     receipt->brier = error * error;
 }
 
+static void leo_wonder_appetite_reliability(
+        const Leo *leo, LeoWonderAppetiteReliability *surface);
+static void leo_wonder_appetite_drift(
+        const Leo *leo, LeoWonderAppetiteDrift *surface);
+static int leo_wonder_appetite_reliability_bin(float appetite);
+
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_wonder_appetite_policy_name(int policy) {
+    static const char *names[LEO_WONDER_APPETITE_POLICY_COUNT] = {
+        "none", "legacy", "forming", "uncalibrated", "drifting",
+        "eligible"
+    };
+    return policy >= 0 && policy < LEO_WONDER_APPETITE_POLICY_COUNT ?
+        names[policy] : "none";
+}
+
+static int leo_wonder_appetite_policy_result(
+        const LeoWonderAppetiteCalibrationReceipt *receipt) {
+    if (!receipt) return LEO_WONDER_APPETITE_POLICY_RESULT_NONE;
+    if (receipt->policy == LEO_WONDER_APPETITE_POLICY_NONE)
+        return LEO_WONDER_APPETITE_POLICY_RESULT_NONE;
+    if (receipt->policy == LEO_WONDER_APPETITE_POLICY_LEGACY)
+        return LEO_WONDER_APPETITE_POLICY_RESULT_LEGACY;
+    if (receipt->verdict == LEO_WONDER_APPETITE_CALIB_PENDING)
+        return LEO_WONDER_APPETITE_POLICY_RESULT_PENDING;
+    if (receipt->verdict == LEO_WONDER_APPETITE_CALIB_EXTERNAL ||
+        receipt->verdict == LEO_WONDER_APPETITE_CALIB_LOST ||
+        receipt->verdict == LEO_WONDER_APPETITE_CALIB_UNSCORABLE)
+        return LEO_WONDER_APPETITE_POLICY_RESULT_CONFOUNDED;
+
+    int positive =
+        receipt->verdict == LEO_WONDER_APPETITE_CALIB_SUSTAINED ||
+        receipt->verdict == LEO_WONDER_APPETITE_CALIB_GROUNDED;
+    if (receipt->policy == LEO_WONDER_APPETITE_POLICY_ELIGIBLE)
+        return positive ?
+            LEO_WONDER_APPETITE_POLICY_RESULT_SUPPORTED :
+            LEO_WONDER_APPETITE_POLICY_RESULT_OVERREACH;
+    return positive ?
+        LEO_WONDER_APPETITE_POLICY_RESULT_MISSED :
+        LEO_WONDER_APPETITE_POLICY_RESULT_RESTRAINT;
+}
+
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_wonder_appetite_policy_result_name(int result) {
+    static const char
+        *names[LEO_WONDER_APPETITE_POLICY_RESULT_COUNT] = {
+            "none", "pending", "supported", "overreach", "missed",
+            "restraint", "confounded", "legacy"
+        };
+    return result >= 0 &&
+           result < LEO_WONDER_APPETITE_POLICY_RESULT_COUNT ?
+        names[result] : "none";
+}
+
+static void leo_wonder_appetite_policy_snapshot(
+        const Leo *leo, float appetite, int spoken,
+        LeoWonderAppetiteCalibrationReceipt *forecast) {
+    if (!forecast || !g_leo_wonder_appetite_policy_on) return;
+    int bin = leo_wonder_appetite_reliability_bin(appetite);
+    if (!leo || bin < 0) {
+        forecast->policy = LEO_WONDER_APPETITE_POLICY_FORMING;
+        return;
+    }
+
+    LeoWonderAppetiteReliability reliability;
+    LeoWonderAppetiteDrift drift;
+    leo_wonder_appetite_reliability(leo, &reliability);
+    leo_wonder_appetite_drift(leo, &drift);
+    int cell_index =
+        (spoken ? LEO_WONDER_APPETITE_RELIABILITY_BINS : 0) + bin;
+    const LeoWonderAppetiteReliabilityCell *reliability_cell =
+        &reliability.cells[cell_index];
+    const LeoWonderAppetiteDriftCell *drift_cell =
+        &drift.cells[cell_index];
+    forecast->policy_n = (uint8_t)drift_cell->n;
+    forecast->policy_reliability = reliability_cell->status;
+    forecast->policy_drift = drift_cell->status;
+
+    if (drift_cell->n < LEO_WONDER_APPETITE_DRIFT_MIN_N) {
+        forecast->policy = LEO_WONDER_APPETITE_POLICY_FORMING;
+    } else if (reliability_cell->status !=
+               LEO_WONDER_APPETITE_RELIABILITY_ALIGNED) {
+        forecast->policy =
+            LEO_WONDER_APPETITE_POLICY_UNCALIBRATED;
+    } else if (drift_cell->status !=
+               LEO_WONDER_APPETITE_DRIFT_STABLE) {
+        forecast->policy = LEO_WONDER_APPETITE_POLICY_DRIFTING;
+    } else {
+        forecast->policy = LEO_WONDER_APPETITE_POLICY_ELIGIBLE;
+    }
+}
+
 /* Evaluate every open forecast against this already-lived turn, then open at
  * most one new fixed-window forecast from A.44's current salient receipt.
  * Existing forecasts see the turn before a new one is born, so no forecast can
@@ -6421,6 +6560,8 @@ static void leo_wonder_appetite_calibrate(
     forecast.appetite = winner->appetite;
     forecast.spoken = winner->spoken;
     forecast.verdict = LEO_WONDER_APPETITE_CALIB_PENDING;
+    leo_wonder_appetite_policy_snapshot(
+        leo, winner->appetite, winner->spoken, &forecast);
     if (winner->spoken) {
         int episode = leo_wonder_find_open(leo, winner->word);
         if (episode >= 0)
@@ -6465,9 +6606,72 @@ static int leo_wonder_appetite_calibration_valid(
         receipt->verdict <= LEO_WONDER_APPETITE_CALIB_NONE ||
         receipt->verdict >=
             LEO_WONDER_APPETITE_CALIB_VERDICT_COUNT ||
+        receipt->policy >= LEO_WONDER_APPETITE_POLICY_COUNT ||
+        receipt->policy_reliability >=
+            LEO_WONDER_APPETITE_RELIABILITY_STATUS_COUNT ||
+        receipt->policy_drift >=
+            LEO_WONDER_APPETITE_DRIFT_STATUS_COUNT ||
+        receipt->policy_n > LEO_WONDER_APPETITE_CALIB_RING ||
         (receipt->spoken && !receipt->wonder_id) ||
         (!receipt->spoken && receipt->wonder_id))
         return 0;
+    if (receipt->policy == LEO_WONDER_APPETITE_POLICY_NONE ||
+        receipt->policy == LEO_WONDER_APPETITE_POLICY_LEGACY) {
+        if (receipt->policy_reliability !=
+                LEO_WONDER_APPETITE_RELIABILITY_EMPTY ||
+            receipt->policy_drift !=
+                LEO_WONDER_APPETITE_DRIFT_EMPTY ||
+            receipt->policy_n != 0)
+            return 0;
+    } else if (receipt->policy ==
+               LEO_WONDER_APPETITE_POLICY_FORMING) {
+        if (receipt->policy_n >=
+                LEO_WONDER_APPETITE_DRIFT_MIN_N ||
+            (receipt->policy_n == 0 &&
+             (receipt->policy_reliability !=
+                  LEO_WONDER_APPETITE_RELIABILITY_EMPTY ||
+              receipt->policy_drift !=
+                  LEO_WONDER_APPETITE_DRIFT_EMPTY)) ||
+            (receipt->policy_n > 0 &&
+             receipt->policy_drift !=
+                  LEO_WONDER_APPETITE_DRIFT_FORMING))
+            return 0;
+    } else if (receipt->policy ==
+               LEO_WONDER_APPETITE_POLICY_UNCALIBRATED) {
+        if (receipt->policy_n <
+                LEO_WONDER_APPETITE_DRIFT_MIN_N ||
+            (receipt->policy_reliability !=
+                 LEO_WONDER_APPETITE_RELIABILITY_OVER &&
+             receipt->policy_reliability !=
+                 LEO_WONDER_APPETITE_RELIABILITY_UNDER) ||
+            (receipt->policy_drift !=
+                 LEO_WONDER_APPETITE_DRIFT_STABLE &&
+             receipt->policy_drift !=
+                 LEO_WONDER_APPETITE_DRIFT_RISING &&
+             receipt->policy_drift !=
+                 LEO_WONDER_APPETITE_DRIFT_FALLING))
+            return 0;
+    } else if (receipt->policy ==
+               LEO_WONDER_APPETITE_POLICY_DRIFTING) {
+        if (receipt->policy_n <
+                LEO_WONDER_APPETITE_DRIFT_MIN_N ||
+            receipt->policy_reliability !=
+                LEO_WONDER_APPETITE_RELIABILITY_ALIGNED ||
+            (receipt->policy_drift !=
+                 LEO_WONDER_APPETITE_DRIFT_RISING &&
+             receipt->policy_drift !=
+                 LEO_WONDER_APPETITE_DRIFT_FALLING))
+            return 0;
+    } else if (receipt->policy ==
+               LEO_WONDER_APPETITE_POLICY_ELIGIBLE) {
+        if (receipt->policy_n <
+                LEO_WONDER_APPETITE_DRIFT_MIN_N ||
+            receipt->policy_reliability !=
+                LEO_WONDER_APPETITE_RELIABILITY_ALIGNED ||
+            receipt->policy_drift !=
+                LEO_WONDER_APPETITE_DRIFT_STABLE)
+            return 0;
+    }
     if (receipt->semantic_hits > 0 &&
         receipt->peak_recurrence <
             LEO_WONDER_APPETITE_RESONANCE_MIN)
@@ -6515,6 +6719,26 @@ static int leo_wonder_appetite_calibration_valid(
     return receipt->verdict ==
                LEO_WONDER_APPETITE_CALIB_FADED &&
            receipt->semantic_hits == 0;
+}
+
+static void leo_wonder_appetite_calibration_migrate_v21(
+        LeoWonderAppetiteCalibrationReceipt *receipt,
+        const LeoWonderAppetiteCalibrationReceiptV21 *old) {
+    if (!receipt || !old) return;
+    memset(receipt, 0, sizeof *receipt);
+    receipt->proposed_turn = old->proposed_turn;
+    receipt->deadline_turn = old->deadline_turn;
+    receipt->observed_turn = old->observed_turn;
+    receipt->wonder_id = old->wonder_id;
+    memcpy(receipt->word, old->word, sizeof receipt->word);
+    receipt->appetite = old->appetite;
+    receipt->peak_recurrence = old->peak_recurrence;
+    receipt->brier = old->brier;
+    receipt->observations = old->observations;
+    receipt->semantic_hits = old->semantic_hits;
+    receipt->spoken = old->spoken;
+    receipt->verdict = old->verdict;
+    receipt->policy = LEO_WONDER_APPETITE_POLICY_LEGACY;
 }
 
 static int leo_wonder_appetite_reliability_bin(float appetite) {
@@ -7894,9 +8118,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v19      : contrastive own-field birth anchors for pre-Wonder semantics
  *   v20      : exact birth provenance for the Wonder that currently has the mouth
  *   v21      : slow calibration diary over three-turn appetite forecasts
+ *   v22      : forecast-birth shadow abstention snapshots
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 21  /* appetite calibration extends the fail-soft tail; v5..v20 soft-migrate */
+#define LEO_STATE_VERSION 22  /* A.48 freezes policy knowledge at forecast birth; v5..v21 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -8114,8 +8339,8 @@ static int leo_save_state(const Leo *leo, const char *path) {
         fwrite(&leo->school.pending_origin,
                sizeof leo->school.pending_origin, 1, f);
 
-    /* A.45 (v21): fixed-horizon forecasts and their later verdicts. This
-     * evidence is independently disposable and grants no scheduling right. */
+    /* A.45/A.48 (v22): fixed-horizon forecasts, later verdicts, and the
+     * policy knowledge frozen at birth. Evidence grants no scheduling right. */
     st_w32(f, (int32_t)leo->wonder_appetite_calibration.n);
     st_w32(f, (int32_t)leo->wonder_appetite_calibration.ptr);
     if (leo->wonder_appetite_calibration.n > 0)
@@ -8786,8 +9011,9 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
-    /* Slow appetite calibration (v21). Older bodies wake without forecasts;
-     * a damaged diary loses only its claims about the future. */
+    /* Slow appetite calibration (v21/v22). A v21 forecast migrates as LEGACY:
+     * its old body never observed a policy decision, so one is not invented.
+     * A damaged diary loses only its claims about the future. */
     if (version >= 21) {
         int32_t n = 0, ptr = 0;
         int appetite_calibration_ok =
@@ -8796,11 +9022,26 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
             ptr >= 0 && ptr < LEO_WONDER_APPETITE_CALIB_RING &&
             ((n < LEO_WONDER_APPETITE_CALIB_RING && ptr == n) ||
              n == LEO_WONDER_APPETITE_CALIB_RING);
-        if (appetite_calibration_ok && n > 0 &&
-            fread(leo->wonder_appetite_calibration.receipts,
-                  sizeof(LeoWonderAppetiteCalibrationReceipt),
-                  (size_t)n, f) != (size_t)n)
-            appetite_calibration_ok = 0;
+        if (appetite_calibration_ok && n > 0) {
+            if (version >= 22) {
+                if (fread(
+                        leo->wonder_appetite_calibration.receipts,
+                        sizeof(LeoWonderAppetiteCalibrationReceipt),
+                        (size_t)n, f) != (size_t)n)
+                    appetite_calibration_ok = 0;
+            } else {
+                for (int i = 0; i < n; i++) {
+                    LeoWonderAppetiteCalibrationReceiptV21 old;
+                    if (fread(&old, sizeof old, 1, f) != 1) {
+                        appetite_calibration_ok = 0;
+                        break;
+                    }
+                    leo_wonder_appetite_calibration_migrate_v21(
+                        &leo->wonder_appetite_calibration.receipts[i],
+                        &old);
+                }
+            }
+        }
         if (appetite_calibration_ok) {
             LeoWonderAppetiteCalibration *calibration =
                 &leo->wonder_appetite_calibration;
@@ -8838,7 +9079,7 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
             }
         }
         if (!appetite_calibration_ok) {
-            fprintf(stderr, "[leo] WARNING: v21 appetite-calibration tail truncated/corrupt — organism lives without forecasts.\n");
+            fprintf(stderr, "[leo] WARNING: v21-v22 appetite-calibration tail truncated/corrupt — organism lives without forecasts.\n");
             memset(&leo->wonder_appetite_calibration, 0,
                    sizeof leo->wonder_appetite_calibration);
         }
@@ -9338,6 +9579,67 @@ static void print_wonder_appetite_drift_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_appetite_policy_stats(const Leo *leo) {
+    if (!g_leo_wonder_appetite_policy_on || !leo ||
+        leo->wonder_appetite_calibration.n == 0)
+        return;
+    int policy_counts[LEO_WONDER_APPETITE_POLICY_COUNT] = {0};
+    int result_counts[LEO_WONDER_APPETITE_POLICY_RESULT_COUNT] = {0};
+    for (int i = 0;
+         i < leo->wonder_appetite_calibration.n; i++) {
+        const LeoWonderAppetiteCalibrationReceipt *receipt =
+            leo_wonder_appetite_calibration_at(
+                &leo->wonder_appetite_calibration, i);
+        if (!receipt) continue;
+        int policy =
+            receipt->policy < LEO_WONDER_APPETITE_POLICY_COUNT ?
+                receipt->policy : LEO_WONDER_APPETITE_POLICY_NONE;
+        int result = leo_wonder_appetite_policy_result(receipt);
+        policy_counts[policy]++;
+        if (result >= 0 &&
+            result < LEO_WONDER_APPETITE_POLICY_RESULT_COUNT)
+            result_counts[result]++;
+    }
+
+    printf("     [wonder-appetite-policy: eligible=%d forming=%d uncalibrated=%d drifting=%d legacy=%d none=%d supported=%d overreach=%d missed=%d restraint=%d confounded=%d pending=%d entries=",
+           policy_counts[LEO_WONDER_APPETITE_POLICY_ELIGIBLE],
+           policy_counts[LEO_WONDER_APPETITE_POLICY_FORMING],
+           policy_counts[LEO_WONDER_APPETITE_POLICY_UNCALIBRATED],
+           policy_counts[LEO_WONDER_APPETITE_POLICY_DRIFTING],
+           policy_counts[LEO_WONDER_APPETITE_POLICY_LEGACY],
+           policy_counts[LEO_WONDER_APPETITE_POLICY_NONE],
+           result_counts[LEO_WONDER_APPETITE_POLICY_RESULT_SUPPORTED],
+           result_counts[LEO_WONDER_APPETITE_POLICY_RESULT_OVERREACH],
+           result_counts[LEO_WONDER_APPETITE_POLICY_RESULT_MISSED],
+           result_counts[LEO_WONDER_APPETITE_POLICY_RESULT_RESTRAINT],
+           result_counts[LEO_WONDER_APPETITE_POLICY_RESULT_CONFOUNDED],
+           result_counts[LEO_WONDER_APPETITE_POLICY_RESULT_PENDING]);
+    const char *separator = "";
+    for (int i = 0;
+         i < leo->wonder_appetite_calibration.n; i++) {
+        const LeoWonderAppetiteCalibrationReceipt *receipt =
+            leo_wonder_appetite_calibration_at(
+                &leo->wonder_appetite_calibration, i);
+        if (!receipt) continue;
+        printf("%s%s:%llu/%.3f/%u/%u/%s/%s/%s/%s",
+               separator, receipt->word,
+               (unsigned long long)receipt->proposed_turn,
+               (double)receipt->appetite,
+               (unsigned)receipt->spoken,
+               (unsigned)receipt->policy_n,
+               leo_wonder_appetite_reliability_status_name(
+                   receipt->policy_reliability),
+               leo_wonder_appetite_drift_status_name(
+                   receipt->policy_drift),
+               leo_wonder_appetite_policy_name(receipt->policy),
+               leo_wonder_appetite_policy_result_name(
+                   leo_wonder_appetite_policy_result(receipt)));
+        separator = "|";
+    }
+    if (!separator[0]) printf("none");
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -9575,6 +9877,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-appetite-calibration")) g_leo_wonder_appetite_calibration_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-reliability")) g_leo_wonder_appetite_reliability_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-drift")) g_leo_wonder_appetite_drift_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite-policy")) g_leo_wonder_appetite_policy_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -9793,6 +10096,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_calibration_stats(&leo);
             print_wonder_appetite_reliability_stats(&leo);
             print_wonder_appetite_drift_stats(&leo);
+            print_wonder_appetite_policy_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -9854,6 +10158,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_calibration_stats(&leo);
             print_wonder_appetite_reliability_stats(&leo);
             print_wonder_appetite_drift_stats(&leo);
+            print_wonder_appetite_policy_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */
