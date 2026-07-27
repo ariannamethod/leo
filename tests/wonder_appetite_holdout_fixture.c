@@ -159,7 +159,13 @@ static int add_future(Leo *leo, const char *scenario) {
 
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--tail-size")) {
-        printf("%zu\n", sizeof(LeoWonderAppetiteHoldouts));
+        printf("%zu\n",
+               sizeof(LeoWonderAppetiteHoldouts) +
+               sizeof(LeoWonderAppetiteAdmissions));
+        return 0;
+    }
+    if (argc == 2 && !strcmp(argv[1], "--admission-tail-size")) {
+        printf("%zu\n", sizeof(LeoWonderAppetiteAdmissions));
         return 0;
     }
     if (argc != 3 ||

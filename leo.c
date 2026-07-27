@@ -1996,6 +1996,10 @@ typedef struct {
     int   scored;
     int   eligible;
     int   abstained;
+    int   supported;
+    int   overreach;
+    int   missed;
+    int   restraint;
     float coverage;
     float overreach_rate;
     float overreach_upper;
@@ -2059,6 +2063,31 @@ typedef struct {
     LeoWonderAppetiteHoldoutTrial
         trials[LEO_WONDER_APPETITE_RELIABILITY_CELLS];
 } LeoWonderAppetiteHoldouts;
+
+/* A.52: preserve why A.50 admitted an A.51 trial after the 32-receipt diary
+ * rotates away. This immutable receipt is provenance, not another verdict. */
+enum {
+    LEO_WONDER_APPETITE_ADMISSION_EMPTY = 0,
+    LEO_WONDER_APPETITE_ADMISSION_ATTESTED,
+    LEO_WONDER_APPETITE_ADMISSION_STATUS_COUNT
+};
+typedef struct {
+    uint64_t opened_turn;
+    uint64_t baseline_proposed_turn;
+    uint8_t  spoken;
+    uint8_t  bin;
+    uint8_t  status;
+    uint8_t  eligible;
+    uint8_t  abstained;
+    uint8_t  supported;
+    uint8_t  overreach;
+    uint8_t  missed;
+    uint8_t  restraint;
+} LeoWonderAppetiteAdmissionReceipt;
+typedef struct {
+    LeoWonderAppetiteAdmissionReceipt
+        receipts[LEO_WONDER_APPETITE_RELIABILITY_CELLS];
+} LeoWonderAppetiteAdmissions;
 
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
@@ -2231,6 +2260,9 @@ typedef struct {
     /* A.51/state v23: fixed-budget out-of-sample trials over A.50 candidates.
      * Evidence only; no School, routing, sampling, or generation reader. */
     LeoWonderAppetiteHoldouts wonder_appetite_holdouts;
+    /* A.52/state v24: immutable proof of the A.50 geometry that admitted each
+     * trial. Separate so v23 trials migrate visibly unattested, never invented. */
+    LeoWonderAppetiteAdmissions wonder_appetite_admissions;
     /* A.42/A.43: pre-grounding address witness. Semantic conflict can only
      * guard; an exact waiting name may redirect without assigning meaning. */
     LeoWonderAddressReceipt wonder_address;
@@ -2514,6 +2546,7 @@ static int g_leo_wonder_appetite_policy_on = 1; /* frozen shadow abstention at f
 static int g_leo_wonder_appetite_regret_on = 1; /* separate costs of motion and restraint; derived diagnostic only. */
 static int g_leo_wonder_appetite_readiness_on = 1; /* paired confidence frontier; candidate is not permission. */
 static int g_leo_wonder_appetite_holdout_on = 1; /* fixed future trial; persisted evidence, never speech authority. */
+static int g_leo_wonder_appetite_admission_on = 1; /* immutable candidate provenance; no reader in speech. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -7420,6 +7453,10 @@ static void leo_wonder_appetite_readiness(
         cell->scored = source->scored;
         cell->eligible = source->eligible;
         cell->abstained = source->abstained;
+        cell->supported = source->supported;
+        cell->overreach = source->overreach;
+        cell->missed = source->missed;
+        cell->restraint = source->restraint;
         cell->coverage = source->coverage;
         cell->overreach_rate = source->overreach_rate;
         cell->overreach_upper = source->overreach_upper;
@@ -7628,6 +7665,59 @@ static int leo_wonder_appetite_holdout_valid(
     return expected.status == trial->status;
 }
 
+static int leo_wonder_appetite_admission_valid(
+        const LeoWonderAppetiteAdmissionReceipt *receipt,
+        const LeoWonderAppetiteHoldoutTrial *trial) {
+    if (!receipt || !trial) return 0;
+    if (receipt->status ==
+        LEO_WONDER_APPETITE_ADMISSION_EMPTY) {
+        return receipt->opened_turn == 0 &&
+               receipt->baseline_proposed_turn == 0 &&
+               receipt->spoken == 0 &&
+               receipt->bin == 0 &&
+               receipt->eligible == 0 &&
+               receipt->abstained == 0 &&
+               receipt->supported == 0 &&
+               receipt->overreach == 0 &&
+               receipt->missed == 0 &&
+               receipt->restraint == 0;
+    }
+    if (receipt->status !=
+            LEO_WONDER_APPETITE_ADMISSION_ATTESTED ||
+        trial->status == LEO_WONDER_APPETITE_HOLDOUT_EMPTY ||
+        receipt->opened_turn != trial->opened_turn ||
+        receipt->baseline_proposed_turn !=
+            trial->baseline_proposed_turn ||
+        receipt->spoken != trial->spoken ||
+        receipt->bin != trial->bin ||
+        receipt->eligible <
+            LEO_WONDER_APPETITE_READINESS_MIN_ARM_N ||
+        receipt->abstained <
+            LEO_WONDER_APPETITE_READINESS_MIN_ARM_N ||
+        (int)receipt->eligible + receipt->abstained >
+            LEO_WONDER_APPETITE_CALIB_RING ||
+        receipt->eligible !=
+            receipt->supported + receipt->overreach ||
+        receipt->abstained !=
+            receipt->missed + receipt->restraint)
+        return 0;
+
+    float overreach_lower = 0.0f, overreach_upper = 0.0f;
+    float missed_lower = 0.0f, missed_upper = 0.0f;
+    leo_wilson_interval(
+        receipt->overreach, receipt->eligible,
+        &overreach_lower, &overreach_upper);
+    leo_wilson_interval(
+        receipt->missed, receipt->abstained,
+        &missed_lower, &missed_upper);
+    (void)overreach_lower;
+    (void)missed_lower;
+    return overreach_upper <
+               LEO_WONDER_APPETITE_READINESS_RISK_CEILING &&
+           missed_upper <
+               LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
+}
+
 static void leo_wonder_appetite_holdout_update(Leo *leo) {
     if (!leo || !g_leo_wonder_appetite_holdout_on ||
         !g_leo_wonder_appetite_calibration_on)
@@ -7731,6 +7821,30 @@ static void leo_wonder_appetite_holdout_update(Leo *leo) {
         trial->spoken = frontier.cells[i].spoken;
         trial->bin = frontier.cells[i].bin;
         trial->status = LEO_WONDER_APPETITE_HOLDOUT_PENDING;
+        if (g_leo_wonder_appetite_admission_on) {
+            LeoWonderAppetiteAdmissionReceipt *admission =
+                &leo->wonder_appetite_admissions.receipts[i];
+            memset(admission, 0, sizeof *admission);
+            admission->opened_turn = trial->opened_turn;
+            admission->baseline_proposed_turn =
+                trial->baseline_proposed_turn;
+            admission->spoken = trial->spoken;
+            admission->bin = trial->bin;
+            admission->status =
+                LEO_WONDER_APPETITE_ADMISSION_ATTESTED;
+            admission->eligible =
+                (uint8_t)frontier.cells[i].eligible;
+            admission->abstained =
+                (uint8_t)frontier.cells[i].abstained;
+            admission->supported =
+                (uint8_t)frontier.cells[i].supported;
+            admission->overreach =
+                (uint8_t)frontier.cells[i].overreach;
+            admission->missed =
+                (uint8_t)frontier.cells[i].missed;
+            admission->restraint =
+                (uint8_t)frontier.cells[i].restraint;
+        }
     }
 }
 
@@ -8805,9 +8919,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v21      : slow calibration diary over three-turn appetite forecasts
  *   v22      : forecast-birth shadow abstention snapshots
  *   v23      : fixed-budget out-of-sample trials over readiness candidates
+ *   v24      : immutable A.50 admission receipts for those trials
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 23  /* A.51 persists non-restartable holdout trials; v5..v22 soft-migrate */
+#define LEO_STATE_VERSION 24  /* A.52 preserves why a trial was admitted; v5..v23 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -9038,6 +9153,11 @@ static int leo_save_state(const Leo *leo, const char *path) {
      * Their verdicts remain evidence and have no route into speech. */
     fwrite(&leo->wonder_appetite_holdouts,
            sizeof leo->wonder_appetite_holdouts, 1, f);
+
+    /* A.52 (v24): admission provenance is separate from the v23 experiment.
+     * It may be lost fail-soft without rewriting either history or verdict. */
+    fwrite(&leo->wonder_appetite_admissions,
+           sizeof leo->wonder_appetite_admissions, 1, f);
 
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
@@ -9798,6 +9918,28 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
+    /* A.52 admission provenance (v24). v23 trials remain alive but visibly
+     * unattested: reconstructing their vanished admission history would lie. */
+    if (version >= 24) {
+        int admission_ok =
+            fread(&leo->wonder_appetite_admissions,
+                  sizeof leo->wonder_appetite_admissions, 1, f) == 1;
+        if (admission_ok)
+            for (int i = 0;
+                 i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++)
+                if (!leo_wonder_appetite_admission_valid(
+                        &leo->wonder_appetite_admissions.receipts[i],
+                        &leo->wonder_appetite_holdouts.trials[i])) {
+                    admission_ok = 0;
+                    break;
+                }
+        if (!admission_ok) {
+            fprintf(stderr, "[leo] WARNING: v24 readiness-admission tail truncated/corrupt — trials live, but their admission proof is unavailable.\n");
+            memset(&leo->wonder_appetite_admissions, 0,
+                   sizeof leo->wonder_appetite_admissions);
+        }
+    }
+
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
     leo_build_chamber_tags(leo);
@@ -10531,6 +10673,79 @@ static void print_wonder_appetite_holdout_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_appetite_admission_stats(const Leo *leo) {
+    if (!g_leo_wonder_appetite_admission_on || !leo)
+        return;
+    int occupied = 0, attested = 0, legacy = 0;
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteHoldoutTrial *trial =
+            &leo->wonder_appetite_holdouts.trials[i];
+        if (trial->status == LEO_WONDER_APPETITE_HOLDOUT_EMPTY)
+            continue;
+        occupied++;
+        if (leo->wonder_appetite_admissions.receipts[i].status ==
+            LEO_WONDER_APPETITE_ADMISSION_ATTESTED)
+            attested++;
+        else
+            legacy++;
+    }
+    if (occupied == 0) return;
+
+    static const int lower[] = {62, 70, 80, 90};
+    static const int upper[] = {70, 80, 90, 100};
+    printf("     [wonder-appetite-admission: attested=%d legacy=%d cells=",
+           attested, legacy);
+    const char *separator = "";
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteHoldoutTrial *trial =
+            &leo->wonder_appetite_holdouts.trials[i];
+        if (trial->status == LEO_WONDER_APPETITE_HOLDOUT_EMPTY)
+            continue;
+        const LeoWonderAppetiteAdmissionReceipt *receipt =
+            &leo->wonder_appetite_admissions.receipts[i];
+        int has_receipt =
+            receipt->status ==
+                LEO_WONDER_APPETITE_ADMISSION_ATTESTED;
+        int eligible = has_receipt ? receipt->eligible : 0;
+        int abstained = has_receipt ? receipt->abstained : 0;
+        int supported = has_receipt ? receipt->supported : 0;
+        int overreach = has_receipt ? receipt->overreach : 0;
+        int missed = has_receipt ? receipt->missed : 0;
+        int restraint = has_receipt ? receipt->restraint : 0;
+        float overreach_lower = 0.0f, overreach_upper = 0.0f;
+        float missed_lower = 0.0f, missed_upper = 0.0f;
+        leo_wilson_interval(
+            overreach, eligible,
+            &overreach_lower, &overreach_upper);
+        leo_wilson_interval(
+            missed, abstained,
+            &missed_lower, &missed_upper);
+        (void)overreach_lower;
+        (void)missed_lower;
+        float overreach_rate = eligible > 0 ?
+            (float)overreach / eligible : 0.0f;
+        float missed_rate = abstained > 0 ?
+            (float)missed / abstained : 0.0f;
+        printf("%s%c%d-%d:%llu/%llu/%d/%d/%d/%d/%d/%d/%d/%.3f/%.3f/%.3f/%.3f/%s",
+               separator, trial->spoken ? 's' : 'u',
+               lower[trial->bin], upper[trial->bin],
+               (unsigned long long)trial->opened_turn,
+               (unsigned long long)trial->baseline_proposed_turn,
+               eligible + abstained,
+               eligible, abstained, supported, overreach,
+               missed, restraint,
+               (double)overreach_rate,
+               (double)overreach_upper,
+               (double)missed_rate,
+               (double)missed_upper,
+               has_receipt ? "attested" : "legacy");
+        separator = "|";
+    }
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -10772,6 +10987,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-appetite-regret")) g_leo_wonder_appetite_regret_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-readiness")) g_leo_wonder_appetite_readiness_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-holdout")) g_leo_wonder_appetite_holdout_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite-admission")) g_leo_wonder_appetite_admission_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -10994,6 +11210,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_regret_stats(&leo);
             print_wonder_appetite_readiness_stats(&leo);
             print_wonder_appetite_holdout_stats(&leo);
+            print_wonder_appetite_admission_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -11059,6 +11276,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_regret_stats(&leo);
             print_wonder_appetite_readiness_stats(&leo);
             print_wonder_appetite_holdout_stats(&leo);
+            print_wonder_appetite_admission_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */

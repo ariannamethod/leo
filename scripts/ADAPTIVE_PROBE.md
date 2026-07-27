@@ -568,3 +568,30 @@ spends four of its 16 attempts outside the target stratum and ends
 This is still a shadow experiment. `confirmed` does not authorize speech,
 scheduling, routing, or a sampler change. It says only that an A.50 candidate
 survived one future that it could neither select nor postpone.
+
+Run the immutable admission-receipt fork:
+
+```sh
+make deferred-wonder-appetite-admission
+```
+
+A.52 preserves the exact A.50 evidence that allowed a new A.51 trial to open.
+The receipt binds the trial identity and stratum to the original arm counts:
+eligible, abstained, supported, overreach, missed, and restraint. Validation
+recomputes both Wilson bounds and rejects a receipt unless each arm had at
+least eight observations and both upper bounds were strictly below `0.500`.
+
+State v24 places this immutable receipt in a separate tail after the unchanged
+v23 holdout. A v23 trial remains live after migration but is reported as
+`legacy`; absent evidence is never reconstructed. A damaged v24 admission tail
+fails soft by clearing only provenance, leaving the A.51 trial and all earlier
+state intact.
+
+The checked process starts from one exact candidate and forks before arming.
+Default and `--no-wonder-appetite-admission` must produce the same reply and
+byte-identical state through the complete A.51 holdout tail. Only the new A.52
+tail may differ. The admitted fork must preserve the original `7/1 | 1/7`
+outcomes and independently recomputed Wilson upper bounds `0.471/0.471`.
+
+The receipt has no generation reader. `attested` means that the holdout has a
+verifiable warrant, not that its eventual verdict may change speech.
