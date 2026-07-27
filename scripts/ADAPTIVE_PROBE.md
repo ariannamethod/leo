@@ -595,3 +595,35 @@ outcomes and independently recomputed Wilson upper bounds `0.471/0.471`.
 
 The receipt has no generation reader. `attested` means that the holdout has a
 verifiable warrant, not that its eventual verdict may change speech.
+
+Run the current-life transport matrix:
+
+```sh
+make deferred-wonder-appetite-transport
+```
+
+A.53 asks whether one attested, confirmed result still describes the measured
+policy geometry of Leo's present. The current window begins strictly after the
+last proposal consumed by A.51. Earlier admission evidence and the holdout
+cannot grade their own transport.
+
+Each exact spoken/appetite stratum needs eight new eligible and eight new
+abstained outcomes. Current overreach and missed-continuation Wilson upper
+bounds must independently remain below `0.500`. Policy coverage stays a third
+axis: the current 95% interval must overlap both the A.52 admission interval
+and the realized A.51 holdout interval.
+
+An interval overlap is a compatibility screen, not an equivalence test. The
+success status is therefore `provisional`, not permanent applicability.
+`unattested`, `pending`, `refuted`, `incompatible`, `observing`, and `shifted`
+preserve the distinct ways a transport claim may be unavailable.
+
+The checked matrix rotates motion risk, restraint risk, admission coverage,
+and holdout coverage independently. It also includes thin-current and
+policy-language-change cases. Default and
+`--no-wonder-appetite-transport` forks must keep identical replies and
+byte-identical complete v24 states for all eight rows.
+
+A.53 is derived diagnostics only. It does not persist another judgment and no
+speech or scheduler path reads it. Even `provisional` remains evidence, not
+permission.

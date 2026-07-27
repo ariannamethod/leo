@@ -1,6 +1,8 @@
 #define LEO_NO_MAIN
 #include "../leo.c"
 
+static uint64_t proposed_base = 10;
+
 static int add_outcome(
         Leo *leo, float appetite, int spoken,
         int policy, int verdict) {
@@ -11,7 +13,7 @@ static int add_outcome(
     int slot = calibration->n;
     LeoWonderAppetiteCalibrationReceipt receipt;
     memset(&receipt, 0, sizeof receipt);
-    receipt.proposed_turn = (uint64_t)(10 + slot * 4);
+    receipt.proposed_turn = proposed_base + (uint64_t)slot * 4;
     receipt.deadline_turn =
         receipt.proposed_turn +
             LEO_WONDER_APPETITE_CALIB_HORIZON;
@@ -157,6 +159,103 @@ static int add_future(Leo *leo, const char *scenario) {
     return 0;
 }
 
+static int transport_scenario(const char *scenario) {
+    return
+        !strcmp(scenario, "transport-provisional") ||
+        !strcmp(scenario, "transport-motion-shift") ||
+        !strcmp(scenario, "transport-restraint-shift") ||
+        !strcmp(scenario, "transport-both-shift") ||
+        !strcmp(scenario, "transport-coverage-shift") ||
+        !strcmp(scenario, "transport-holdout-coverage-shift") ||
+        !strcmp(scenario, "transport-observing") ||
+        !strcmp(scenario, "transport-incompatible");
+}
+
+static int add_transport_present(Leo *leo, const char *scenario) {
+    if (!strcmp(scenario, "transport-provisional"))
+        return
+            add_n(leo, 7, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 1, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_FADED) &&
+            add_n(leo, 1, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 7, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_FADED);
+    if (!strcmp(scenario, "transport-motion-shift"))
+        return
+            add_n(leo, 4, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 4, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_FADED) &&
+            add_n(leo, 1, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 7, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_FADED);
+    if (!strcmp(scenario, "transport-restraint-shift"))
+        return
+            add_n(leo, 7, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 1, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_FADED) &&
+            add_n(leo, 4, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 4, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_FADED);
+    if (!strcmp(scenario, "transport-both-shift"))
+        return
+            add_n(leo, 4, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 4, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_FADED) &&
+            add_n(leo, 4, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 4, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_FADED);
+    if (!strcmp(scenario, "transport-coverage-shift") ||
+        !strcmp(scenario, "transport-holdout-coverage-shift"))
+        return
+            add_n(leo, 23, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 1, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                  LEO_WONDER_APPETITE_CALIB_FADED) &&
+            add_n(leo, 1, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+            add_n(leo, 7, 0.65f, 0,
+                  LEO_WONDER_APPETITE_POLICY_FORMING,
+                  LEO_WONDER_APPETITE_CALIB_FADED);
+    if (!strcmp(scenario, "transport-observing"))
+        return add_n(
+            leo, 7, 0.65f, 0,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    if (!strcmp(scenario, "transport-incompatible"))
+        return add_n(
+            leo, 1, 0.65f, 0,
+            LEO_WONDER_APPETITE_POLICY_LEGACY,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--tail-size")) {
         printf("%zu\n",
@@ -174,9 +273,10 @@ int main(int argc, char **argv) {
          strcmp(argv[2], "motion-failed") &&
          strcmp(argv[2], "restraint-failed") &&
          strcmp(argv[2], "both-failed") &&
-         strcmp(argv[2], "coverage-starved"))) {
+         strcmp(argv[2], "coverage-starved") &&
+         !transport_scenario(argv[2]))) {
         fprintf(stderr,
-                "usage: %s STATE arm|confirmed|motion-failed|restraint-failed|both-failed|coverage-starved\n",
+                "usage: %s STATE arm|confirmed|motion-failed|restraint-failed|both-failed|coverage-starved|transport-provisional|transport-motion-shift|transport-restraint-shift|transport-both-shift|transport-coverage-shift|transport-holdout-coverage-shift|transport-observing|transport-incompatible\n",
                 argv[0]);
         return 2;
     }
@@ -189,7 +289,38 @@ int main(int argc, char **argv) {
         "Leo hears the night and asks what the sea remembers. "
         "The child watches light move across the room.");
     int ok = add_candidate(&leo);
-    if (ok && strcmp(argv[2], "arm")) {
+    if (ok && transport_scenario(argv[2])) {
+        leo_wonder_appetite_holdout_update(&leo);
+        ok = add_future(&leo, "confirmed");
+        if (ok) leo_wonder_appetite_holdout_update(&leo);
+        LeoWonderAppetiteHoldoutTrial *trial =
+            &leo.wonder_appetite_holdouts.trials[0];
+        uint64_t boundary =
+            leo_wonder_appetite_holdout_terminal_boundary(trial);
+        memset(&leo.wonder_appetite_calibration, 0,
+               sizeof leo.wonder_appetite_calibration);
+        proposed_base = boundary + 4;
+        if (!strcmp(argv[2], "transport-coverage-shift")) {
+            LeoWonderAppetiteAdmissionReceipt *admission =
+                &leo.wonder_appetite_admissions.receipts[0];
+            admission->eligible = 8;
+            admission->abstained = 24;
+            admission->supported = 7;
+            admission->overreach = 1;
+            admission->missed = 1;
+            admission->restraint = 23;
+        }
+        if (!strcmp(
+                argv[2], "transport-holdout-coverage-shift")) {
+            trial->eligible = 4;
+            trial->abstained = 12;
+            trial->supported = 4;
+            trial->overreach = 0;
+            trial->missed = 1;
+            trial->restraint = 11;
+        }
+        if (ok) ok = add_transport_present(&leo, argv[2]);
+    } else if (ok && strcmp(argv[2], "arm")) {
         leo_wonder_appetite_holdout_update(&leo);
         ok = add_future(&leo, argv[2]);
         if (ok) leo_wonder_appetite_holdout_update(&leo);
