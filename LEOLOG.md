@@ -4390,3 +4390,70 @@ complete-state equality=4/4
 `--no-wonder-appetite-policy` suppresses the diagnostic and prevents new
 snapshots. No policy field is read by School, Flow, shadow, routing, sampling,
 or generation. A.48 has earned a falsifiable account of restraint, not a voice.
+
+## Phase A.49 — motion and restraint must keep separate debts (2026-07-27)
+
+A.48 could name a supported decision, an overreach, a missed continuation, or
+justified restraint. Counting those outcomes was not yet enough. A single
+utility or regret score would require an unsupported exchange rate between two
+different errors: moving when Leo should have waited, and waiting when a living
+continuation was available.
+
+A.49 therefore reconstructs three independent coordinates from frozen A.48
+receipts:
+
+```text
+coverage       = eligible / all causally scored policy decisions
+overreach      = overreach / eligible decisions
+missed         = missed / abstentions
+```
+
+The two error rates keep their own denominators and 95% Wilson intervals.
+Coverage remains visible but cannot compensate either error. The projection
+uses the same eight spoken/appetite strata as A.46-A.48, so a mature silent
+history cannot price a spoken question, and one appetite range cannot lend
+certainty to another.
+
+Arm maturity is also asymmetric. Four eligible observations make a cell
+`eligible-observed`; four abstentions make it `abstention-observed`; both arms
+must independently reach four before the cell is `paired`. Smaller occupied
+cells remain `forming`. `pending`, `confounded`, `legacy`, and `none` receipts
+are counted separately and excluded from policy pricing.
+
+The surface is a pure diagnostic reconstruction. It adds no member to `Leo`,
+no state tail, and no reader in School, Flow, shadow, routing, sampling, or
+generation. `LEO_STATE_VERSION` remains 22.
+`--no-wonder-appetite-regret` removes only the diagnostic projection.
+
+Eight direct contracts raised the suite from **381/381** to **389/389**. They
+cover an empty diary, a genuinely paired cell, independent Wilson-bearing
+error axes, one-arm maturity, spoken/unspoken isolation, aggregate-versus-cell
+separation, causal exclusions, and non-mutation of the diary, School, Flow,
+and state format.
+
+The process matrix then built two v22 lives with the same `8/16` policy
+coverage and crossed a real load/respond/save boundary:
+
+```text
+motion-heavy:
+  supported=5, overreach=3, missed=3, restraint=5
+  overreach=0.375 [0.137,0.694]
+  missed=0.375 [0.137,0.694]
+
+restraint-heavy:
+  supported=7, overreach=1, missed=5, restraint=3
+  overreach=0.125 [0.022,0.471]
+  missed=0.625 [0.306,0.863]
+
+each life:
+  paired cells=1, eligible-observed cells=1,
+  abstention-observed cells=1
+  reply equality=1/1
+  complete state equality=1/1
+```
+
+Two complete runs reproduced the matrix rows, Wilson intervals, replies, and
+state hashes byte-for-byte.
+
+Equal coverage now preserves unlike ways of being wrong. A.49 does not yet
+choose between them; it makes the future choice answerable.

@@ -1911,6 +1911,71 @@ enum {
     LEO_WONDER_APPETITE_POLICY_RESULT_COUNT
 };
 
+/* A.49: the cost of restraint has two axes which must not be collapsed into
+ * one utility scalar. Overreach is measured among eligible forecasts; missed
+ * continuation is measured among abstentions. Coverage remains a third axis.
+ * The surface is reconstructed from frozen A.48 receipts and is never saved. */
+#define LEO_WONDER_APPETITE_REGRET_MIN_ARM_N 4
+enum {
+    LEO_WONDER_APPETITE_REGRET_EMPTY = 0,
+    LEO_WONDER_APPETITE_REGRET_FORMING,
+    LEO_WONDER_APPETITE_REGRET_ELIGIBLE_OBSERVED,
+    LEO_WONDER_APPETITE_REGRET_ABSTENTION_OBSERVED,
+    LEO_WONDER_APPETITE_REGRET_PAIRED,
+    LEO_WONDER_APPETITE_REGRET_STATUS_COUNT
+};
+typedef struct {
+    int   scored;
+    int   eligible;
+    int   abstained;
+    int   supported;
+    int   overreach;
+    int   missed;
+    int   restraint;
+    int   policy_forming;
+    int   policy_uncalibrated;
+    int   policy_drifting;
+    float coverage;
+    float overreach_rate;
+    float overreach_lower;
+    float overreach_upper;
+    float missed_rate;
+    float missed_lower;
+    float missed_upper;
+    uint8_t spoken;
+    uint8_t bin;
+    uint8_t status;
+} LeoWonderAppetiteRegretCell;
+typedef struct {
+    LeoWonderAppetiteRegretCell
+        cells[LEO_WONDER_APPETITE_RELIABILITY_CELLS];
+    int scored;
+    int eligible;
+    int abstained;
+    int supported;
+    int overreach;
+    int missed;
+    int restraint;
+    int policy_forming;
+    int policy_uncalibrated;
+    int policy_drifting;
+    int pending;
+    int confounded;
+    int legacy;
+    int none;
+    int forming_cells;
+    int eligible_observed_cells;
+    int abstention_observed_cells;
+    int paired_cells;
+    float coverage;
+    float overreach_rate;
+    float overreach_lower;
+    float overreach_upper;
+    float missed_rate;
+    float missed_lower;
+    float missed_upper;
+} LeoWonderAppetiteRegret;
+
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
  * A confident sibling may veto a destructive close, but can never learn, open,
@@ -2359,6 +2424,7 @@ static int g_leo_wonder_appetite_calibration_on = 1; /* persistent slow verdicts
 static int g_leo_wonder_appetite_reliability_on = 1; /* derived confidence surface over scored forecasts; diagnostic only. */
 static int g_leo_wonder_appetite_drift_on = 1; /* derived endpoint drift over reliability cells; diagnostic only. */
 static int g_leo_wonder_appetite_policy_on = 1; /* frozen shadow abstention at forecast birth; never read by speech. */
+static int g_leo_wonder_appetite_regret_on = 1; /* separate costs of motion and restraint; derived diagnostic only. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -7050,6 +7116,186 @@ static void leo_wonder_appetite_drift(
     }
 }
 
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_wonder_appetite_regret_status_name(
+        int status) {
+    static const char
+        *names[LEO_WONDER_APPETITE_REGRET_STATUS_COUNT] = {
+            "empty", "forming", "eligible-observed",
+            "abstention-observed", "paired"
+        };
+    return status >= 0 &&
+           status < LEO_WONDER_APPETITE_REGRET_STATUS_COUNT ?
+        names[status] : "empty";
+}
+
+static void leo_wonder_appetite_regret_finish_cell(
+        LeoWonderAppetiteRegretCell *cell) {
+    if (!cell || cell->scored <= 0) return;
+    cell->coverage =
+        (float)cell->eligible / (float)cell->scored;
+    if (cell->eligible > 0) {
+        cell->overreach_rate =
+            (float)cell->overreach / (float)cell->eligible;
+        leo_wilson_interval(
+            cell->overreach, cell->eligible,
+            &cell->overreach_lower, &cell->overreach_upper);
+    }
+    if (cell->abstained > 0) {
+        cell->missed_rate =
+            (float)cell->missed / (float)cell->abstained;
+        leo_wilson_interval(
+            cell->missed, cell->abstained,
+            &cell->missed_lower, &cell->missed_upper);
+    }
+
+    int eligible_observed =
+        cell->eligible >= LEO_WONDER_APPETITE_REGRET_MIN_ARM_N;
+    int abstention_observed =
+        cell->abstained >= LEO_WONDER_APPETITE_REGRET_MIN_ARM_N;
+    if (eligible_observed && abstention_observed)
+        cell->status = LEO_WONDER_APPETITE_REGRET_PAIRED;
+    else if (eligible_observed)
+        cell->status =
+            LEO_WONDER_APPETITE_REGRET_ELIGIBLE_OBSERVED;
+    else if (abstention_observed)
+        cell->status =
+            LEO_WONDER_APPETITE_REGRET_ABSTENTION_OBSERVED;
+    else
+        cell->status = LEO_WONDER_APPETITE_REGRET_FORMING;
+}
+
+/* Reconstruct the two error axes from decisions which were frozen before
+ * their outcomes. A missed continuation and an overreach remain separate
+ * denominators: this layer has no warrant to say they cost the same. */
+static void leo_wonder_appetite_regret(
+        const Leo *leo, LeoWonderAppetiteRegret *surface) {
+    if (!surface) return;
+    memset(surface, 0, sizeof *surface);
+    for (int spoken = 0; spoken <= 1; spoken++)
+        for (int bin = 0;
+             bin < LEO_WONDER_APPETITE_RELIABILITY_BINS; bin++) {
+            int cell_index =
+                spoken * LEO_WONDER_APPETITE_RELIABILITY_BINS + bin;
+            surface->cells[cell_index].spoken = (uint8_t)spoken;
+            surface->cells[cell_index].bin = (uint8_t)bin;
+        }
+    if (!leo) return;
+
+    for (int i = 0;
+         i < leo->wonder_appetite_calibration.n; i++) {
+        const LeoWonderAppetiteCalibrationReceipt *receipt =
+            leo_wonder_appetite_calibration_at(
+                &leo->wonder_appetite_calibration, i);
+        int result = leo_wonder_appetite_policy_result(receipt);
+        if (result == LEO_WONDER_APPETITE_POLICY_RESULT_NONE) {
+            surface->none++;
+            continue;
+        }
+        if (result == LEO_WONDER_APPETITE_POLICY_RESULT_LEGACY) {
+            surface->legacy++;
+            continue;
+        }
+        if (result == LEO_WONDER_APPETITE_POLICY_RESULT_PENDING) {
+            surface->pending++;
+            continue;
+        }
+        if (result == LEO_WONDER_APPETITE_POLICY_RESULT_CONFOUNDED) {
+            surface->confounded++;
+            continue;
+        }
+
+        int bin = leo_wonder_appetite_reliability_bin(
+            receipt ? receipt->appetite : 0.0f);
+        if (!receipt || bin < 0) continue;
+        int cell_index =
+            (receipt->spoken ?
+                 LEO_WONDER_APPETITE_RELIABILITY_BINS : 0) + bin;
+        LeoWonderAppetiteRegretCell *cell =
+            &surface->cells[cell_index];
+        cell->scored++;
+        surface->scored++;
+
+        if (receipt->policy ==
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE) {
+            cell->eligible++;
+            surface->eligible++;
+        } else {
+            cell->abstained++;
+            surface->abstained++;
+            if (receipt->policy ==
+                LEO_WONDER_APPETITE_POLICY_FORMING) {
+                cell->policy_forming++;
+                surface->policy_forming++;
+            } else if (receipt->policy ==
+                       LEO_WONDER_APPETITE_POLICY_UNCALIBRATED) {
+                cell->policy_uncalibrated++;
+                surface->policy_uncalibrated++;
+            } else if (receipt->policy ==
+                       LEO_WONDER_APPETITE_POLICY_DRIFTING) {
+                cell->policy_drifting++;
+                surface->policy_drifting++;
+            }
+        }
+
+        if (result ==
+            LEO_WONDER_APPETITE_POLICY_RESULT_SUPPORTED) {
+            cell->supported++;
+            surface->supported++;
+        } else if (
+            result ==
+            LEO_WONDER_APPETITE_POLICY_RESULT_OVERREACH) {
+            cell->overreach++;
+            surface->overreach++;
+        } else if (
+            result == LEO_WONDER_APPETITE_POLICY_RESULT_MISSED) {
+            cell->missed++;
+            surface->missed++;
+        } else if (
+            result ==
+            LEO_WONDER_APPETITE_POLICY_RESULT_RESTRAINT) {
+            cell->restraint++;
+            surface->restraint++;
+        }
+    }
+
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        LeoWonderAppetiteRegretCell *cell = &surface->cells[i];
+        leo_wonder_appetite_regret_finish_cell(cell);
+        if (cell->status == LEO_WONDER_APPETITE_REGRET_FORMING)
+            surface->forming_cells++;
+        else if (
+            cell->status ==
+            LEO_WONDER_APPETITE_REGRET_ELIGIBLE_OBSERVED)
+            surface->eligible_observed_cells++;
+        else if (
+            cell->status ==
+            LEO_WONDER_APPETITE_REGRET_ABSTENTION_OBSERVED)
+            surface->abstention_observed_cells++;
+        else if (cell->status == LEO_WONDER_APPETITE_REGRET_PAIRED)
+            surface->paired_cells++;
+    }
+
+    if (surface->scored > 0)
+        surface->coverage =
+            (float)surface->eligible / (float)surface->scored;
+    if (surface->eligible > 0) {
+        surface->overreach_rate =
+            (float)surface->overreach / (float)surface->eligible;
+        leo_wilson_interval(
+            surface->overreach, surface->eligible,
+            &surface->overreach_lower, &surface->overreach_upper);
+    }
+    if (surface->abstained > 0) {
+        surface->missed_rate =
+            (float)surface->missed / (float)surface->abstained;
+        leo_wilson_interval(
+            surface->missed, surface->abstained,
+            &surface->missed_lower, &surface->missed_upper);
+    }
+}
+
 static int leo_flow_kind(const LeoFlow *flow, int glyph, int window, int face) {
     if (!flow || flow->n <= 0 || glyph < 0 || glyph >= GLYPH_COUNT) return LEO_FLOW_QUIET;
     if (window < 3) window = 3;
@@ -9640,6 +9886,60 @@ static void print_wonder_appetite_policy_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_appetite_regret_stats(const Leo *leo) {
+    if (!g_leo_wonder_appetite_regret_on || !leo ||
+        leo->wonder_appetite_calibration.n == 0)
+        return;
+    LeoWonderAppetiteRegret surface;
+    leo_wonder_appetite_regret(leo, &surface);
+    static const int lower[] = {62, 70, 80, 90};
+    static const int upper[] = {70, 80, 90, 100};
+
+    printf("     [wonder-appetite-regret: scored=%d eligible=%d abstained=%d supported=%d overreach=%d missed=%d restraint=%d policy-forming=%d policy-uncalibrated=%d policy-drifting=%d pending=%d confounded=%d legacy=%d none=%d coverage=%.3f overreach-axis=%.3f/%.3f/%.3f missed-axis=%.3f/%.3f/%.3f forming-cells=%d eligible-cells=%d abstention-cells=%d paired-cells=%d cells=",
+           surface.scored, surface.eligible, surface.abstained,
+           surface.supported, surface.overreach, surface.missed,
+           surface.restraint, surface.policy_forming,
+           surface.policy_uncalibrated, surface.policy_drifting,
+           surface.pending, surface.confounded, surface.legacy,
+           surface.none, (double)surface.coverage,
+           (double)surface.overreach_rate,
+           (double)surface.overreach_lower,
+           (double)surface.overreach_upper,
+           (double)surface.missed_rate,
+           (double)surface.missed_lower,
+           (double)surface.missed_upper,
+           surface.forming_cells,
+           surface.eligible_observed_cells,
+           surface.abstention_observed_cells,
+           surface.paired_cells);
+    const char *separator = "";
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteRegretCell *cell =
+            &surface.cells[i];
+        if (cell->scored <= 0) continue;
+        printf("%s%c%d-%d:%d/%d/%d/%d/%d/%d/%d/%d/%d/%d/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%s",
+               separator, cell->spoken ? 's' : 'u',
+               lower[cell->bin], upper[cell->bin],
+               cell->scored, cell->eligible, cell->abstained,
+               cell->supported, cell->overreach, cell->missed,
+               cell->restraint, cell->policy_forming,
+               cell->policy_uncalibrated, cell->policy_drifting,
+               (double)cell->coverage,
+               (double)cell->overreach_rate,
+               (double)cell->overreach_lower,
+               (double)cell->overreach_upper,
+               (double)cell->missed_rate,
+               (double)cell->missed_lower,
+               (double)cell->missed_upper,
+               leo_wonder_appetite_regret_status_name(
+                   cell->status));
+        separator = "|";
+    }
+    if (!separator[0]) printf("none");
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -9878,6 +10178,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-appetite-reliability")) g_leo_wonder_appetite_reliability_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-drift")) g_leo_wonder_appetite_drift_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-policy")) g_leo_wonder_appetite_policy_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite-regret")) g_leo_wonder_appetite_regret_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -10097,6 +10398,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_reliability_stats(&leo);
             print_wonder_appetite_drift_stats(&leo);
             print_wonder_appetite_policy_stats(&leo);
+            print_wonder_appetite_regret_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -10159,6 +10461,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_reliability_stats(&leo);
             print_wonder_appetite_drift_stats(&leo);
             print_wonder_appetite_policy_stats(&leo);
+            print_wonder_appetite_regret_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */

@@ -125,6 +125,81 @@ static void test_add_appetite_calibration(
         leo->school.turn_clock = (long)receipt.observed_turn;
 }
 
+static void test_add_appetite_policy_outcome(
+        Leo *leo, float appetite, int spoken,
+        int policy, int verdict) {
+    if (!leo ||
+        leo->wonder_appetite_calibration.n >=
+            LEO_WONDER_APPETITE_CALIB_RING)
+        return;
+    LeoWonderAppetiteCalibration *calibration =
+        &leo->wonder_appetite_calibration;
+    int slot = calibration->n;
+    LeoWonderAppetiteCalibrationReceipt receipt;
+    memset(&receipt, 0, sizeof receipt);
+    receipt.proposed_turn = (uint64_t)(10 + slot * 4);
+    receipt.deadline_turn =
+        receipt.proposed_turn +
+            LEO_WONDER_APPETITE_CALIB_HORIZON;
+    receipt.observed_turn = receipt.proposed_turn;
+    receipt.appetite = appetite;
+    receipt.spoken = spoken ? 1 : 0;
+    receipt.wonder_id = spoken ? (uint64_t)(slot + 1) : 0;
+    receipt.policy = (uint8_t)policy;
+    receipt.verdict = (uint8_t)verdict;
+    snprintf(receipt.word, sizeof receipt.word, "p%02d", slot);
+
+    if (policy == LEO_WONDER_APPETITE_POLICY_ELIGIBLE) {
+        receipt.policy_n = LEO_WONDER_APPETITE_DRIFT_MIN_N;
+        receipt.policy_reliability =
+            LEO_WONDER_APPETITE_RELIABILITY_ALIGNED;
+        receipt.policy_drift =
+            LEO_WONDER_APPETITE_DRIFT_STABLE;
+    } else if (
+        policy == LEO_WONDER_APPETITE_POLICY_DRIFTING) {
+        receipt.policy_n = LEO_WONDER_APPETITE_DRIFT_MIN_N;
+        receipt.policy_reliability =
+            LEO_WONDER_APPETITE_RELIABILITY_ALIGNED;
+        receipt.policy_drift =
+            LEO_WONDER_APPETITE_DRIFT_RISING;
+    } else if (
+        policy == LEO_WONDER_APPETITE_POLICY_UNCALIBRATED) {
+        receipt.policy_n = LEO_WONDER_APPETITE_DRIFT_MIN_N;
+        receipt.policy_reliability =
+            LEO_WONDER_APPETITE_RELIABILITY_OVER;
+        receipt.policy_drift =
+            LEO_WONDER_APPETITE_DRIFT_STABLE;
+    }
+
+    if (verdict == LEO_WONDER_APPETITE_CALIB_SUSTAINED) {
+        receipt.observed_turn = receipt.deadline_turn;
+        receipt.observations =
+            LEO_WONDER_APPETITE_CALIB_HORIZON;
+        receipt.semantic_hits = 1;
+        receipt.peak_recurrence =
+            LEO_WONDER_APPETITE_RESONANCE_MIN;
+        float error = appetite - 1.0f;
+        receipt.brier = error * error;
+    } else if (
+        verdict == LEO_WONDER_APPETITE_CALIB_FADED) {
+        receipt.observed_turn = receipt.deadline_turn;
+        receipt.observations =
+            LEO_WONDER_APPETITE_CALIB_HORIZON;
+        receipt.brier = appetite * appetite;
+    } else if (
+        verdict == LEO_WONDER_APPETITE_CALIB_EXTERNAL) {
+        receipt.observed_turn++;
+        receipt.observations = 1;
+    }
+
+    calibration->receipts[slot] = receipt;
+    calibration->n++;
+    calibration->ptr =
+        calibration->n % LEO_WONDER_APPETITE_CALIB_RING;
+    if ((uint64_t)leo->school.turn_clock < receipt.observed_turn)
+        leo->school.turn_clock = (long)receipt.observed_turn;
+}
+
 __attribute__((noinline))
 static void test_wonder_appetite_drift_surface(void) {
     Leo *drift = malloc(sizeof *drift);
@@ -447,6 +522,158 @@ static void test_wonder_appetite_shadow_policy(void) {
           forecast.policy_n == 0,
           "wonder-appetite-policy: ablation leaves no hidden decision");
     g_leo_wonder_appetite_policy_on = previous_policy;
+
+    leo_free(leo);
+    free(leo);
+}
+
+__attribute__((noinline))
+static void test_wonder_appetite_regret_surface(void) {
+    Leo *leo = malloc(sizeof *leo);
+    LeoWonderAppetiteRegret surface;
+    CHECK(leo != NULL,
+          "wonder-appetite-regret: heap fixture allocated");
+    if (!leo) return;
+
+    leo_init(leo);
+    leo_wonder_appetite_regret(leo, &surface);
+    CHECK(surface.scored == 0 &&
+          surface.cells[0].status ==
+              LEO_WONDER_APPETITE_REGRET_EMPTY,
+          "wonder-appetite-regret: an empty diary invents no cost");
+
+    for (int i = 0; i < 3; i++)
+        test_add_appetite_policy_outcome(
+            leo, 0.65f, 0,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    test_add_appetite_policy_outcome(
+        leo, 0.65f, 0,
+        LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+        LEO_WONDER_APPETITE_CALIB_FADED);
+    test_add_appetite_policy_outcome(
+        leo, 0.65f, 0,
+        LEO_WONDER_APPETITE_POLICY_FORMING,
+        LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < 3; i++)
+        test_add_appetite_policy_outcome(
+            leo, 0.65f, 0,
+            LEO_WONDER_APPETITE_POLICY_FORMING,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    leo_wonder_appetite_regret(leo, &surface);
+    const LeoWonderAppetiteRegretCell *paired =
+        &surface.cells[0];
+    CHECK(paired->scored == 8 &&
+          paired->eligible == 4 &&
+          paired->abstained == 4 &&
+          paired->supported == 3 &&
+          paired->overreach == 1 &&
+          paired->missed == 1 &&
+          paired->restraint == 3 &&
+          paired->status ==
+              LEO_WONDER_APPETITE_REGRET_PAIRED,
+          "wonder-appetite-regret: paired evidence preserves all four outcomes");
+    CHECK(fabsf(paired->coverage - 0.5f) < 1e-6f &&
+          fabsf(paired->overreach_rate - 0.25f) < 1e-6f &&
+          fabsf(paired->missed_rate - 0.25f) < 1e-6f &&
+          paired->overreach_lower < paired->overreach_rate &&
+          paired->overreach_upper > paired->overreach_rate &&
+          paired->missed_lower < paired->missed_rate &&
+          paired->missed_upper > paired->missed_rate,
+          "wonder-appetite-regret: coverage and both Wilson-bearing costs remain separate");
+
+    for (int i = 0; i < 4; i++)
+        test_add_appetite_policy_outcome(
+            leo, 0.85f, 1,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < 2; i++)
+        test_add_appetite_policy_outcome(
+            leo, 0.85f, 0,
+            LEO_WONDER_APPETITE_POLICY_DRIFTING,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < 2; i++)
+        test_add_appetite_policy_outcome(
+            leo, 0.85f, 0,
+            LEO_WONDER_APPETITE_POLICY_DRIFTING,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    leo_wonder_appetite_regret(leo, &surface);
+    const LeoWonderAppetiteRegretCell *abstention =
+        &surface.cells[2];
+    const LeoWonderAppetiteRegretCell *eligible =
+        &surface.cells[
+            LEO_WONDER_APPETITE_RELIABILITY_BINS + 2];
+    CHECK(abstention->status ==
+              LEO_WONDER_APPETITE_REGRET_ABSTENTION_OBSERVED &&
+          abstention->eligible == 0 &&
+          abstention->abstained == 4 &&
+          abstention->missed == 2 &&
+          abstention->restraint == 2 &&
+          eligible->status ==
+              LEO_WONDER_APPETITE_REGRET_ELIGIBLE_OBSERVED &&
+          eligible->eligible == 4 &&
+          eligible->abstained == 0,
+          "wonder-appetite-regret: spoken and unspoken arms cannot lend each other maturity");
+    CHECK(surface.scored == 16 &&
+          surface.eligible == 8 &&
+          surface.abstained == 8 &&
+          surface.supported == 7 &&
+          surface.overreach == 1 &&
+          surface.missed == 3 &&
+          surface.restraint == 5 &&
+          fabsf(surface.coverage - 0.5f) < 1e-6f &&
+          fabsf(surface.overreach_rate - 0.125f) < 1e-6f &&
+          fabsf(surface.missed_rate - 0.375f) < 1e-6f &&
+          surface.paired_cells == 1 &&
+          surface.eligible_observed_cells == 1 &&
+          surface.abstention_observed_cells == 1,
+          "wonder-appetite-regret: aggregate coverage cannot erase the stratified tradeoff");
+
+    test_add_appetite_policy_outcome(
+        leo, 0.75f, 0,
+        LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+        LEO_WONDER_APPETITE_CALIB_PENDING);
+    test_add_appetite_policy_outcome(
+        leo, 0.75f, 0,
+        LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+        LEO_WONDER_APPETITE_CALIB_EXTERNAL);
+    test_add_appetite_policy_outcome(
+        leo, 0.75f, 0,
+        LEO_WONDER_APPETITE_POLICY_LEGACY,
+        LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    test_add_appetite_policy_outcome(
+        leo, 0.75f, 0,
+        LEO_WONDER_APPETITE_POLICY_NONE,
+        LEO_WONDER_APPETITE_CALIB_FADED);
+    leo_wonder_appetite_regret(leo, &surface);
+    CHECK(surface.scored == 16 &&
+          surface.pending == 1 &&
+          surface.confounded == 1 &&
+          surface.legacy == 1 &&
+          surface.none == 1 &&
+          surface.cells[1].status ==
+              LEO_WONDER_APPETITE_REGRET_EMPTY,
+          "wonder-appetite-regret: pending, confounded, legacy, and ablated lives cannot price policy");
+
+    LeoWonderAppetiteCalibration diary_before =
+        leo->wonder_appetite_calibration;
+    LeoSchool *school_before = malloc(sizeof *school_before);
+    LeoFlow *flow_before = malloc(sizeof *flow_before);
+    if (school_before) *school_before = leo->school;
+    if (flow_before) *flow_before = leo->flow;
+    leo_wonder_appetite_regret(leo, &surface);
+    CHECK(school_before && flow_before &&
+          !memcmp(&diary_before,
+                  &leo->wonder_appetite_calibration,
+                  sizeof diary_before) &&
+          !memcmp(school_before, &leo->school,
+                  sizeof *school_before) &&
+          !memcmp(flow_before, &leo->flow,
+                  sizeof *flow_before) &&
+          LEO_STATE_VERSION == 22,
+          "wonder-appetite-regret: observing cost rewrites no evidence, body, or state format");
+    free(school_before);
+    free(flow_before);
 
     leo_free(leo);
     free(leo);
@@ -2917,6 +3144,7 @@ int main(void) {
      * body already owns a deliberately large stack frame. */
     test_wonder_appetite_drift_surface();
     test_wonder_appetite_shadow_policy();
+    test_wonder_appetite_regret_surface();
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the

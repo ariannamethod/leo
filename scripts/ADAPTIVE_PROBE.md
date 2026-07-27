@@ -467,3 +467,37 @@ baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow
 diagnostics would leak the judge into the stimulus, while sending Leo's private
 dialogue to an external API remains outside this protocol.
+
+Run the two-axis policy-regret matrix:
+
+```sh
+make deferred-wonder-appetite-regret
+```
+
+A.49 derives a policy cost surface from settled A.48 receipts without changing
+their frozen decisions. It deliberately refuses a single utility score:
+
+```text
+coverage  = eligible / scored
+overreach = overreach / eligible
+missed    = missed / abstained
+```
+
+Both error axes expose separate 95% Wilson intervals. The projection preserves
+the exact A.46-A.48 spoken/appetite strata. A cell is
+`eligible-observed` after four eligible decisions,
+`abstention-observed` after four abstentions, and `paired` only after both arms
+independently reach four. Smaller occupied cells remain `forming`.
+
+Pending, confounded, legacy, and ablated receipts are reported but excluded
+from the denominators. The surface is reconstructed only for diagnostics:
+there is no new persisted field, state remains v22, and no speech or scheduler
+path reads it. `--no-wonder-appetite-regret` suppresses only this line.
+
+The checked matrix builds two v22 fixtures with identical `0.500` coverage but
+different outcome geometry. The motion-heavy life must report
+`overreach=0.375, missed=0.375`; the restraint-heavy life must report
+`overreach=0.125, missed=0.625`. Both must contain one paired, one
+eligible-observed, and one abstention-observed stratum. ON/OFF forks use the
+same seed and require identical replies and byte-identical complete saved
+states.
