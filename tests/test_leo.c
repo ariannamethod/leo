@@ -54,10 +54,11 @@ static void seed_wonder_redirection_body(Leo *leo) {
         leo->school.pending_alt_glyph, 1, field_token, field_weight);
 }
 
-static long test_appetite_calibration_tail_size(const Leo *leo) {
+static long test_appetite_and_later_tail_size(const Leo *leo) {
     return (long)(2 * sizeof(int32_t) +
         leo->wonder_appetite_calibration.n *
-            (int)sizeof(LeoWonderAppetiteCalibrationReceipt));
+            (int)sizeof(LeoWonderAppetiteCalibrationReceipt) +
+        sizeof(LeoWonderAppetiteHoldouts));
 }
 
 static void test_add_appetite_calibration(
@@ -702,7 +703,7 @@ static void test_wonder_appetite_regret_surface(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 22,
+          LEO_STATE_VERSION == 23,
           "wonder-appetite-regret: observing cost rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
@@ -831,11 +832,299 @@ static void test_wonder_appetite_readiness_frontier(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 22,
+          LEO_STATE_VERSION == 23,
           "wonder-appetite-readiness: candidacy rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
 
+    leo_free(leo);
+    free(leo);
+}
+
+static LeoWonderAppetiteHoldoutTrial *
+test_open_appetite_holdout(Leo *leo, float appetite, int spoken) {
+    if (!leo) return NULL;
+    test_reset_appetite_policy_outcomes(leo);
+    memset(&leo->wonder_appetite_holdouts, 0,
+           sizeof leo->wonder_appetite_holdouts);
+    test_add_appetite_readiness_cell(
+        leo, appetite, spoken, 7, 1, 1, 7);
+    leo_wonder_appetite_holdout_update(leo);
+    int bin = leo_wonder_appetite_reliability_bin(appetite);
+    int index = (spoken ? LEO_WONDER_APPETITE_RELIABILITY_BINS : 0) +
+                bin;
+    return &leo->wonder_appetite_holdouts.trials[index];
+}
+
+static LeoWonderAppetiteHoldoutTrial *
+test_finish_appetite_holdout(
+        Leo *leo, float appetite, int spoken,
+        int supported, int overreach, int missed, int restraint,
+        int confounded, int other) {
+    LeoWonderAppetiteHoldoutTrial *trial =
+        test_open_appetite_holdout(leo, appetite, spoken);
+    test_add_appetite_readiness_cell(
+        leo, appetite, spoken,
+        supported, overreach, missed, restraint);
+    for (int i = 0; i < confounded; i++)
+        test_add_appetite_policy_outcome(
+            leo, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_EXTERNAL);
+    for (int i = 0; i < other; i++)
+        test_add_appetite_policy_outcome(
+            leo, appetite < 0.70f ? 0.75f : 0.65f, spoken,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    leo_wonder_appetite_holdout_update(leo);
+    return trial;
+}
+
+__attribute__((noinline))
+static void test_wonder_appetite_holdout_trial(void) {
+    Leo *leo = malloc(sizeof *leo);
+    CHECK(leo != NULL,
+          "wonder-appetite-holdout: heap fixture allocated");
+    if (!leo) return;
+
+    int previous_holdout = g_leo_wonder_appetite_holdout_on;
+    int previous_calibration =
+        g_leo_wonder_appetite_calibration_on;
+    int previous_policy = g_leo_wonder_appetite_policy_on;
+    g_leo_wonder_appetite_holdout_on = 1;
+    g_leo_wonder_appetite_calibration_on = 1;
+    g_leo_wonder_appetite_policy_on = 1;
+
+    leo_init(leo);
+    LeoWonderAppetiteHoldoutTrial *trial =
+        test_open_appetite_holdout(leo, 0.65f, 0);
+    CHECK(trial &&
+          trial->status ==
+              LEO_WONDER_APPETITE_HOLDOUT_PENDING &&
+          trial->opened_turn ==
+              (uint64_t)leo->school.turn_clock &&
+          trial->baseline_proposed_turn == 70 &&
+          trial->attempts == 0,
+          "wonder-appetite-holdout: a candidate freezes one readerless future boundary");
+    LeoWonderAppetiteCalibration diary_before =
+        leo->wonder_appetite_calibration;
+    LeoSchool *school_before = malloc(sizeof *school_before);
+    LeoFlow *flow_before = malloc(sizeof *flow_before);
+    if (school_before) *school_before = leo->school;
+    if (flow_before) *flow_before = leo->flow;
+    leo_wonder_appetite_holdout_update(leo);
+    CHECK(trial && school_before && flow_before &&
+          trial->attempts == 0 &&
+          !memcmp(&diary_before,
+                  &leo->wonder_appetite_calibration,
+                  sizeof diary_before) &&
+          !memcmp(school_before, &leo->school,
+                  sizeof *school_before) &&
+          !memcmp(flow_before, &leo->flow,
+                  sizeof *flow_before),
+          "wonder-appetite-holdout: the qualifying past cannot grade its own trial or rewrite Leo");
+    free(school_before);
+    free(flow_before);
+
+    trial = test_finish_appetite_holdout(
+        leo, 0.65f, 0, 7, 1, 1, 7, 0, 0);
+    CHECK(trial &&
+          trial->status ==
+              LEO_WONDER_APPETITE_HOLDOUT_CONFIRMED &&
+          trial->attempts == 16 &&
+          trial->matched == 16 &&
+          trial->eligible == 8 &&
+          trial->abstained == 8 &&
+          trial->supported == 7 &&
+          trial->overreach == 1 &&
+          trial->missed == 1 &&
+          trial->restraint == 7,
+          "wonder-appetite-holdout: sixteen new balanced lives can confirm both bounds");
+    LeoWonderAppetiteHoldoutTrial terminal = *trial;
+    leo_wonder_appetite_holdout_update(leo);
+    CHECK(!memcmp(&terminal, trial, sizeof terminal),
+          "wonder-appetite-holdout: a terminal trial cannot restart on its favorable history");
+
+    const char *state = "/tmp/leo_appetite_holdout_v23.state";
+    const char *v22 = "/tmp/leo_appetite_holdout_v22.state";
+    const char *cut = "/tmp/leo_appetite_holdout_v23_cut.state";
+    const char *bad = "/tmp/leo_appetite_holdout_v23_bad.state";
+    int saved = leo_save_state(leo, state);
+    Leo *woke = malloc(sizeof *woke);
+    Leo *old = malloc(sizeof *old);
+    Leo *damaged = malloc(sizeof *damaged);
+    if (woke) leo_init(woke);
+    if (old) leo_init(old);
+    if (damaged) leo_init(damaged);
+    CHECK(saved && woke && leo_load_state(woke, state) &&
+          !memcmp(&woke->wonder_appetite_holdouts,
+                  &leo->wonder_appetite_holdouts,
+                  sizeof leo->wonder_appetite_holdouts),
+          "wonder-appetite-holdout: a completed trial survives v23 sleep exactly");
+
+    int built_v22 = 0, built_cut = 0, built_bad = 0;
+    FILE *fi = fopen(state, "rb");
+    if (fi) {
+        fseek(fi, 0, SEEK_END);
+        long size = ftell(fi);
+        fseek(fi, 0, SEEK_SET);
+        unsigned char *bytes =
+            malloc(size > 0 ? (size_t)size : 1);
+        if (bytes &&
+            size > (long)sizeof(LeoWonderAppetiteHoldouts) &&
+            (long)fread(bytes, 1, (size_t)size, fi) == size) {
+            uint32_t twenty_two = 22;
+            memcpy(bytes + sizeof(uint32_t), &twenty_two,
+                   sizeof twenty_two);
+            FILE *fo = fopen(v22, "wb");
+            long v22_size =
+                size - (long)sizeof(LeoWonderAppetiteHoldouts);
+            if (fo) {
+                built_v22 =
+                    (long)fwrite(bytes, 1,
+                                 (size_t)v22_size, fo) == v22_size;
+                fclose(fo);
+            }
+            uint32_t twenty_three = 23;
+            memcpy(bytes + sizeof(uint32_t), &twenty_three,
+                   sizeof twenty_three);
+            fo = fopen(cut, "wb");
+            if (fo) {
+                built_cut =
+                    (long)fwrite(bytes, 1,
+                                 (size_t)(size - 1), fo) ==
+                    size - 1;
+                fclose(fo);
+            }
+            LeoWonderAppetiteHoldouts corrupted;
+            memcpy(
+                &corrupted,
+                bytes + size -
+                    (long)sizeof(LeoWonderAppetiteHoldouts),
+                sizeof corrupted);
+            corrupted.trials[0].attempts = 15;
+            memcpy(
+                bytes + size -
+                    (long)sizeof(LeoWonderAppetiteHoldouts),
+                &corrupted, sizeof corrupted);
+            fo = fopen(bad, "wb");
+            if (fo) {
+                built_bad =
+                    (long)fwrite(bytes, 1,
+                                 (size_t)size, fo) == size;
+                fclose(fo);
+            }
+        }
+        free(bytes);
+        fclose(fi);
+    }
+    CHECK(built_v22 && old && leo_load_state(old, v22) &&
+          old->wonder_appetite_calibration.n ==
+              leo->wonder_appetite_calibration.n &&
+          old->wonder_appetite_holdouts.trials[0].status ==
+              LEO_WONDER_APPETITE_HOLDOUT_EMPTY,
+          "wonder-appetite-holdout: a v22 body migrates without invented future evidence");
+    CHECK(built_cut && damaged &&
+          leo_load_state(damaged, cut) &&
+          damaged->wonder_appetite_calibration.n ==
+              leo->wonder_appetite_calibration.n &&
+          damaged->wonder_appetite_holdouts.trials[0].status ==
+              LEO_WONDER_APPETITE_HOLDOUT_EMPTY,
+          "wonder-appetite-holdout: a corrupt v23 tail loses only its trial");
+    CHECK(built_bad && damaged &&
+          leo_load_state(damaged, bad) &&
+          damaged->wonder_appetite_calibration.n ==
+              leo->wonder_appetite_calibration.n &&
+          damaged->wonder_appetite_holdouts.trials[0].status ==
+              LEO_WONDER_APPETITE_HOLDOUT_EMPTY,
+          "wonder-appetite-holdout: an impossible v23 verdict fails soft without rewriting history");
+    if (woke) { leo_free(woke); free(woke); }
+    if (old) { leo_free(old); free(old); }
+    if (damaged) { leo_free(damaged); free(damaged); }
+    remove(state);
+    remove(v22);
+    remove(cut);
+    remove(bad);
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_finish_appetite_holdout(
+        leo, 0.65f, 0, 4, 4, 1, 7, 0, 0);
+    CHECK(trial &&
+          trial->status ==
+              LEO_WONDER_APPETITE_HOLDOUT_MOTION_FAILED,
+          "wonder-appetite-holdout: future overreach can fail motion alone");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_finish_appetite_holdout(
+        leo, 0.65f, 0, 7, 1, 4, 4, 0, 0);
+    CHECK(trial &&
+          trial->status ==
+              LEO_WONDER_APPETITE_HOLDOUT_RESTRAINT_FAILED,
+          "wonder-appetite-holdout: future misses can fail restraint alone");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_finish_appetite_holdout(
+        leo, 0.65f, 0, 4, 4, 4, 4, 0, 0);
+    CHECK(trial &&
+          trial->status ==
+              LEO_WONDER_APPETITE_HOLDOUT_BOTH_FAILED,
+          "wonder-appetite-holdout: two future debts cannot cancel");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_finish_appetite_holdout(
+        leo, 0.65f, 0, 12, 0, 0, 0, 0, 4);
+    CHECK(trial &&
+          trial->attempts == 16 &&
+          trial->eligible == 12 &&
+          trial->abstained == 0 &&
+          trial->other == 4 &&
+          trial->status ==
+              LEO_WONDER_APPETITE_HOLDOUT_COVERAGE_STARVED,
+          "wonder-appetite-holdout: a fixed future cannot wait forever for its missing arm");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_finish_appetite_holdout(
+        leo, 0.65f, 0, 4, 0, 0, 4, 8, 0);
+    CHECK(trial &&
+          trial->attempts == 16 &&
+          trial->matched == 8 &&
+          trial->confounded == 8 &&
+          trial->status ==
+              LEO_WONDER_APPETITE_HOLDOUT_CONFIRMED,
+          "wonder-appetite-holdout: confounds spend budget without impersonating either arm");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_open_appetite_holdout(leo, 0.65f, 0);
+    test_add_appetite_policy_outcome(
+        leo, 0.65f, 0,
+        LEO_WONDER_APPETITE_POLICY_LEGACY,
+        LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    leo_wonder_appetite_holdout_update(leo);
+    CHECK(trial &&
+          trial->attempts == 1 &&
+          trial->status ==
+              LEO_WONDER_APPETITE_HOLDOUT_INVALIDATED,
+          "wonder-appetite-holdout: a changed policy invalidates rather than rewrites the experiment");
+
+    leo_free(leo);
+    leo_init(leo);
+    g_leo_wonder_appetite_holdout_on = 0;
+    trial = test_open_appetite_holdout(leo, 0.65f, 0);
+    CHECK(trial &&
+          trial->status ==
+              LEO_WONDER_APPETITE_HOLDOUT_EMPTY,
+          "wonder-appetite-holdout: ablation prevents even the experimental ledger");
+
+    g_leo_wonder_appetite_holdout_on = previous_holdout;
+    g_leo_wonder_appetite_calibration_on =
+        previous_calibration;
+    g_leo_wonder_appetite_policy_on = previous_policy;
     leo_free(leo);
     free(leo);
 }
@@ -1826,7 +2115,7 @@ int main(void) {
             if (bytes && sz > 1 &&
                 (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                 long appetite_tail =
-                    test_appetite_calibration_tail_size(&pre);
+                    test_appetite_and_later_tail_size(&pre);
                 long origin_tail = (long)sizeof(int32_t);
                 long tail = appetite_tail + origin_tail +
                             (long)(sizeof(int32_t) +
@@ -2571,7 +2860,7 @@ int main(void) {
             if (bytes && sz > (long)sizeof(LeoDeferredWonder) + 5 &&
                 (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                 long appetite_tail =
-                    test_appetite_calibration_tail_size(&sleep);
+                    test_appetite_and_later_tail_size(&sleep);
                 long origin_tail =
                     (long)(sizeof(int32_t) + sizeof(LeoDeferredWonder));
                 uint32_t nineteen = 19;
@@ -2850,7 +3139,7 @@ int main(void) {
                 unsigned char *bytes =
                     malloc(sz > 0 ? (size_t)sz : 1);
                 long appetite_tail =
-                    test_appetite_calibration_tail_size(cal);
+                    test_appetite_and_later_tail_size(cal);
                 if (bytes && sz > appetite_tail &&
                     (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                     uint32_t twenty = 20;
@@ -2870,10 +3159,13 @@ int main(void) {
                            sizeof twenty_two);
                     fo = fopen(cut, "wb");
                     if (fo) {
+                        long holdout_tail =
+                            (long)sizeof(LeoWonderAppetiteHoldouts);
                         built_cut =
                             (long)fwrite(
-                                bytes, 1, (size_t)(sz - 1), fo) ==
-                            sz - 1;
+                                bytes, 1,
+                                (size_t)(sz - holdout_tail - 1), fo) ==
+                            sz - holdout_tail - 1;
                         fclose(fo);
                     }
 
@@ -3307,6 +3599,7 @@ int main(void) {
     test_wonder_appetite_shadow_policy();
     test_wonder_appetite_regret_surface();
     test_wonder_appetite_readiness_frontier();
+    test_wonder_appetite_holdout_trial();
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the
@@ -3536,7 +3829,7 @@ int main(void) {
                                            (w.school.has_pending_origin ?
                                             sizeof(LeoDeferredWonder) : 0));
                 long appetite_tail =
-                    test_appetite_calibration_tail_size(&w);
+                    test_appetite_and_later_tail_size(&w);
                 long current_flow = (long)(2 * sizeof(int32_t) +
                                            w.flow.n * (int)sizeof(LeoFlowSnapshot) +
                                            2 * sizeof(int32_t) +
@@ -3930,7 +4223,7 @@ int main(void) {
                                               (fl->school.has_pending_origin ?
                                                sizeof(LeoDeferredWonder) : 0));
                     long appetite_tail =
-                        test_appetite_calibration_tail_size(fl);
+                        test_appetite_and_later_tail_size(fl);
                     long current_tail = (long)(2 * sizeof(int32_t) +
                                               fl->flow.n * (int)sizeof(LeoFlowSnapshot) +
                                               2 * sizeof(int32_t) +
@@ -4185,7 +4478,7 @@ int main(void) {
                                               (sh->school.has_pending_origin ?
                                                sizeof(LeoDeferredWonder) : 0));
                     long appetite_tail =
-                        test_appetite_calibration_tail_size(sh);
+                        test_appetite_and_later_tail_size(sh);
                     uint32_t fifteen = 15;
                     memcpy(bytes + sizeof(uint32_t), &fifteen, sizeof fifteen);
                     FILE *fo = fopen(legacy, "wb");
@@ -5029,7 +5322,7 @@ int main(void) {
                        sizeof(int32_t) +
                        (l.school.has_pending_origin ?
                         sizeof(LeoDeferredWonder) : 0)) +
-                test_appetite_calibration_tail_size(&l);
+                test_appetite_and_later_tail_size(&l);
             uint32_t ten = 10;
             memcpy(fb + sizeof(uint32_t), &ten, sizeof ten);
             tf = fopen(sp, "wb");

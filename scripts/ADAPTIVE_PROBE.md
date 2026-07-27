@@ -530,3 +530,41 @@ byte-identical v22 states.
 
 This remains selection-conditioned shadow evidence, not a causal claim about a
 speech intervention. A.50 adds no state and has no generation reader.
+
+Run the fixed-future holdout matrix:
+
+```sh
+make deferred-wonder-appetite-holdout
+```
+
+A.51 opens at most one non-restartable trial for each exact A.50 candidate
+stratum. Opening freezes the current turn and latest proposal identity. The
+qualifying history cannot grade itself; only later settled A.48 receipts are
+eligible.
+
+Each trial consumes exactly 16 future settled policy attempts. Receipts from
+other strata and causally confounded receipts still consume budget, so the
+experiment cannot wait for a convenient sample. The target stratum needs at
+least four eligible and four abstained outcomes. Missing either arm produces
+`coverage-starved`. Otherwise the two Wilson upper bounds are judged
+independently, producing `confirmed`, `motion-failed`, `restraint-failed`, or
+`both-failed`. A `none` or `legacy` policy receipt invalidates the apparatus
+rather than being reinterpreted.
+
+State v23 persists the frozen boundary, the 16 proposal identities already
+seen, separate arm outcomes, confounds, other-stratum budget, and terminal
+status. v22 migrates empty; a damaged v23 tail fails soft without losing the
+forecast diary. A terminal trial cannot reopen. `--no-wonder-appetite-holdout`
+removes both updates and diagnostics.
+
+The checked matrix includes one real-process arming fork and five terminal
+forks. Arming must preserve the reply and every saved byte before the v23 tail.
+For each terminal verdict, default and ablated processes must preserve both the
+reply and the complete state. The expected Wilson-upper pairs are
+`0.471/0.471`, `0.785/0.471`, `0.471/0.785`, and `0.785/0.785`; a fifth case
+spends four of its 16 attempts outside the target stratum and ends
+`coverage-starved`.
+
+This is still a shadow experiment. `confirmed` does not authorize speech,
+scheduling, routing, or a sampler change. It says only that an A.50 candidate
+survived one future that it could neither select nor postpone.

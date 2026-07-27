@@ -2019,6 +2019,47 @@ typedef struct {
     int candidate;
 } LeoWonderAppetiteReadiness;
 
+/* A.51: a candidate must face a fixed out-of-sample future before any later
+ * intervention design may cite it. One non-restartable trial lives per exact
+ * stratum. All future settled policy attempts consume its fixed budget, so
+ * the trial cannot wait indefinitely for a convenient arm balance. */
+#define LEO_WONDER_APPETITE_HOLDOUT_BUDGET 16
+#define LEO_WONDER_APPETITE_HOLDOUT_MIN_ARM_N 4
+enum {
+    LEO_WONDER_APPETITE_HOLDOUT_EMPTY = 0,
+    LEO_WONDER_APPETITE_HOLDOUT_PENDING,
+    LEO_WONDER_APPETITE_HOLDOUT_CONFIRMED,
+    LEO_WONDER_APPETITE_HOLDOUT_MOTION_FAILED,
+    LEO_WONDER_APPETITE_HOLDOUT_RESTRAINT_FAILED,
+    LEO_WONDER_APPETITE_HOLDOUT_BOTH_FAILED,
+    LEO_WONDER_APPETITE_HOLDOUT_COVERAGE_STARVED,
+    LEO_WONDER_APPETITE_HOLDOUT_INVALIDATED,
+    LEO_WONDER_APPETITE_HOLDOUT_STATUS_COUNT
+};
+typedef struct {
+    uint64_t opened_turn;
+    uint64_t baseline_proposed_turn;
+    uint64_t seen_proposed_turn[
+        LEO_WONDER_APPETITE_HOLDOUT_BUDGET];
+    uint8_t  spoken;
+    uint8_t  bin;
+    uint8_t  status;
+    uint8_t  attempts;
+    uint8_t  matched;
+    uint8_t  eligible;
+    uint8_t  abstained;
+    uint8_t  supported;
+    uint8_t  overreach;
+    uint8_t  missed;
+    uint8_t  restraint;
+    uint8_t  confounded;
+    uint8_t  other;
+} LeoWonderAppetiteHoldoutTrial;
+typedef struct {
+    LeoWonderAppetiteHoldoutTrial
+        trials[LEO_WONDER_APPETITE_RELIABILITY_CELLS];
+} LeoWonderAppetiteHoldouts;
+
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
  * A confident sibling may veto a destructive close, but can never learn, open,
@@ -2187,6 +2228,9 @@ typedef struct {
     /* A.45/state v21: slow verdicts over salient appetite forecasts. The diary
      * survives sleep but remains evidence-only and has no speech reader. */
     LeoWonderAppetiteCalibration wonder_appetite_calibration;
+    /* A.51/state v23: fixed-budget out-of-sample trials over A.50 candidates.
+     * Evidence only; no School, routing, sampling, or generation reader. */
+    LeoWonderAppetiteHoldouts wonder_appetite_holdouts;
     /* A.42/A.43: pre-grounding address witness. Semantic conflict can only
      * guard; an exact waiting name may redirect without assigning meaning. */
     LeoWonderAddressReceipt wonder_address;
@@ -2469,6 +2513,7 @@ static int g_leo_wonder_appetite_drift_on = 1; /* derived endpoint drift over re
 static int g_leo_wonder_appetite_policy_on = 1; /* frozen shadow abstention at forecast birth; never read by speech. */
 static int g_leo_wonder_appetite_regret_on = 1; /* separate costs of motion and restraint; derived diagnostic only. */
 static int g_leo_wonder_appetite_readiness_on = 1; /* paired confidence frontier; candidate is not permission. */
+static int g_leo_wonder_appetite_holdout_on = 1; /* fixed future trial; persisted evidence, never speech authority. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -7443,6 +7488,252 @@ static void leo_wonder_appetite_readiness(
     }
 }
 
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_wonder_appetite_holdout_status_name(
+        int status) {
+    static const char
+        *names[LEO_WONDER_APPETITE_HOLDOUT_STATUS_COUNT] = {
+            "empty", "pending", "confirmed", "motion-failed",
+            "restraint-failed", "both-failed", "coverage-starved",
+            "invalidated"
+        };
+    return status >= 0 &&
+           status < LEO_WONDER_APPETITE_HOLDOUT_STATUS_COUNT ?
+        names[status] : "empty";
+}
+
+static void leo_wonder_appetite_holdout_finalize(
+        LeoWonderAppetiteHoldoutTrial *trial) {
+    if (!trial ||
+        trial->status == LEO_WONDER_APPETITE_HOLDOUT_INVALIDATED ||
+        trial->attempts < LEO_WONDER_APPETITE_HOLDOUT_BUDGET)
+        return;
+    if (trial->eligible < LEO_WONDER_APPETITE_HOLDOUT_MIN_ARM_N ||
+        trial->abstained < LEO_WONDER_APPETITE_HOLDOUT_MIN_ARM_N) {
+        trial->status =
+            LEO_WONDER_APPETITE_HOLDOUT_COVERAGE_STARVED;
+        return;
+    }
+
+    float overreach_lower = 0.0f, overreach_upper = 0.0f;
+    float missed_lower = 0.0f, missed_upper = 0.0f;
+    leo_wilson_interval(
+        trial->overreach, trial->eligible,
+        &overreach_lower, &overreach_upper);
+    leo_wilson_interval(
+        trial->missed, trial->abstained,
+        &missed_lower, &missed_upper);
+    (void)overreach_lower;
+    (void)missed_lower;
+    int motion_bounded =
+        overreach_upper <
+            LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
+    int restraint_bounded =
+        missed_upper <
+            LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
+    if (motion_bounded && restraint_bounded)
+        trial->status = LEO_WONDER_APPETITE_HOLDOUT_CONFIRMED;
+    else if (!motion_bounded && !restraint_bounded)
+        trial->status =
+            LEO_WONDER_APPETITE_HOLDOUT_BOTH_FAILED;
+    else if (!motion_bounded)
+        trial->status =
+            LEO_WONDER_APPETITE_HOLDOUT_MOTION_FAILED;
+    else
+        trial->status =
+            LEO_WONDER_APPETITE_HOLDOUT_RESTRAINT_FAILED;
+}
+
+static int leo_wonder_appetite_holdout_seen(
+        const LeoWonderAppetiteHoldoutTrial *trial,
+        uint64_t proposed_turn) {
+    if (!trial || proposed_turn == 0) return 0;
+    for (int i = 0; i < trial->attempts; i++)
+        if (trial->seen_proposed_turn[i] == proposed_turn)
+            return 1;
+    return 0;
+}
+
+static uint64_t leo_wonder_appetite_latest_proposal(
+        const Leo *leo) {
+    uint64_t latest = 0;
+    if (!leo) return latest;
+    for (int i = 0;
+         i < leo->wonder_appetite_calibration.n; i++) {
+        const LeoWonderAppetiteCalibrationReceipt *receipt =
+            leo_wonder_appetite_calibration_at(
+                &leo->wonder_appetite_calibration, i);
+        if (receipt && receipt->proposed_turn > latest)
+            latest = receipt->proposed_turn;
+    }
+    return latest;
+}
+
+static int leo_wonder_appetite_holdout_valid(
+        const LeoWonderAppetiteHoldoutTrial *trial,
+        uint64_t turn_clock) {
+    if (!trial) return 0;
+    if (trial->status == LEO_WONDER_APPETITE_HOLDOUT_EMPTY) {
+        if (trial->opened_turn || trial->baseline_proposed_turn ||
+            trial->spoken || trial->bin || trial->attempts ||
+            trial->matched || trial->eligible || trial->abstained ||
+            trial->supported || trial->overreach || trial->missed ||
+            trial->restraint || trial->confounded || trial->other)
+            return 0;
+        for (int i = 0;
+             i < LEO_WONDER_APPETITE_HOLDOUT_BUDGET; i++)
+            if (trial->seen_proposed_turn[i]) return 0;
+        return 1;
+    }
+    if (trial->status >=
+            LEO_WONDER_APPETITE_HOLDOUT_STATUS_COUNT ||
+        trial->opened_turn == 0 ||
+        trial->opened_turn > turn_clock ||
+        trial->baseline_proposed_turn == 0 ||
+        trial->baseline_proposed_turn > trial->opened_turn ||
+        trial->spoken > 1 ||
+        trial->bin >= LEO_WONDER_APPETITE_RELIABILITY_BINS ||
+        trial->attempts > LEO_WONDER_APPETITE_HOLDOUT_BUDGET ||
+        trial->matched != trial->eligible + trial->abstained ||
+        trial->eligible != trial->supported + trial->overreach ||
+        trial->abstained != trial->missed + trial->restraint ||
+        trial->attempts !=
+            trial->matched + trial->confounded + trial->other)
+        return 0;
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_HOLDOUT_BUDGET; i++) {
+        uint64_t seen = trial->seen_proposed_turn[i];
+        if (i < trial->attempts) {
+            if (seen <= trial->baseline_proposed_turn ||
+                seen > turn_clock)
+                return 0;
+            for (int j = 0; j < i; j++)
+                if (seen == trial->seen_proposed_turn[j])
+                    return 0;
+        } else if (seen) {
+            return 0;
+        }
+    }
+
+    if (trial->status == LEO_WONDER_APPETITE_HOLDOUT_INVALIDATED)
+        return trial->attempts > 0 && trial->other > 0;
+    if (trial->status == LEO_WONDER_APPETITE_HOLDOUT_PENDING)
+        return trial->attempts <
+            LEO_WONDER_APPETITE_HOLDOUT_BUDGET;
+    if (trial->attempts != LEO_WONDER_APPETITE_HOLDOUT_BUDGET)
+        return 0;
+    LeoWonderAppetiteHoldoutTrial expected = *trial;
+    expected.status = LEO_WONDER_APPETITE_HOLDOUT_PENDING;
+    leo_wonder_appetite_holdout_finalize(&expected);
+    return expected.status == trial->status;
+}
+
+static void leo_wonder_appetite_holdout_update(Leo *leo) {
+    if (!leo || !g_leo_wonder_appetite_holdout_on ||
+        !g_leo_wonder_appetite_calibration_on)
+        return;
+
+    for (int cell_index = 0;
+         cell_index < LEO_WONDER_APPETITE_RELIABILITY_CELLS;
+         cell_index++) {
+        LeoWonderAppetiteHoldoutTrial *trial =
+            &leo->wonder_appetite_holdouts.trials[cell_index];
+        if (trial->status !=
+            LEO_WONDER_APPETITE_HOLDOUT_PENDING)
+            continue;
+        for (int i = 0;
+             i < leo->wonder_appetite_calibration.n &&
+             trial->attempts <
+                LEO_WONDER_APPETITE_HOLDOUT_BUDGET; i++) {
+            const LeoWonderAppetiteCalibrationReceipt *receipt =
+                leo_wonder_appetite_calibration_at(
+                    &leo->wonder_appetite_calibration, i);
+            if (!receipt ||
+                receipt->proposed_turn <=
+                    trial->baseline_proposed_turn ||
+                leo_wonder_appetite_holdout_seen(
+                    trial, receipt->proposed_turn))
+                continue;
+            int result =
+                leo_wonder_appetite_policy_result(receipt);
+            if (result ==
+                LEO_WONDER_APPETITE_POLICY_RESULT_PENDING)
+                continue;
+
+            int attempt = trial->attempts;
+            trial->seen_proposed_turn[attempt] =
+                receipt->proposed_turn;
+            trial->attempts++;
+            if (result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_NONE ||
+                result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_LEGACY) {
+                trial->other++;
+                trial->status =
+                    LEO_WONDER_APPETITE_HOLDOUT_INVALIDATED;
+                break;
+            }
+
+            int bin = leo_wonder_appetite_reliability_bin(
+                receipt->appetite);
+            int exact =
+                bin == trial->bin &&
+                (receipt->spoken ? 1 : 0) == trial->spoken;
+            if (!exact) {
+                trial->other++;
+                continue;
+            }
+            if (result ==
+                LEO_WONDER_APPETITE_POLICY_RESULT_CONFOUNDED) {
+                trial->confounded++;
+                continue;
+            }
+
+            trial->matched++;
+            if (receipt->policy ==
+                LEO_WONDER_APPETITE_POLICY_ELIGIBLE) {
+                trial->eligible++;
+                if (result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_SUPPORTED)
+                    trial->supported++;
+                else
+                    trial->overreach++;
+            } else {
+                trial->abstained++;
+                if (result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_MISSED)
+                    trial->missed++;
+                else
+                    trial->restraint++;
+            }
+        }
+        leo_wonder_appetite_holdout_finalize(trial);
+    }
+
+    if (!g_leo_wonder_appetite_policy_on) return;
+    LeoWonderAppetiteReadiness frontier;
+    leo_wonder_appetite_readiness(leo, &frontier);
+    uint64_t baseline =
+        leo_wonder_appetite_latest_proposal(leo);
+    if (baseline == 0) return;
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        LeoWonderAppetiteHoldoutTrial *trial =
+            &leo->wonder_appetite_holdouts.trials[i];
+        if (trial->status != LEO_WONDER_APPETITE_HOLDOUT_EMPTY ||
+            frontier.cells[i].status !=
+                LEO_WONDER_APPETITE_READINESS_CANDIDATE)
+            continue;
+        memset(trial, 0, sizeof *trial);
+        trial->opened_turn =
+            (uint64_t)leo->school.turn_clock;
+        trial->baseline_proposed_turn = baseline;
+        trial->spoken = frontier.cells[i].spoken;
+        trial->bin = frontier.cells[i].bin;
+        trial->status = LEO_WONDER_APPETITE_HOLDOUT_PENDING;
+    }
+}
+
 static int leo_flow_kind(const LeoFlow *flow, int glyph, int window, int face) {
     if (!flow || flow->n <= 0 || glyph < 0 || glyph >= GLYPH_COUNT) return LEO_FLOW_QUIET;
     if (window < 3) window = 3;
@@ -8462,6 +8753,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     leo_wonder_appetite_observe(
         leo, prompt, prewonder_field_token, prewonder_field_weight);
     leo_wonder_appetite_calibrate(leo, prompt);
+    leo_wonder_appetite_holdout_update(leo);
     leo_shadow_calibrate(leo, prompt);            /* judge t-1 only after t has become history */
     leo_shadow_observe(leo);                      /* after speech: a proposal for the next turn, never a reader */
     leo->gravity = NULL;
@@ -8512,9 +8804,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v20      : exact birth provenance for the Wonder that currently has the mouth
  *   v21      : slow calibration diary over three-turn appetite forecasts
  *   v22      : forecast-birth shadow abstention snapshots
+ *   v23      : fixed-budget out-of-sample trials over readiness candidates
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 22  /* A.48 freezes policy knowledge at forecast birth; v5..v21 soft-migrate */
+#define LEO_STATE_VERSION 23  /* A.51 persists non-restartable holdout trials; v5..v22 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -8740,6 +9033,11 @@ static int leo_save_state(const Leo *leo, const char *path) {
         fwrite(leo->wonder_appetite_calibration.receipts,
                sizeof(LeoWonderAppetiteCalibrationReceipt),
                (size_t)leo->wonder_appetite_calibration.n, f);
+
+    /* A.51 (v23): fixed out-of-sample trials are a separate fail-soft tail.
+     * Their verdicts remain evidence and have no route into speech. */
+    fwrite(&leo->wonder_appetite_holdouts,
+           sizeof leo->wonder_appetite_holdouts, 1, f);
 
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
@@ -9478,6 +9776,28 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
+    /* Readiness holdouts (v23). Older bodies receive no invented experiment;
+     * corruption discards only the holdout ledger. */
+    if (version >= 23) {
+        int holdout_ok =
+            fread(&leo->wonder_appetite_holdouts,
+                  sizeof leo->wonder_appetite_holdouts, 1, f) == 1;
+        if (holdout_ok)
+            for (int i = 0;
+                 i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++)
+                if (!leo_wonder_appetite_holdout_valid(
+                        &leo->wonder_appetite_holdouts.trials[i],
+                        (uint64_t)leo->school.turn_clock)) {
+                    holdout_ok = 0;
+                    break;
+                }
+        if (!holdout_ok) {
+            fprintf(stderr, "[leo] WARNING: v23 readiness-holdout tail truncated/corrupt — organism lives without trials.\n");
+            memset(&leo->wonder_appetite_holdouts, 0,
+                   sizeof leo->wonder_appetite_holdouts);
+        }
+    }
+
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
     leo_build_chamber_tags(leo);
@@ -10128,6 +10448,89 @@ static void print_wonder_appetite_readiness_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_appetite_holdout_stats(const Leo *leo) {
+    if (!g_leo_wonder_appetite_holdout_on || !leo)
+        return;
+    int counts[LEO_WONDER_APPETITE_HOLDOUT_STATUS_COUNT] = {0};
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        int status =
+            leo->wonder_appetite_holdouts.trials[i].status;
+        if (status > LEO_WONDER_APPETITE_HOLDOUT_EMPTY &&
+            status < LEO_WONDER_APPETITE_HOLDOUT_STATUS_COUNT)
+            counts[status]++;
+    }
+    int occupied = 0;
+    for (int i = 1;
+         i < LEO_WONDER_APPETITE_HOLDOUT_STATUS_COUNT; i++)
+        occupied += counts[i];
+    if (occupied == 0) return;
+
+    static const int lower[] = {62, 70, 80, 90};
+    static const int upper[] = {70, 80, 90, 100};
+    printf("     [wonder-appetite-holdout: budget=%d min-arm=%d ceiling=%.3f pending=%d confirmed=%d motion-failed=%d restraint-failed=%d both-failed=%d coverage-starved=%d invalidated=%d cells=",
+           LEO_WONDER_APPETITE_HOLDOUT_BUDGET,
+           LEO_WONDER_APPETITE_HOLDOUT_MIN_ARM_N,
+           (double)LEO_WONDER_APPETITE_READINESS_RISK_CEILING,
+           counts[LEO_WONDER_APPETITE_HOLDOUT_PENDING],
+           counts[LEO_WONDER_APPETITE_HOLDOUT_CONFIRMED],
+           counts[LEO_WONDER_APPETITE_HOLDOUT_MOTION_FAILED],
+           counts[LEO_WONDER_APPETITE_HOLDOUT_RESTRAINT_FAILED],
+           counts[LEO_WONDER_APPETITE_HOLDOUT_BOTH_FAILED],
+           counts[LEO_WONDER_APPETITE_HOLDOUT_COVERAGE_STARVED],
+           counts[LEO_WONDER_APPETITE_HOLDOUT_INVALIDATED]);
+    const char *separator = "";
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteHoldoutTrial *trial =
+            &leo->wonder_appetite_holdouts.trials[i];
+        if (trial->status == LEO_WONDER_APPETITE_HOLDOUT_EMPTY)
+            continue;
+        float overreach_lower = 0.0f, overreach_upper = 0.0f;
+        float missed_lower = 0.0f, missed_upper = 0.0f;
+        leo_wilson_interval(
+            trial->overreach, trial->eligible,
+            &overreach_lower, &overreach_upper);
+        leo_wilson_interval(
+            trial->missed, trial->abstained,
+            &missed_lower, &missed_upper);
+        (void)overreach_lower;
+        (void)missed_lower;
+        float overreach_rate = trial->eligible > 0 ?
+            (float)trial->overreach / trial->eligible : 0.0f;
+        float missed_rate = trial->abstained > 0 ?
+            (float)trial->missed / trial->abstained : 0.0f;
+        printf("%s%c%d-%d:%llu/%llu/%u/%u/%u/%u/%u/%u/%u/%u/%u/%u/%.3f/%.3f/%.3f/%.3f/%s/",
+               separator, trial->spoken ? 's' : 'u',
+               lower[trial->bin], upper[trial->bin],
+               (unsigned long long)trial->opened_turn,
+               (unsigned long long)trial->baseline_proposed_turn,
+               (unsigned)trial->attempts,
+               (unsigned)trial->matched,
+               (unsigned)trial->eligible,
+               (unsigned)trial->abstained,
+               (unsigned)trial->supported,
+               (unsigned)trial->overreach,
+               (unsigned)trial->missed,
+               (unsigned)trial->restraint,
+               (unsigned)trial->confounded,
+               (unsigned)trial->other,
+               (double)overreach_rate,
+               (double)overreach_upper,
+               (double)missed_rate,
+               (double)missed_upper,
+               leo_wonder_appetite_holdout_status_name(
+                   trial->status));
+        for (int j = 0; j < trial->attempts; j++)
+            printf("%s%llu", j ? "," : "",
+                   (unsigned long long)
+                       trial->seen_proposed_turn[j]);
+        if (trial->attempts == 0) printf("none");
+        separator = "|";
+    }
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -10368,6 +10771,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-appetite-policy")) g_leo_wonder_appetite_policy_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-regret")) g_leo_wonder_appetite_regret_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-readiness")) g_leo_wonder_appetite_readiness_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite-holdout")) g_leo_wonder_appetite_holdout_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -10589,6 +10993,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_policy_stats(&leo);
             print_wonder_appetite_regret_stats(&leo);
             print_wonder_appetite_readiness_stats(&leo);
+            print_wonder_appetite_holdout_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -10653,6 +11058,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_policy_stats(&leo);
             print_wonder_appetite_regret_stats(&leo);
             print_wonder_appetite_readiness_stats(&leo);
+            print_wonder_appetite_holdout_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */

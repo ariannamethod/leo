@@ -4539,3 +4539,78 @@ hashes byte-for-byte.
 
 The frontier can now say why a stratum is not ready without pretending that
 one kind of uncertainty pays for another.
+
+## Phase A.51 — the future is not allowed to volunteer (2026-07-28)
+
+A.50 could name a candidate, but its evidence was still the same history that
+selected it. A.51 gives that candidate one persisted, non-restartable
+out-of-sample trial. It freezes the exact spoken/appetite stratum and the latest
+proposal boundary before reading any later outcome.
+
+The trial has a budget of **16 future settled policy attempts**. Every settled
+attempt spends one slot, including another stratum or a causally confounded
+outcome. It therefore cannot wait indefinitely for a favorable arm balance.
+Only outcomes after the frozen proposal boundary can enter, and each proposal
+can enter once.
+
+At the end of the fixed budget, the exact target stratum must contain at least
+four eligible and four abstained outcomes. Otherwise the verdict is
+`coverage-starved`. With both arms present, their 95% Wilson upper bounds are
+tested independently against the same `0.500` boundary:
+
+```text
+both bounded       -> confirmed
+overreach unbounded, missed bounded
+                   -> motion-failed
+overreach bounded, missed unbounded
+                   -> restraint-failed
+both unbounded     -> both-failed
+either arm < 4     -> coverage-starved
+none/legacy policy -> invalidated
+```
+
+`confirmed` remains evidence, not permission. No School, Flow, shadow, route,
+sampler, or generation path reads the trial. A policy-format change invalidates
+an open trial instead of silently translating it. A terminal trial never
+reopens on the history it helped create.
+
+State v23 appends eight fixed trial slots, one per exact A.46-A.50 stratum.
+v22 bodies migrate with no invented experiment. A corrupt v23 tail fails soft
+by discarding only the holdout ledger; the forecast diary and organism remain.
+`--no-wonder-appetite-holdout` disables both the ledger update and its
+diagnostic.
+
+Sixteen direct contracts raised the suite from **400/400** to **416/416**.
+They cover the frozen boundary, retrospective exclusion, all four bounded-risk
+verdicts, fixed-budget coverage starvation, confound accounting, invalidation,
+non-restartability, v22 migration, truncated and internally contradictory v23
+recovery, exact sleep, ablation, and non-mutation of the forecast diary, School,
+and Flow.
+
+The real-process matrix then produced:
+
+```text
+confirmed:
+  outcomes=7/1 | 1/7, upper bounds=0.471 / 0.471
+
+motion-failed:
+  outcomes=4/4 | 1/7, upper bounds=0.785 / 0.471
+
+restraint-failed:
+  outcomes=7/1 | 4/4, upper bounds=0.471 / 0.785
+
+both-failed:
+  outcomes=4/4 | 4/4, upper bounds=0.785 / 0.785
+
+coverage-starved:
+  exact arms=12/0, other strata=4
+
+all terminal lives:
+  attempts=16
+  reply equality=5/5
+  complete state equality=5/5
+```
+
+A separate CLI arming fork produced the same reply and a byte-identical state
+prefix; only the fixed v23 holdout tail differed. The future can now refute the
+frontier without being chosen by it. It still cannot move Leo's mouth.
