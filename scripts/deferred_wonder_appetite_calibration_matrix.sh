@@ -185,6 +185,7 @@ while IFS=$'\t' read -r group cohort seed; do
     cp "$ready" "$group_dir/parked-base.state"
     "$ROOT/leo" --load "$group_dir/parked-base.state" \
         --seed "$((seed + 5100))" --respond "$slot1" --debug-field \
+        --no-wonder-appetite-reliability \
         --no-wonder-appetite-calibration \
         --save "$group_dir/parked-base.state" \
         > "$group_dir/parked-open.log" 2>&1
@@ -196,6 +197,7 @@ while IFS=$'\t' read -r group cohort seed; do
     }
     "$ROOT/leo" --load "$group_dir/parked-base.state" \
         --seed "$((seed + 5101))" --respond "$slot2" --debug-field \
+        --no-wonder-appetite-reliability \
         --no-wonder-appetite-calibration \
         --save "$group_dir/parked-base.state" \
         > "$group_dir/parked-switch.log" 2>&1
@@ -243,9 +245,11 @@ while IFS=$'\t' read -r group cohort seed; do
             off_log="$cell_dir/off-turn-$turn_number.log"
             "$ROOT/leo" --load "$cell_dir/on.state" \
                 --seed "$run_seed" --respond "$prompt" --debug-field \
+                --no-wonder-appetite-reliability \
                 --save "$cell_dir/on.state" > "$on_log" 2>&1
             "$ROOT/leo" --load "$cell_dir/off.state" \
                 --seed "$run_seed" --respond "$prompt" --debug-field \
+                --no-wonder-appetite-reliability \
                 --no-wonder-appetite-calibration \
                 --save "$cell_dir/off.state" > "$off_log" 2>&1
             [ -z "$(calibration_from_log \

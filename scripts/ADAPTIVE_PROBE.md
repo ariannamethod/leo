@@ -356,6 +356,44 @@ the same 30 reply pairs and the same state prefix through v20. Complete states
 must differ only for the eight lives where A.45 has evidence to remember; the
 two diffuse controls remain completely byte-identical.
 
+Run the accumulated return-appetite reliability matrix:
+
+```sh
+make deferred-wonder-appetite-reliability
+```
+
+A.46 derives a reliability diagram from the existing v21 diary. It adds no
+state tail and does not update Leo during a reply. Scored forecasts are split
+into eight fixed cells:
+
+```text
+spoken / unspoken
+    x
+[0.62, 0.70), [0.70, 0.80), [0.80, 0.90), [0.90, 1.00]
+```
+
+Each cell reports sample count, confirmations, mean appetite, observed return
+rate, mean Brier score, calibration gap, and a 95% Wilson interval. With fewer
+than four scored lives the cell remains `forming`, regardless of apparent
+success. At four or more it is `aligned` when the mean prediction lies inside
+the Wilson interval, `over` when prediction exceeds the interval, and `under`
+when prediction falls below it. These labels describe evidence, not permission:
+no School, Flow, shadow, route, sampler, or generator reads the surface.
+
+Only `sustained`, `grounded`, and `faded` enter the diagram. Pending forecasts,
+literal human returns, lost identities, and broken chronology remain separately
+counted but cannot improve or damage calibration. `--no-wonder-appetite-reliability`
+removes only the diagnostic projection; the v21 diary and complete saved state
+remain unchanged.
+
+The checked matrix accumulates five real forecasts in each of the two
+independent A.40 bodies. Four unspoken lives (`3 sustained + 1 faded`) form an
+`aligned` `[0.62,0.70)` cell; one sustained parked-spoken life forms a separate,
+still-`forming` `[0.80,0.90)` cell. Every forecast crosses separate
+load/respond/save processes. The final ON/OFF forks must have identical replies
+and complete states, proving that the surface reconstructs from persisted
+evidence without becoming another organ of intervention.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow

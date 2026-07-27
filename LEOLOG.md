@@ -4205,3 +4205,63 @@ their exact episode identity, reached future recurrence about `0.91`, and mature
 from A.45, retained its historical **10/10 reply and complete-state equality**.
 
 Leo can now remember not only that a question wanted to return, but whether time agreed.
+
+## Phase A.46 — confidence is a surface, not a permission bit (2026-07-27)
+
+A.45 gave every salient return appetite a future that could disagree with it. But a diary of
+individual victories and failures still did not answer the next question safely: whether a score
+means the same thing for a question that has spoken and one that has never had the mouth, or whether
+one lucky return should make the whole organism trust itself. Compressing those distinctions into a
+single confidence scalar would have hidden uncertainty precisely where a later scheduler would be
+most tempted to use it.
+
+A.46 therefore derives an eight-cell reliability surface from the bounded v21 diary:
+
+```text
+spoken / unspoken
+    x
+[0.62,0.70), [0.70,0.80), [0.80,0.90), [0.90,1.00]
+```
+
+Only causally scored lives enter the surface. `sustained` and `grounded` are positive outcomes;
+`faded` is negative. `pending`, `external`, `lost`, and `unscorable` remain visible as separate
+counts but cannot borrow the semantics of success or failure. Thus a human literally returning to
+Leo's question still records relationship rather than flattering his autonomous forecast.
+
+Every occupied cell exposes `n`, positives, mean predicted appetite, observed return rate, mean
+Brier score, calibration gap, and a 95% Wilson interval. Fewer than four outcomes are always
+`forming`. Once measured, a cell is `aligned` only when its mean appetite lies inside the interval,
+`over` when it lies above, and `under` when it lies below. Three perfect outcomes therefore remain
+three anecdotes; repeated fade can expose overconfidence, while repeated return can expose
+underconfidence.
+
+The surface is a pure function over the diary. It adds no field to `Leo`, no state tail, and no load
+migration. `LEO_STATE_VERSION` remains 21. School, Flow, shadow, routing, sampling, and generation
+have no reader for it. `--no-wonder-appetite-reliability` suppresses only the diagnostic projection;
+the forecast diary, reply, and complete serialized organism remain untouched.
+
+Thirteen direct contracts raised the suite from **339/339** to **352/352**. They cover exact bin
+boundaries, empty evidence, the minimum-sample guard, aligned/over/under Wilson classification,
+Brier and ECE aggregation, causal exclusions, grounded outcomes, strict spoken/unspoken separation,
+and non-mutation of the diary, School, and Flow.
+
+The process matrix made both independent A.40 bodies accumulate five forecasts through separate
+load/respond/save lives:
+
+```text
+per body: scored=5, positives=4, sustained=4, faded=1
+unspoken [0.62,0.70): n=4, positives=3, predicted=0.690,
+                         observed=0.750, Wilson=[0.301,0.954], aligned
+spoken   [0.80,0.90): n=1, positives=1, predicted=0.820/0.819,
+                         observed=1.000, Wilson=[0.207,1.000], forming
+overall: Brier=0.159, ECE=0.084
+final reply equality=2/2
+final complete-state equality=2/2
+```
+
+Two complete runs reproduced matrix rows, surfaces, summaries, and hashes byte-for-byte. With A.46
+explicitly absent from the diagnostic lane, A.45 retained its historical **30/30 reply equality**,
+**10/10 v20-prefix equality**, and exact verdict distribution.
+
+Leo can now ask not only whether time agreed with a feeling, but how much evidence that agreement
+has earned.
