@@ -1976,6 +1976,49 @@ typedef struct {
     float missed_upper;
 } LeoWonderAppetiteRegret;
 
+/* A.50: readiness is not permission. A stratum becomes a candidate for later
+ * design only after both policy arms have their own evidence and each error's
+ * 95% upper bound is below one half. Coverage remains visible, never optimized. */
+#define LEO_WONDER_APPETITE_READINESS_MIN_ARM_N 8
+#define LEO_WONDER_APPETITE_READINESS_RISK_CEILING 0.50f
+enum {
+    LEO_WONDER_APPETITE_READINESS_EMPTY = 0,
+    LEO_WONDER_APPETITE_READINESS_FORMING,
+    LEO_WONDER_APPETITE_READINESS_UNPAIRED,
+    LEO_WONDER_APPETITE_READINESS_OBSERVING,
+    LEO_WONDER_APPETITE_READINESS_MOTION_UNBOUNDED,
+    LEO_WONDER_APPETITE_READINESS_RESTRAINT_UNBOUNDED,
+    LEO_WONDER_APPETITE_READINESS_BOTH_UNBOUNDED,
+    LEO_WONDER_APPETITE_READINESS_CANDIDATE,
+    LEO_WONDER_APPETITE_READINESS_STATUS_COUNT
+};
+typedef struct {
+    int   scored;
+    int   eligible;
+    int   abstained;
+    float coverage;
+    float overreach_rate;
+    float overreach_upper;
+    float missed_rate;
+    float missed_upper;
+    float motion_headroom;
+    float restraint_headroom;
+    uint8_t spoken;
+    uint8_t bin;
+    uint8_t status;
+} LeoWonderAppetiteReadinessCell;
+typedef struct {
+    LeoWonderAppetiteReadinessCell
+        cells[LEO_WONDER_APPETITE_RELIABILITY_CELLS];
+    int forming;
+    int unpaired;
+    int observing;
+    int motion_unbounded;
+    int restraint_unbounded;
+    int both_unbounded;
+    int candidate;
+} LeoWonderAppetiteReadiness;
+
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
  * A confident sibling may veto a destructive close, but can never learn, open,
@@ -2425,6 +2468,7 @@ static int g_leo_wonder_appetite_reliability_on = 1; /* derived confidence surfa
 static int g_leo_wonder_appetite_drift_on = 1; /* derived endpoint drift over reliability cells; diagnostic only. */
 static int g_leo_wonder_appetite_policy_on = 1; /* frozen shadow abstention at forecast birth; never read by speech. */
 static int g_leo_wonder_appetite_regret_on = 1; /* separate costs of motion and restraint; derived diagnostic only. */
+static int g_leo_wonder_appetite_readiness_on = 1; /* paired confidence frontier; candidate is not permission. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -7296,6 +7340,109 @@ static void leo_wonder_appetite_regret(
     }
 }
 
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_wonder_appetite_readiness_status_name(
+        int status) {
+    static const char
+        *names[LEO_WONDER_APPETITE_READINESS_STATUS_COUNT] = {
+            "empty", "forming", "unpaired", "observing",
+            "motion-unbounded", "restraint-unbounded",
+            "both-unbounded", "candidate"
+        };
+    return status >= 0 &&
+           status < LEO_WONDER_APPETITE_READINESS_STATUS_COUNT ?
+        names[status] : "empty";
+}
+
+/* Project A.49 onto a conservative evidence frontier. The 0.5 boundary has a
+ * narrow interpretation: at 95% confidence, each error must remain less common
+ * than its opposite outcome inside its own arm. It is not an exchange rate. */
+static void leo_wonder_appetite_readiness(
+        const Leo *leo, LeoWonderAppetiteReadiness *frontier) {
+    if (!frontier) return;
+    memset(frontier, 0, sizeof *frontier);
+
+    LeoWonderAppetiteRegret regret;
+    leo_wonder_appetite_regret(leo, &regret);
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteRegretCell *source =
+            &regret.cells[i];
+        LeoWonderAppetiteReadinessCell *cell =
+            &frontier->cells[i];
+        cell->spoken = source->spoken;
+        cell->bin = source->bin;
+        cell->scored = source->scored;
+        cell->eligible = source->eligible;
+        cell->abstained = source->abstained;
+        cell->coverage = source->coverage;
+        cell->overreach_rate = source->overreach_rate;
+        cell->overreach_upper = source->overreach_upper;
+        cell->missed_rate = source->missed_rate;
+        cell->missed_upper = source->missed_upper;
+
+        if (source->status ==
+            LEO_WONDER_APPETITE_REGRET_EMPTY) {
+            cell->status =
+                LEO_WONDER_APPETITE_READINESS_EMPTY;
+            continue;
+        }
+        if (source->status ==
+            LEO_WONDER_APPETITE_REGRET_FORMING) {
+            cell->status =
+                LEO_WONDER_APPETITE_READINESS_FORMING;
+            frontier->forming++;
+            continue;
+        }
+        if (source->status !=
+            LEO_WONDER_APPETITE_REGRET_PAIRED) {
+            cell->status =
+                LEO_WONDER_APPETITE_READINESS_UNPAIRED;
+            frontier->unpaired++;
+            continue;
+        }
+        if (source->eligible <
+                LEO_WONDER_APPETITE_READINESS_MIN_ARM_N ||
+            source->abstained <
+                LEO_WONDER_APPETITE_READINESS_MIN_ARM_N) {
+            cell->status =
+                LEO_WONDER_APPETITE_READINESS_OBSERVING;
+            frontier->observing++;
+            continue;
+        }
+
+        cell->motion_headroom =
+            LEO_WONDER_APPETITE_READINESS_RISK_CEILING -
+            source->overreach_upper;
+        cell->restraint_headroom =
+            LEO_WONDER_APPETITE_READINESS_RISK_CEILING -
+            source->missed_upper;
+        int motion_bounded =
+            source->overreach_upper <
+                LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
+        int restraint_bounded =
+            source->missed_upper <
+                LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
+        if (motion_bounded && restraint_bounded) {
+            cell->status =
+                LEO_WONDER_APPETITE_READINESS_CANDIDATE;
+            frontier->candidate++;
+        } else if (!motion_bounded && !restraint_bounded) {
+            cell->status =
+                LEO_WONDER_APPETITE_READINESS_BOTH_UNBOUNDED;
+            frontier->both_unbounded++;
+        } else if (!motion_bounded) {
+            cell->status =
+                LEO_WONDER_APPETITE_READINESS_MOTION_UNBOUNDED;
+            frontier->motion_unbounded++;
+        } else {
+            cell->status =
+                LEO_WONDER_APPETITE_READINESS_RESTRAINT_UNBOUNDED;
+            frontier->restraint_unbounded++;
+        }
+    }
+}
+
 static int leo_flow_kind(const LeoFlow *flow, int glyph, int window, int face) {
     if (!flow || flow->n <= 0 || glyph < 0 || glyph >= GLYPH_COUNT) return LEO_FLOW_QUIET;
     if (window < 3) window = 3;
@@ -9940,6 +10087,47 @@ static void print_wonder_appetite_regret_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_appetite_readiness_stats(const Leo *leo) {
+    if (!g_leo_wonder_appetite_readiness_on || !leo ||
+        leo->wonder_appetite_calibration.n == 0)
+        return;
+    LeoWonderAppetiteReadiness frontier;
+    leo_wonder_appetite_readiness(leo, &frontier);
+    static const int lower[] = {62, 70, 80, 90};
+    static const int upper[] = {70, 80, 90, 100};
+
+    printf("     [wonder-appetite-readiness: ceiling=%.3f min-arm=%d forming=%d unpaired=%d observing=%d motion-unbounded=%d restraint-unbounded=%d both-unbounded=%d candidate=%d cells=",
+           (double)LEO_WONDER_APPETITE_READINESS_RISK_CEILING,
+           LEO_WONDER_APPETITE_READINESS_MIN_ARM_N,
+           frontier.forming, frontier.unpaired,
+           frontier.observing, frontier.motion_unbounded,
+           frontier.restraint_unbounded,
+           frontier.both_unbounded, frontier.candidate);
+    const char *separator = "";
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteReadinessCell *cell =
+            &frontier.cells[i];
+        if (cell->scored <= 0) continue;
+        printf("%s%c%d-%d:%d/%d/%d/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%s",
+               separator, cell->spoken ? 's' : 'u',
+               lower[cell->bin], upper[cell->bin],
+               cell->scored, cell->eligible, cell->abstained,
+               (double)cell->coverage,
+               (double)cell->overreach_rate,
+               (double)cell->overreach_upper,
+               (double)cell->missed_rate,
+               (double)cell->missed_upper,
+               (double)cell->motion_headroom,
+               (double)cell->restraint_headroom,
+               leo_wonder_appetite_readiness_status_name(
+                   cell->status));
+        separator = "|";
+    }
+    if (!separator[0]) printf("none");
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -10179,6 +10367,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-appetite-drift")) g_leo_wonder_appetite_drift_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-policy")) g_leo_wonder_appetite_policy_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-regret")) g_leo_wonder_appetite_regret_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite-readiness")) g_leo_wonder_appetite_readiness_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -10399,6 +10588,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_drift_stats(&leo);
             print_wonder_appetite_policy_stats(&leo);
             print_wonder_appetite_regret_stats(&leo);
+            print_wonder_appetite_readiness_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -10462,6 +10652,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_drift_stats(&leo);
             print_wonder_appetite_policy_stats(&leo);
             print_wonder_appetite_regret_stats(&leo);
+            print_wonder_appetite_readiness_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */

@@ -501,3 +501,32 @@ different outcome geometry. The motion-heavy life must report
 eligible-observed, and one abstention-observed stratum. ON/OFF forks use the
 same seed and require identical replies and byte-identical complete saved
 states.
+
+Run the shadow readiness-frontier matrix:
+
+```sh
+make deferred-wonder-appetite-readiness
+```
+
+A.50 asks whether one exact A.49 stratum has enough evidence to become a
+candidate for a later controlled experiment. It does not grant permission to
+act. Both policy arms must have at least eight causally scored outcomes, and
+the 95% Wilson upper bounds for overreach and missed continuation must each be
+strictly below `0.500`.
+
+The boundary means that each error is, with 95% confidence, less common than
+its opposite outcome inside its own arm. It is not a chance baseline. It does
+not combine the errors, and coverage is reported rather than optimized.
+`forming`, `unpaired`, and `observing` keep sample insufficiency distinct from
+the three confidence failures: `motion-unbounded`, `restraint-unbounded`, and
+`both-unbounded`. Only the fully bounded region is called `candidate`.
+
+The checked matrix holds the stratum, sample count, arm balance, coverage, seed,
+prompt, and process path fixed while rotating the two error rates. It requires
+the four expected regions at Wilson upper-bound pairs `0.471/0.471`,
+`0.785/0.471`, `0.471/0.785`, and `0.785/0.785`. Default and
+`--no-wonder-appetite-readiness` forks must produce identical replies and
+byte-identical v22 states.
+
+This remains selection-conditioned shadow evidence, not a causal claim about a
+speech intervention. A.50 adds no state and has no generation reader.

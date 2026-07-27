@@ -200,6 +200,38 @@ static void test_add_appetite_policy_outcome(
         leo->school.turn_clock = (long)receipt.observed_turn;
 }
 
+static void test_reset_appetite_policy_outcomes(Leo *leo) {
+    if (!leo) return;
+    memset(&leo->wonder_appetite_calibration, 0,
+           sizeof leo->wonder_appetite_calibration);
+}
+
+static void test_add_appetite_readiness_cell(
+        Leo *leo, float appetite, int spoken,
+        int supported, int overreach,
+        int missed, int restraint) {
+    for (int i = 0; i < supported; i++)
+        test_add_appetite_policy_outcome(
+            leo, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < overreach; i++)
+        test_add_appetite_policy_outcome(
+            leo, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    for (int i = 0; i < missed; i++)
+        test_add_appetite_policy_outcome(
+            leo, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_FORMING,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < restraint; i++)
+        test_add_appetite_policy_outcome(
+            leo, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_FORMING,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+}
+
 __attribute__((noinline))
 static void test_wonder_appetite_drift_surface(void) {
     Leo *drift = malloc(sizeof *drift);
@@ -672,6 +704,135 @@ static void test_wonder_appetite_regret_surface(void) {
                   sizeof *flow_before) &&
           LEO_STATE_VERSION == 22,
           "wonder-appetite-regret: observing cost rewrites no evidence, body, or state format");
+    free(school_before);
+    free(flow_before);
+
+    leo_free(leo);
+    free(leo);
+}
+
+__attribute__((noinline))
+static void test_wonder_appetite_readiness_frontier(void) {
+    Leo *leo = malloc(sizeof *leo);
+    LeoWonderAppetiteReadiness frontier;
+    CHECK(leo != NULL,
+          "wonder-appetite-readiness: heap fixture allocated");
+    if (!leo) return;
+
+    leo_init(leo);
+    leo_wonder_appetite_readiness(leo, &frontier);
+    CHECK(frontier.candidate == 0 &&
+          frontier.cells[0].status ==
+              LEO_WONDER_APPETITE_READINESS_EMPTY,
+          "wonder-appetite-readiness: an empty diary grants no candidacy");
+
+    test_add_appetite_readiness_cell(
+        leo, 0.65f, 0, 3, 0, 0, 3);
+    leo_wonder_appetite_readiness(leo, &frontier);
+    CHECK(frontier.forming == 1 &&
+          frontier.cells[0].status ==
+              LEO_WONDER_APPETITE_READINESS_FORMING,
+          "wonder-appetite-readiness: two thin arms remain forming");
+
+    test_reset_appetite_policy_outcomes(leo);
+    test_add_appetite_readiness_cell(
+        leo, 0.65f, 0, 7, 1, 0, 0);
+    leo_wonder_appetite_readiness(leo, &frontier);
+    CHECK(frontier.unpaired == 1 &&
+          frontier.cells[0].status ==
+              LEO_WONDER_APPETITE_READINESS_UNPAIRED,
+          "wonder-appetite-readiness: one measured arm cannot authorize its absent twin");
+
+    test_reset_appetite_policy_outcomes(leo);
+    test_add_appetite_readiness_cell(
+        leo, 0.65f, 0, 3, 1, 1, 3);
+    leo_wonder_appetite_readiness(leo, &frontier);
+    CHECK(frontier.observing == 1 &&
+          frontier.cells[0].status ==
+              LEO_WONDER_APPETITE_READINESS_OBSERVING &&
+          frontier.cells[0].motion_headroom == 0.0f &&
+          frontier.cells[0].restraint_headroom == 0.0f,
+          "wonder-appetite-readiness: A.49 pairing is observation, not readiness");
+
+    test_reset_appetite_policy_outcomes(leo);
+    test_add_appetite_readiness_cell(
+        leo, 0.65f, 0, 7, 1, 1, 7);
+    leo_wonder_appetite_readiness(leo, &frontier);
+    const LeoWonderAppetiteReadinessCell *candidate =
+        &frontier.cells[0];
+    CHECK(frontier.candidate == 1 &&
+          candidate->status ==
+              LEO_WONDER_APPETITE_READINESS_CANDIDATE &&
+          candidate->eligible == 8 &&
+          candidate->abstained == 8 &&
+          fabsf(candidate->coverage - 0.5f) < 1e-6f &&
+          candidate->overreach_upper <
+              LEO_WONDER_APPETITE_READINESS_RISK_CEILING &&
+          candidate->missed_upper <
+              LEO_WONDER_APPETITE_READINESS_RISK_CEILING &&
+          candidate->motion_headroom > 0.0f &&
+          candidate->restraint_headroom > 0.0f,
+          "wonder-appetite-readiness: both independently bounded arms become only a candidate");
+
+    test_reset_appetite_policy_outcomes(leo);
+    test_add_appetite_readiness_cell(
+        leo, 0.65f, 0, 4, 4, 1, 7);
+    leo_wonder_appetite_readiness(leo, &frontier);
+    CHECK(frontier.motion_unbounded == 1 &&
+          frontier.cells[0].status ==
+              LEO_WONDER_APPETITE_READINESS_MOTION_UNBOUNDED,
+          "wonder-appetite-readiness: overreach uncertainty keeps its own veto");
+
+    test_reset_appetite_policy_outcomes(leo);
+    test_add_appetite_readiness_cell(
+        leo, 0.65f, 0, 7, 1, 4, 4);
+    leo_wonder_appetite_readiness(leo, &frontier);
+    CHECK(frontier.restraint_unbounded == 1 &&
+          frontier.cells[0].status ==
+              LEO_WONDER_APPETITE_READINESS_RESTRAINT_UNBOUNDED,
+          "wonder-appetite-readiness: missed-continuation uncertainty keeps its own veto");
+
+    test_reset_appetite_policy_outcomes(leo);
+    test_add_appetite_readiness_cell(
+        leo, 0.65f, 0, 4, 4, 4, 4);
+    leo_wonder_appetite_readiness(leo, &frontier);
+    CHECK(frontier.both_unbounded == 1 &&
+          frontier.cells[0].status ==
+              LEO_WONDER_APPETITE_READINESS_BOTH_UNBOUNDED,
+          "wonder-appetite-readiness: two uncertain debts cannot cancel");
+
+    test_reset_appetite_policy_outcomes(leo);
+    test_add_appetite_readiness_cell(
+        leo, 0.85f, 1, 7, 1, 0, 0);
+    test_add_appetite_readiness_cell(
+        leo, 0.85f, 0, 0, 0, 1, 7);
+    leo_wonder_appetite_readiness(leo, &frontier);
+    CHECK(frontier.candidate == 0 &&
+          frontier.unpaired == 2 &&
+          frontier.cells[2].status ==
+              LEO_WONDER_APPETITE_READINESS_UNPAIRED &&
+          frontier.cells[
+              LEO_WONDER_APPETITE_RELIABILITY_BINS + 2].status ==
+              LEO_WONDER_APPETITE_READINESS_UNPAIRED,
+          "wonder-appetite-readiness: spoken and unspoken arms cannot form a synthetic pair");
+
+    LeoWonderAppetiteCalibration diary_before =
+        leo->wonder_appetite_calibration;
+    LeoSchool *school_before = malloc(sizeof *school_before);
+    LeoFlow *flow_before = malloc(sizeof *flow_before);
+    if (school_before) *school_before = leo->school;
+    if (flow_before) *flow_before = leo->flow;
+    leo_wonder_appetite_readiness(leo, &frontier);
+    CHECK(school_before && flow_before &&
+          !memcmp(&diary_before,
+                  &leo->wonder_appetite_calibration,
+                  sizeof diary_before) &&
+          !memcmp(school_before, &leo->school,
+                  sizeof *school_before) &&
+          !memcmp(flow_before, &leo->flow,
+                  sizeof *flow_before) &&
+          LEO_STATE_VERSION == 22,
+          "wonder-appetite-readiness: candidacy rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
 
@@ -3145,6 +3306,7 @@ int main(void) {
     test_wonder_appetite_drift_surface();
     test_wonder_appetite_shadow_policy();
     test_wonder_appetite_regret_surface();
+    test_wonder_appetite_readiness_frontier();
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the
