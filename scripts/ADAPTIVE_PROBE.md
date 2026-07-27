@@ -394,6 +394,35 @@ load/respond/save processes. The final ON/OFF forks must have identical replies
 and complete states, proving that the surface reconstructs from persisted
 evidence without becoming another organ of intervention.
 
+Run the accumulated return-appetite drift matrix:
+
+```sh
+make deferred-wonder-appetite-drift
+```
+
+A.47 asks whether an apparently calibrated A.46 cell still means the same
+thing now as it did earlier. Inside each exact spoken/appetite stratum, it
+compares the four oldest and four newest scored receipts in the bounded v21
+diary. A cell remains `forming` until it has eight causally scored lives.
+Middle receipts are deliberately excluded from the two fixed endpoint windows,
+so accumulating history cannot blur the current temporal resolution.
+
+Each measured cell reports early/recent confirmations, mean appetite, observed
+return rate, mean Brier score, and four independent shifts: return rate,
+appetite, calibration gap, and Brier. `rising` or `falling` requires
+non-overlapping 95% Wilson intervals for the two observed return rates;
+otherwise the cell is `stable`. These words name the direction of observed
+return, not improvement or damage. In particular, base-rate movement cannot
+silently become a verdict about self-knowledge.
+
+The checked matrix gives both independent A.40 bodies the same eight unspoken
+forecasts in opposite order. Both pooled A.46 cells are `aligned` at `4/8`,
+predicted appetite `0.690`, and observed rate `0.500`. One chronology is
+`faded x4 -> sustained x4` and becomes `rising`; the other is
+`sustained x4 -> faded x4` and becomes `falling`. Final ON/OFF replies and
+complete states must remain byte-identical. `--no-wonder-appetite-drift`
+removes only this projection; it does not remove or rewrite the v21 diary.
+
 The API and frozen-replay lanes do not adapt moves to Leo's answers; they are
 baselines. `local-v1` is genuinely adaptive within its nine predeclared phases,
 but only through the narrow visible sensors above. Selecting a move from shadow

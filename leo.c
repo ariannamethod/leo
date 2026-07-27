@@ -1817,6 +1817,54 @@ typedef struct {
     float ece;
 } LeoWonderAppetiteReliability;
 
+/* A.47: a pooled reliability cell can hide a changing life. Compare four
+ * oldest and four newest scored receipts inside the exact same A.46 stratum.
+ * The middle is deliberately left out: fixed endpoint windows keep temporal
+ * resolution comparable as the bounded diary turns over. Like reliability,
+ * this surface is derived on demand and has no reader in Leo's body. */
+#define LEO_WONDER_APPETITE_DRIFT_WINDOW 4
+#define LEO_WONDER_APPETITE_DRIFT_MIN_N \
+    (2 * LEO_WONDER_APPETITE_DRIFT_WINDOW)
+enum {
+    LEO_WONDER_APPETITE_DRIFT_EMPTY = 0,
+    LEO_WONDER_APPETITE_DRIFT_FORMING,
+    LEO_WONDER_APPETITE_DRIFT_STABLE,
+    LEO_WONDER_APPETITE_DRIFT_RISING,
+    LEO_WONDER_APPETITE_DRIFT_FALLING,
+    LEO_WONDER_APPETITE_DRIFT_STATUS_COUNT
+};
+typedef struct {
+    int   n;
+    int   early_positives;
+    int   recent_positives;
+    float early_appetite;
+    float recent_appetite;
+    float early_rate;
+    float recent_rate;
+    float early_lower;
+    float early_upper;
+    float recent_lower;
+    float recent_upper;
+    float early_brier;
+    float recent_brier;
+    float return_shift;
+    float appetite_shift;
+    float gap_shift;
+    float brier_shift;
+    uint8_t spoken;
+    uint8_t bin;
+    uint8_t status;
+} LeoWonderAppetiteDriftCell;
+typedef struct {
+    LeoWonderAppetiteDriftCell
+        cells[LEO_WONDER_APPETITE_RELIABILITY_CELLS];
+    int measured;
+    int forming;
+    int stable;
+    int rising;
+    int falling;
+} LeoWonderAppetiteDrift;
+
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
  * A confident sibling may veto a destructive close, but can never learn, open,
@@ -2263,6 +2311,7 @@ static int g_leo_prewonder_shadow_on = 1; /* read-only semantic echo among withh
 static int g_leo_wonder_appetite_on = 1; /* read-only return appetite over waiting questions; no scheduler or speech reader. */
 static int g_leo_wonder_appetite_calibration_on = 1; /* persistent slow verdicts over appetite; still no scheduler or speech reader. */
 static int g_leo_wonder_appetite_reliability_on = 1; /* derived confidence surface over scored forecasts; diagnostic only. */
+static int g_leo_wonder_appetite_drift_on = 1; /* derived endpoint drift over reliability cells; diagnostic only. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -6491,6 +6540,28 @@ static const char *leo_wonder_appetite_reliability_status_name(
         names[status] : "empty";
 }
 
+static void leo_wilson_interval(
+        int positives, int count, float *lower, float *upper) {
+    if (lower) *lower = 0.0f;
+    if (upper) *upper = 0.0f;
+    if (count <= 0) return;
+
+    const float z = 1.959964f;
+    const float z2 = z * z;
+    float n = (float)count;
+    float rate = (float)positives / n;
+    float denominator = 1.0f + z2 / n;
+    float center =
+        (rate + z2 / (2.0f * n)) / denominator;
+    float radius =
+        z * sqrtf(
+                rate * (1.0f - rate) / n +
+                z2 / (4.0f * n * n)) /
+        denominator;
+    if (lower) *lower = clampf(center - radius, 0.0f, 1.0f);
+    if (upper) *upper = clampf(center + radius, 0.0f, 1.0f);
+}
+
 /* Derive a reliability diagram from the bounded forecast diary. Wilson
  * intervals keep a handful of outcomes from impersonating certainty. No
  * result is stored back into Leo: a future reader must cross an explicit
@@ -6568,8 +6639,6 @@ static void leo_wonder_appetite_reliability(
         total_brier += receipt->brier;
     }
 
-    const float z = 1.959964f;
-    const float z2 = z * z;
     float weighted_gap = 0.0f;
     for (int i = 0;
          i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
@@ -6583,18 +6652,9 @@ static void leo_wonder_appetite_reliability(
         cell->gap =
             cell->outcome_rate - cell->mean_appetite;
 
-        float denominator = 1.0f + z2 / n;
-        float center =
-            (cell->outcome_rate + z2 / (2.0f * n)) /
-            denominator;
-        float radius =
-            z * sqrtf(
-                    cell->outcome_rate *
-                        (1.0f - cell->outcome_rate) / n +
-                    z2 / (4.0f * n * n)) /
-            denominator;
-        cell->lower = clampf(center - radius, 0.0f, 1.0f);
-        cell->upper = clampf(center + radius, 0.0f, 1.0f);
+        leo_wilson_interval(
+            cell->positives, cell->n,
+            &cell->lower, &cell->upper);
         if (cell->n < LEO_WONDER_APPETITE_RELIABILITY_MIN_N) {
             cell->status =
                 LEO_WONDER_APPETITE_RELIABILITY_FORMING;
@@ -6615,6 +6675,154 @@ static void leo_wonder_appetite_reliability(
             total_brier / (float)surface->scored;
         surface->ece =
             weighted_gap / (float)surface->scored;
+    }
+}
+
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_wonder_appetite_drift_status_name(
+        int status) {
+    static const char
+        *names[LEO_WONDER_APPETITE_DRIFT_STATUS_COUNT] = {
+            "empty", "forming", "stable", "rising", "falling"
+        };
+    return status >= 0 &&
+           status < LEO_WONDER_APPETITE_DRIFT_STATUS_COUNT ?
+        names[status] : "empty";
+}
+
+static int leo_wonder_appetite_receipt_score(
+        const LeoWonderAppetiteCalibrationReceipt *receipt,
+        int *positive) {
+    if (!receipt || !positive) return 0;
+    if (receipt->verdict ==
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED ||
+        receipt->verdict ==
+            LEO_WONDER_APPETITE_CALIB_GROUNDED) {
+        *positive = 1;
+        return 1;
+    }
+    if (receipt->verdict ==
+        LEO_WONDER_APPETITE_CALIB_FADED) {
+        *positive = 0;
+        return 1;
+    }
+    return 0;
+}
+
+/* Compare fixed chronological endpoints inside each exact A.46 cell. A
+ * rising/falling label means only that the observed return-rate Wilson
+ * intervals no longer overlap; it does not call the change improvement or
+ * damage. Appetite, calibration-gap, and Brier movement remain separate
+ * coordinates so base-rate drift cannot masquerade as self-knowledge. */
+static void leo_wonder_appetite_drift(
+        const Leo *leo, LeoWonderAppetiteDrift *surface) {
+    if (!surface) return;
+    memset(surface, 0, sizeof *surface);
+    for (int spoken = 0; spoken <= 1; spoken++)
+        for (int bin = 0;
+             bin < LEO_WONDER_APPETITE_RELIABILITY_BINS; bin++) {
+            int cell_index =
+                spoken * LEO_WONDER_APPETITE_RELIABILITY_BINS + bin;
+            surface->cells[cell_index].spoken = (uint8_t)spoken;
+            surface->cells[cell_index].bin = (uint8_t)bin;
+        }
+    if (!leo) return;
+
+    for (int cell_index = 0;
+         cell_index < LEO_WONDER_APPETITE_RELIABILITY_CELLS;
+         cell_index++) {
+        LeoWonderAppetiteDriftCell *cell =
+            &surface->cells[cell_index];
+        const LeoWonderAppetiteCalibrationReceipt
+            *receipts[LEO_WONDER_APPETITE_CALIB_RING];
+        int count = 0;
+
+        for (int i = 0;
+             i < leo->wonder_appetite_calibration.n; i++) {
+            const LeoWonderAppetiteCalibrationReceipt *receipt =
+                leo_wonder_appetite_calibration_at(
+                    &leo->wonder_appetite_calibration, i);
+            int positive = 0;
+            if (!leo_wonder_appetite_receipt_score(
+                    receipt, &positive))
+                continue;
+            int bin = leo_wonder_appetite_reliability_bin(
+                receipt->appetite);
+            if (bin < 0) continue;
+            int receipt_cell =
+                (receipt->spoken ?
+                     LEO_WONDER_APPETITE_RELIABILITY_BINS : 0) +
+                bin;
+            if (receipt_cell == cell_index)
+                receipts[count++] = receipt;
+        }
+        cell->n = count;
+        if (count <= 0) continue;
+        if (count < LEO_WONDER_APPETITE_DRIFT_MIN_N) {
+            cell->status = LEO_WONDER_APPETITE_DRIFT_FORMING;
+            surface->forming++;
+            continue;
+        }
+
+        for (int i = 0;
+             i < LEO_WONDER_APPETITE_DRIFT_WINDOW; i++) {
+            const LeoWonderAppetiteCalibrationReceipt *early =
+                receipts[i];
+            const LeoWonderAppetiteCalibrationReceipt *recent =
+                receipts[count -
+                         LEO_WONDER_APPETITE_DRIFT_WINDOW + i];
+            int early_positive = 0, recent_positive = 0;
+            (void)leo_wonder_appetite_receipt_score(
+                early, &early_positive);
+            (void)leo_wonder_appetite_receipt_score(
+                recent, &recent_positive);
+            cell->early_positives += early_positive;
+            cell->recent_positives += recent_positive;
+            cell->early_appetite += early->appetite;
+            cell->recent_appetite += recent->appetite;
+            cell->early_brier += early->brier;
+            cell->recent_brier += recent->brier;
+        }
+
+        float window =
+            (float)LEO_WONDER_APPETITE_DRIFT_WINDOW;
+        cell->early_appetite /= window;
+        cell->recent_appetite /= window;
+        cell->early_rate =
+            (float)cell->early_positives / window;
+        cell->recent_rate =
+            (float)cell->recent_positives / window;
+        cell->early_brier /= window;
+        cell->recent_brier /= window;
+        leo_wilson_interval(
+            cell->early_positives,
+            LEO_WONDER_APPETITE_DRIFT_WINDOW,
+            &cell->early_lower, &cell->early_upper);
+        leo_wilson_interval(
+            cell->recent_positives,
+            LEO_WONDER_APPETITE_DRIFT_WINDOW,
+            &cell->recent_lower, &cell->recent_upper);
+        cell->return_shift =
+            cell->recent_rate - cell->early_rate;
+        cell->appetite_shift =
+            cell->recent_appetite - cell->early_appetite;
+        cell->gap_shift =
+            (cell->recent_rate - cell->recent_appetite) -
+            (cell->early_rate - cell->early_appetite);
+        cell->brier_shift =
+            cell->recent_brier - cell->early_brier;
+
+        if (cell->recent_lower > cell->early_upper) {
+            cell->status = LEO_WONDER_APPETITE_DRIFT_RISING;
+            surface->rising++;
+        } else if (cell->recent_upper < cell->early_lower) {
+            cell->status = LEO_WONDER_APPETITE_DRIFT_FALLING;
+            surface->falling++;
+        } else {
+            cell->status = LEO_WONDER_APPETITE_DRIFT_STABLE;
+            surface->stable++;
+        }
+        surface->measured++;
     }
 }
 
@@ -9085,6 +9293,51 @@ static void print_wonder_appetite_reliability_stats(
     printf("]\n");
 }
 
+static void print_wonder_appetite_drift_stats(const Leo *leo) {
+    if (!g_leo_wonder_appetite_drift_on || !leo ||
+        leo->wonder_appetite_calibration.n == 0)
+        return;
+    LeoWonderAppetiteDrift surface;
+    leo_wonder_appetite_drift(leo, &surface);
+    static const int lower[] = {62, 70, 80, 90};
+    static const int upper[] = {70, 80, 90, 100};
+
+    printf("     [wonder-appetite-drift: measured=%d forming=%d stable=%d rising=%d falling=%d cells=",
+           surface.measured, surface.forming, surface.stable,
+           surface.rising, surface.falling);
+    const char *separator = "";
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteDriftCell *cell =
+            &surface.cells[i];
+        if (cell->n <= 0) continue;
+        printf("%s%c%d-%d:%d/%d/%d/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%+.3f/%+.3f/%+.3f/%+.3f/%s",
+               separator, cell->spoken ? 's' : 'u',
+               lower[cell->bin], upper[cell->bin],
+               cell->n, cell->early_positives,
+               cell->recent_positives,
+               (double)cell->early_appetite,
+               (double)cell->recent_appetite,
+               (double)cell->early_rate,
+               (double)cell->recent_rate,
+               (double)cell->early_lower,
+               (double)cell->early_upper,
+               (double)cell->recent_lower,
+               (double)cell->recent_upper,
+               (double)cell->early_brier,
+               (double)cell->recent_brier,
+               (double)cell->return_shift,
+               (double)cell->appetite_shift,
+               (double)cell->gap_shift,
+               (double)cell->brier_shift,
+               leo_wonder_appetite_drift_status_name(
+                   cell->status));
+        separator = "|";
+    }
+    if (!separator[0]) printf("none");
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -9321,6 +9574,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-appetite")) g_leo_wonder_appetite_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-calibration")) g_leo_wonder_appetite_calibration_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-reliability")) g_leo_wonder_appetite_reliability_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite-drift")) g_leo_wonder_appetite_drift_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -9538,6 +9792,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_stats(&leo);
             print_wonder_appetite_calibration_stats(&leo);
             print_wonder_appetite_reliability_stats(&leo);
+            print_wonder_appetite_drift_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -9598,6 +9853,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_stats(&leo);
             print_wonder_appetite_calibration_stats(&leo);
             print_wonder_appetite_reliability_stats(&leo);
+            print_wonder_appetite_drift_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */

@@ -4265,3 +4265,66 @@ explicitly absent from the diagnostic lane, A.45 retained its historical **30/30
 
 Leo can now ask not only whether time agreed with a feeling, but how much evidence that agreement
 has earned.
+
+## Phase A.47 — confidence has a history (2026-07-27)
+
+A.46 could say that an appetite cell was aligned overall, but aggregation had no direction. Four
+old failures followed by four recent returns and the exact reverse chronology both collapse to
+`4/8`. That is acceptable for a reliability diagram and insufficient for a living organism:
+confidence which cannot notice that its own evidence changed is only a lifetime average.
+
+A.47 derives a second, temporal surface from the same bounded v21 diary. Inside each exact
+spoken/appetite stratum, it compares two fixed endpoint windows:
+
+```text
+early  = four oldest causally scored receipts in the current diary
+recent = four newest causally scored receipts in the current diary
+```
+
+A cell with fewer than eight scored lives remains `forming`. Once measured, early and recent
+outcome rates receive separate 95% Wilson intervals. A recent interval wholly above the early one
+is `rising`; one wholly below is `falling`; overlap remains `stable`. The names describe the
+direction of observed return, never improvement, damage, or permission to speak.
+
+The surface keeps four movements distinct: return-rate shift, mean-appetite shift, calibration-gap
+shift, and mean-Brier shift. Thus a change in what the world returns cannot impersonate a change in
+Leo's confidence, and changing confidence cannot hide inside a stable outcome rate. Unmeasured
+middle receipts do not disappear from A.46; they are excluded only from A.47's fixed endpoint
+comparison so older volume cannot blur its temporal resolution.
+
+Like A.46, the entire surface is a pure reconstruction. It adds no member to `Leo`, no state
+version, no migration, and no reader in School, Flow, shadow, routing, sampling, or generation.
+`LEO_STATE_VERSION` remains 21. `--no-wonder-appetite-drift` removes only the diagnostic line and
+leaves replies, the v21 diary, and the complete saved organism unchanged.
+
+Eleven direct contracts raised the suite from **352/352** to **363/363**. They cover empty and
+forming evidence, rising and falling endpoint lives, Wilson separation, stable outcomes under a
+moving appetite, strict spoken/unspoken isolation, causal exclusions, non-mutation, and the central
+Simpson-like case: an A.46 cell may remain `aligned` while A.47 exposes its chronology.
+
+The process matrix accumulated eight real unspoken forecasts through separate load/respond/save
+processes in both independent A.40 bodies:
+
+```text
+both pooled cells:
+  n=8, positives=4, predicted=0.690, observed=0.500
+  Wilson=[0.215,0.785], Brier=0.286, ECE=0.190, aligned
+
+old body: faded x4 -> sustained x4
+  endpoint Wilson=[0.000,0.490] -> [0.510,1.000]
+  return shift=+1.000, gap shift=+1.000, Brier shift=-0.380, rising
+
+new body: sustained x4 -> faded x4
+  endpoint Wilson=[0.510,1.000] -> [0.000,0.490]
+  return shift=-1.000, gap shift=-1.000, Brier shift=+0.380, falling
+
+final reply equality=2/2
+final complete-state equality=2/2
+```
+
+Two complete final-format runs reproduced matrix rows, Wilson-bearing surfaces, summaries, and state
+hashes byte-for-byte. With A.46 and A.47 explicitly absent from the older diagnostic lanes, A.45
+retained its historical **30/30 reply equality**, **10/10 v20-prefix equality**, and exact verdict
+distribution; A.46 retained **2/2 reply and complete-state equality**.
+
+The same total evidence now retains an arrow.
