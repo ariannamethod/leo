@@ -679,3 +679,58 @@ states in every row.
 
 A.54 adds no state and no speech, scheduler, routing, sampling, or generation
 reader. It is a readerless chronology of evidence, not permission to intervene.
+
+Run the persisted transport-life sequence:
+
+```sh
+make deferred-wonder-appetite-checkpoint
+```
+
+A.55 stops asking the rotating A.48 diary to impersonate long time. Once an
+A.51 trial is confirmed and its A.52 admission receipt is attested, a
+checkpoint opens after that trial's terminal proposal. It owns exactly the
+next 32 settled policy attempts as two adjacent 16-attempt epochs unless a
+changed policy language invalidates comparison earlier. Every attempt stores
+its proposal identity and raw outcome category. Another stratum or a confound
+spends time without filling either arm; pending forecasts spend no slot.
+`none` or `legacy` closes the lane early as `incompatible`.
+
+When a checkpoint terminates, its `through_proposed_turn` becomes the next
+checkpoint's exclusive boundary. The next life therefore cannot reuse an
+outcome from the previous one. The v25 state keeps at most the two most recent
+terminal lives per trial plus one active life. Rates, intervals, and the
+terminal status are not trusted as opaque claims: load validation recomputes
+the verdict from raw counts and rejects duplicate proposal identities,
+non-monotonic proposals, overlap, and mismatched stored status.
+
+The last two terminal lives produce a readerless sequence:
+
+```text
+one                 one complete life, no regime claim
+stable-provisional  both lives are provisional
+emerging-shift      provisional -> shifted
+persistent-shift    shifted -> shifted, even on different risk axes
+recovered           shifted -> provisional
+insufficient        either life is coverage-starved
+incompatible        policy language changed; no translation is attempted
+```
+
+An unfinished 31-attempt life remains `pending` across save/load and produces
+no sequence claim. A v24 body starts its first checkpoint after every
+calibration receipt it already carries; migration cannot retrospectively turn
+old diary entries into a new experiment. A truncated or corrupt v25 tail
+fails soft by discarding only checkpoints and anchoring future observation
+after the surviving diary. The body, trial, and admission proof remain intact.
+
+The eight-case process matrix covers one life, stable provisionality, emerging
+and persistent shifts, recovery, insufficient coverage, policy
+incompatibility, and a 31/32 active life. Default and
+`--no-wonder-appetite-checkpoint` forks keep strict checkpoint boundaries,
+identical replies, and byte-identical complete states in all eight rows. A
+separate writer isolation pair holds all pre-v25 bytes equal while the
+checkpoint tail differs, then confirms that those two distinct readerless
+states still produce the same reply.
+
+A.55 persists evidence, not authority. School, Flow, shadow, routing,
+sampling, scheduling, and generation do not read the checkpoint or its
+sequence.

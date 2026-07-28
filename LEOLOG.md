@@ -4822,3 +4822,86 @@ No field was added to `Leo`; no state version moved beyond 24. The chronology
 has no reader in School, Flow, shadow, routing, sampling, scheduling, or
 generation. A pooled present can no longer pass for continuity until each era
 has testified separately.
+
+## Phase A.55 — time cannot borrow its own evidence (2026-07-28)
+
+A.54 could split the current observable ring into early and recent epochs, but
+the ring still rotated. It could say what the present looked like, not whether
+the same geometry survived several disjoint lives. Re-reading a favorable
+receipt in two windows would have made repetition look like persistence.
+
+A.55 gives each confirmed and attested A.51/A.52 trial a persisted checkpoint
+lane. One checkpoint owns exactly 32 newly settled policy attempts after an
+exclusive proposal boundary in an ordinary comparable life; incompatible
+policy language closes that budget early:
+
+```text
+checkpoint 1  (trial terminal, proposal p1 .. p32]
+checkpoint 2  (p32, proposal p33 .. p64]
+```
+
+Each proposal identity is stored, strictly increasing, alongside raw counts
+for exact eligible/abstained outcomes, support, overreach, miss, restraint,
+confounds, other strata, and incompatible policy language. The first and last
+identity of each 16-attempt epoch must agree with the raw identity vector.
+The derived Wilson geometry and final status are recomputed during validation.
+A duplicate ID, an overlapping checkpoint, or a verdict that disagrees with
+its counts invalidates the whole optional v25 ledger.
+
+Only the two newest terminal checkpoints are retained, plus an active one. The
+pair is classified without gaining a speech reader:
+
+```text
+one                 one observation is not a regime
+stable-provisional  provisional -> provisional
+emerging-shift      provisional -> any measured shift
+persistent-shift    shift -> shift, even when the debt changes axis
+recovered           shift -> provisional
+insufficient        a life lacks one measured arm
+incompatible        the policy language changed and the lane closes
+```
+
+`persistent-shift` deliberately does not require the same subtype twice. An
+early motion failure followed by a recent motion failure still says the
+transport geometry remained displaced, while `same_signature=0` preserves
+that its temporal face changed. None of these names is permission to intervene.
+
+State moved from v24 to v25. An older body anchors every eligible lane after
+the newest calibration receipt already present, so migration observes only
+future lives. A truncated or internally impossible v25 tail fails soft: the
+checkpoint ledger is cleared and re-anchored after surviving history, while
+the body, calibration diary, holdout trial, and admission receipt remain.
+Thirty-one attempts survive sleep as thirty-one; they cannot become a
+completed era.
+
+Twenty direct contracts raised the suite from **449/449** to **469/469**.
+They cover one complete life, exact proposal ownership, strict non-overlap,
+stable provisionality, emerging and persistent shifts, changing shift
+signature, recovery, insufficient coverage, 31/32 persistence, exact v25
+round-trip, future-only v24 migration, truncated and corrupt v25 tails,
+confound/other time cost, policy incompatibility, ablation, duplicate IDs,
+false verdicts, forged overlap, and internally coherent evidence dated beyond
+Leo's lived clock.
+
+The real-process matrix produced:
+
+```text
+one           1  provisional       -> one
+stable        2  provisional       -> stable-provisional
+emerging      2  early-shifted      -> emerging-shift
+persistent    2  recent-shifted     -> persistent-shift
+recovered     2  provisional       -> recovered
+insufficient  2  coverage-starved  -> insufficient
+incompatible  1  incompatible      -> incompatible
+pending       0  pending 31/32     -> no sequence
+
+checkpoint chronology  8/8
+reply equality          8/8
+complete state equality 8/8
+writer prefix equality  yes
+writer reply equality   yes
+```
+
+The on/off writer pair differed only in the fixed v25 checkpoint tail. With
+that tail preserved, both bodies spoke the same reply. Time is now durable
+without becoming a hidden voice.
