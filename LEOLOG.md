@@ -4748,3 +4748,77 @@ complete state equality 8/8
 
 The result can now age without being erased and expire without being called
 false. A past can remain true while ceasing to be the present.
+
+## Phase A.54 — an average is not an era (2026-07-28)
+
+A.53 could ask whether a historical result still fit Leo's current life, but
+its one pooled window could make two different regimes look calm in aggregate.
+A good recent period could pay an earlier debt; opposite motion and restraint
+failures could cancel; a policy ecology could reverse while leaving the total
+coverage unchanged.
+
+A.54 keeps the bounded A.48 evidence surface and divides a complete current
+post-holdout window into two adjacent epochs:
+
+```text
+early     16 oldest settled attempts in the current 32-receipt window
+recent    16 newest settled attempts in the current 32-receipt window
+```
+
+The witness records each epoch's first and last proposal identity and requires
+the boundary to be strictly ordered. It does not claim that the current ring
+still contains the first 32 post-holdout events after older evidence has
+rotated away. It describes chronology inside the observable present.
+
+Every settled policy attempt spends a slot. Other strata and confounds consume
+time without filling an outcome arm. Each epoch needs four exact eligible and
+four exact abstained outcomes; it cannot borrow its missing arm from its
+neighbor. Policy `none` or `legacy`, or non-monotonic proposal identity, makes
+the chronology incompatible.
+
+Each epoch independently carries:
+
+```text
+motion       overreach Wilson upper bound < 0.500
+restraint    missed-continuation upper bound < 0.500
+history      epoch coverage interval overlaps both A.52 and A.51 coverage
+ecology      early and recent coverage intervals overlap each other
+```
+
+A.53's pooled status is another independent prerequisite. A.54 may veto a
+pooled `provisional`, but it cannot rehabilitate `aggregate-shifted`. Coverage
+interval overlap remains a compatibility screen, never an equivalence claim.
+The strongest new word is still `provisional`.
+
+Fifteen direct contracts raised the suite from **434/434** to **449/449**.
+They cover empty, pending, unattested, refuted, complete provisional
+chronology, non-overlap, complete non-mutation, hidden early and recent motion
+shifts, opposite-axis cancellation, hidden ecology inversion, pooled failure,
+thin chronology, epoch-local coverage starvation, policy incompatibility, and
+unchanged v24 state.
+
+The real-process matrix then produced:
+
+```text
+provisional       early 0.471/0.471, recent 0.471/0.471
+early shift       early motion 0.694, pooled provisional
+recent shift      recent motion 0.694, pooled provisional
+both shift        early motion 0.694, recent restraint 0.694,
+                  pooled provisional
+ecology shift     coverage 12/4 -> 4/12, pooled 16/16 provisional
+aggregate shift   both epochs motion 0.785, pooled veto
+observing         16 + 15 settled attempts
+coverage-starved  early arms 16/0, recent arms 8/8
+incompatible      one post-boundary legacy policy
+
+proposal chronology      9/9
+reply equality            9/9
+complete state equality   9/9
+```
+
+Two complete runs reproduced all nine rows byte-for-byte.
+
+No field was added to `Leo`; no state version moved beyond 24. The chronology
+has no reader in School, Flow, shadow, routing, sampling, scheduling, or
+generation. A pooled present can no longer pass for continuity until each era
+has testified separately.

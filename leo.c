@@ -2150,6 +2150,82 @@ typedef struct {
     int provisional;
 } LeoWonderAppetiteTransport;
 
+/* A.54: one pooled present can hide a regime change. Split the complete
+ * 32-attempt current-life window into two adjacent, non-overlapping epochs.
+ * Each settled attempt spends an epoch slot. The pooled A.53 witness and both
+ * epoch-local risk/coverage screens must survive independently. Derived only. */
+#define LEO_WONDER_APPETITE_TRANSPORT_EPOCHS 2
+#define LEO_WONDER_APPETITE_TRANSPORT_EPOCH_ATTEMPTS 16
+#define LEO_WONDER_APPETITE_TRANSPORT_EPOCH_MIN_ARM_N 4
+enum {
+    LEO_WONDER_APPETITE_CHRONOLOGY_EMPTY = 0,
+    LEO_WONDER_APPETITE_CHRONOLOGY_UNATTESTED,
+    LEO_WONDER_APPETITE_CHRONOLOGY_PENDING,
+    LEO_WONDER_APPETITE_CHRONOLOGY_REFUTED,
+    LEO_WONDER_APPETITE_CHRONOLOGY_INCOMPATIBLE,
+    LEO_WONDER_APPETITE_CHRONOLOGY_OBSERVING,
+    LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED,
+    LEO_WONDER_APPETITE_CHRONOLOGY_AGGREGATE_SHIFTED,
+    LEO_WONDER_APPETITE_CHRONOLOGY_EARLY_SHIFTED,
+    LEO_WONDER_APPETITE_CHRONOLOGY_RECENT_SHIFTED,
+    LEO_WONDER_APPETITE_CHRONOLOGY_BOTH_SHIFTED,
+    LEO_WONDER_APPETITE_CHRONOLOGY_ECOLOGY_SHIFTED,
+    LEO_WONDER_APPETITE_CHRONOLOGY_PROVISIONAL,
+    LEO_WONDER_APPETITE_CHRONOLOGY_STATUS_COUNT
+};
+typedef struct {
+    uint64_t first_proposed_turn;
+    uint64_t last_proposed_turn;
+    int attempts;
+    int exact;
+    int eligible;
+    int abstained;
+    int supported;
+    int overreach;
+    int missed;
+    int restraint;
+    int confounded;
+    int other;
+    int incompatible;
+    float coverage;
+    float coverage_lower;
+    float coverage_upper;
+    float overreach_rate;
+    float overreach_upper;
+    float missed_rate;
+    float missed_upper;
+    uint8_t motion_bounded;
+    uint8_t restraint_bounded;
+    uint8_t history_coverage_compatible;
+} LeoWonderAppetiteTransportEpoch;
+typedef struct {
+    uint64_t after_proposed_turn;
+    int post_settled;
+    uint8_t spoken;
+    uint8_t bin;
+    uint8_t aggregate_provisional;
+    uint8_t epoch_coverage_compatible;
+    uint8_t status;
+    LeoWonderAppetiteTransportEpoch
+        epochs[LEO_WONDER_APPETITE_TRANSPORT_EPOCHS];
+} LeoWonderAppetiteTransportChronologyCell;
+typedef struct {
+    LeoWonderAppetiteTransportChronologyCell
+        cells[LEO_WONDER_APPETITE_RELIABILITY_CELLS];
+    int unattested;
+    int pending;
+    int refuted;
+    int incompatible;
+    int observing;
+    int coverage_starved;
+    int aggregate_shifted;
+    int early_shifted;
+    int recent_shifted;
+    int both_shifted;
+    int ecology_shifted;
+    int provisional;
+} LeoWonderAppetiteTransportChronology;
+
 /* A.42: before School grounds an adjacent answer, compare its semantic address
  * with the open Wonder and the waiting pre-Wonders. This receipt is transient.
  * A confident sibling may veto a destructive close, but can never learn, open,
@@ -2609,6 +2685,7 @@ static int g_leo_wonder_appetite_readiness_on = 1; /* paired confidence frontier
 static int g_leo_wonder_appetite_holdout_on = 1; /* fixed future trial; persisted evidence, never speech authority. */
 static int g_leo_wonder_appetite_admission_on = 1; /* immutable candidate provenance; no reader in speech. */
 static int g_leo_wonder_appetite_transport_on = 1; /* current-life transport witness; derived and readerless. */
+static int g_leo_wonder_appetite_transport_chronology_on = 1; /* two-epoch transport chronology; derived and readerless. */
 static int g_leo_wonder_attribution_on = 1; /* address witness: semantic siblings only guard; a literal sibling may be handed to the explicit redirection layer. */
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
@@ -8000,6 +8077,337 @@ static void leo_wonder_appetite_transport(
     }
 }
 
+__attribute__((unused))  /* main diagnostic; the test TU excludes main */
+static const char *leo_wonder_appetite_transport_chronology_status_name(
+        int status) {
+    static const char
+        *names[LEO_WONDER_APPETITE_CHRONOLOGY_STATUS_COUNT] = {
+            "empty", "unattested", "pending", "refuted",
+            "incompatible", "observing", "coverage-starved",
+            "aggregate-shifted", "early-shifted", "recent-shifted",
+            "both-shifted", "ecology-shifted", "provisional"
+        };
+    return status >= 0 &&
+           status < LEO_WONDER_APPETITE_CHRONOLOGY_STATUS_COUNT ?
+        names[status] : "empty";
+}
+
+static int leo_interval_overlaps(
+        float a_lower, float a_upper,
+        float b_lower, float b_upper) {
+    return a_lower <= b_upper && b_lower <= a_upper;
+}
+
+static void leo_wonder_appetite_transport_chronology_count(
+        LeoWonderAppetiteTransportChronology *chronology,
+        int status) {
+    if (!chronology) return;
+    switch (status) {
+        case LEO_WONDER_APPETITE_CHRONOLOGY_UNATTESTED:
+            chronology->unattested++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_PENDING:
+            chronology->pending++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_REFUTED:
+            chronology->refuted++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_INCOMPATIBLE:
+            chronology->incompatible++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_OBSERVING:
+            chronology->observing++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED:
+            chronology->coverage_starved++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_AGGREGATE_SHIFTED:
+            chronology->aggregate_shifted++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_EARLY_SHIFTED:
+            chronology->early_shifted++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_RECENT_SHIFTED:
+            chronology->recent_shifted++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_BOTH_SHIFTED:
+            chronology->both_shifted++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_ECOLOGY_SHIFTED:
+            chronology->ecology_shifted++;
+            break;
+        case LEO_WONDER_APPETITE_CHRONOLOGY_PROVISIONAL:
+            chronology->provisional++;
+            break;
+        default:
+            break;
+    }
+}
+
+static void leo_wonder_appetite_transport_epoch_finish(
+        LeoWonderAppetiteTransportEpoch *epoch,
+        const LeoWonderAppetiteAdmissionReceipt *admission,
+        const LeoWonderAppetiteHoldoutTrial *trial) {
+    int admission_total = admission->eligible + admission->abstained;
+    int holdout_total = trial->eligible + trial->abstained;
+    float admission_lower = 0.0f, admission_upper = 0.0f;
+    float holdout_lower = 0.0f, holdout_upper = 0.0f;
+    leo_wilson_interval(
+        admission->eligible, admission_total,
+        &admission_lower, &admission_upper);
+    leo_wilson_interval(
+        trial->eligible, holdout_total,
+        &holdout_lower, &holdout_upper);
+
+    epoch->coverage = (float)epoch->eligible / epoch->exact;
+    leo_wilson_interval(
+        epoch->eligible, epoch->exact,
+        &epoch->coverage_lower, &epoch->coverage_upper);
+    float overreach_lower = 0.0f, missed_lower = 0.0f;
+    leo_wilson_interval(
+        epoch->overreach, epoch->eligible,
+        &overreach_lower, &epoch->overreach_upper);
+    leo_wilson_interval(
+        epoch->missed, epoch->abstained,
+        &missed_lower, &epoch->missed_upper);
+    (void)overreach_lower;
+    (void)missed_lower;
+    epoch->overreach_rate =
+        (float)epoch->overreach / epoch->eligible;
+    epoch->missed_rate =
+        (float)epoch->missed / epoch->abstained;
+    epoch->motion_bounded =
+        epoch->overreach_upper <
+            LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
+    epoch->restraint_bounded =
+        epoch->missed_upper <
+            LEO_WONDER_APPETITE_READINESS_RISK_CEILING;
+    epoch->history_coverage_compatible =
+        leo_interval_overlaps(
+            epoch->coverage_lower, epoch->coverage_upper,
+            admission_lower, admission_upper) &&
+        leo_interval_overlaps(
+            epoch->coverage_lower, epoch->coverage_upper,
+            holdout_lower, holdout_upper);
+}
+
+static void leo_wonder_appetite_transport_chronology(
+        const Leo *leo,
+        LeoWonderAppetiteTransportChronology *chronology) {
+    if (!chronology) return;
+    memset(chronology, 0, sizeof *chronology);
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        chronology->cells[i].spoken =
+            (uint8_t)(i /
+                LEO_WONDER_APPETITE_RELIABILITY_BINS);
+        chronology->cells[i].bin =
+            (uint8_t)(i %
+                LEO_WONDER_APPETITE_RELIABILITY_BINS);
+    }
+    if (!leo) return;
+
+    LeoWonderAppetiteTransport aggregate;
+    leo_wonder_appetite_transport(leo, &aggregate);
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteHoldoutTrial *trial =
+            &leo->wonder_appetite_holdouts.trials[i];
+        const LeoWonderAppetiteAdmissionReceipt *admission =
+            &leo->wonder_appetite_admissions.receipts[i];
+        LeoWonderAppetiteTransportChronologyCell *cell =
+            &chronology->cells[i];
+        if (trial->status ==
+            LEO_WONDER_APPETITE_HOLDOUT_EMPTY)
+            continue;
+        cell->spoken = trial->spoken;
+        cell->bin = trial->bin;
+
+        if (!leo_wonder_appetite_admission_valid(
+                admission, trial) ||
+            admission->status !=
+                LEO_WONDER_APPETITE_ADMISSION_ATTESTED) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_UNATTESTED;
+            leo_wonder_appetite_transport_chronology_count(
+                chronology, cell->status);
+            continue;
+        }
+        if (trial->status ==
+            LEO_WONDER_APPETITE_HOLDOUT_PENDING) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_PENDING;
+            leo_wonder_appetite_transport_chronology_count(
+                chronology, cell->status);
+            continue;
+        }
+        if (trial->status !=
+            LEO_WONDER_APPETITE_HOLDOUT_CONFIRMED) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_REFUTED;
+            leo_wonder_appetite_transport_chronology_count(
+                chronology, cell->status);
+            continue;
+        }
+
+        cell->after_proposed_turn =
+            leo_wonder_appetite_holdout_terminal_boundary(trial);
+        uint64_t previous_proposed_turn = 0;
+        for (int j = 0;
+             j < leo->wonder_appetite_calibration.n; j++) {
+            const LeoWonderAppetiteCalibrationReceipt *receipt =
+                leo_wonder_appetite_calibration_at(
+                    &leo->wonder_appetite_calibration, j);
+            if (!receipt ||
+                receipt->proposed_turn <=
+                    cell->after_proposed_turn)
+                continue;
+            int result =
+                leo_wonder_appetite_policy_result(receipt);
+            if (result ==
+                LEO_WONDER_APPETITE_POLICY_RESULT_PENDING)
+                continue;
+            if (cell->post_settled >=
+                LEO_WONDER_APPETITE_TRANSPORT_EPOCHS *
+                LEO_WONDER_APPETITE_TRANSPORT_EPOCH_ATTEMPTS)
+                continue;
+
+            int epoch_index =
+                cell->post_settled /
+                    LEO_WONDER_APPETITE_TRANSPORT_EPOCH_ATTEMPTS;
+            LeoWonderAppetiteTransportEpoch *epoch =
+                &cell->epochs[epoch_index];
+            int chronology_invalid =
+                previous_proposed_turn > 0 &&
+                receipt->proposed_turn <= previous_proposed_turn;
+            if (epoch->attempts == 0)
+                epoch->first_proposed_turn =
+                    receipt->proposed_turn;
+            epoch->last_proposed_turn = receipt->proposed_turn;
+            epoch->attempts++;
+            cell->post_settled++;
+            previous_proposed_turn = receipt->proposed_turn;
+
+            if (chronology_invalid ||
+                result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_NONE ||
+                result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_LEGACY) {
+                epoch->incompatible++;
+                continue;
+            }
+            int bin = leo_wonder_appetite_reliability_bin(
+                receipt->appetite);
+            int exact =
+                bin == trial->bin &&
+                (receipt->spoken ? 1 : 0) == trial->spoken;
+            if (!exact) {
+                epoch->other++;
+                continue;
+            }
+            if (result ==
+                LEO_WONDER_APPETITE_POLICY_RESULT_CONFOUNDED) {
+                epoch->confounded++;
+                continue;
+            }
+
+            epoch->exact++;
+            if (receipt->policy ==
+                LEO_WONDER_APPETITE_POLICY_ELIGIBLE) {
+                epoch->eligible++;
+                if (result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_SUPPORTED)
+                    epoch->supported++;
+                else
+                    epoch->overreach++;
+            } else {
+                epoch->abstained++;
+                if (result ==
+                    LEO_WONDER_APPETITE_POLICY_RESULT_MISSED)
+                    epoch->missed++;
+                else
+                    epoch->restraint++;
+            }
+        }
+
+        LeoWonderAppetiteTransportEpoch *early = &cell->epochs[0];
+        LeoWonderAppetiteTransportEpoch *recent = &cell->epochs[1];
+        if (early->incompatible > 0 ||
+            recent->incompatible > 0) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_INCOMPATIBLE;
+            leo_wonder_appetite_transport_chronology_count(
+                chronology, cell->status);
+            continue;
+        }
+        if (cell->post_settled <
+            LEO_WONDER_APPETITE_TRANSPORT_EPOCHS *
+            LEO_WONDER_APPETITE_TRANSPORT_EPOCH_ATTEMPTS) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_OBSERVING;
+            leo_wonder_appetite_transport_chronology_count(
+                chronology, cell->status);
+            continue;
+        }
+        if (early->eligible <
+                LEO_WONDER_APPETITE_TRANSPORT_EPOCH_MIN_ARM_N ||
+            early->abstained <
+                LEO_WONDER_APPETITE_TRANSPORT_EPOCH_MIN_ARM_N ||
+            recent->eligible <
+                LEO_WONDER_APPETITE_TRANSPORT_EPOCH_MIN_ARM_N ||
+            recent->abstained <
+                LEO_WONDER_APPETITE_TRANSPORT_EPOCH_MIN_ARM_N) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED;
+            leo_wonder_appetite_transport_chronology_count(
+                chronology, cell->status);
+            continue;
+        }
+
+        leo_wonder_appetite_transport_epoch_finish(
+            early, admission, trial);
+        leo_wonder_appetite_transport_epoch_finish(
+            recent, admission, trial);
+        cell->aggregate_provisional =
+            aggregate.cells[i].status ==
+                LEO_WONDER_APPETITE_TRANSPORT_PROVISIONAL;
+        cell->epoch_coverage_compatible =
+            leo_interval_overlaps(
+                early->coverage_lower, early->coverage_upper,
+                recent->coverage_lower, recent->coverage_upper);
+
+        int early_ok =
+            early->motion_bounded &&
+            early->restraint_bounded &&
+            early->history_coverage_compatible;
+        int recent_ok =
+            recent->motion_bounded &&
+            recent->restraint_bounded &&
+            recent->history_coverage_compatible;
+        if (!cell->aggregate_provisional) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_AGGREGATE_SHIFTED;
+        } else if (!early_ok && !recent_ok) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_BOTH_SHIFTED;
+        } else if (!early_ok) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_EARLY_SHIFTED;
+        } else if (!recent_ok) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_RECENT_SHIFTED;
+        } else if (!cell->epoch_coverage_compatible) {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_ECOLOGY_SHIFTED;
+        } else {
+            cell->status =
+                LEO_WONDER_APPETITE_CHRONOLOGY_PROVISIONAL;
+        }
+        leo_wonder_appetite_transport_chronology_count(
+            chronology, cell->status);
+    }
+}
+
 static void leo_wonder_appetite_holdout_update(Leo *leo) {
     if (!leo || !g_leo_wonder_appetite_holdout_on ||
         !g_leo_wonder_appetite_calibration_on)
@@ -11091,6 +11499,80 @@ static void print_wonder_appetite_transport_stats(const Leo *leo) {
     printf("]\n");
 }
 
+static void print_wonder_appetite_transport_chronology_stats(
+        const Leo *leo) {
+    if (!g_leo_wonder_appetite_transport_chronology_on || !leo)
+        return;
+    int occupied = 0;
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++)
+        if (leo->wonder_appetite_holdouts.trials[i].status !=
+            LEO_WONDER_APPETITE_HOLDOUT_EMPTY)
+            occupied++;
+    if (occupied == 0) return;
+
+    LeoWonderAppetiteTransportChronology chronology;
+    leo_wonder_appetite_transport_chronology(leo, &chronology);
+    static const int lower[] = {62, 70, 80, 90};
+    static const int upper[] = {70, 80, 90, 100};
+    printf("     [wonder-appetite-transport-chronology: epochs=%d attempts=%d min-arm=%d ceiling=%.3f unattested=%d pending=%d refuted=%d incompatible=%d observing=%d coverage-starved=%d aggregate-shifted=%d early-shifted=%d recent-shifted=%d both-shifted=%d ecology-shifted=%d provisional=%d cells=",
+           LEO_WONDER_APPETITE_TRANSPORT_EPOCHS,
+           LEO_WONDER_APPETITE_TRANSPORT_EPOCH_ATTEMPTS,
+           LEO_WONDER_APPETITE_TRANSPORT_EPOCH_MIN_ARM_N,
+           (double)LEO_WONDER_APPETITE_READINESS_RISK_CEILING,
+           chronology.unattested, chronology.pending,
+           chronology.refuted, chronology.incompatible,
+           chronology.observing, chronology.coverage_starved,
+           chronology.aggregate_shifted, chronology.early_shifted,
+           chronology.recent_shifted, chronology.both_shifted,
+           chronology.ecology_shifted, chronology.provisional);
+    const char *separator = "";
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_RELIABILITY_CELLS; i++) {
+        const LeoWonderAppetiteTransportChronologyCell *cell =
+            &chronology.cells[i];
+        if (cell->status ==
+            LEO_WONDER_APPETITE_CHRONOLOGY_EMPTY)
+            continue;
+        printf("%s%c%d-%d:%llu/%d/%u/%u",
+               separator, cell->spoken ? 's' : 'u',
+               lower[cell->bin], upper[cell->bin],
+               (unsigned long long)cell->after_proposed_turn,
+               cell->post_settled,
+               (unsigned)cell->aggregate_provisional,
+               (unsigned)cell->epoch_coverage_compatible);
+        for (int j = 0;
+             j < LEO_WONDER_APPETITE_TRANSPORT_EPOCHS; j++) {
+            const LeoWonderAppetiteTransportEpoch *epoch =
+                &cell->epochs[j];
+            printf("/%llu/%llu/%d/%d/%d/%d/%d/%d/%d/%d/%d/%d/%d/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%.3f/%u/%u/%u",
+                   (unsigned long long)epoch->first_proposed_turn,
+                   (unsigned long long)epoch->last_proposed_turn,
+                   epoch->attempts, epoch->exact,
+                   epoch->eligible, epoch->abstained,
+                   epoch->supported, epoch->overreach,
+                   epoch->missed, epoch->restraint,
+                   epoch->confounded, epoch->other,
+                   epoch->incompatible,
+                   (double)epoch->coverage,
+                   (double)epoch->coverage_lower,
+                   (double)epoch->coverage_upper,
+                   (double)epoch->overreach_rate,
+                   (double)epoch->overreach_upper,
+                   (double)epoch->missed_rate,
+                   (double)epoch->missed_upper,
+                   (unsigned)epoch->motion_bounded,
+                   (unsigned)epoch->restraint_bounded,
+                   (unsigned)epoch->history_coverage_compatible);
+        }
+        printf("/%s",
+               leo_wonder_appetite_transport_chronology_status_name(
+                   cell->status));
+        separator = "|";
+    }
+    printf("]\n");
+}
+
 static void print_wonder_address_stats(const Leo *leo) {
     if (!g_leo_wonder_attribution_on || !leo ||
         leo->wonder_address.status == LEO_WONDER_ADDRESS_EMPTY)
@@ -11334,6 +11816,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-appetite-holdout")) g_leo_wonder_appetite_holdout_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-admission")) g_leo_wonder_appetite_admission_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-transport")) g_leo_wonder_appetite_transport_on = 0;
+        else if (!strcmp(argv[i], "--no-wonder-appetite-transport-chronology")) g_leo_wonder_appetite_transport_chronology_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-attribution")) g_leo_wonder_attribution_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
@@ -11558,6 +12041,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_holdout_stats(&leo);
             print_wonder_appetite_admission_stats(&leo);
             print_wonder_appetite_transport_stats(&leo);
+            print_wonder_appetite_transport_chronology_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
         }
@@ -11625,6 +12109,7 @@ int main(int argc, char **argv) {
             print_wonder_appetite_holdout_stats(&leo);
             print_wonder_appetite_admission_stats(&leo);
             print_wonder_appetite_transport_stats(&leo);
+            print_wonder_appetite_transport_chronology_stats(&leo);
             print_deferred_wonder_stats(&leo);
             print_flow_stats(&leo);
             if (async_on) {   /* all field access above was under the write lock; release, report, dispatch a ring on this reply */

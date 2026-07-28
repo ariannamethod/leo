@@ -159,6 +159,19 @@ static int add_future(Leo *leo, const char *scenario) {
     return 0;
 }
 
+static int chronology_scenario(const char *scenario) {
+    return
+        !strcmp(scenario, "chronology-provisional") ||
+        !strcmp(scenario, "chronology-early-shift") ||
+        !strcmp(scenario, "chronology-recent-shift") ||
+        !strcmp(scenario, "chronology-both-shift") ||
+        !strcmp(scenario, "chronology-ecology-shift") ||
+        !strcmp(scenario, "chronology-aggregate-shift") ||
+        !strcmp(scenario, "chronology-observing") ||
+        !strcmp(scenario, "chronology-coverage-starved") ||
+        !strcmp(scenario, "chronology-incompatible");
+}
+
 static int transport_scenario(const char *scenario) {
     return
         !strcmp(scenario, "transport-provisional") ||
@@ -168,7 +181,8 @@ static int transport_scenario(const char *scenario) {
         !strcmp(scenario, "transport-coverage-shift") ||
         !strcmp(scenario, "transport-holdout-coverage-shift") ||
         !strcmp(scenario, "transport-observing") ||
-        !strcmp(scenario, "transport-incompatible");
+        !strcmp(scenario, "transport-incompatible") ||
+        chronology_scenario(scenario);
 }
 
 static int add_transport_present(Leo *leo, const char *scenario) {
@@ -256,6 +270,66 @@ static int add_transport_present(Leo *leo, const char *scenario) {
     return 0;
 }
 
+static int add_epoch(
+        Leo *leo,
+        int supported, int overreach, int missed, int restraint) {
+    return
+        add_n(leo, supported, 0.65f, 0,
+              LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+              LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+        add_n(leo, overreach, 0.65f, 0,
+              LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+              LEO_WONDER_APPETITE_CALIB_FADED) &&
+        add_n(leo, missed, 0.65f, 0,
+              LEO_WONDER_APPETITE_POLICY_FORMING,
+              LEO_WONDER_APPETITE_CALIB_SUSTAINED) &&
+        add_n(leo, restraint, 0.65f, 0,
+              LEO_WONDER_APPETITE_POLICY_FORMING,
+              LEO_WONDER_APPETITE_CALIB_FADED);
+}
+
+static int add_chronology_present(
+        Leo *leo, const char *scenario) {
+    if (!strcmp(scenario, "chronology-provisional"))
+        return
+            add_epoch(leo, 7, 1, 1, 7) &&
+            add_epoch(leo, 7, 1, 1, 7);
+    if (!strcmp(scenario, "chronology-early-shift"))
+        return
+            add_epoch(leo, 5, 3, 0, 8) &&
+            add_epoch(leo, 8, 0, 0, 8);
+    if (!strcmp(scenario, "chronology-recent-shift"))
+        return
+            add_epoch(leo, 8, 0, 0, 8) &&
+            add_epoch(leo, 5, 3, 0, 8);
+    if (!strcmp(scenario, "chronology-both-shift"))
+        return
+            add_epoch(leo, 5, 3, 0, 8) &&
+            add_epoch(leo, 8, 0, 3, 5);
+    if (!strcmp(scenario, "chronology-ecology-shift"))
+        return
+            add_epoch(leo, 11, 1, 0, 4) &&
+            add_epoch(leo, 4, 0, 1, 11);
+    if (!strcmp(scenario, "chronology-aggregate-shift"))
+        return
+            add_epoch(leo, 4, 4, 0, 8) &&
+            add_epoch(leo, 4, 4, 0, 8);
+    if (!strcmp(scenario, "chronology-observing"))
+        return
+            add_epoch(leo, 8, 0, 0, 8) &&
+            add_epoch(leo, 8, 0, 0, 7);
+    if (!strcmp(scenario, "chronology-coverage-starved"))
+        return
+            add_epoch(leo, 16, 0, 0, 0) &&
+            add_epoch(leo, 8, 0, 0, 8);
+    if (!strcmp(scenario, "chronology-incompatible"))
+        return add_n(
+            leo, 1, 0.65f, 0,
+            LEO_WONDER_APPETITE_POLICY_LEGACY,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--tail-size")) {
         printf("%zu\n",
@@ -276,7 +350,7 @@ int main(int argc, char **argv) {
          strcmp(argv[2], "coverage-starved") &&
          !transport_scenario(argv[2]))) {
         fprintf(stderr,
-                "usage: %s STATE arm|confirmed|motion-failed|restraint-failed|both-failed|coverage-starved|transport-provisional|transport-motion-shift|transport-restraint-shift|transport-both-shift|transport-coverage-shift|transport-holdout-coverage-shift|transport-observing|transport-incompatible\n",
+                "usage: %s STATE arm|confirmed|motion-failed|restraint-failed|both-failed|coverage-starved|transport-*|chronology-*\n",
                 argv[0]);
         return 2;
     }
@@ -319,7 +393,10 @@ int main(int argc, char **argv) {
             trial->missed = 1;
             trial->restraint = 11;
         }
-        if (ok) ok = add_transport_present(&leo, argv[2]);
+        if (ok)
+            ok = chronology_scenario(argv[2]) ?
+                add_chronology_present(&leo, argv[2]) :
+                add_transport_present(&leo, argv[2]);
     } else if (ok && strcmp(argv[2], "arm")) {
         leo_wonder_appetite_holdout_update(&leo);
         ok = add_future(&leo, argv[2]);

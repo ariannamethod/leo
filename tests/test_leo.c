@@ -1310,6 +1310,32 @@ static void test_add_appetite_transport_outcomes(
             LEO_WONDER_APPETITE_CALIB_FADED);
 }
 
+static uint64_t test_add_appetite_transport_epoch(
+        Leo *leo, uint64_t proposed, float appetite, int spoken,
+        int supported, int overreach, int missed, int restraint) {
+    for (int i = 0; i < supported; i++, proposed += 4)
+        test_add_appetite_policy_outcome_after(
+            leo, proposed, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < overreach; i++, proposed += 4)
+        test_add_appetite_policy_outcome_after(
+            leo, proposed, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    for (int i = 0; i < missed; i++, proposed += 4)
+        test_add_appetite_policy_outcome_after(
+            leo, proposed, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_FORMING,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    for (int i = 0; i < restraint; i++, proposed += 4)
+        test_add_appetite_policy_outcome_after(
+            leo, proposed, appetite, spoken,
+            LEO_WONDER_APPETITE_POLICY_FORMING,
+            LEO_WONDER_APPETITE_CALIB_FADED);
+    return proposed;
+}
+
 static LeoWonderAppetiteHoldoutTrial *
 test_prepare_appetite_transport(Leo *leo) {
     LeoWonderAppetiteHoldoutTrial *trial =
@@ -1536,6 +1562,296 @@ static void test_wonder_appetite_transport_witness(void) {
 
     g_leo_wonder_appetite_transport_on =
         previous_transport;
+    g_leo_wonder_appetite_holdout_on = previous_holdout;
+    g_leo_wonder_appetite_calibration_on =
+        previous_calibration;
+    g_leo_wonder_appetite_policy_on = previous_policy;
+    g_leo_wonder_appetite_admission_on =
+        previous_admission;
+    leo_free(leo);
+    free(leo);
+    free(before);
+}
+
+__attribute__((noinline))
+static void test_wonder_appetite_transport_chronology(void) {
+    Leo *leo = malloc(sizeof *leo);
+    Leo *before = malloc(sizeof *before);
+    CHECK(leo && before,
+          "wonder-appetite-transport-chronology: heap fixtures allocated");
+    if (!leo || !before) {
+        free(leo);
+        free(before);
+        return;
+    }
+
+    int previous_chronology =
+        g_leo_wonder_appetite_transport_chronology_on;
+    int previous_transport =
+        g_leo_wonder_appetite_transport_on;
+    int previous_holdout =
+        g_leo_wonder_appetite_holdout_on;
+    int previous_calibration =
+        g_leo_wonder_appetite_calibration_on;
+    int previous_policy =
+        g_leo_wonder_appetite_policy_on;
+    int previous_admission =
+        g_leo_wonder_appetite_admission_on;
+    g_leo_wonder_appetite_transport_chronology_on = 1;
+    g_leo_wonder_appetite_transport_on = 1;
+    g_leo_wonder_appetite_holdout_on = 1;
+    g_leo_wonder_appetite_calibration_on = 1;
+    g_leo_wonder_appetite_policy_on = 1;
+    g_leo_wonder_appetite_admission_on = 1;
+
+    LeoWonderAppetiteTransportChronology chronology;
+    leo_init(leo);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    CHECK(chronology.unattested == 0 &&
+          chronology.pending == 0 &&
+          chronology.refuted == 0 &&
+          chronology.incompatible == 0 &&
+          chronology.observing == 0 &&
+          chronology.provisional == 0,
+          "wonder-appetite-transport-chronology: an empty life invents no eras");
+
+    LeoWonderAppetiteHoldoutTrial *trial =
+        test_open_appetite_holdout(leo, 0.65f, 0);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    CHECK(trial && chronology.pending == 1 &&
+          chronology.cells[0].status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_PENDING,
+          "wonder-appetite-transport-chronology: chronology cannot precede its unfinished future");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    memset(&leo->wonder_appetite_admissions, 0,
+           sizeof leo->wonder_appetite_admissions);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    CHECK(trial && chronology.unattested == 1 &&
+          chronology.cells[0].status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_UNATTESTED,
+          "wonder-appetite-transport-chronology: chronology cannot manufacture a vanished warrant");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_finish_appetite_holdout(
+        leo, 0.65f, 0, 4, 4, 1, 7, 0, 0);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    CHECK(trial && chronology.refuted == 1 &&
+          chronology.cells[0].status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_REFUTED,
+          "wonder-appetite-transport-chronology: a refuted future has no transport eras");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    uint64_t boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    uint64_t proposed = boundary + 4;
+    proposed = test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 7, 1, 1, 7);
+    test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 7, 1, 1, 7);
+    *before = *leo;
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    const LeoWonderAppetiteTransportChronologyCell *cell =
+        &chronology.cells[0];
+    const LeoWonderAppetiteTransportEpoch *early =
+        &cell->epochs[0];
+    const LeoWonderAppetiteTransportEpoch *recent =
+        &cell->epochs[1];
+    CHECK(chronology.provisional == 1 &&
+          cell->post_settled == 32 &&
+          cell->aggregate_provisional &&
+          cell->epoch_coverage_compatible &&
+          early->attempts == 16 && recent->attempts == 16 &&
+          early->last_proposed_turn <
+              recent->first_proposed_turn &&
+          early->eligible == 8 && early->abstained == 8 &&
+          recent->eligible == 8 && recent->abstained == 8 &&
+          fabsf(early->overreach_upper - 0.4709f) < 1e-3f &&
+          fabsf(recent->missed_upper - 0.4709f) < 1e-3f &&
+          early->motion_bounded && early->restraint_bounded &&
+          recent->motion_bounded && recent->restraint_bounded &&
+          early->history_coverage_compatible &&
+          recent->history_coverage_compatible &&
+          cell->status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_PROVISIONAL,
+          "wonder-appetite-transport-chronology: two bounded adjacent eras preserve only provisional continuity");
+    CHECK(!memcmp(before, leo, sizeof *leo) &&
+          LEO_STATE_VERSION == 24,
+          "wonder-appetite-transport-chronology: reading eras rewrites no body, evidence, or state format");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    proposed = boundary + 4;
+    proposed = test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 5, 3, 0, 8);
+    test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 8, 0, 0, 8);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    cell = &chronology.cells[0];
+    CHECK(chronology.early_shifted == 1 &&
+          cell->aggregate_provisional &&
+          !cell->epochs[0].motion_bounded &&
+          cell->epochs[1].motion_bounded &&
+          cell->status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_EARLY_SHIFTED,
+          "wonder-appetite-transport-chronology: a good recent era cannot average away earlier overreach");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    proposed = boundary + 4;
+    proposed = test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 8, 0, 0, 8);
+    test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 5, 3, 0, 8);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    cell = &chronology.cells[0];
+    CHECK(chronology.recent_shifted == 1 &&
+          cell->aggregate_provisional &&
+          cell->epochs[0].motion_bounded &&
+          !cell->epochs[1].motion_bounded &&
+          cell->status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_RECENT_SHIFTED,
+          "wonder-appetite-transport-chronology: an earlier calm cannot average away recent overreach");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    proposed = boundary + 4;
+    proposed = test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 5, 3, 0, 8);
+    test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 8, 0, 3, 5);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    cell = &chronology.cells[0];
+    CHECK(chronology.both_shifted == 1 &&
+          cell->aggregate_provisional &&
+          !cell->epochs[0].motion_bounded &&
+          cell->epochs[0].restraint_bounded &&
+          cell->epochs[1].motion_bounded &&
+          !cell->epochs[1].restraint_bounded &&
+          cell->status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_BOTH_SHIFTED,
+          "wonder-appetite-transport-chronology: opposite era-local debts cannot cancel in a pooled present");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    proposed = boundary + 4;
+    proposed = test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 11, 1, 0, 4);
+    test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 4, 0, 1, 11);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    cell = &chronology.cells[0];
+    CHECK(chronology.ecology_shifted == 1 &&
+          cell->aggregate_provisional &&
+          cell->epochs[0].history_coverage_compatible &&
+          cell->epochs[1].history_coverage_compatible &&
+          !cell->epoch_coverage_compatible &&
+          cell->epochs[1].coverage_upper <
+              cell->epochs[0].coverage_lower &&
+          cell->status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_ECOLOGY_SHIFTED,
+          "wonder-appetite-transport-chronology: a stable pooled coverage cannot hide an arm ecology inversion");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    proposed = boundary + 4;
+    proposed = test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 4, 4, 0, 8);
+    test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 4, 4, 0, 8);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    CHECK(chronology.aggregate_shifted == 1 &&
+          !chronology.cells[0].aggregate_provisional &&
+          chronology.cells[0].status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_AGGREGATE_SHIFTED,
+          "wonder-appetite-transport-chronology: chronology cannot overrule a failed pooled transport");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    proposed = boundary + 4;
+    proposed = test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 8, 0, 0, 8);
+    test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 8, 0, 0, 7);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    CHECK(chronology.observing == 1 &&
+          chronology.cells[0].post_settled == 31 &&
+          chronology.cells[0].status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_OBSERVING,
+          "wonder-appetite-transport-chronology: thirty-one lives cannot impersonate two eras");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    proposed = boundary + 4;
+    proposed = test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 16, 0, 0, 0);
+    test_add_appetite_transport_epoch(
+        leo, proposed, 0.65f, 0, 8, 0, 0, 8);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    CHECK(chronology.coverage_starved == 1 &&
+          chronology.cells[0].epochs[0].abstained == 0 &&
+          chronology.cells[0].status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED,
+          "wonder-appetite-transport-chronology: an epoch cannot borrow its missing arm from another");
+
+    leo_free(leo);
+    leo_init(leo);
+    trial = test_prepare_appetite_transport(leo);
+    boundary =
+        leo_wonder_appetite_holdout_terminal_boundary(trial);
+    test_add_appetite_policy_outcome_after(
+        leo, boundary + 4, 0.65f, 0,
+        LEO_WONDER_APPETITE_POLICY_LEGACY,
+        LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    leo_wonder_appetite_transport_chronology(
+        leo, &chronology);
+    CHECK(chronology.incompatible == 1 &&
+          chronology.cells[0].epochs[0].incompatible == 1 &&
+          chronology.cells[0].status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_INCOMPATIBLE,
+          "wonder-appetite-transport-chronology: an era cannot translate a changed policy language");
+
+    g_leo_wonder_appetite_transport_chronology_on =
+        previous_chronology;
+    g_leo_wonder_appetite_transport_on = previous_transport;
     g_leo_wonder_appetite_holdout_on = previous_holdout;
     g_leo_wonder_appetite_calibration_on =
         previous_calibration;
@@ -4020,6 +4336,7 @@ int main(void) {
     test_wonder_appetite_readiness_frontier();
     test_wonder_appetite_holdout_trial();
     test_wonder_appetite_transport_witness();
+    test_wonder_appetite_transport_chronology();
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the

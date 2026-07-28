@@ -627,3 +627,55 @@ byte-identical complete v24 states for all eight rows.
 A.53 is derived diagnostics only. It does not persist another judgment and no
 speech or scheduler path reads it. Even `provisional` remains evidence, not
 permission.
+
+Run the two-epoch current-life chronology:
+
+```sh
+make deferred-wonder-appetite-transport-chronology
+```
+
+A.54 asks whether A.53's pooled present is hiding a regime change. It uses the
+complete current 32-settled-attempt post-holdout window already bounded by the
+A.48 diary. The older 16 attempts form the `early` epoch and the newer 16 form
+the `recent` epoch. Their proposal boundaries must be ordered and
+non-overlapping. If earlier post-holdout evidence has rotated away, A.54 makes
+no claim to have recovered it; this is chronology inside the observable
+present, not a reconstruction of the first historical era.
+
+Every settled attempt spends one epoch slot, including another stratum or a
+causally confounded outcome. Pending receipts do not become outcomes and leave
+the window `observing`. A `none` or `legacy` policy, or non-monotonic proposal
+identity, makes it `incompatible`.
+Each complete epoch independently needs at least four exact eligible and four
+exact abstained outcomes. An absent arm produces `coverage-starved` rather than
+borrowing observations from the neighboring era.
+
+For each epoch, motion and restraint retain separate 95% Wilson upper-bound
+vetoes below `0.500`. Its policy-coverage interval must also overlap both the
+A.52 admission interval and the realized A.51 holdout interval. Finally, the
+early and recent coverage intervals must overlap each other. As in A.53,
+interval overlap is only a compatibility screen, not evidence of equivalent
+distributions.
+
+The pooled A.53 cell must remain `provisional` before A.54 can be
+`provisional`. Chronology can only add vetoes:
+
+```text
+aggregate-shifted  pooled A.53 transport already failed
+early-shifted      only the older observed epoch fails
+recent-shifted     only the newer observed epoch fails
+both-shifted       both epochs fail, possibly on different risk axes
+ecology-shifted    both epochs pass history screens but their coverages diverge
+provisional        pooled and both local screens expose no measured shift
+```
+
+The nine-case matrix includes three temporal arrangements with identical
+pooled arm totals, an opposite-axis cancellation, a `12/4 -> 4/12` policy
+ecology inversion whose pooled coverage remains `16/16`, a pooled failure,
+thin chronology, epoch-local coverage starvation, and policy incompatibility.
+Default and `--no-wonder-appetite-transport-chronology` forks must preserve
+strict proposal order, identical replies, and byte-identical complete v24
+states in every row.
+
+A.54 adds no state and no speech, scheduler, routing, sampling, or generation
+reader. It is a readerless chronology of evidence, not permission to intervene.
