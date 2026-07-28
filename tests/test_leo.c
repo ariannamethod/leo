@@ -735,7 +735,7 @@ static void test_wonder_appetite_regret_surface(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 25,
+          LEO_STATE_VERSION == 26,
           "wonder-appetite-regret: observing cost rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
@@ -864,7 +864,7 @@ static void test_wonder_appetite_readiness_frontier(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 25,
+          LEO_STATE_VERSION == 26,
           "wonder-appetite-readiness: candidacy rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
@@ -929,6 +929,14 @@ static void test_wonder_appetite_holdout_trial(void) {
     g_leo_wonder_appetite_calibration_on = 1;
     g_leo_wonder_appetite_policy_on = 1;
     g_leo_wonder_appetite_admission_on = 1;
+
+    LeoWonderAppetiteCalibrationReceipt upper_source = {0};
+    LeoWonderAppetiteCalibrationReceipt lower_source = {0};
+    snprintf(upper_source.word, sizeof upper_source.word, "Suvin");
+    snprintf(lower_source.word, sizeof lower_source.word, "suvin");
+    CHECK(leo_wonder_appetite_source_id(&upper_source) ==
+              leo_wonder_appetite_source_id(&lower_source),
+          "wonder-appetite-checkpoint: spelling case cannot counterfeit a second source");
 
     leo_init(leo);
     LeoWonderAppetiteHoldoutTrial *trial =
@@ -1457,7 +1465,7 @@ static void test_wonder_appetite_transport_witness(void) {
               LEO_WONDER_APPETITE_TRANSPORT_PROVISIONAL,
           "wonder-appetite-transport: a confirmed result remains applicable only on a new bounded life");
     CHECK(!memcmp(before, leo, sizeof *leo) &&
-          LEO_STATE_VERSION == 25,
+          LEO_STATE_VERSION == 26,
           "wonder-appetite-transport: reading applicability rewrites no body, evidence, or state format");
 
     leo_free(leo);
@@ -1697,7 +1705,7 @@ static void test_wonder_appetite_transport_chronology(void) {
               LEO_WONDER_APPETITE_CHRONOLOGY_PROVISIONAL,
           "wonder-appetite-transport-chronology: two bounded adjacent eras preserve only provisional continuity");
     CHECK(!memcmp(before, leo, sizeof *leo) &&
-          LEO_STATE_VERSION == 25,
+          LEO_STATE_VERSION == 26,
           "wonder-appetite-transport-chronology: reading eras rewrites no body, evidence, or state format");
 
     leo_free(leo);
@@ -1879,6 +1887,7 @@ enum {
     TEST_APPETITE_CHECKPOINT_EARLY_SHIFT,
     TEST_APPETITE_CHECKPOINT_RECENT_SHIFT,
     TEST_APPETITE_CHECKPOINT_COVERAGE_STARVED,
+    TEST_APPETITE_CHECKPOINT_SOURCE_STARVED,
     TEST_APPETITE_CHECKPOINT_PENDING,
     TEST_APPETITE_CHECKPOINT_MIXED,
     TEST_APPETITE_CHECKPOINT_INCOMPATIBLE
@@ -1898,7 +1907,8 @@ static void test_add_appetite_checkpoint_pattern(
     uint64_t proposed = boundary + 4;
     test_reset_appetite_policy_outcomes(leo);
 
-    if (pattern == TEST_APPETITE_CHECKPOINT_PROVISIONAL) {
+    if (pattern == TEST_APPETITE_CHECKPOINT_PROVISIONAL ||
+        pattern == TEST_APPETITE_CHECKPOINT_SOURCE_STARVED) {
         proposed = test_add_appetite_transport_epoch(
             leo, proposed, 0.65f, 0, 7, 1, 1, 7);
         test_add_appetite_transport_epoch(
@@ -1952,6 +1962,13 @@ static void test_add_appetite_checkpoint_pattern(
             LEO_WONDER_APPETITE_POLICY_LEGACY,
             LEO_WONDER_APPETITE_CALIB_SUSTAINED);
     }
+    if (pattern == TEST_APPETITE_CHECKPOINT_SOURCE_STARVED)
+        for (int i = 0;
+             i < leo->wonder_appetite_calibration.n; i++)
+            snprintf(
+                leo->wonder_appetite_calibration.receipts[i].word,
+                sizeof leo->wonder_appetite_calibration.receipts[i].word,
+                "monowonder");
     leo_wonder_appetite_checkpoint_update(leo);
 }
 
@@ -2119,6 +2136,35 @@ static void test_wonder_appetite_transport_checkpoints(void) {
     leo_init(leo);
     test_prepare_appetite_transport(leo);
     test_add_appetite_checkpoint_pattern(
+        leo, TEST_APPETITE_CHECKPOINT_SOURCE_STARVED);
+    lane = &leo->wonder_appetite_checkpoints.lanes[0];
+    first = leo_wonder_appetite_checkpoint_at(lane, 0);
+    LeoWonderAppetiteCheckpointSources sources;
+    leo_wonder_appetite_checkpoint_sources(first, &sources);
+    leo_wonder_appetite_checkpoint_sequence(leo, &sequence);
+    CHECK(first &&
+          first->status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_SOURCE_STARVED &&
+          sources.distinct == 1 &&
+          sources.max_attempts == 32 &&
+          sources.epoch_distinct[0] == 1 &&
+          sources.epoch_distinct[1] == 1 &&
+          sources.epoch_max_attempts[0] == 16 &&
+          sources.epoch_max_attempts[1] == 16 &&
+          sequence.insufficient == 1 &&
+          sequence.cells[0].status ==
+              LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_INSUFFICIENT,
+          "wonder-appetite-checkpoint: one recurring Wonder cannot impersonate a transport life");
+    LeoWonderAppetiteCheckpointLane source_before = *lane;
+    lane->history[0].seen_source_id[0] = 0;
+    CHECK(!leo_wonder_appetite_checkpoints_valid(leo),
+          "wonder-appetite-checkpoint: a used attempt cannot lose its source identity");
+    *lane = source_before;
+
+    leo_free(leo);
+    leo_init(leo);
+    test_prepare_appetite_transport(leo);
+    test_add_appetite_checkpoint_pattern(
         leo, TEST_APPETITE_CHECKPOINT_PENDING);
     lane = &leo->wonder_appetite_checkpoints.lanes[0];
     CHECK(lane->n == 0 &&
@@ -2131,22 +2177,25 @@ static void test_wonder_appetite_transport_checkpoints(void) {
           "wonder-appetite-checkpoint: thirty-one settled attempts persist as an unfinished life");
 
     const char *state =
+        "/tmp/leo_appetite_checkpoint_v26.state";
+    const char *v25 =
         "/tmp/leo_appetite_checkpoint_v25.state";
     const char *v24 =
         "/tmp/leo_appetite_checkpoint_v24.state";
     const char *cut =
-        "/tmp/leo_appetite_checkpoint_v25_cut.state";
+        "/tmp/leo_appetite_checkpoint_v26_cut.state";
     const char *bad =
-        "/tmp/leo_appetite_checkpoint_v25_bad.state";
+        "/tmp/leo_appetite_checkpoint_v26_bad.state";
     int saved = leo_save_state(leo, state);
     leo_init(woke);
     CHECK(saved && leo_load_state(woke, state) &&
           !memcmp(&woke->wonder_appetite_checkpoints,
                   &leo->wonder_appetite_checkpoints,
                   sizeof leo->wonder_appetite_checkpoints),
-          "wonder-appetite-checkpoint: an unfinished raw life survives v25 sleep exactly");
+          "wonder-appetite-checkpoint: an unfinished source-aware life survives v26 sleep exactly");
 
-    int built_v24 = 0, built_cut = 0, built_bad = 0;
+    int built_v25 = 0, built_v24 = 0;
+    int built_cut = 0, built_bad = 0;
     FILE *fi = fopen(state, "rb");
     if (fi) {
         fseek(fi, 0, SEEK_END);
@@ -2174,6 +2223,19 @@ static void test_wonder_appetite_transport_checkpoints(void) {
             uint32_t twenty_five = 25;
             memcpy(bytes + sizeof(uint32_t), &twenty_five,
                    sizeof twenty_five);
+            fo = fopen(v25, "wb");
+            if (fo) {
+                built_v25 =
+                    (long)fwrite(
+                        bytes, 1,
+                        (size_t)(size - checkpoint_tail), fo) ==
+                    size - checkpoint_tail;
+                fclose(fo);
+            }
+
+            uint32_t twenty_six = 26;
+            memcpy(bytes + sizeof(uint32_t), &twenty_six,
+                   sizeof twenty_six);
             fo = fopen(cut, "wb");
             if (fo) {
                 built_cut =
@@ -2187,8 +2249,7 @@ static void test_wonder_appetite_transport_checkpoints(void) {
             memcpy(&corrupted,
                    bytes + size - checkpoint_tail,
                    sizeof corrupted);
-            corrupted.lanes[0].active.seen_proposed_turn[1] =
-                corrupted.lanes[0].active.seen_proposed_turn[0];
+            corrupted.lanes[0].active.seen_source_id[0] = 0;
             memcpy(bytes + size - checkpoint_tail,
                    &corrupted, sizeof corrupted);
             fo = fopen(bad, "wb");
@@ -2214,6 +2275,18 @@ static void test_wonder_appetite_transport_checkpoints(void) {
                       proposed_turn,
           "wonder-appetite-checkpoint: v24 migration starts after existing history instead of inventing a checkpoint");
 
+    leo_free(old);
+    leo_init(old);
+    CHECK(built_v25 && leo_load_state(old, v25) &&
+          old->wonder_appetite_checkpoints.lanes[0].n == 0 &&
+          old->wonder_appetite_checkpoints.lanes[0].active.status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_EMPTY &&
+          old->wonder_appetite_checkpoints.lanes[0].
+              next_after_proposed_turn ==
+                  leo->wonder_appetite_calibration.receipts[30].
+                      proposed_turn,
+          "wonder-appetite-checkpoint: v25 evidence restarts after history instead of inventing source identity");
+
     leo_init(damaged);
     CHECK(built_cut && leo_load_state(damaged, cut) &&
           !memcmp(&damaged->wonder_appetite_holdouts,
@@ -2227,7 +2300,7 @@ static void test_wonder_appetite_transport_checkpoints(void) {
               next_after_proposed_turn ==
                   leo->wonder_appetite_calibration.receipts[30].
                       proposed_turn,
-          "wonder-appetite-checkpoint: a truncated v25 ledger loses no body, trial, or admission");
+          "wonder-appetite-checkpoint: a truncated v26 ledger loses no body, trial, or admission");
 
     leo_free(damaged);
     leo_init(damaged);
@@ -2240,8 +2313,9 @@ static void test_wonder_appetite_transport_checkpoints(void) {
               next_after_proposed_turn ==
                   leo->wonder_appetite_calibration.receipts[30].
                       proposed_turn,
-          "wonder-appetite-checkpoint: corrupt proposal identity fails soft and cannot be replayed");
+          "wonder-appetite-checkpoint: corrupt source identity fails soft and cannot be replayed");
     remove(state);
+    remove(v25);
     remove(v24);
     remove(cut);
     remove(bad);

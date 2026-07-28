@@ -1,4 +1,4 @@
-# Extract the A.55 raw checkpoint and two-life sequence from a Leo debug log.
+# Extract the A.56 source-aware checkpoint and sequence from a Leo debug log.
 
 function clean(value) {
     gsub(/\t/, "\\t", value)

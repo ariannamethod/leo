@@ -176,6 +176,17 @@ static uint32_t fnv1a(const void *data, int len) {
     return h;
 }
 
+static uint64_t fnv1a64_ascii_lower(const char *data, size_t len) {
+    uint64_t h = UINT64_C(14695981039346656037);
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)data[i];
+        if (c >= 'A' && c <= 'Z') c = (unsigned char)(c + 'a' - 'A');
+        h ^= c;
+        h *= UINT64_C(1099511628211);
+    }
+    return h;
+}
+
 __attribute__((unused))  /* used by the smoke main; absent in the test TU */
 static double leo_ns(void) {
     struct timespec ts;
@@ -2165,6 +2176,7 @@ enum {
     LEO_WONDER_APPETITE_CHRONOLOGY_INCOMPATIBLE,
     LEO_WONDER_APPETITE_CHRONOLOGY_OBSERVING,
     LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED,
+    LEO_WONDER_APPETITE_CHRONOLOGY_SOURCE_STARVED,
     LEO_WONDER_APPETITE_CHRONOLOGY_AGGREGATE_SHIFTED,
     LEO_WONDER_APPETITE_CHRONOLOGY_EARLY_SHIFTED,
     LEO_WONDER_APPETITE_CHRONOLOGY_RECENT_SHIFTED,
@@ -2226,12 +2238,15 @@ typedef struct {
     int provisional;
 } LeoWonderAppetiteTransportChronology;
 
-/* A.55: transport evidence advances through fixed, non-overlapping lives.
- * Checkpoints persist raw proposal identities and outcome counts; all rates
- * and sequence claims are recomputed. Two terminal checkpoints are enough to
- * distinguish one transition from a repeated regime without authorizing it. */
+/* A.55/A.56: transport evidence advances through fixed, non-overlapping
+ * lives. Proposal and source identities prevent evidence reuse and a single
+ * recurring Wonder from impersonating a whole semantic ecology. All rates
+ * and sequence claims are recomputed; none of this grants a speech reader. */
 #define LEO_WONDER_APPETITE_CHECKPOINT_BUDGET 32
 #define LEO_WONDER_APPETITE_CHECKPOINT_HISTORY 2
+#define LEO_WONDER_APPETITE_CHECKPOINT_MIN_SOURCES 4
+#define LEO_WONDER_APPETITE_CHECKPOINT_EPOCH_MIN_SOURCES 2
+#define LEO_WONDER_APPETITE_CHECKPOINT_EPOCH_MAX_SOURCE 8
 typedef struct {
     uint64_t first_proposed_turn;
     uint64_t last_proposed_turn;
@@ -2252,6 +2267,8 @@ typedef struct {
     uint64_t after_proposed_turn;
     uint64_t through_proposed_turn;
     uint64_t seen_proposed_turn[
+        LEO_WONDER_APPETITE_CHECKPOINT_BUDGET];
+    uint64_t seen_source_id[
         LEO_WONDER_APPETITE_CHECKPOINT_BUDGET];
     uint8_t spoken;
     uint8_t bin;
@@ -2480,8 +2497,8 @@ typedef struct {
     /* A.52/state v24: immutable proof of the A.50 geometry that admitted each
      * trial. Separate so v23 trials migrate visibly unattested, never invented. */
     LeoWonderAppetiteAdmissions wonder_appetite_admissions;
-    /* A.55/state v25: raw fixed-budget transport checkpoints. They persist
-     * evidence chronology, but no cognition or generation path reads them. */
+    /* A.56/state v26: source-aware fixed-budget transport checkpoints. They
+     * persist evidence chronology, but cognition and generation never read it. */
     LeoWonderAppetiteCheckpoints wonder_appetite_checkpoints;
     /* A.42/A.43: pre-grounding address witness. Semantic conflict can only
      * guard; an exact waiting name may redirect without assigning meaning. */
@@ -8168,8 +8185,9 @@ static const char *leo_wonder_appetite_transport_chronology_status_name(
         *names[LEO_WONDER_APPETITE_CHRONOLOGY_STATUS_COUNT] = {
             "empty", "unattested", "pending", "refuted",
             "incompatible", "observing", "coverage-starved",
-            "aggregate-shifted", "early-shifted", "recent-shifted",
-            "both-shifted", "ecology-shifted", "provisional"
+            "source-starved", "aggregate-shifted", "early-shifted",
+            "recent-shifted", "both-shifted", "ecology-shifted",
+            "provisional"
         };
     return status >= 0 &&
            status < LEO_WONDER_APPETITE_CHRONOLOGY_STATUS_COUNT ?
@@ -8195,6 +8213,75 @@ static int leo_interval_overlaps(
         float a_lower, float a_upper,
         float b_lower, float b_upper) {
     return a_lower <= b_upper && b_lower <= a_upper;
+}
+
+typedef struct {
+    int distinct;
+    int max_attempts;
+    int epoch_distinct[LEO_WONDER_APPETITE_TRANSPORT_EPOCHS];
+    int epoch_max_attempts[LEO_WONDER_APPETITE_TRANSPORT_EPOCHS];
+} LeoWonderAppetiteCheckpointSources;
+
+static uint64_t leo_wonder_appetite_source_id(
+        const LeoWonderAppetiteCalibrationReceipt *receipt) {
+    if (!receipt || !receipt->word[0]) return 0;
+    uint64_t id =
+        fnv1a64_ascii_lower(receipt->word, strlen(receipt->word));
+    return id ? id : 1;
+}
+
+static void leo_wonder_appetite_checkpoint_sources(
+        const LeoWonderAppetiteCheckpoint *checkpoint,
+        LeoWonderAppetiteCheckpointSources *sources) {
+    if (!sources) return;
+    memset(sources, 0, sizeof *sources);
+    if (!checkpoint) return;
+    for (int i = 0; i < checkpoint->attempts; i++) {
+        uint64_t id = checkpoint->seen_source_id[i];
+        int total = 0, first = 1;
+        for (int j = 0; j < checkpoint->attempts; j++) {
+            if (checkpoint->seen_source_id[j] != id) continue;
+            total++;
+            if (j < i) first = 0;
+        }
+        if (first) sources->distinct++;
+        if (total > sources->max_attempts)
+            sources->max_attempts = total;
+
+        int epoch =
+            i / LEO_WONDER_APPETITE_TRANSPORT_EPOCH_ATTEMPTS;
+        int begin =
+            epoch * LEO_WONDER_APPETITE_TRANSPORT_EPOCH_ATTEMPTS;
+        int end = begin +
+            LEO_WONDER_APPETITE_TRANSPORT_EPOCH_ATTEMPTS;
+        if (end > checkpoint->attempts) end = checkpoint->attempts;
+        int epoch_total = 0, epoch_first = 1;
+        for (int j = begin; j < end; j++) {
+            if (checkpoint->seen_source_id[j] != id) continue;
+            epoch_total++;
+            if (j < i) epoch_first = 0;
+        }
+        if (epoch_first) sources->epoch_distinct[epoch]++;
+        if (epoch_total > sources->epoch_max_attempts[epoch])
+            sources->epoch_max_attempts[epoch] = epoch_total;
+    }
+}
+
+static int leo_wonder_appetite_checkpoint_sources_sufficient(
+        const LeoWonderAppetiteCheckpoint *checkpoint) {
+    LeoWonderAppetiteCheckpointSources sources;
+    leo_wonder_appetite_checkpoint_sources(checkpoint, &sources);
+    if (sources.distinct <
+        LEO_WONDER_APPETITE_CHECKPOINT_MIN_SOURCES)
+        return 0;
+    for (int i = 0;
+         i < LEO_WONDER_APPETITE_TRANSPORT_EPOCHS; i++)
+        if (sources.epoch_distinct[i] <
+                LEO_WONDER_APPETITE_CHECKPOINT_EPOCH_MIN_SOURCES ||
+            sources.epoch_max_attempts[i] >
+                LEO_WONDER_APPETITE_CHECKPOINT_EPOCH_MAX_SOURCE)
+            return 0;
+    return 1;
 }
 
 static void leo_wonder_appetite_transport_chronology_count(
@@ -8523,6 +8610,9 @@ static int leo_wonder_appetite_checkpoint_grade(
     if (checkpoint->attempts <
         LEO_WONDER_APPETITE_CHECKPOINT_BUDGET)
         return LEO_WONDER_APPETITE_CHRONOLOGY_PENDING;
+    if (!leo_wonder_appetite_checkpoint_sources_sufficient(
+            checkpoint))
+        return LEO_WONDER_APPETITE_CHRONOLOGY_SOURCE_STARVED;
     if (early_raw->eligible <
             LEO_WONDER_APPETITE_TRANSPORT_EPOCH_MIN_ARM_N ||
         early_raw->abstained <
@@ -8750,6 +8840,8 @@ static void leo_wonder_appetite_checkpoint_update(Leo *leo) {
                 &checkpoint->epochs[epoch_index];
             checkpoint->seen_proposed_turn[attempt] =
                 receipt->proposed_turn;
+            checkpoint->seen_source_id[attempt] =
+                leo_wonder_appetite_source_id(receipt);
             checkpoint->through_proposed_turn =
                 receipt->proposed_turn;
             checkpoint->attempts++;
@@ -8880,8 +8972,11 @@ static void leo_wonder_appetite_checkpoint_sequence(
                 cell->status =
                     LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_INCOMPATIBLE;
                 sequence->incompatible++;
-            } else if (cell->recent_status ==
-                LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED) {
+            } else if (
+                cell->recent_status ==
+                    LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED ||
+                cell->recent_status ==
+                    LEO_WONDER_APPETITE_CHRONOLOGY_SOURCE_STARVED) {
                 cell->status =
                     LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_INSUFFICIENT;
                 sequence->insufficient++;
@@ -8909,8 +9004,12 @@ static void leo_wonder_appetite_checkpoint_sequence(
         } else if (
             cell->previous_status ==
                     LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED ||
+            cell->previous_status ==
+                    LEO_WONDER_APPETITE_CHRONOLOGY_SOURCE_STARVED ||
             cell->recent_status ==
-                    LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED) {
+                    LEO_WONDER_APPETITE_CHRONOLOGY_COVERAGE_STARVED ||
+            cell->recent_status ==
+                    LEO_WONDER_APPETITE_CHRONOLOGY_SOURCE_STARVED) {
             cell->status =
                 LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_INSUFFICIENT;
             sequence->insufficient++;
@@ -9012,6 +9111,11 @@ static int leo_wonder_appetite_checkpoint_record_valid(
         } else if (proposed != 0) {
             return 0;
         }
+        uint64_t source =
+            checkpoint->seen_source_id[i];
+        if ((i < checkpoint->attempts && source == 0) ||
+            (i >= checkpoint->attempts && source != 0))
+            return 0;
     }
     if (checkpoint->through_proposed_turn != previous)
         return 0;
@@ -10336,9 +10440,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v23      : fixed-budget out-of-sample trials over readiness candidates
  *   v24      : immutable A.50 admission receipts for those trials
  *   v25      : non-overlapping raw transport checkpoints and their sequence
+ *   v26      : source identities and ecology for transport checkpoints
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 25  /* A.55 carries transport lives; v5..v24 soft-migrate */
+#define LEO_STATE_VERSION 26  /* A.56 carries checkpoint source ecology; v5..v25 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -10575,8 +10680,8 @@ static int leo_save_state(const Leo *leo, const char *path) {
     fwrite(&leo->wonder_appetite_admissions,
            sizeof leo->wonder_appetite_admissions, 1, f);
 
-    /* A.55 (v25): each checkpoint owns its proposal identities and raw counts.
-     * Derived verdicts are checked again on load; no speech path reads this. */
+    /* A.56 (v26): checkpoints also own source identities, so recurrence by one
+     * Wonder cannot impersonate semantic transport. No speech path reads this. */
     fwrite(&leo->wonder_appetite_checkpoints,
            sizeof leo->wonder_appetite_checkpoints, 1, f);
 
@@ -11361,16 +11466,16 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
 
-    /* A.55 transport lives (v25). Older bodies begin after every receipt they
-     * already carry: migration may observe the future, never retrofit a past
-     * checkpoint. A malformed v25 tail loses only this readerless ledger. */
-    if (version >= 25) {
+    /* A.56 source-aware transport lives (v26). A v25 ledger cannot prove
+     * source diversity, so it is not promoted: both older bodies and damaged
+     * v26 bodies restart observation after every receipt they already carry. */
+    if (version >= 26) {
         int checkpoint_ok =
             fread(&leo->wonder_appetite_checkpoints,
                   sizeof leo->wonder_appetite_checkpoints, 1, f) == 1 &&
             leo_wonder_appetite_checkpoints_valid(leo);
         if (!checkpoint_ok) {
-            fprintf(stderr, "[leo] WARNING: v25 transport-checkpoint tail truncated/corrupt — organism lives without checkpoints.\n");
+            fprintf(stderr, "[leo] WARNING: v26 transport-checkpoint tail truncated/corrupt — organism lives without checkpoints.\n");
             memset(&leo->wonder_appetite_checkpoints, 0,
                    sizeof leo->wonder_appetite_checkpoints);
         }
@@ -12325,14 +12430,21 @@ static void print_wonder_appetite_checkpoint_record(
     if (!checkpoint ||
         checkpoint->status ==
             LEO_WONDER_APPETITE_CHRONOLOGY_EMPTY) {
-        printf("/0/0/empty/0/0/0/0/0/0/0/0/0/0");
+        printf("/0/0/empty/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0");
         return;
     }
-    printf("/%llu/%llu/%s",
+    LeoWonderAppetiteCheckpointSources sources;
+    leo_wonder_appetite_checkpoint_sources(checkpoint, &sources);
+    printf("/%llu/%llu/%s/%d/%d/%d/%d/%d/%d",
            (unsigned long long)checkpoint->after_proposed_turn,
            (unsigned long long)checkpoint->through_proposed_turn,
            leo_wonder_appetite_transport_chronology_status_name(
-               checkpoint->status));
+               checkpoint->status),
+           sources.distinct, sources.max_attempts,
+           sources.epoch_distinct[0],
+           sources.epoch_max_attempts[0],
+           sources.epoch_distinct[1],
+           sources.epoch_max_attempts[1]);
     for (int i = 0;
          i < LEO_WONDER_APPETITE_TRANSPORT_EPOCHS; i++) {
         const LeoWonderAppetiteCheckpointEpoch *epoch =
@@ -12386,7 +12498,10 @@ static void print_wonder_appetite_checkpoint_stats(const Leo *leo) {
             continue;
         int bin =
             i % LEO_WONDER_APPETITE_RELIABILITY_BINS;
-        printf("%s%c%d-%d:%llu/%u/%llu/%llu/%u/%s/%u",
+        LeoWonderAppetiteCheckpointSources active_sources;
+        leo_wonder_appetite_checkpoint_sources(
+            &lane->active, &active_sources);
+        printf("%s%c%d-%d:%llu/%u/%llu/%llu/%u/%s/%d/%d/%d/%d/%d/%d/%u",
                separator,
                i / LEO_WONDER_APPETITE_RELIABILITY_BINS ?
                    's' : 'u',
@@ -12401,6 +12516,12 @@ static void print_wonder_appetite_checkpoint_stats(const Leo *leo) {
                (unsigned)lane->active.attempts,
                leo_wonder_appetite_transport_chronology_status_name(
                    lane->active.status),
+               active_sources.distinct,
+               active_sources.max_attempts,
+               active_sources.epoch_distinct[0],
+               active_sources.epoch_max_attempts[0],
+               active_sources.epoch_distinct[1],
+               active_sources.epoch_max_attempts[1],
                (unsigned)lane->n);
         for (int j = 0;
              j < LEO_WONDER_APPETITE_CHECKPOINT_HISTORY; j++)
