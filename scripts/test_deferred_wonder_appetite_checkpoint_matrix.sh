@@ -25,6 +25,7 @@ awk -F '\t' '
         expected["checkpoint-persistent"] = "2/recent-shifted/persistent-shift"
         expected["checkpoint-recovered"] = "2/provisional/recovered"
         expected["checkpoint-insufficient"] = "2/coverage-starved/insufficient"
+        expected["checkpoint-source-starved"] = "1/source-starved/insufficient"
         expected["checkpoint-incompatible"] = "1/incompatible/incompatible"
         expected["checkpoint-pending"] = "0/pending/empty"
         if (($2 "/" $3 "/" $4) != expected[$1])
@@ -32,7 +33,7 @@ awk -F '\t' '
         rows++
     }
     END {
-        if (rows != 8)
+        if (rows != 9)
             exit 1
     }
 ' "$OUT/plan.tsv" || {

@@ -4905,3 +4905,71 @@ writer reply equality   yes
 The on/off writer pair differed only in the fixed v25 checkpoint tail. With
 that tail preserved, both bodies spoke the same reply. Time is now durable
 without becoming a hidden voice.
+
+## Phase A.56 — one recurring question is not a world (2026-07-28)
+
+A prospective process run exposed a hole in A.55 that its constructed
+checkpoint matrix could not see. Starting from a confirmed and attested past,
+one real deferred question (`suvin`) lived through 145 separate
+save/exit/reload turns. Its semantic association returned every fourth turn.
+That one identity alone filled all 32 checkpoint attempts and closed a
+terminal life:
+
+```text
+sources          1
+max source      32
+early epoch     1 source / 16 attempts
+recent epoch    1 source / 16 attempts
+```
+
+The arm verdict was honestly `coverage-starved`, but the ledger had no way to
+say that the whole alleged life was one thought repeated. Attempt count is not
+source independence.
+
+A.56 persists a deterministic 64-bit identity of each calibration word beside
+its proposal identity. The hash is evidence-only: neither the word nor the
+hash is read by School, Flow, scheduling, routing, sampling, or generation.
+Every complete checkpoint now requires:
+
+```text
+whole life       at least 4 distinct Wonder sources
+each epoch       at least 2 distinct sources
+each epoch       no source may occupy more than 8 of 16 attempts
+```
+
+Failure is named `source-starved`, separate from policy-arm
+`coverage-starved`. Both are insufficient for a checkpoint sequence, but they
+preserve different debts. Debug receipts expose total and per-epoch source
+counts for the active checkpoint as well as both terminal histories.
+
+State moved from v25 to v26. A v25 checkpoint cannot be given source identity
+after the fact, so migration preserves the organism, calibration, holdout, and
+admission, then anchors a new source-aware checkpoint after the newest
+surviving receipt. A malformed v26 source vector fails soft in the same narrow
+way. Zero identities in used slots and nonzero identities in unused slots are
+invalid; verdicts are regraded from the persisted raw vector on load.
+
+Four direct contracts raised the suite from **469/469** to **473/473**. The
+expanded real-process fixture matrix is **9/9** for chronology, reply equality,
+and complete on/off state equality. Its new constructed cell records
+`source-starved: 1/32`; ordinary cells retain `32/1`.
+
+The prospective natural-life receipt is independently reproducible with:
+
+```sh
+make deferred-wonder-appetite-checkpoint-life
+```
+
+Across 145 on/off process turns, all 145 visible replies were identical and
+the complete state prefix before the fixed checkpoint tail was identical.
+Only the readerless tail differed. The former false life now ends explicitly:
+
+```text
+one-wonder-cycle  source-starved  sources=1  max=32
+epochs            1/16 | 1/16
+sequence          insufficient
+```
+
+This closes the reproduced pseudo-replication. It does not yet prove that an
+ordinary unscripted long life supplies four source-distinct Wonders; that
+remains a prospective observation rather than a manufactured success.

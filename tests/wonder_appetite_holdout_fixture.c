@@ -180,6 +180,7 @@ static int checkpoint_scenario(const char *scenario) {
         !strcmp(scenario, "checkpoint-persistent") ||
         !strcmp(scenario, "checkpoint-recovered") ||
         !strcmp(scenario, "checkpoint-insufficient") ||
+        !strcmp(scenario, "checkpoint-source-starved") ||
         !strcmp(scenario, "checkpoint-incompatible") ||
         !strcmp(scenario, "checkpoint-pending") ||
         !strcmp(scenario, "checkpoint-ablated");
@@ -356,7 +357,19 @@ static int add_checkpoint_life(
     memset(&leo->wonder_appetite_calibration, 0,
            sizeof leo->wonder_appetite_calibration);
     proposed_base = boundary + 4;
-    int ok = add_chronology_present(leo, chronology);
+    const char *evidence =
+        !strcmp(chronology, "chronology-source-starved") ?
+            "chronology-provisional" : chronology;
+    int ok = add_chronology_present(leo, evidence);
+    if (ok &&
+        !strcmp(chronology, "chronology-source-starved"))
+        for (int i = 0;
+             i < leo->wonder_appetite_calibration.n; i++)
+            snprintf(
+                leo->wonder_appetite_calibration.receipts[i].word,
+                sizeof
+                    leo->wonder_appetite_calibration.receipts[i].word,
+                "monowonder");
     if (ok) leo_wonder_appetite_checkpoint_update(leo);
     return ok;
 }
@@ -396,6 +409,9 @@ static int build_checkpoint_scenario(
                 leo, "chronology-provisional") &&
             add_checkpoint_life(
                 leo, "chronology-coverage-starved");
+    if (!strcmp(scenario, "checkpoint-source-starved"))
+        return add_checkpoint_life(
+            leo, "chronology-source-starved");
     if (!strcmp(scenario, "checkpoint-incompatible"))
         return add_checkpoint_life(
             leo, "chronology-incompatible");

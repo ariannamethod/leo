@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A.55: persist non-overlapping transport lives and classify their sequence.
+# A.56: persist non-overlapping, source-aware transport lives.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,6 +20,7 @@ printf 'checkpoint-emerging\t2\tearly-shifted\temerging-shift\n' >> "$PLAN"
 printf 'checkpoint-persistent\t2\trecent-shifted\tpersistent-shift\n' >> "$PLAN"
 printf 'checkpoint-recovered\t2\tprovisional\trecovered\n' >> "$PLAN"
 printf 'checkpoint-insufficient\t2\tcoverage-starved\tinsufficient\n' >> "$PLAN"
+printf 'checkpoint-source-starved\t1\tsource-starved\tinsufficient\n' >> "$PLAN"
 printf 'checkpoint-incompatible\t1\tincompatible\tincompatible\n' >> "$PLAN"
 printf 'checkpoint-pending\t0\tpending\tempty\n' >> "$PLAN"
 
@@ -60,7 +61,7 @@ cell_values() {
                     split(items[i], pair, /:/)
                     if (pair[1] != wanted) continue
                     split(pair[2], values, /\//)
-                    for (j = 1; j <= 33; j++)
+                    for (j = 1; j <= 51; j++)
                         printf "%s%s", (j == 1 ? "" : "\t"), values[j]
                     printf "\n"
                     exit
@@ -92,7 +93,7 @@ sequence_status() {
 }
 
 # Writer isolation: identical evidence with the organ on/off may differ only
-# in the fixed v25 tail, and the distinct states must still speak identically.
+# in the fixed v26 tail, and the distinct states must still speak identically.
 "$OUT/holdout-fixture" "$OUT/writer-on.state" checkpoint-one
 "$OUT/holdout-fixture" "$OUT/writer-off.state" checkpoint-ablated
 checkpoint_tail="$("$OUT/holdout-fixture" --checkpoint-tail-size)"
@@ -102,7 +103,7 @@ writer_prefix=$((writer_size - checkpoint_tail))
     cmp -s -n "$writer_prefix" \
         "$OUT/writer-on.state" "$OUT/writer-off.state" &&
     ! cmp -s "$OUT/writer-on.state" "$OUT/writer-off.state" || {
-        printf 'checkpoint writer escaped its v25 tail\n' >&2
+        printf 'checkpoint writer escaped its v26 tail\n' >&2
         exit 1
     }
 for side in on off; do
@@ -123,7 +124,7 @@ writer_reply_equal=0
 }
 
 MATRIX="$OUT/matrix.tsv"
-printf 'case\tn\tactive_attempts\trecent\tsequence\tchronological\treply_equal\tstate_equal\n' > "$MATRIX"
+printf 'case\tn\tactive_attempts\trecent\tsequence\tsources\tmax_source\tearly_sources\tearly_max_source\trecent_sources\trecent_max_source\tchronological\treply_equal\tstate_equal\n' > "$MATRIX"
 
 tail -n +2 "$PLAN" |
 while IFS=$'\t' read -r case_name expected_n \
@@ -148,7 +149,7 @@ while IFS=$'\t' read -r case_name expected_n \
 
     report="$(report_from_log "$case_dir/on.log" "$case_name" "$seed")"
     [ -n "$report" ] || {
-        printf '%s emitted no A.55 checkpoint witness\n' \
+        printf '%s emitted no A.56 checkpoint witness\n' \
             "$case_name" >&2
         exit 1
     }
@@ -168,18 +169,42 @@ while IFS=$'\t' read -r case_name expected_n \
         exit 1
     }
     IFS=$'\t' read -r next_after blocked_cell active_after \
-        active_through active_attempts active_status n \
+        active_through active_attempts active_status \
+        active_sources active_max active_early_sources active_early_max \
+        active_recent_sources active_recent_max n \
         first_after first_through first_status \
+        first_sources first_max first_early_sources first_early_max \
+        first_recent_sources first_recent_max \
         _ _ _ _ _ _ _ _ _ _ \
         second_after second_through second_status \
+        second_sources second_max second_early_sources second_early_max \
+        second_recent_sources second_recent_max \
         _ _ _ _ _ _ _ _ _ _ extra <<< "$cell"
 
     if [ "$n" = 0 ]; then
         recent="$active_status"
+        sources="$active_sources"
+        max_source="$active_max"
+        early_sources="$active_early_sources"
+        early_max="$active_early_max"
+        recent_sources="$active_recent_sources"
+        recent_max="$active_recent_max"
     elif [ "$n" = 1 ]; then
         recent="$first_status"
+        sources="$first_sources"
+        max_source="$first_max"
+        early_sources="$first_early_sources"
+        early_max="$first_early_max"
+        recent_sources="$first_recent_sources"
+        recent_max="$first_recent_max"
     else
         recent="$second_status"
+        sources="$second_sources"
+        max_source="$second_max"
+        early_sources="$second_early_sources"
+        early_max="$second_early_max"
+        recent_sources="$second_recent_sources"
+        recent_max="$second_recent_max"
     fi
     actual_sequence="$(
         sequence_status "$sequence_cells" u62-70
@@ -208,6 +233,28 @@ while IFS=$'\t' read -r case_name expected_n \
     if [ "$case_name" = checkpoint-incompatible ]; then
         expected_blocked=1
     fi
+    expected_sources=32
+    expected_max=1
+    expected_early_sources=16
+    expected_early_max=1
+    expected_recent_sources=16
+    expected_recent_max=1
+    if [ "$case_name" = checkpoint-pending ]; then
+        expected_sources=31
+        expected_recent_sources=15
+    elif [ "$case_name" = checkpoint-incompatible ]; then
+        expected_sources=1
+        expected_early_sources=1
+        expected_recent_sources=0
+        expected_recent_max=0
+    elif [ "$case_name" = checkpoint-source-starved ]; then
+        expected_sources=1
+        expected_max=32
+        expected_early_sources=1
+        expected_early_max=16
+        expected_recent_sources=1
+        expected_recent_max=16
+    fi
 
     [ -z "${extra:-}" ] &&
     [ "$budget" = 32 ] && [ "$epochs" = 2 ] &&
@@ -219,6 +266,12 @@ while IFS=$'\t' read -r case_name expected_n \
     [ "$n" = "$expected_n" ] &&
     [ "$recent" = "$expected_recent" ] &&
     [ "$actual_sequence" = "$expected_sequence" ] &&
+    [ "$sources" = "$expected_sources" ] &&
+    [ "$max_source" = "$expected_max" ] &&
+    [ "$early_sources" = "$expected_early_sources" ] &&
+    [ "$early_max" = "$expected_early_max" ] &&
+    [ "$recent_sources" = "$expected_recent_sources" ] &&
+    [ "$recent_max" = "$expected_recent_max" ] &&
     [ "$chronological" = 1 ] &&
     [ "$reply_equal" = 1 ] && [ "$state_equal" = 1 ] || {
         printf '%s checkpoint contract failed: n=%s active=%s/%s recent=%s sequence=%s chronological=%s reply=%s state=%s\n' \
@@ -228,25 +281,26 @@ while IFS=$'\t' read -r case_name expected_n \
         exit 1
     }
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$case_name" "$n" "$active_attempts" "$recent" \
-        "$actual_sequence" "$chronological" \
-        "$reply_equal" "$state_equal" >> "$MATRIX"
+        "$actual_sequence" "$sources" "$max_source" \
+        "$early_sources" "$early_max" "$recent_sources" "$recent_max" \
+        "$chronological" "$reply_equal" "$state_equal" >> "$MATRIX"
 done
 
 awk -F '\t' -v writer_reply_equal="$writer_reply_equal" '
     NR > 1 {
         rows++
-        chronology += $6
-        replies += $7
-        states += $8
+        chronology += $12
+        replies += $13
+        states += $14
     }
     END {
         print "cases\tchronological\treply_equal\tstate_equal\twriter_prefix_equal\twriter_reply_equal"
         print rows "\t" chronology "\t" replies "\t" states \
               "\t1\t" writer_reply_equal
-        if (rows != 8 || chronology != 8 ||
-            replies != 8 || states != 8 ||
+        if (rows != 9 || chronology != 9 ||
+            replies != 9 || states != 9 ||
             writer_reply_equal != 1)
             exit 1
     }
