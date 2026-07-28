@@ -172,6 +172,19 @@ static int chronology_scenario(const char *scenario) {
         !strcmp(scenario, "chronology-incompatible");
 }
 
+static int checkpoint_scenario(const char *scenario) {
+    return
+        !strcmp(scenario, "checkpoint-one") ||
+        !strcmp(scenario, "checkpoint-stable") ||
+        !strcmp(scenario, "checkpoint-emerging") ||
+        !strcmp(scenario, "checkpoint-persistent") ||
+        !strcmp(scenario, "checkpoint-recovered") ||
+        !strcmp(scenario, "checkpoint-insufficient") ||
+        !strcmp(scenario, "checkpoint-incompatible") ||
+        !strcmp(scenario, "checkpoint-pending") ||
+        !strcmp(scenario, "checkpoint-ablated");
+}
+
 static int transport_scenario(const char *scenario) {
     return
         !strcmp(scenario, "transport-provisional") ||
@@ -330,15 +343,92 @@ static int add_chronology_present(
     return 0;
 }
 
+static int add_checkpoint_life(
+        Leo *leo, const char *chronology) {
+    LeoWonderAppetiteHoldoutTrial *trial =
+        &leo->wonder_appetite_holdouts.trials[0];
+    LeoWonderAppetiteCheckpointLane *lane =
+        &leo->wonder_appetite_checkpoints.lanes[0];
+    uint64_t boundary =
+        lane->next_after_proposed_turn ?
+            lane->next_after_proposed_turn :
+            leo_wonder_appetite_holdout_terminal_boundary(trial);
+    memset(&leo->wonder_appetite_calibration, 0,
+           sizeof leo->wonder_appetite_calibration);
+    proposed_base = boundary + 4;
+    int ok = add_chronology_present(leo, chronology);
+    if (ok) leo_wonder_appetite_checkpoint_update(leo);
+    return ok;
+}
+
+static int build_checkpoint_scenario(
+        Leo *leo, const char *scenario) {
+    if (!strcmp(scenario, "checkpoint-one"))
+        return add_checkpoint_life(
+            leo, "chronology-provisional");
+    if (!strcmp(scenario, "checkpoint-stable"))
+        return
+            add_checkpoint_life(
+                leo, "chronology-provisional") &&
+            add_checkpoint_life(
+                leo, "chronology-provisional");
+    if (!strcmp(scenario, "checkpoint-emerging"))
+        return
+            add_checkpoint_life(
+                leo, "chronology-provisional") &&
+            add_checkpoint_life(
+                leo, "chronology-early-shift");
+    if (!strcmp(scenario, "checkpoint-persistent"))
+        return
+            add_checkpoint_life(
+                leo, "chronology-early-shift") &&
+            add_checkpoint_life(
+                leo, "chronology-recent-shift");
+    if (!strcmp(scenario, "checkpoint-recovered"))
+        return
+            add_checkpoint_life(
+                leo, "chronology-early-shift") &&
+            add_checkpoint_life(
+                leo, "chronology-provisional");
+    if (!strcmp(scenario, "checkpoint-insufficient"))
+        return
+            add_checkpoint_life(
+                leo, "chronology-provisional") &&
+            add_checkpoint_life(
+                leo, "chronology-coverage-starved");
+    if (!strcmp(scenario, "checkpoint-incompatible"))
+        return add_checkpoint_life(
+            leo, "chronology-incompatible");
+    if (!strcmp(scenario, "checkpoint-pending"))
+        return add_checkpoint_life(
+            leo, "chronology-observing");
+    if (!strcmp(scenario, "checkpoint-ablated")) {
+        int previous = g_leo_wonder_appetite_checkpoint_on;
+        g_leo_wonder_appetite_checkpoint_on = 0;
+        int ok = add_checkpoint_life(
+            leo, "chronology-provisional");
+        g_leo_wonder_appetite_checkpoint_on = previous;
+        return ok;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--tail-size")) {
         printf("%zu\n",
                sizeof(LeoWonderAppetiteHoldouts) +
-               sizeof(LeoWonderAppetiteAdmissions));
+               sizeof(LeoWonderAppetiteAdmissions) +
+               sizeof(LeoWonderAppetiteCheckpoints));
         return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "--admission-tail-size")) {
-        printf("%zu\n", sizeof(LeoWonderAppetiteAdmissions));
+        printf("%zu\n",
+               sizeof(LeoWonderAppetiteAdmissions) +
+               sizeof(LeoWonderAppetiteCheckpoints));
+        return 0;
+    }
+    if (argc == 2 && !strcmp(argv[1], "--checkpoint-tail-size")) {
+        printf("%zu\n", sizeof(LeoWonderAppetiteCheckpoints));
         return 0;
     }
     if (argc != 3 ||
@@ -348,9 +438,10 @@ int main(int argc, char **argv) {
          strcmp(argv[2], "restraint-failed") &&
          strcmp(argv[2], "both-failed") &&
          strcmp(argv[2], "coverage-starved") &&
+         !checkpoint_scenario(argv[2]) &&
          !transport_scenario(argv[2]))) {
         fprintf(stderr,
-                "usage: %s STATE arm|confirmed|motion-failed|restraint-failed|both-failed|coverage-starved|transport-*|chronology-*\n",
+                "usage: %s STATE arm|confirmed|motion-failed|restraint-failed|both-failed|coverage-starved|transport-*|chronology-*|checkpoint-*\n",
                 argv[0]);
         return 2;
     }
@@ -363,7 +454,13 @@ int main(int argc, char **argv) {
         "Leo hears the night and asks what the sea remembers. "
         "The child watches light move across the room.");
     int ok = add_candidate(&leo);
-    if (ok && transport_scenario(argv[2])) {
+    if (ok && checkpoint_scenario(argv[2])) {
+        leo_wonder_appetite_holdout_update(&leo);
+        ok = add_future(&leo, "confirmed");
+        if (ok) leo_wonder_appetite_holdout_update(&leo);
+        if (ok) ok = build_checkpoint_scenario(
+            &leo, argv[2]);
+    } else if (ok && transport_scenario(argv[2])) {
         leo_wonder_appetite_holdout_update(&leo);
         ok = add_future(&leo, "confirmed");
         if (ok) leo_wonder_appetite_holdout_update(&leo);

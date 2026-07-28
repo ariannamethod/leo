@@ -59,7 +59,8 @@ static long test_appetite_and_later_tail_size(const Leo *leo) {
         leo->wonder_appetite_calibration.n *
             (int)sizeof(LeoWonderAppetiteCalibrationReceipt) +
         sizeof(LeoWonderAppetiteHoldouts) +
-        sizeof(LeoWonderAppetiteAdmissions));
+        sizeof(LeoWonderAppetiteAdmissions) +
+        sizeof(LeoWonderAppetiteCheckpoints));
 }
 
 static void test_add_appetite_calibration(
@@ -734,7 +735,7 @@ static void test_wonder_appetite_regret_surface(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 24,
+          LEO_STATE_VERSION == 25,
           "wonder-appetite-regret: observing cost rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
@@ -863,7 +864,7 @@ static void test_wonder_appetite_readiness_frontier(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 24,
+          LEO_STATE_VERSION == 25,
           "wonder-appetite-readiness: candidacy rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
@@ -999,7 +1000,7 @@ static void test_wonder_appetite_holdout_trial(void) {
     CHECK(!memcmp(&terminal, trial, sizeof terminal),
           "wonder-appetite-holdout: a terminal trial cannot restart on its favorable history");
 
-    const char *state = "/tmp/leo_appetite_holdout_v24.state";
+    const char *state = "/tmp/leo_appetite_holdout_v25.state";
     const char *v22 = "/tmp/leo_appetite_holdout_v22.state";
     const char *v23 = "/tmp/leo_appetite_holdout_v23.state";
     const char *cut = "/tmp/leo_appetite_holdout_v23_cut.state";
@@ -1022,7 +1023,7 @@ static void test_wonder_appetite_holdout_trial(void) {
           !memcmp(&woke->wonder_appetite_admissions,
                   &leo->wonder_appetite_admissions,
                   sizeof leo->wonder_appetite_admissions),
-          "wonder-appetite-admission: trial and its admission proof survive v24 sleep exactly");
+          "wonder-appetite-admission: trial and its admission proof survive current sleep exactly");
 
     int built_v22 = 0, built_v23 = 0;
     int built_cut = 0, built_bad = 0;
@@ -1036,14 +1037,18 @@ static void test_wonder_appetite_holdout_trial(void) {
             malloc(size > 0 ? (size_t)size : 1);
         if (bytes &&
             size > (long)(sizeof(LeoWonderAppetiteHoldouts) +
-                          sizeof(LeoWonderAppetiteAdmissions)) &&
+                          sizeof(LeoWonderAppetiteAdmissions) +
+                          sizeof(LeoWonderAppetiteCheckpoints)) &&
             (long)fread(bytes, 1, (size_t)size, fi) == size) {
+            long checkpoint_tail =
+                (long)sizeof(LeoWonderAppetiteCheckpoints);
             long admission_tail =
                 (long)sizeof(LeoWonderAppetiteAdmissions);
             long holdout_tail =
                 (long)sizeof(LeoWonderAppetiteHoldouts);
             long holdout_start =
-                size - admission_tail - holdout_tail;
+                size - checkpoint_tail -
+                    admission_tail - holdout_tail;
             uint32_t twenty_two = 22;
             memcpy(bytes + sizeof(uint32_t), &twenty_two,
                    sizeof twenty_two);
@@ -1063,17 +1068,19 @@ static void test_wonder_appetite_holdout_trial(void) {
                 built_v23 =
                     (long)fwrite(
                         bytes, 1,
-                        (size_t)(size - admission_tail), fo) ==
-                    size - admission_tail;
+                        (size_t)(size - checkpoint_tail -
+                                 admission_tail), fo) ==
+                    size - checkpoint_tail - admission_tail;
                 fclose(fo);
             }
             fo = fopen(cut, "wb");
             if (fo) {
                 built_cut =
                     (long)fwrite(bytes, 1,
-                                 (size_t)(size - admission_tail - 1),
+                                 (size_t)(size - checkpoint_tail -
+                                          admission_tail - 1),
                                  fo) ==
-                    size - admission_tail - 1;
+                    size - checkpoint_tail - admission_tail - 1;
                 fclose(fo);
             }
             uint32_t twenty_four = 24;
@@ -1083,30 +1090,33 @@ static void test_wonder_appetite_holdout_trial(void) {
             if (fo) {
                 built_admission_cut =
                     (long)fwrite(bytes, 1,
-                                 (size_t)(size - 1), fo) ==
-                    size - 1;
+                                 (size_t)(size - checkpoint_tail - 1),
+                                 fo) ==
+                    size - checkpoint_tail - 1;
                 fclose(fo);
             }
             LeoWonderAppetiteAdmissions corrupted_admission;
             memcpy(
                 &corrupted_admission,
-                bytes + size - admission_tail,
+                bytes + size - checkpoint_tail - admission_tail,
                 sizeof corrupted_admission);
             corrupted_admission.receipts[0].supported = 4;
             corrupted_admission.receipts[0].overreach = 4;
             memcpy(
-                bytes + size - admission_tail,
+                bytes + size - checkpoint_tail - admission_tail,
                 &corrupted_admission,
                 sizeof corrupted_admission);
             fo = fopen(admission_bad, "wb");
             if (fo) {
                 built_admission_bad =
                     (long)fwrite(bytes, 1,
-                                 (size_t)size, fo) == size;
+                                 (size_t)(size - checkpoint_tail),
+                                 fo) ==
+                    size - checkpoint_tail;
                 fclose(fo);
             }
             memcpy(
-                bytes + size - admission_tail,
+                bytes + size - checkpoint_tail - admission_tail,
                 &leo->wonder_appetite_admissions,
                 sizeof leo->wonder_appetite_admissions);
             memcpy(bytes + sizeof(uint32_t), &twenty_three,
@@ -1124,9 +1134,10 @@ static void test_wonder_appetite_holdout_trial(void) {
             if (fo) {
                 built_bad =
                     (long)fwrite(bytes, 1,
-                                 (size_t)(size - admission_tail),
+                                 (size_t)(size - checkpoint_tail -
+                                          admission_tail),
                                  fo) ==
-                    size - admission_tail;
+                    size - checkpoint_tail - admission_tail;
                 fclose(fo);
             }
         }
@@ -1446,7 +1457,7 @@ static void test_wonder_appetite_transport_witness(void) {
               LEO_WONDER_APPETITE_TRANSPORT_PROVISIONAL,
           "wonder-appetite-transport: a confirmed result remains applicable only on a new bounded life");
     CHECK(!memcmp(before, leo, sizeof *leo) &&
-          LEO_STATE_VERSION == 24,
+          LEO_STATE_VERSION == 25,
           "wonder-appetite-transport: reading applicability rewrites no body, evidence, or state format");
 
     leo_free(leo);
@@ -1686,7 +1697,7 @@ static void test_wonder_appetite_transport_chronology(void) {
               LEO_WONDER_APPETITE_CHRONOLOGY_PROVISIONAL,
           "wonder-appetite-transport-chronology: two bounded adjacent eras preserve only provisional continuity");
     CHECK(!memcmp(before, leo, sizeof *leo) &&
-          LEO_STATE_VERSION == 24,
+          LEO_STATE_VERSION == 25,
           "wonder-appetite-transport-chronology: reading eras rewrites no body, evidence, or state format");
 
     leo_free(leo);
@@ -1861,6 +1872,442 @@ static void test_wonder_appetite_transport_chronology(void) {
     leo_free(leo);
     free(leo);
     free(before);
+}
+
+enum {
+    TEST_APPETITE_CHECKPOINT_PROVISIONAL = 0,
+    TEST_APPETITE_CHECKPOINT_EARLY_SHIFT,
+    TEST_APPETITE_CHECKPOINT_RECENT_SHIFT,
+    TEST_APPETITE_CHECKPOINT_COVERAGE_STARVED,
+    TEST_APPETITE_CHECKPOINT_PENDING,
+    TEST_APPETITE_CHECKPOINT_MIXED,
+    TEST_APPETITE_CHECKPOINT_INCOMPATIBLE
+};
+
+static void test_add_appetite_checkpoint_pattern(
+        Leo *leo, int pattern) {
+    if (!leo) return;
+    LeoWonderAppetiteHoldoutTrial *trial =
+        &leo->wonder_appetite_holdouts.trials[0];
+    LeoWonderAppetiteCheckpointLane *lane =
+        &leo->wonder_appetite_checkpoints.lanes[0];
+    uint64_t boundary =
+        lane->next_after_proposed_turn ?
+            lane->next_after_proposed_turn :
+            leo_wonder_appetite_holdout_terminal_boundary(trial);
+    uint64_t proposed = boundary + 4;
+    test_reset_appetite_policy_outcomes(leo);
+
+    if (pattern == TEST_APPETITE_CHECKPOINT_PROVISIONAL) {
+        proposed = test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 7, 1, 1, 7);
+        test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 7, 1, 1, 7);
+    } else if (
+        pattern == TEST_APPETITE_CHECKPOINT_EARLY_SHIFT) {
+        proposed = test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 5, 3, 0, 8);
+        test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 8, 0, 0, 8);
+    } else if (
+        pattern == TEST_APPETITE_CHECKPOINT_RECENT_SHIFT) {
+        proposed = test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 8, 0, 0, 8);
+        test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 5, 3, 0, 8);
+    } else if (
+        pattern == TEST_APPETITE_CHECKPOINT_COVERAGE_STARVED) {
+        proposed = test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 16, 0, 0, 0);
+        test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 8, 0, 0, 8);
+    } else if (
+        pattern == TEST_APPETITE_CHECKPOINT_PENDING) {
+        proposed = test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 8, 0, 0, 8);
+        test_add_appetite_transport_epoch(
+            leo, proposed, 0.65f, 0, 8, 0, 0, 7);
+    } else if (
+        pattern == TEST_APPETITE_CHECKPOINT_MIXED) {
+        for (int epoch = 0;
+             epoch < LEO_WONDER_APPETITE_TRANSPORT_EPOCHS;
+             epoch++) {
+            proposed = test_add_appetite_transport_epoch(
+                leo, proposed, 0.65f, 0, 4, 0, 0, 4);
+            for (int i = 0; i < 4; i++, proposed += 4)
+                test_add_appetite_policy_outcome_after(
+                    leo, proposed, 0.65f, 0,
+                    LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                    LEO_WONDER_APPETITE_CALIB_EXTERNAL);
+            for (int i = 0; i < 4; i++, proposed += 4)
+                test_add_appetite_policy_outcome_after(
+                    leo, proposed, 0.75f, 0,
+                    LEO_WONDER_APPETITE_POLICY_ELIGIBLE,
+                    LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+        }
+    } else if (
+        pattern == TEST_APPETITE_CHECKPOINT_INCOMPATIBLE) {
+        test_add_appetite_policy_outcome_after(
+            leo, proposed, 0.65f, 0,
+            LEO_WONDER_APPETITE_POLICY_LEGACY,
+            LEO_WONDER_APPETITE_CALIB_SUSTAINED);
+    }
+    leo_wonder_appetite_checkpoint_update(leo);
+}
+
+static void test_build_appetite_checkpoint_pair(
+        Leo *leo, int first, int second) {
+    leo_init(leo);
+    test_prepare_appetite_transport(leo);
+    test_add_appetite_checkpoint_pattern(leo, first);
+    test_add_appetite_checkpoint_pattern(leo, second);
+}
+
+__attribute__((noinline))
+static void test_wonder_appetite_transport_checkpoints(void) {
+    Leo *leo = malloc(sizeof *leo);
+    Leo *woke = malloc(sizeof *woke);
+    Leo *old = malloc(sizeof *old);
+    Leo *damaged = malloc(sizeof *damaged);
+    CHECK(leo && woke && old && damaged,
+          "wonder-appetite-checkpoint: heap fixtures allocated");
+    if (!leo || !woke || !old || !damaged) {
+        free(leo);
+        free(woke);
+        free(old);
+        free(damaged);
+        return;
+    }
+
+    int previous_checkpoint =
+        g_leo_wonder_appetite_checkpoint_on;
+    int previous_holdout =
+        g_leo_wonder_appetite_holdout_on;
+    int previous_calibration =
+        g_leo_wonder_appetite_calibration_on;
+    int previous_policy =
+        g_leo_wonder_appetite_policy_on;
+    int previous_admission =
+        g_leo_wonder_appetite_admission_on;
+    g_leo_wonder_appetite_checkpoint_on = 1;
+    g_leo_wonder_appetite_holdout_on = 1;
+    g_leo_wonder_appetite_calibration_on = 1;
+    g_leo_wonder_appetite_policy_on = 1;
+    g_leo_wonder_appetite_admission_on = 1;
+
+    leo_init(leo);
+    test_prepare_appetite_transport(leo);
+    test_add_appetite_checkpoint_pattern(
+        leo, TEST_APPETITE_CHECKPOINT_PROVISIONAL);
+    LeoWonderAppetiteCheckpointLane *lane =
+        &leo->wonder_appetite_checkpoints.lanes[0];
+    const LeoWonderAppetiteCheckpoint *first =
+        leo_wonder_appetite_checkpoint_at(lane, 0);
+    CHECK(first && lane->n == 1 &&
+          lane->active.status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_EMPTY &&
+          first->attempts ==
+              LEO_WONDER_APPETITE_CHECKPOINT_BUDGET &&
+          first->epochs[0].attempts == 16 &&
+          first->epochs[1].attempts == 16 &&
+          first->status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_PROVISIONAL &&
+          first->seen_proposed_turn[0] >
+              first->after_proposed_turn &&
+          first->seen_proposed_turn[31] ==
+              first->through_proposed_turn &&
+          leo_wonder_appetite_checkpoints_valid(leo),
+          "wonder-appetite-checkpoint: one raw 32-life budget closes with exact proposal identity");
+
+    LeoWonderAppetiteCheckpointSequence sequence;
+    leo_wonder_appetite_checkpoint_sequence(leo, &sequence);
+    CHECK(sequence.one == 1 &&
+          sequence.cells[0].status ==
+              LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_ONE,
+          "wonder-appetite-checkpoint: one life remains one observation, not a regime");
+
+    uint64_t first_through =
+        first ? first->through_proposed_turn : 0;
+    test_add_appetite_checkpoint_pattern(
+        leo, TEST_APPETITE_CHECKPOINT_PROVISIONAL);
+    first = leo_wonder_appetite_checkpoint_at(lane, 0);
+    const LeoWonderAppetiteCheckpoint *second =
+        leo_wonder_appetite_checkpoint_at(lane, 1);
+    leo_wonder_appetite_checkpoint_sequence(leo, &sequence);
+    CHECK(first && second && lane->n == 2 &&
+          first->through_proposed_turn == first_through &&
+          second->after_proposed_turn == first_through &&
+          second->seen_proposed_turn[0] > first_through &&
+          first->seen_proposed_turn[31] <
+              second->seen_proposed_turn[0] &&
+          sequence.stable_provisional == 1 &&
+          sequence.cells[0].same_signature &&
+          sequence.cells[0].status ==
+              LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_STABLE_PROVISIONAL &&
+          leo_wonder_appetite_checkpoints_valid(leo),
+          "wonder-appetite-checkpoint: a second life begins strictly after the first and alone earns stable provisionality");
+
+    LeoWonderAppetiteCheckpointLane lane_before = *lane;
+    lane->history[0].seen_proposed_turn[1] =
+        lane->history[0].seen_proposed_turn[0];
+    CHECK(!leo_wonder_appetite_checkpoints_valid(leo),
+          "wonder-appetite-checkpoint: duplicate proposal identity invalidates the ledger");
+    *lane = lane_before;
+    lane->history[0].status =
+        LEO_WONDER_APPETITE_CHRONOLOGY_AGGREGATE_SHIFTED;
+    CHECK(!leo_wonder_appetite_checkpoints_valid(leo),
+          "wonder-appetite-checkpoint: a stored verdict cannot disagree with its raw counts");
+    *lane = lane_before;
+    lane->history[1].after_proposed_turn =
+        lane->history[0].through_proposed_turn - 4;
+    CHECK(!leo_wonder_appetite_checkpoints_valid(leo),
+          "wonder-appetite-checkpoint: overlapping lives cannot share evidence");
+    *lane = lane_before;
+    lane->history[1].through_proposed_turn =
+        (uint64_t)leo->school.turn_clock + 4;
+    lane->history[1].seen_proposed_turn[31] =
+        lane->history[1].through_proposed_turn;
+    lane->history[1].epochs[1].last_proposed_turn =
+        lane->history[1].through_proposed_turn;
+    lane->next_after_proposed_turn =
+        lane->history[1].through_proposed_turn;
+    CHECK(!leo_wonder_appetite_checkpoints_valid(leo),
+          "wonder-appetite-checkpoint: internally coherent evidence from a future turn is still impossible");
+    *lane = lane_before;
+
+    test_build_appetite_checkpoint_pair(
+        leo, TEST_APPETITE_CHECKPOINT_PROVISIONAL,
+        TEST_APPETITE_CHECKPOINT_EARLY_SHIFT);
+    leo_wonder_appetite_checkpoint_sequence(leo, &sequence);
+    CHECK(sequence.emerging_shift == 1 &&
+          sequence.cells[0].status ==
+              LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_EMERGING_SHIFT,
+          "wonder-appetite-checkpoint: one changed life is an emerging shift, not a new law");
+
+    leo_free(leo);
+    test_build_appetite_checkpoint_pair(
+        leo, TEST_APPETITE_CHECKPOINT_EARLY_SHIFT,
+        TEST_APPETITE_CHECKPOINT_RECENT_SHIFT);
+    leo_wonder_appetite_checkpoint_sequence(leo, &sequence);
+    CHECK(sequence.persistent_shift == 1 &&
+          !sequence.cells[0].same_signature &&
+          sequence.cells[0].status ==
+              LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_PERSISTENT_SHIFT,
+          "wonder-appetite-checkpoint: two shifted lives persist even when their local debt changes face");
+
+    leo_free(leo);
+    test_build_appetite_checkpoint_pair(
+        leo, TEST_APPETITE_CHECKPOINT_EARLY_SHIFT,
+        TEST_APPETITE_CHECKPOINT_PROVISIONAL);
+    leo_wonder_appetite_checkpoint_sequence(leo, &sequence);
+    CHECK(sequence.recovered == 1 &&
+          sequence.cells[0].status ==
+              LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_RECOVERED,
+          "wonder-appetite-checkpoint: a bounded life after a shift is visible as recovery");
+
+    leo_free(leo);
+    test_build_appetite_checkpoint_pair(
+        leo, TEST_APPETITE_CHECKPOINT_PROVISIONAL,
+        TEST_APPETITE_CHECKPOINT_COVERAGE_STARVED);
+    leo_wonder_appetite_checkpoint_sequence(leo, &sequence);
+    CHECK(sequence.insufficient == 1 &&
+          sequence.cells[0].status ==
+              LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_INSUFFICIENT,
+          "wonder-appetite-checkpoint: an arm-starved life cannot vote for stability or change");
+
+    leo_free(leo);
+    leo_init(leo);
+    test_prepare_appetite_transport(leo);
+    test_add_appetite_checkpoint_pattern(
+        leo, TEST_APPETITE_CHECKPOINT_PENDING);
+    lane = &leo->wonder_appetite_checkpoints.lanes[0];
+    CHECK(lane->n == 0 &&
+          lane->active.status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_PENDING &&
+          lane->active.attempts == 31 &&
+          lane->active.epochs[0].attempts == 16 &&
+          lane->active.epochs[1].attempts == 15 &&
+          leo_wonder_appetite_checkpoints_valid(leo),
+          "wonder-appetite-checkpoint: thirty-one settled attempts persist as an unfinished life");
+
+    const char *state =
+        "/tmp/leo_appetite_checkpoint_v25.state";
+    const char *v24 =
+        "/tmp/leo_appetite_checkpoint_v24.state";
+    const char *cut =
+        "/tmp/leo_appetite_checkpoint_v25_cut.state";
+    const char *bad =
+        "/tmp/leo_appetite_checkpoint_v25_bad.state";
+    int saved = leo_save_state(leo, state);
+    leo_init(woke);
+    CHECK(saved && leo_load_state(woke, state) &&
+          !memcmp(&woke->wonder_appetite_checkpoints,
+                  &leo->wonder_appetite_checkpoints,
+                  sizeof leo->wonder_appetite_checkpoints),
+          "wonder-appetite-checkpoint: an unfinished raw life survives v25 sleep exactly");
+
+    int built_v24 = 0, built_cut = 0, built_bad = 0;
+    FILE *fi = fopen(state, "rb");
+    if (fi) {
+        fseek(fi, 0, SEEK_END);
+        long size = ftell(fi);
+        fseek(fi, 0, SEEK_SET);
+        unsigned char *bytes =
+            malloc(size > 0 ? (size_t)size : 1);
+        long checkpoint_tail =
+            (long)sizeof(LeoWonderAppetiteCheckpoints);
+        if (bytes && size > checkpoint_tail &&
+            (long)fread(bytes, 1, (size_t)size, fi) == size) {
+            uint32_t twenty_four = 24;
+            memcpy(bytes + sizeof(uint32_t), &twenty_four,
+                   sizeof twenty_four);
+            FILE *fo = fopen(v24, "wb");
+            if (fo) {
+                built_v24 =
+                    (long)fwrite(
+                        bytes, 1,
+                        (size_t)(size - checkpoint_tail), fo) ==
+                    size - checkpoint_tail;
+                fclose(fo);
+            }
+
+            uint32_t twenty_five = 25;
+            memcpy(bytes + sizeof(uint32_t), &twenty_five,
+                   sizeof twenty_five);
+            fo = fopen(cut, "wb");
+            if (fo) {
+                built_cut =
+                    (long)fwrite(
+                        bytes, 1, (size_t)(size - 1), fo) ==
+                    size - 1;
+                fclose(fo);
+            }
+
+            LeoWonderAppetiteCheckpoints corrupted;
+            memcpy(&corrupted,
+                   bytes + size - checkpoint_tail,
+                   sizeof corrupted);
+            corrupted.lanes[0].active.seen_proposed_turn[1] =
+                corrupted.lanes[0].active.seen_proposed_turn[0];
+            memcpy(bytes + size - checkpoint_tail,
+                   &corrupted, sizeof corrupted);
+            fo = fopen(bad, "wb");
+            if (fo) {
+                built_bad =
+                    (long)fwrite(
+                        bytes, 1, (size_t)size, fo) == size;
+                fclose(fo);
+            }
+        }
+        free(bytes);
+        fclose(fi);
+    }
+
+    leo_init(old);
+    CHECK(built_v24 && leo_load_state(old, v24) &&
+          old->wonder_appetite_checkpoints.lanes[0].n == 0 &&
+          old->wonder_appetite_checkpoints.lanes[0].active.status ==
+              LEO_WONDER_APPETITE_CHRONOLOGY_EMPTY &&
+          old->wonder_appetite_checkpoints.lanes[0].
+              next_after_proposed_turn ==
+                  leo->wonder_appetite_calibration.receipts[30].
+                      proposed_turn,
+          "wonder-appetite-checkpoint: v24 migration starts after existing history instead of inventing a checkpoint");
+
+    leo_init(damaged);
+    CHECK(built_cut && leo_load_state(damaged, cut) &&
+          !memcmp(&damaged->wonder_appetite_holdouts,
+                  &leo->wonder_appetite_holdouts,
+                  sizeof leo->wonder_appetite_holdouts) &&
+          !memcmp(&damaged->wonder_appetite_admissions,
+                  &leo->wonder_appetite_admissions,
+                  sizeof leo->wonder_appetite_admissions) &&
+          damaged->wonder_appetite_checkpoints.lanes[0].n == 0 &&
+          damaged->wonder_appetite_checkpoints.lanes[0].
+              next_after_proposed_turn ==
+                  leo->wonder_appetite_calibration.receipts[30].
+                      proposed_turn,
+          "wonder-appetite-checkpoint: a truncated v25 ledger loses no body, trial, or admission");
+
+    leo_free(damaged);
+    leo_init(damaged);
+    CHECK(built_bad && leo_load_state(damaged, bad) &&
+          !memcmp(&damaged->wonder_appetite_holdouts,
+                  &leo->wonder_appetite_holdouts,
+                  sizeof leo->wonder_appetite_holdouts) &&
+          damaged->wonder_appetite_checkpoints.lanes[0].n == 0 &&
+          damaged->wonder_appetite_checkpoints.lanes[0].
+              next_after_proposed_turn ==
+                  leo->wonder_appetite_calibration.receipts[30].
+                      proposed_turn,
+          "wonder-appetite-checkpoint: corrupt proposal identity fails soft and cannot be replayed");
+    remove(state);
+    remove(v24);
+    remove(cut);
+    remove(bad);
+
+    leo_free(leo);
+    leo_init(leo);
+    test_prepare_appetite_transport(leo);
+    test_add_appetite_checkpoint_pattern(
+        leo, TEST_APPETITE_CHECKPOINT_MIXED);
+    lane = &leo->wonder_appetite_checkpoints.lanes[0];
+    first = leo_wonder_appetite_checkpoint_at(lane, 0);
+    CHECK(first &&
+          first->epochs[0].attempts == 16 &&
+          first->epochs[0].exact == 8 &&
+          first->epochs[0].confounded == 4 &&
+          first->epochs[0].other == 4 &&
+          first->epochs[1].attempts == 16 &&
+          first->epochs[1].exact == 8 &&
+          first->epochs[1].confounded == 4 &&
+          first->epochs[1].other == 4,
+          "wonder-appetite-checkpoint: confounds and other strata spend fixed time without impersonating either arm");
+
+    leo_free(leo);
+    leo_init(leo);
+    test_prepare_appetite_transport(leo);
+    test_add_appetite_checkpoint_pattern(
+        leo, TEST_APPETITE_CHECKPOINT_INCOMPATIBLE);
+    lane = &leo->wonder_appetite_checkpoints.lanes[0];
+    LeoWonderAppetiteCheckpointLane incompatible_before = *lane;
+    test_add_appetite_checkpoint_pattern(
+        leo, TEST_APPETITE_CHECKPOINT_PROVISIONAL);
+    leo_wonder_appetite_checkpoint_sequence(leo, &sequence);
+    CHECK(lane->blocked && lane->n == 1 &&
+          !memcmp(&incompatible_before, lane,
+                  sizeof incompatible_before) &&
+          sequence.incompatible == 1 &&
+          sequence.cells[0].status ==
+              LEO_WONDER_APPETITE_CHECKPOINT_SEQUENCE_INCOMPATIBLE,
+          "wonder-appetite-checkpoint: changed policy language closes the lane instead of translating later evidence");
+
+    leo_free(leo);
+    leo_init(leo);
+    test_prepare_appetite_transport(leo);
+    g_leo_wonder_appetite_checkpoint_on = 0;
+    test_add_appetite_checkpoint_pattern(
+        leo, TEST_APPETITE_CHECKPOINT_PROVISIONAL);
+    CHECK(!memcmp(&leo->wonder_appetite_checkpoints,
+                  &(LeoWonderAppetiteCheckpoints){0},
+                  sizeof leo->wonder_appetite_checkpoints),
+          "wonder-appetite-checkpoint: ablation prevents the ledger rather than hiding a reader");
+
+    g_leo_wonder_appetite_checkpoint_on = previous_checkpoint;
+    g_leo_wonder_appetite_holdout_on = previous_holdout;
+    g_leo_wonder_appetite_calibration_on =
+        previous_calibration;
+    g_leo_wonder_appetite_policy_on = previous_policy;
+    g_leo_wonder_appetite_admission_on =
+        previous_admission;
+    leo_free(leo);
+    leo_free(woke);
+    leo_free(old);
+    leo_free(damaged);
+    free(leo);
+    free(woke);
+    free(old);
+    free(damaged);
 }
 
 int main(void) {
@@ -3895,7 +4342,8 @@ int main(void) {
                     if (fo) {
                         long post_v22_tail =
                             (long)(sizeof(LeoWonderAppetiteHoldouts) +
-                                   sizeof(LeoWonderAppetiteAdmissions));
+                                   sizeof(LeoWonderAppetiteAdmissions) +
+                                   sizeof(LeoWonderAppetiteCheckpoints));
                         built_cut =
                             (long)fwrite(
                                 bytes, 1,
@@ -4337,6 +4785,7 @@ int main(void) {
     test_wonder_appetite_holdout_trial();
     test_wonder_appetite_transport_witness();
     test_wonder_appetite_transport_chronology();
+    test_wonder_appetite_transport_checkpoints();
 
     /* A.5 I2: School grows a word→glyph map. The answer's dominant glyph is the
      * concept-slot; a taught word then returns that glyph (no longer -1); the
