@@ -4973,3 +4973,77 @@ sequence          insufficient
 This closes the reproduced pseudo-replication. It does not yet prove that an
 ordinary unscripted long life supplies four source-distinct Wonders; that
 remains a prospective observation rather than a manufactured success.
+
+## Phase A.57 — one question owns the mouth, not perception (2026-07-28)
+
+The first broad prospective life exposed a missing body capability rather than
+a bad A.56 threshold. While one Wonder was open, School set `was_answer` for
+every human turn and did not scan for another unknown. Leo could wait with
+several questions that had already entered the deferred constellation, but a
+new counter-question arriving while the mouth was occupied disappeared.
+
+A.57 lets exactly that event enter the existing bounded pre-Wonder queue. The
+contract is narrow:
+
+```text
+active Wonder exists
+human turn is a question
+active Wonder is not explicitly named
+candidate is genuinely new, not an already-waiting sibling
+                         -> remember silently; keep the active mouth
+```
+
+An unfamiliar declarative description remains sensation, not a counterfeit
+question. An explicitly named active Wonder still owns its correction turn.
+An already-waiting sibling keeps A.40's unchanged wait semantics, while A.43
+may still redirect it on a later explicit address. The new birth is reported
+as `queued-occupied`.
+
+The writer uses the existing eight-slot `LeoDeferredWonder` body and its
+existing eviction, provenance, sleep, and later-opening rules. It adds no new
+persisted field and does not move state beyond v26. The focused
+`--no-occupied-wonder-queue` ablation removes only this new perception path.
+
+Five direct contracts raised the suite from **473/473** to **478/478**. They
+cover silent queueing without replacement or accidental learning, rejection
+of a declarative pseudo-question, unchanged waiting on exact return, later
+opening with the original hypotheses, and the focused ablation.
+
+The prospective process receipt is reproducible with:
+
+```sh
+make deferred-wonder-appetite-source-ecology-life
+```
+
+Its 208-turn plan is sealed before the first reply. Eight synthetic words have
+distinct two-glyph association paths, every turn crosses a real
+save/process-exit/reload boundary, and three bodies receive identical prompts
+and seeds: checkpoint writer ON, checkpoint writer OFF, and A.57 queue OFF.
+
+```text
+new counter-questions queued while occupied       6
+visible replies, checkpoint writer ON/OFF          208/208 equal
+visible replies, A.57 queue ON/OFF                 208/208 equal
+checkpoint-writer body prefix                      byte-identical
+
+A.57 ON terminal checkpoint:
+  sources                                           7
+  max attempts from one source                      5
+  early epoch                                       4 sources, max 5
+  recent epoch                                      4 sources, max 5
+  status                                            coverage-starved
+
+A.57 OFF after the same life:
+  active checkpoint                                 5/32
+  sources                                           1
+  terminal checkpoint                               none
+```
+
+Two complete ON runs reproduced the sealed plan, curiosity receipts,
+calibration receipts, checkpoint receipts, observed summary, and final state
+byte-for-byte.
+
+A.57 therefore makes A.56's source-independence boundary reachable without
+granting the new queue a voice. The terminal life still had `0 eligible / 16
+abstained` in both epochs. That policy-arm starvation is a separate result:
+source plurality has been restored; evidence balance has not.

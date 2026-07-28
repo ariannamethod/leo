@@ -3632,6 +3632,142 @@ int main(void) {
         g_leo_capsule_on = prev_capsule;
     }
 
+    /* A.57: one open question owns the mouth, not perception. A new askable
+     * word encountered while that mouth is occupied joins the same bounded
+     * waiting constellation without replacing or resolving the active Wonder. */
+    {
+        int prev_school = g_leo_school_on;
+        int prev_wonder = g_leo_wonder_on;
+        int prev_deferred = g_leo_deferred_wonder_on;
+        int prev_occupied_queue =
+            g_leo_occupied_wonder_queue_on;
+        int prev_redirection = g_leo_wonder_redirection_on;
+        int prev_klaus = g_leo_klaus_on;
+        int prev_capsule = g_leo_capsule_on;
+        g_leo_school_on = 1;
+        g_leo_wonder_on = 1;
+        g_leo_deferred_wonder_on = 1;
+        g_leo_occupied_wonder_queue_on = 1;
+        g_leo_wonder_redirection_on = 0;
+        g_leo_klaus_on = 0;
+        g_leo_capsule_on = 0;
+
+        Leo occupied; leo_init(&occupied);
+        occupied.school.turn_clock = 1;
+        strncpy(occupied.school.pending, "suvin",
+                sizeof occupied.school.pending - 1);
+        occupied.school.pending_glyph =
+            semtok_find_glyph("light");
+        occupied.school.pending_alt_glyph =
+            semtok_find_glyph("cold");
+        leo_pending_wonder_origin_begin(
+            &occupied, occupied.school.pending,
+            occupied.school.pending_glyph,
+            occupied.school.pending_alt_glyph, 1, NULL, NULL);
+        leo_wonder_open(
+            &occupied, occupied.school.pending,
+            occupied.school.pending_glyph,
+            occupied.school.pending_alt_glyph);
+
+        char out[1024];
+        srand(5701);
+        leo_respond(
+            &occupied,
+            "Does nareth feel like dark night or wild animal?",
+            out, sizeof out);
+        int nareth =
+            leo_deferred_wonder_find(&occupied, "nareth");
+        CHECK(occupied.curiosity.outcome ==
+                  LEO_CURIOSITY_QUEUED_OCCUPIED &&
+              !strcmp(occupied.curiosity.candidate, "nareth") &&
+              !strcmp(occupied.school.pending, "suvin") &&
+              nareth >= 0 &&
+              occupied.school.deferred[nareth].blocks == 1 &&
+              !leo_school_is_learned(&occupied, "suvin") &&
+              !leo_school_is_learned(&occupied, "nareth"),
+              "pre-wonder constellation: an occupied mouth still notices and queues a new question");
+
+        LeoDeferredWonder nareth_birth =
+            occupied.school.deferred[nareth];
+        srand(5702);
+        leo_respond(&occupied, "Rough stone. Soft feather.",
+                    out, sizeof out);
+        nareth = leo_deferred_wonder_find(&occupied, "nareth");
+        CHECK(leo_deferred_wonder_find(
+                  &occupied, "rough") < 0 &&
+              !strcmp(occupied.school.pending, "suvin") &&
+              nareth >= 0 &&
+              !memcmp(&occupied.school.deferred[nareth],
+                      &nareth_birth, sizeof nareth_birth),
+              "pre-wonder constellation: an unfamiliar description remains sensation, not a counterfeit question");
+
+        srand(5702);
+        leo_respond(&occupied, "nareth", out, sizeof out);
+        nareth = leo_deferred_wonder_find(&occupied, "nareth");
+        CHECK(occupied.curiosity.outcome ==
+                  LEO_CURIOSITY_CONTINUED &&
+              !strcmp(occupied.school.pending, "suvin") &&
+              nareth >= 0 &&
+              !memcmp(&occupied.school.deferred[nareth],
+                      &nareth_birth, sizeof nareth_birth),
+              "pre-wonder constellation: a newly queued sibling inherits A.40's unchanged wait");
+
+        srand(5703);
+        leo_respond(&occupied, "A suvin is bright light.",
+                    out, sizeof out);
+        memset(occupied.chamber_act, 0,
+               sizeof occupied.chamber_act);
+        memset(occupied.chamber_ext, 0,
+               sizeof occupied.chamber_ext);
+        srand(5704);
+        leo_respond(&occupied, "nareth", out, sizeof out);
+        CHECK(occupied.curiosity.outcome ==
+                  LEO_CURIOSITY_ASKED_DEFERRED &&
+              !strcmp(occupied.school.pending, "nareth") &&
+              occupied.school.pending_glyph ==
+                  nareth_birth.offered_glyph &&
+              occupied.school.pending_alt_glyph ==
+                  nareth_birth.offered_alt_glyph &&
+              leo_deferred_wonder_find(
+                  &occupied, "nareth") < 0,
+              "pre-wonder constellation: the queued question later receives the one available mouth");
+
+        Leo ablated; leo_init(&ablated);
+        ablated.school.turn_clock = 1;
+        strncpy(ablated.school.pending, "suvin",
+                sizeof ablated.school.pending - 1);
+        ablated.school.pending_glyph =
+            semtok_find_glyph("light");
+        ablated.school.pending_alt_glyph =
+            semtok_find_glyph("cold");
+        leo_wonder_open(
+            &ablated, ablated.school.pending,
+            ablated.school.pending_glyph,
+            ablated.school.pending_alt_glyph);
+        g_leo_occupied_wonder_queue_on = 0;
+        srand(5701);
+        leo_respond(
+            &ablated,
+            "Does nareth feel like dark night or wild animal?",
+            out, sizeof out);
+        CHECK(!strcmp(ablated.school.pending, "suvin") &&
+              ablated.school.n_deferred == 0 &&
+              ablated.curiosity.outcome ==
+                  LEO_CURIOSITY_CONTINUED,
+              "pre-wonder constellation: the occupied-queue ablation restores occupied blindness");
+
+        leo_free(&occupied);
+        leo_free(&ablated);
+        g_leo_school_on = prev_school;
+        g_leo_wonder_on = prev_wonder;
+        g_leo_deferred_wonder_on = prev_deferred;
+        g_leo_occupied_wonder_queue_on =
+            prev_occupied_queue;
+        g_leo_wonder_redirection_on = prev_redirection;
+        g_leo_klaus_on = prev_klaus;
+        g_leo_capsule_on = prev_capsule;
+    }
+
     /* A.41: semantic shadow can recognize which withheld question the present
      * meaning resembles, but cannot open it. Glyph grounding is load-bearing;
      * the own-field birth anchor supplies identity/tie shape, never authority. */
