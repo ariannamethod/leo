@@ -1666,6 +1666,7 @@ enum {
     LEO_CURIOSITY_BLOCKED_DEFERRED,
     LEO_CURIOSITY_ADDRESS_GUARDED,
     LEO_CURIOSITY_REDIRECTED,
+    LEO_CURIOSITY_QUEUED_OCCUPIED,
     LEO_CURIOSITY_NO_CANDIDATE,
     LEO_CURIOSITY_DISABLED,
     LEO_CURIOSITY_OUTCOME_COUNT
@@ -2774,6 +2775,7 @@ static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
+static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
 static int g_leo_prewonder_shadow_on = 1; /* read-only semantic echo among withheld questions; no speech reader. */
 static int g_leo_wonder_appetite_on = 1; /* read-only return appetite over waiting questions; no scheduler or speech reader. */
 static int g_leo_wonder_appetite_calibration_on = 1; /* persistent slow verdicts over appetite; still no scheduler or speech reader. */
@@ -10034,6 +10036,9 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
      * unfinished wonder now survives those turns and may return on resonance. */
     int was_answer = 0, wonder_reask = 0, address_guarded = 0;
     int address_redirected = 0;
+    int occupied_queued = 0;
+    char occupied_unknown[LEO_HEARD_WORDLEN] = {0};
+    int occupied_heard = 0;
     uint8_t flow_event = 0;
     uint64_t flow_wonder_id = 0;
     if (g_leo_school_on && leo->school.pending[0]) {
@@ -10079,7 +10084,33 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                     flow_wonder_id = leo_wonder_episode_id(
                         &leo->school.wonders[open_episode]);
             }
+            /* One question owns the mouth, not the whole sensorium. A genuinely
+             * new askable word can join the bounded waiting constellation while
+             * the active Wonder continues. Existing siblings keep A.40's exact
+             * wait semantics, and an explicit correction of the active word
+             * still wins the turn. */
+            if (g_leo_occupied_wonder_queue_on &&
+                !address_redirected && strchr(prompt, '?') &&
+                !leo_school_text_has_word(
+                    prompt, leo->school.pending)) {
+                char beyond_novelty[LEO_HEARD_WORDLEN] = {0};
+                int beyond_heard = 0, from_waiting = 0;
+                if (leo_school_scan_unknown(
+                        leo, prompt, occupied_unknown,
+                        beyond_novelty, &beyond_heard,
+                        &from_waiting) &&
+                    !from_waiting &&
+                    strcmp(occupied_unknown,
+                           leo->school.pending))
+                    occupied_heard =
+                        leo_heard_count(
+                            &leo->heard, occupied_unknown);
+                else
+                    occupied_unknown[0] = 0;
+            }
             int g = leo_school_grounded_answer(leo, prompt);
+            if (g >= 0 && occupied_unknown[0])
+                g = -1;
             if (g >= 0 && address_veto) {
                 g = -1;
                 address_guarded = 1;
@@ -10223,6 +10254,23 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
             if (msum > 0.0f) leo->prompt_meaning = pm;  /* topicless prompt → NULL → pre-#3 voice (byte-id) */
         }
     }
+    if (occupied_unknown[0] && g_leo_wonder_on &&
+        g_leo_deferred_wonder_on) {
+        if (g && prewonder_field_token[0] < 0)
+            leo_prewonder_field_constellation(
+                leo, prompt, g,
+                prewonder_field_token, prewonder_field_weight);
+        int occupied_glyphs[2] = {-1, -1};
+        leo_school_predict_glyphs(
+            leo, prompt, occupied_glyphs);
+        occupied_queued =
+            leo_deferred_wonder_remember(
+                leo, occupied_unknown,
+                occupied_glyphs[0], occupied_glyphs[1],
+                occupied_heard,
+                prewonder_field_token,
+                prewonder_field_weight) != NULL;
+    }
     int produced;
     /* A.5 School: an unknown content word, and Leo is curious enough (not under
      * high FEAR+VOID) → he ECHOES it back as a question ("Zorble?") instead of
@@ -10280,6 +10328,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (has_unknown) {
         strncpy(curiosity.candidate, unk, LEO_HEARD_WORDLEN - 1);
         curiosity.candidate[LEO_HEARD_WORDLEN - 1] = 0;
+    } else if (occupied_queued) {
+        strncpy(curiosity.candidate, occupied_unknown,
+                LEO_HEARD_WORDLEN - 1);
+        curiosity.candidate[LEO_HEARD_WORDLEN - 1] = 0;
     }
     if (deferred[0]) {
         strncpy(curiosity.deferred, deferred, LEO_HEARD_WORDLEN - 1);
@@ -10295,6 +10347,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     else if (address_redirected &&
              !(flow_event & LEO_FLOW_WONDER_RESOLVED))
         curiosity.outcome = LEO_CURIOSITY_REDIRECTED;
+    else if (occupied_queued)
+        curiosity.outcome = LEO_CURIOSITY_QUEUED_OCCUPIED;
     else if (was_answer)
         curiosity.outcome = (flow_event & LEO_FLOW_WONDER_RESOLVED) ?
             LEO_CURIOSITY_RESOLVED : LEO_CURIOSITY_CONTINUED;
@@ -12635,7 +12689,8 @@ static void print_flow_stats(const Leo *leo) {
         static const char *outcomes[LEO_CURIOSITY_OUTCOME_COUNT] = {
             "none", "asked", "reasked", "resolved", "continued",
             "blocked-distress", "asked-deferred", "blocked-deferred",
-            "address-guarded", "redirected", "no-candidate", "disabled"
+            "address-guarded", "redirected", "queued-occupied",
+            "no-candidate", "disabled"
         };
         printf("     [curiosity: turn=%llu outcome=%s candidate=%s deferred=%s heard=%d distress=%.3f gate=%.3f]\n",
                (unsigned long long)leo->curiosity.turn,
@@ -12816,6 +12871,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
+        else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;
         else if (!strcmp(argv[i], "--no-prewonder-shadow")) g_leo_prewonder_shadow_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite")) g_leo_wonder_appetite_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-appetite-calibration")) g_leo_wonder_appetite_calibration_on = 0;
