@@ -5309,3 +5309,65 @@ The positive-control receipt is reproducible with:
 ```sh
 make deferred-wonder-appetite-visible-signal
 ```
+
+## Phase A.62 — ordinary meaning returns in pieces (2026-07-29)
+
+A.61 proved that appetite can discriminate lived history when both semantic
+anchors arrive together in a constructed prompt. A.62 takes the same reader
+out of that laboratory. It changes no body field or threshold. Instead, it
+births seven deferred Wonders from the real `leo.txt` corpus, lets `nareth`
+and `lume` pass through A.43's ordinary redirection path, and then starts
+three independent 64-turn conversations from that exact body.
+
+The interlocutor is local, deterministic, and source-blind. After one fixed
+opening, it sees only Leo's last visible reply, selects its longest
+non-generic content word, and rotates four ordinary follow-up forms. It cannot
+read state, debug receipts, deferred identities, scores, or future outcomes.
+The policy and its implementation hash are sealed before the first reply;
+later prompt instances do not yet exist when a forecast could be proposed.
+No outcome class is assigned at all.
+
+Across **192** dialogue turns, the reader remained observational:
+
+```text
+appetite receipts                         192
+diffuse / salient                         192 / 0
+forecasts / near misses                     0 / 1
+maximum recurrence                          0.400
+maximum appetite                            0.670
+maximum margin                              0.220
+top candidates         flom 1, lume 187, merel 2, nareth 2
+```
+
+The lone near miss was spoken, still-open `nareth` in seed 211:
+`margin=0.220`, `recurrence=0.400`, `appetite=0.670`. It is useful because it
+crosses the appetite and margin coordinates while failing only the hard
+`recurrence >= 0.750` gate. Every other turn tells the same temporal story
+more quietly.
+
+A.44's recurrence coordinate is computed from the current turn's glyph and
+field evidence. In A.61, a prompt deliberately supplied both semantic anchors
+at once and produced `recurrence=0.800`. In ordinary dialogue, meaning comes
+back piecemeal: one visible reply leads to one follow-up, and a related glyph
+usually arrives without its companion in that same instant. The reader
+therefore amputates the relation at the turn boundary before appetite can
+judge it.
+
+This is **ecological coverage starvation**, not evidence that the `0.750`
+threshold should be lowered. A single weak association and a temporally
+distributed strong return are still observationally confounded. A.63 must
+replay these already captured lives through competing, read-only temporal
+recurrence windows before any accumulator earns a place in `Leo`.
+
+Checkpoint writing stayed invisible: writer ON and OFF produced identical
+replies on all **192/192** turns, all **3/3** final states were byte-identical,
+and their body prefixes were likewise identical. A second complete run
+reproduced the sealed policy, prompts, replies, candidate receipts, summary,
+and starting body byte-for-byte.
+
+No member of `Leo`, state byte, generation reader, sampler, threshold, or
+weight changed in A.62. The natural-life receipt is reproducible with:
+
+```sh
+make deferred-wonder-appetite-natural-life
+```
