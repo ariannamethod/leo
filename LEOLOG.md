@@ -5371,3 +5371,73 @@ weight changed in A.62. The natural-life receipt is reproducible with:
 ```sh
 make deferred-wonder-appetite-natural-life
 ```
+
+## Phase A.63 — a correct memory may still have nothing to remember (2026-07-29)
+
+A.62 suggested that current-turn recurrence might amputate a meaning whose
+parts arrive in adjacent turns. A.63 tests that diagnosis without adding an
+accumulator to `Leo`. It reloads A.62's real seven-Wonder body and passes
+sealed prompt traces through a separate read-only fixture. No reply or state
+is produced by the fixture.
+
+The counterfactual is deliberately stricter than an EMA over the old scalar.
+For each two-hypothesis Wonder, it remembers the last non-literal evidence for
+each side independently and reports `0.800` only while both distinct sides are
+inside the same fixed window. Repeating one side cannot become completeness.
+Evidence belonging to another Wonder cannot be borrowed. A prompt that names
+the source is a human invitation and neither activates nor stores temporal
+support. One-sided Wonders remain outside this particular claim.
+
+Three true and four false controls were sealed:
+
+```text
+true    light + dark in one turn
+true    light -> dark in adjacent turns
+true    dark -> light in adjacent turns
+
+false   light -> light
+false   light -> eight neutral turns -> dark
+false   light -> tree, crossing Wonder ownership
+false   light -> "nareth and dark", crossing human address
+```
+
+The existing current-turn reader detects only **1/3** true controls and none
+of the false controls. Conjunctive windows of 2, 4, and 8 turns each detect
+all **3/3** true controls and **0/4** false controls. Thus a bounded temporal
+operator can repair the turn-boundary counterfactual without converting
+repetition, ownership leakage, distance, or literal address into recurrence.
+
+But the natural cohort refuses the attractive conclusion:
+
+```text
+natural dialogue turns                 192
+paired hits, window 2                    0
+paired hits, window 4                    0
+paired hits, window 8                    0
+```
+
+The one-sided observations are concrete. `nareth` receives `light`-side
+evidence from `morning`; `flom` receives one side from `mother`; `merel`
+receives its only known side from `window`. None of those lives supplies the
+complementary side inside eight turns. Temporal memory would therefore pass
+the constructed controls while changing no A.62 judgment at all.
+
+The verdict is **safe but unexercised**. The temporal boundary is a real
+limitation of the current observer, but it is not the cause of appetite's
+silence in these lives. Installing the accumulator now would treat a valid
+mathematical counterfactual as if it were ecological evidence.
+
+The next boundary is perception versus self-expression. A reply may contain
+the complementary meaning absent from its prompt, but allowing Leo's own
+speech to certify his own recurrence can also create a closed self-excitation
+loop. That channel requires separate source attribution and negative controls
+before it may join appetite.
+
+Two complete A.63 runs reproduced the natural body, visible prompt traces,
+sealed plan, per-source evidence, and summaries byte-for-byte. No member of
+`Leo`, state byte, generation reader, sampler, threshold, or weight changed.
+The counterfactual receipt is reproducible with:
+
+```sh
+make deferred-wonder-appetite-temporal-counterfactual
+```
