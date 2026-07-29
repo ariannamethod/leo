@@ -5580,3 +5580,97 @@ or weight changed. The external-life receipt is reproducible with:
 ```sh
 make deferred-wonder-appetite-external-life
 ```
+
+## Phase A.66 — provenance remembers who began the unfinished meaning (2026-07-29)
+
+A.65 found an external-to-self complement in one blind turn, but its
+within-turn projection could not say what should survive after that turn.
+A.66 builds the missing causal grammar as a separate read-only state machine.
+It does not join `Leo`, save state, or supply a generation feature.
+
+For each deferred Wonder, source side, and fixed window of 1, 2, 4, or 8
+turns, the shadow keeps an **external invitation**:
+
+```text
+external side A  -> invitation waiting for Leo's side B
+external side B  -> invitation waiting for Leo's side A
+```
+
+Only a current or subsequent opposite-side expression by Leo can complete
+that invitation. The observer rejects easier imitations:
+
+- Leo's expression before the invitation cannot complete it retroactively;
+- reflected evidence can neither open an invitation nor complete one;
+- a reflected copy of the awaited side blocks that reply as evidence;
+- an external opposite side closes the lane as externally sufficient;
+- a self-complete pair closes it as self sufficient;
+- same-side expression, cross-Wonder meaning, and literal source address do
+  not complete it;
+- an invitation expires at its exact window boundary.
+
+Sixteen sealed adversarial traces exercise both directions, temporal order,
+reflection, external and self sufficiency, expiry, ownership, and literal
+address. All **64/64** trace-window contracts land in their declared state.
+In particular, a reflected passage consumes time without rewriting the
+original cause: it can still be followed by an independent completion inside
+window 4, but the same invitation honestly expires in window 2.
+
+The A.65 lives then look different when provenance and order survive the
+turn boundary:
+
+```text
+arm      window   opened   completed   external sufficient   self sufficient
+blind       1         22           1                     0                 2
+blind       2         22           1                     0                 2
+blind       4         20           2                     2                 1
+blind       8         20           2                     2                 1
+side-a      1         64           0                     0                 1
+side-a      2         64           1                     0                 1
+side-a      4         64           2                     0                 2
+side-a      8         64           2                     0                 2
+side-b      1         80          15                     0                 4
+side-b      2         80          19                     0                 4
+side-b      4         80          22                     0                 4
+side-b      8         80          22                     0                 4
+```
+
+The blind witness now appears in both independent conversations. Seed 401
+keeps A.65's same-turn Nareth event:
+
+```text
+human: What can morning change without making a sound?
+Leo:   He respects them. Leo cannot hear. The private life. He laugh at night.
+```
+
+Seed 307 supplies the reversed temporal event. On turn 21 the sealed prompt
+asks what makes a hallway feel longer `at night`. Three turns later, without
+another Nareth-side prompt, Leo says:
+
+```text
+He looks a little of the morning after a day. Then a day. Leo heard.
+He caught some.
+```
+
+That event is absent from windows 1 and 2 and present in windows 4 and 8.
+Side A also ceases to be an absolute zero: `light -> night` completes Nareth
+inside window 4, and `man -> she` completes Flom in the adjacent turn. The
+directional imbalance remains large, but it is a difference in rate rather
+than a binary inability.
+
+This establishes a provenance-valid **ordered complement**, not yet causal
+influence. A sealed external meaning preceding Leo's complement is necessary
+evidence, but Leo might have produced the same word from the same body and
+seed under a neutral prompt. The next boundary therefore requires a matched
+counterfactual: branch from the exact pre-turn state and PRNG position, change
+only the external semantic side, and ask whether completion follows the
+cause rather than merely arriving after it.
+
+No provenance shadow is embodied and no appetite reader is admitted. Two
+complete runs reproduced the generated body, all six external lives, sealed
+inputs, state-machine evidence, and summaries byte for byte. The observer
+also left the source body hash unchanged. No member of `Leo`, state byte,
+generation reader, sampler, threshold, or weight changed. The receipt is:
+
+```sh
+make deferred-wonder-appetite-provenance-shadow
+```
