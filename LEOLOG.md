@@ -5674,3 +5674,84 @@ generation reader, sampler, threshold, or weight changed. The receipt is:
 ```sh
 make deferred-wonder-appetite-provenance-shadow
 ```
+
+## Phase A.67 — after is not because (2026-07-29)
+
+A.66 preserved source and order, then stopped before naming either one a
+cause. A.67 tests that restraint directly. It selects the two blind and two
+side-A ordered complements that survived the provenance shadow, reconstructs
+the exact body immediately before each external invitation, and branches four
+times from the same bytes and PRNG seed:
+
+```text
+target    the original external anchor
+synonym   another surface mapped to the same glyph
+neutral   a familiar surface mapped to neither Wonder side
+opposite  the other side of the Wonder pair
+```
+
+Every later prompt and per-turn seed remains identical. The target branch must
+reproduce the already sealed A.65 replies byte for byte before any
+counterfactual is considered. Prompt geometry is checked by the real body:
+target and synonym supply the declared side, neutral supplies neither side,
+and opposite supplies only the other side for the Wonder under test.
+
+The four interventions are:
+
+```text
+blind-307 Nareth   night / midnight / once / dawn
+blind-401 Nareth   morning / sunrise / memory / evening
+side-A-307 Nareth  light / sun / time / dark
+side-A-401 Flom    man / father / person / woman
+```
+
+All four selected target branches contain the expected self side, as required
+by their selection. The counterfactual result is:
+
+```text
+case                 target   synonym   neutral   opposite reversal
+blind-307 Nareth        1         1         1              0
+blind-401 Nareth        1         0         1              0
+side-A-307 Nareth       1         1         1              0
+side-A-401 Flom         1         1         1              0
+```
+
+Thus all **4/4** events fail semantic necessity. Removing the external Wonder
+side does not remove Leo's later expected side:
+
+- blind-307 reaches the same `morning` reply under `night`, `midnight`,
+  neutral `once`, and opposite `dawn`;
+- blind-401 emits the exact same `night` reply under target `morning` and
+  neutral `memory`, while same-glyph `sunrise` produces another reply;
+- side-A-307 reaches the same `night` under `light`, `sun`, and neutral
+  `time`;
+- side-A-401 reaches the same `she` under `man`, `father`, neutral `person`,
+  and even opposite `woman`.
+
+Only **3/4** events survive a same-glyph synonym, and **0/4** reverse under the
+opposite side. The surface sensitivity of blind-401 is real, but it is not a
+glyph-level complement: neutral `memory` preserves the selected outcome while
+same-glyph `sunrise` does not.
+
+The verdict is **ordered, not caused**. These four A.66 completions are honest
+provenance observations, but none is admissible evidence that the external
+side caused Leo's complement. This does not prove that external meaning has no
+causal effect anywhere. The cases were deliberately selected after their
+target outcomes were observed, so A.67 tests individual necessity rather than
+population lift.
+
+The next admissible causal experiment must remove that selection: preregister
+every qualifying external invitation, branch target/synonym/neutral/opposite
+before reading any outcome, and estimate paired immediate and temporal lift
+over the entire cohort. Until such lift exists, the A.66 shadow remains a
+diagnostic and cannot vote in appetite.
+
+Two complete A.67 runs reproduced the external lives, exact pre-turn bodies,
+all sixteen branch reply streams and states, source evidence, results, and
+verdicts byte for byte. The source body hash remained unchanged. No member of
+`Leo`, state byte, generation reader, sampler, threshold, or weight changed.
+The receipt is:
+
+```sh
+make deferred-wonder-appetite-matched-counterfactual
+```
