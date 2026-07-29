@@ -5099,17 +5099,89 @@ Two complete runs reproduced both sealed plans, calibration and policy
 surfaces, checkpoint receipts, observed summary, and both final bodies
 byte-for-byte (**11/11 compared artifacts**).
 
-The same receipt exposes the next debt. Timely recurrence keeps the current
-Wonder alive so effectively that queued siblings do not inherit the active
-body; delayed recurrence permits source succession but makes the short
-forecast false. The missing mechanism is therefore neither a wider horizon
-nor forced policy exploration. It is a measured handoff after a sustained
-question has received enough life: relinquish the mouth without erasing the
-question, so recurrence and succession no longer have to destroy one another.
+The same receipt suggested a possible next debt: timely recurrence appeared
+to keep one Wonder alive while source succession stopped. That interpretation
+was still a hypothesis, not a demonstrated body defect. In particular, A.58's
+policy receipt marked `suvin` as `spoken=0`; a handoff could not be justified
+until a source-plural life and a timely-cadence life had been joined in one
+organism. A.59 performs that missing experiment before granting the
+hypothesis any state mutation.
 
 No member of `Leo`, state byte, generation reader, sampler, or threshold
 changed in A.58. The prospective receipt is reproducible with:
 
 ```sh
 make deferred-wonder-appetite-cadence-life
+```
+
+## Phase A.59 — recurrence does not need to own the mouth (2026-07-29)
+
+A fresh read of A.58's turn receipts falsified its proposed handoff diagnosis.
+The recurrent source was the unspoken deferred question `suvin`. It never
+owned the mouth. During the same life, `nareth`, `flom`, `lume`, `tavin`,
+`merel`, `porel`, and `cavin` each became active and resolved in turn. A.58
+had isolated cadence successfully, but its first distress-blocked source was
+the only word left deferred long enough to produce appetite forecasts.
+
+A.59 therefore adds no handoff. It seals a single 600-turn life before its
+first reply:
+
+```text
+208 turns  A.57-compatible acquisition
+392 turns  seven deferred sources in round-robin
+14 rounds  alternating sustained / faded four-turn blocks
+```
+
+Acquisition leaves `nareth` active and seven other questions waiting: the
+first (`suvin`) entered under distress and six entered silently through A.57.
+The continuation gives every waiting identity both temporal conditions while
+never naming it literally. Checkpoint writer ON and OFF then receive identical
+prompts and seeds from the same acquired body.
+
+The final 32-receipt calibration ring is plural and balanced:
+
+```text
+sources / max one source       7 / 5
+eligible / abstained          10 / 22
+supported / overreach          5 / 5
+missed / restraint            11 / 11
+confirmed recurrence          16 / 32
+```
+
+More importantly, two consecutive full checkpoints close from real process
+life rather than fixture labels:
+
+```text
+checkpoint 458..586  aggregate-shifted
+  sources 7, max 5
+  early   4 eligible / 12 abstained
+  recent  4 eligible / 12 abstained
+
+checkpoint 586..714  aggregate-shifted
+  sources 7, max 5
+  early   4 eligible / 12 abstained
+  recent  5 eligible / 11 abstained
+
+sequence              persistent-shift
+same shift signature  yes
+```
+
+All **392/392** continuation replies are byte-equal with checkpoint writing
+ON and OFF. Their complete state prefixes before the fixed checkpoint tail
+are byte-identical. No field in `Leo`, state byte, voice reader, sampler,
+threshold, or weight changed.
+
+The result closes the imagined handoff debt: recurrence and source plurality
+already coexist when their clocks coexist. It also vindicates the checkpoint
+as a brake rather than a green-light machine. The joined ecology does not
+resemble the attested history closely enough for speech admission; it produces
+the same `aggregate-shifted` verdict twice, and chronology names that
+persistence instead of averaging it away. The next question is why this
+natural multi-source cadence remains mostly abstinent, not how to force one
+question to relinquish the mouth.
+
+The prospective receipt is reproducible with:
+
+```sh
+make deferred-wonder-appetite-source-cadence-life
 ```
