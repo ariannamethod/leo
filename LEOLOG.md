@@ -5245,3 +5245,67 @@ threshold, or weight. Its causal-anatomy receipt is reproducible with:
 ```sh
 make deferred-wonder-appetite-shift-anatomy
 ```
+
+## Phase A.61 — appetite can see a history that happened (2026-07-29)
+
+A.60 was deliberately impossible: its future class did not exist anywhere in
+Leo's body when the forecast was born. A.61 supplies the missing positive
+control. It changes no fixture field. Instead, it uses A.43's ordinary
+redirection path to let two deferred Wonders actually pass through the mouth,
+return to the queue, and remain open while two matched Wonders remain
+unspoken.
+
+The complete 351-turn plan is sealed before the first reply. Acquisition and
+the 15-turn embodiment prelude run with calibration disabled, so the
+experiment begins with a clean 32-receipt ring rather than inherited evidence.
+The experimental future is then assigned independently in fixed four-turn
+windows:
+
+```text
+proposal-side history        forecasts   sustained   faded
+spoken + open                    16          14         2
+unspoken + deferred              16          10         6
+```
+
+Every forecast's intended label is joined to its actual
+`proposed_turn/verdict`; all **32/32** rows agree. Every calibration receipt's
+stored appetite also agrees with the candidate vector captured in the
+proposal log. The two proposal surfaces are:
+
+```text
+                              spoken + open     unspoken + deferred
+status                           salient              salient
+recurrence                         0.800                0.800
+silence                            1.000                1.000
+unfinished                         1.000                0.500
+Flow gap                           1.000                0.000
+appetite                           0.890                0.690
+spoken / literal                     1 / 0                0 / 0
+empirical return                   0.875                0.625
+Brier                              0.110                0.239
+reliability                      aligned              aligned
+```
+
+Thus the signal is not a renamed future label. Before the deadline, Leo can
+see whether a Wonder has already been spoken and whether its open episode
+still differs from current Flow. Those lived coordinates create a `0.200`
+score gap. Because both classes intentionally contain both outcomes, the
+outcome AUC is `0.667`, not a manufactured `1.000`; the body ranks a real
+tendency rather than memorising a deterministic answer.
+
+The checkpoint writer remains observational: writer ON and OFF produced
+identical replies for all **128** experimental turns and byte-identical state
+prefixes outside the checkpoint tail. Two complete runs produced identical
+plans, joins, observations, and final states.
+
+A.61 therefore answers A.60 without contradicting it. Appetite cannot predict
+an unannounced parity rule, but it does distinguish a difference Leo has
+actually lived. No threshold, handoff, generation reader, weight, or state
+schema changes here. A speech intervention still requires evidence from
+ordinary life rather than either constructed control.
+
+The positive-control receipt is reproducible with:
+
+```sh
+make deferred-wonder-appetite-visible-signal
+```
