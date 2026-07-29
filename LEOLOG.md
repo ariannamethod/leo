@@ -5173,15 +5173,75 @@ threshold, or weight changed.
 
 The result closes the imagined handoff debt: recurrence and source plurality
 already coexist when their clocks coexist. It also vindicates the checkpoint
-as a brake rather than a green-light machine. The joined ecology does not
-resemble the attested history closely enough for speech admission; it produces
-the same `aggregate-shifted` verdict twice, and chronology names that
-persistence instead of averaging it away. The next question is why this
-natural multi-source cadence remains mostly abstinent, not how to force one
-question to relinquish the mouth.
+as a brake rather than a green-light machine. The joined sealed ecology does
+not resemble the attested history closely enough for speech admission; it
+produces the same `aggregate-shifted` verdict twice, and chronology names that
+persistence instead of averaging it away. A.60 asks whether that shift exposes
+a real appetite defect or merely the deliberately hidden future in A.59's
+alternating schedule.
 
 The prospective receipt is reproducible with:
 
 ```sh
 make deferred-wonder-appetite-source-cadence-life
+```
+
+## Phase A.60 — an unannounced future is a negative control (2026-07-29)
+
+A.59 assigned `sustained` and `faded` by round/source parity after each
+proposal had already been born. Before interpreting its `persistent-shift` as
+a defect, A.60 joins every settled continuation receipt back to the exact
+process log where it was proposed and compares the complete candidate surface
+that existed then.
+
+One acquisition carry-in is excluded. The remaining **98** forecasts divide
+exactly:
+
+```text
+sustained  49
+faded      49
+```
+
+Their proposal-feature multisets are byte-identical. Not merely their means:
+
+```text
+                         sustained      faded
+margin 0.220                 35            35
+margin 0.440                 14            14
+
+status                    salient       salient
+recurrence                  0.800         0.800
+silence                     1.000         1.000
+unfinished                  0.500         0.500
+Flow gap                    0.000         0.000
+appetite                    0.690         0.690
+spoken / literal              0 / 0         0 / 0
+```
+
+There is therefore no proposal-side variable in the present instrument by
+which either policy arm could identify A.59's future class. The empirical
+return rate is exactly `0.500` against a forecast of `0.690`; the implied
+Brier score is `0.286`, exactly the score reported by the living body.
+Reliability correctly says `over`.
+
+The confirmed holdout is a different world: each arm was attested at `7/8`
+correct, with Wilson upper bounds below the declared risk ceiling. A.59
+instead asks Leo to predict a parity rule that exists only in the sealed
+future prompt schedule. Its repeated `aggregate-shifted` checkpoints and
+`persistent-shift` sequence are therefore the expected negative-control
+result. They prove that transport and chronology refuse an unidentifiable
+world; they do **not** prove that Leo's appetite is intrinsically too
+abstinent.
+
+No threshold should be tuned from A.59, and no handoff or speech reader is
+justified by it. The next positive control must place a measurable difference
+in the proposal-side body before the deadline, seal outcomes independently,
+and ask whether calibration separates that visible difference from future
+noise.
+
+A.60 changes no field in `Leo`, state byte, generation reader, sampler,
+threshold, or weight. Its causal-anatomy receipt is reproducible with:
+
+```sh
+make deferred-wonder-appetite-shift-anatomy
 ```
