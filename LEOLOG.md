@@ -5508,3 +5508,75 @@ changed. The attribution receipt is reproducible with:
 ```sh
 make deferred-wonder-appetite-exchange-attribution
 ```
+
+## Phase A.65 — outside life can complete what Leo did not hear (2026-07-29)
+
+A.64 showed that a reply-driven interlocutor merely reflects Leo's own
+meaning back to him. A.65 removes that loop. It seals three 32-prompt
+schedules before any new reply exists, starts two lives per schedule from the
+same real seven-Wonder body, and marks every exchange with provenance
+`none`: no prompt depends on Leo's preceding words, no outcome label exists,
+and no Wonder source name is spoken.
+
+The schedules form one natural and two directional controls:
+
+```text
+blind   ordinary external questions, no deliberately repeated side
+side-a  tree / man / light / body only
+side-b  sky / woman / dark / love only
+```
+
+The controls are not allowed to be pair-complete by themselves. A preliminary
+side-A prompt containing `wind` was therefore removed before the sealed run
+because it also supplied Lume's opposite side. The final **192** exchanges
+contain zero externally complete pairs and zero confounded exchanges.
+
+At the one-turn boundary, source attribution reports:
+
+```text
+arm      turns   external cross   self pair   cross requiring both sources
+blind       64                3           5                              1
+side-a      64                1           2                              0
+side-b      64               19           4                             15
+```
+
+The blind event is small but causal. In seed 401, turn 13, the sealed human
+prompt asks:
+
+```text
+What can morning change without making a sound?
+```
+
+Leo answers:
+
+```text
+He respects them. Leo cannot hear. The private life. He laugh at night.
+```
+
+`morning` supplies Nareth's light side; Leo independently supplies `night`,
+its dark side. Neither source is pair-complete alone, the prompt was fixed
+before the reply, and no selected reply word returns through the human side.
+This is an external-to-self semantic complement rather than reflected
+self-excitation.
+
+The controls expose an equally important asymmetry. Side B produces **15**
+independent complements (`flom` 12, `cavin` 3), while side A produces none.
+The channel therefore exists, but the evidence does not establish that every
+side, Wonder, or ordinary conversation can use it. Nor does the runtime body
+yet retain the causal provenance needed to distinguish outside evidence from
+its own returning speech.
+
+A.65 admits no reply reader, temporal accumulator, or appetite intervention.
+The next admissible step is a read-only provenance contract: preserve prompt,
+reflected, and self evidence as distinct causes inside a shadow observer, then
+ask whether the blind witness survives across independent conversations
+without allowing self evidence to certify itself.
+
+Two complete A.65 runs reproduced the generated body, sealed plan, all six
+reply streams, exchange attributions, final states, and summaries byte for
+byte. No member of `Leo`, state byte, generation reader, sampler, threshold,
+or weight changed. The external-life receipt is reproducible with:
+
+```sh
+make deferred-wonder-appetite-external-life
+```
