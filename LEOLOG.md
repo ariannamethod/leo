@@ -5755,3 +5755,92 @@ The receipt is:
 ```sh
 make deferred-wonder-appetite-matched-counterfactual
 ```
+
+## Phase A.68 — every invitation, not only every flower (2026-07-29)
+
+A.67 showed that all four selected ordered complements survived a neutral
+counterfactual. Selection had answered individual necessity, not whether an
+external glyph changes the odds across Leo's life. A.68 therefore seals the
+cohort before seeing any branch outcome:
+
+```text
+2 directed prompt schedules x 2 seeds x 32 turns = 128 cases
+128 exact pre-turn snapshots x 4 variants       = 512 branches
+maximum observation horizon                     = 4 turns
+```
+
+The two schedules contain every A-side and B-side invitation from A.65.
+There is no success filter. Each case branches from identical state bytes and
+uses the same seed at the cause turn, then the original subsequent prompts
+and seeds. `target` must reproduce the A.65 reply slice byte for byte.
+`synonym` retains the source glyph through a different surface, `neutral`
+removes it, and `opposite` supplies the complementary glyph.
+
+The first population pass exposed two weaknesses in the experimental design
+rather than in Leo:
+
+1. Some original invitations legitimately activate School. Requiring
+   `candidate=none` would silently discard population members. A.68 records
+   School outcome and candidate for every branch, reports the total paired
+   effect, and separately reports cases whose four School paths agree.
+2. Some natural prompts carry a source glyph twice: `man ... he`,
+   `light ... morning`, `sky ... wind`, `woman ... she`, or
+   `dark ... night`. Replacing only the headline anchor leaves treatment in
+   the nominal neutral branch and makes the opposite branch two-sided.
+   A.68 keeps target byte-identical but removes all secondary source aliases
+   in neutral and opposite. Prompt geometry is then checked against Leo's
+   actual School glyph map before any estimate is accepted.
+
+The paired result is:
+
+```text
+scope    cases  School diverged  target any  neutral any  helped/harmed  lift
+side-A      64                8           4            3       2 / 1    +0.015625
+side-B      64                8          26           27       2 / 3    -0.015625
+pooled     128               16          30           30       4 / 4     0.000000
+```
+
+On the **112/128** cases where target, synonym, neutral, and opposite retain
+the same School outcome and candidate, target gives `4 helped / 3 harmed`,
+or only `+0.008929`. The synonym contrast is `9 helped / 6 harmed`
+(`+0.023438`) pooled, but it is directionally inconsistent: `+0.078125` on
+side A and `-0.031250` on side B. Opposite prompts reverse into the original
+external side in 28 cases, not as a stable complement rule.
+
+The per-Wonder split explains why a pooled number alone would mislead:
+
+```text
+arm     word      target / synonym / neutral any    target lift   synonym lift
+side-A  cavin                0 /  0 /  0              0.000000       0.000000
+side-A  flom                 3 /  5 /  2             +0.062500      +0.187500
+side-A  lume                 0 /  0 /  0              0.000000       0.000000
+side-A  nareth               1 /  3 /  1              0.000000      +0.125000
+side-B  cavin                4 /  4 /  3             +0.062500      +0.062500
+side-B  flom                16 / 16 / 16              0.000000       0.000000
+side-B  lume                 0 /  0 /  1             -0.062500      -0.062500
+side-B  nareth               6 /  5 /  7             -0.062500      -0.125000
+```
+
+Flom's side-B lane is saturated in all variants; side-A Flom and side-B
+Cavin show small local differences, while Lume and Nareth cancel or reverse
+them. Those interactions were discovered in this cohort and cannot be used
+as confirmatory gates on the same data.
+
+The verdict remains **ordered, not population-caused**. The external lives
+and A.66 provenance shadow describe genuine temporal structure, but the
+current external glyph invitation does not measurably lift its complement
+over a neutral prompt across this population. No appetite reader is admitted.
+A future causal pass must preregister susceptibility conditions, use new
+seeds or lives, and replicate the interaction out of sample before any
+generation path may read it.
+
+Two complete branch runs reproduced all 128 snapshots, 512 branch states and
+evidence streams, 1,952 replies, and results byte for byte. A subsequent clean
+end-to-end run passed the sealed manifest, exact target replay, prompt
+geometry, source and snapshot hashes, and pinned aggregate and per-Wonder
+receipts. No member of `Leo`, state byte, generation reader, sampler,
+threshold, or weight changed. The receipt is:
+
+```sh
+make deferred-wonder-appetite-population-causal-lift
+```

@@ -1,0 +1,9 @@
+arm	anchor	word	synonym	neutral	opposite	external_side	self_side
+side-a	tree	lume	forest	place	sky	a	b
+side-a	man	flom	father	person	woman	a	b
+side-a	light	nareth	sun	time	dark	a	b
+side-a	body	cavin	hand	food	love	a	b
+side-b	sky	lume	cloud	place	tree	b	a
+side-b	woman	flom	mother	person	man	b	a
+side-b	dark	nareth	night	time	light	b	a
+side-b	love	cavin	kiss	food	body	b	a
