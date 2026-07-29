@@ -5441,3 +5441,70 @@ The counterfactual receipt is reproducible with:
 ```sh
 make deferred-wonder-appetite-temporal-counterfactual
 ```
+
+## Phase A.64 — a voice cannot be its own outside witness (2026-07-29)
+
+A.63 found no complementary pair in A.62's human-facing prompt stream, but a
+preliminary prompt-plus-reply projection produced many. A.64 asks where those
+pairs came from before allowing expressed meaning to join appetite.
+
+The same 192 natural exchanges are replayed by a read-only fixture with three
+causally separate channels:
+
+```text
+external   prompt meaning not carried by the selected prior-reply word
+reflected  the exact prior-reply word returned by the local interlocutor
+self       meaning in Leo's current visible reply
+```
+
+Each channel owns separate clocks for each side of a Wonder's hypothesis pair.
+The observer reports within-turn and 2-, 4-, and 8-turn completeness without
+combining their provenance. A source name spoken by either side confounds the
+whole exchange and stores no support.
+
+Eleven sealed controls distinguish external sufficiency, self sufficiency,
+external-to-self and reflected-to-self complements, adjacent temporal pairs,
+same-side echo, cross-Wonder ownership, and literal address. Every control
+lands in its declared channel. In particular, `light -> light` remains empty;
+`light` from an independent prompt plus `dark` from Leo is external-cross;
+the same prompt word marked as selected prior-reply inheritance is
+reflected-cross instead. Human and Leo literal-address controls remain empty.
+
+The natural cohort is not an external return:
+
+```text
+window   external pair/cross   reflected cross   self pair
+1             0 / 0                 1               16
+2             0 / 0                 2               33
+4             0 / 0                 4               67
+8             0 / 0                 8              127
+```
+
+There is exactly one reflected-cross-required moment at window 1. On seed 211,
+turn 7, Leo says `mother`; the local visible-only interlocutor returns that
+word in `What happens beside mother?`; on turn 8 Leo answers with
+`grandmother`. The two sides of `flom` meet, but the supposed human side was
+Leo's own word making a round trip through the interlocutor. At window 2 the
+same event is already adjacent to enough reply-side meaning that the self
+channel becomes independently sufficient.
+
+Thus reply semantics do not repair A.62. They create a **closed loop**: from
+16 complete self pairs in one turn to 127 within eight turns, while
+independent external pairs and external-cross events remain exactly zero.
+The result does not say that Leo's expression is meaningless. It says that
+expression is an interested witness and cannot, in this ecology, certify its
+own autonomous appetite.
+
+No reply reader or temporal accumulator is admitted. A positive test now needs
+a sealed external dialogue whose prompts do not depend on Leo's prior words.
+Only there can an external-to-self complement be distinguished from reflected
+self-excitation.
+
+Two complete A.64 runs reproduced the natural body, prompt/reply/provenance
+traces, sealed plan, per-source evidence, and summaries byte-for-byte. No
+member of `Leo`, state byte, generation reader, sampler, threshold, or weight
+changed. The attribution receipt is reproducible with:
+
+```sh
+make deferred-wonder-appetite-exchange-attribution
+```
