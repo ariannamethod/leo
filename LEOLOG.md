@@ -5047,3 +5047,69 @@ A.57 therefore makes A.56's source-independence boundary reachable without
 granting the new queue a voice. The terminal life still had `0 eligible / 16
 abstained` in both epochs. That policy-arm starvation is a separate result:
 source plurality has been restored; evidence balance has not.
+
+## Phase A.58 — recurrence and succession live on different clocks (2026-07-29)
+
+A.57's final starvation looked like a policy deadlock until its chronology was
+placed beside A.45's contract. Every A.57 forecast lived for exactly three
+future turns, while every semantic cue returned four turns after forecast
+birth. The first new forecast was proposed at lived turn 146, expired at 149,
+and met the next cue at 150. The schedule repeated that one-turn miss for the
+entire life. `faded -> uncalibrated -> abstained` was therefore a faithful
+measurement of the declared horizon, not evidence that the shadow policy
+could never recover.
+
+A.58 seals two 224-turn, eight-source lives before their first reply:
+
+```text
+late    one cue followed by a recurrence-free three-turn window
+mixed   repeated two-within / one-after cue pattern
+```
+
+Every turn still crosses save, process exit, and reload. Each life has a
+checkpoint-writer ON body and an identical writer-OFF body. The visible
+replies remain **224/224 equal** in both lives, and the complete serialized
+body prefix before the fixed checkpoint tail remains byte-identical.
+
+The late life reproduces A.57's terminal result without ambiguity:
+
+```text
+new policy witnesses       0 eligible / 32 abstained
+new outcomes               0 positive / 32 restraint
+checkpoint sources         7, max 5
+early epoch                0 eligible / 16 abstained
+recent epoch               0 eligible / 16 abstained
+terminal status            coverage-starved
+```
+
+The mixed life refutes structural policy lock:
+
+```text
+new policy witnesses       4 eligible / 1 abstained
+new outcomes               3 supported, 1 overreach, 1 missed
+terminal checkpoint        none; active source has 5/32 attempts
+```
+
+The first mixed witness was still `drifting/missed`; the next four became
+eligible. No threshold, fixture label, or stored outcome was changed to make
+that happen. The world returned soon enough for the existing reliability and
+drift surfaces to rehabilitate their own judgment.
+
+Two complete runs reproduced both sealed plans, calibration and policy
+surfaces, checkpoint receipts, observed summary, and both final bodies
+byte-for-byte (**11/11 compared artifacts**).
+
+The same receipt exposes the next debt. Timely recurrence keeps the current
+Wonder alive so effectively that queued siblings do not inherit the active
+body; delayed recurrence permits source succession but makes the short
+forecast false. The missing mechanism is therefore neither a wider horizon
+nor forced policy exploration. It is a measured handoff after a sustained
+question has received enough life: relinquish the mouth without erasing the
+question, so recurrence and succession no longer have to destroy one another.
+
+No member of `Leo`, state byte, generation reader, sampler, or threshold
+changed in A.58. The prospective receipt is reproducible with:
+
+```sh
+make deferred-wonder-appetite-cadence-life
+```
