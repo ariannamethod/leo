@@ -5844,3 +5844,88 @@ threshold, or weight changed. The receipt is:
 ```sh
 make deferred-wonder-appetite-population-causal-lift
 ```
+
+## Phase A.69 — a holdout may refuse its own discovery (2026-07-30)
+
+A.68 found no population target lift, but two of its eight directional cells
+had positive target-versus-neutral and same-glyph-synonym-versus-neutral
+differences at once:
+
+```text
+side-A / Flom
+side-B / Cavin
+```
+
+Those cells are a discovery-derived hypothesis, not evidence that can grade
+itself. A.69 seals them as one `dual-surface-susceptibility` class and assigns
+the other six cells to control before generating any new reply. Its acceptance
+contract is explicit:
+
+```text
+susceptible target lift       > 0
+susceptible synonym lift      > 0
+side-A / Flom target lift    >= 0
+side-B / Cavin target lift   >= 0
+measured replication additionally requires target exact p <= 0.05
+```
+
+The holdout changes both chance and surface. Four unused seeds
+`509/613/719/823` live through two new 32-turn prompt schedules. The new
+sentences contain exactly one declared Wonder side: all **192/192** target,
+synonym, and neutral prompt geometries were checked through Leo's actual glyph
+map before the first holdout reply. No secondary `he`, `morning`, `wind`,
+`night`, or other same-side alias remains to preserve a nominally removed
+treatment.
+
+Every one of the 256 cases is declared before outcomes:
+
+```text
+2 arms x 4 new lives x 32 turns = 256 cases
+256 exact pre-turn states x 3 variants = 768 branches
+variants: target / same-glyph synonym / neutral
+outcome: expected self side within at most 4 turns
+```
+
+Target branches reproduce their new lived trajectories byte for byte. The
+paired holdout result is:
+
+```text
+scope         cases  target helped/harmed  lift       p       synonym h/h  lift       p
+susceptible      64          3 / 1         +0.031250  0.6250        5 / 1  +0.062500  0.218750
+control         192          5 / 8         -0.015625  0.5811        4 / 4   0.000000  1.000000
+pooled          256          8 / 9         -0.003906  1.0000        9 / 5  +0.015625  0.423950
+```
+
+The susceptible aggregate keeps both positive signs, but the predeclared
+cells disagree:
+
+```text
+cell             target any       target h/h   lift       synonym h/h  lift
+side-A / Flom       8 / 32           3 / 0     +0.093750      3 / 0    +0.093750
+side-B / Cavin      0 / 32           0 / 1     -0.031250      2 / 1    +0.031250
+```
+
+Therefore the acceptance contract returns **`not-replicated`**. A pooled
+positive number cannot hide that side-B Cavin reversed under target, and the
+exact paired evidence remains thin. School cannot explain the split:
+all **64/64** susceptible cases keep the same School outcome and candidate
+across target, synonym, and neutral. The 32 School-divergent cases live only
+in the Lume controls and remain published rather than filtered.
+
+Side-A Flom is now a stronger *new* candidate. It carried target and synonym
+across unseen seeds and sentences with three helped and zero harmed
+discordances each. But that narrower hypothesis was selected after reading
+this holdout. A.69 is spent and cannot confirm it. Any A.70 Flom test must
+freeze another independent life surface and acceptance rule first.
+
+The architectural boundary stays closed. Susceptibility is not yet a shared
+property of selected Wonder cells, and neither a global nor cell-local
+appetite reader enters generation. Two complete runs reproduced the natural
+body, all eight target lives, 256 snapshots, 768 branch states and evidence
+streams, 2,928 replies, aggregate and cell summaries, and the verdict byte for
+byte. No member of `Leo`, state byte, sampler, threshold, weight, or speech
+path changed. The receipt is:
+
+```sh
+make deferred-wonder-appetite-susceptibility-holdout
+```

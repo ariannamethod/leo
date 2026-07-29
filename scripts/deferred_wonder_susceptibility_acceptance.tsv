@@ -1,0 +1,6 @@
+criterion	scope	contrast	requirement
+direction-target	susceptible	target-neutral	paired_lift>0
+direction-synonym	susceptible	synonym-neutral	paired_lift>0
+cell-floor	side-a/flom	target-neutral	paired_lift>=0
+cell-floor	side-b/cavin	target-neutral	paired_lift>=0
+measured-target	susceptible	target-neutral	exact_p<=0.05
