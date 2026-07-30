@@ -6003,3 +6003,99 @@ sampler, threshold, weight, or speech path changed. The receipt is:
 ```sh
 make deferred-wonder-appetite-flom-third-life
 ```
+
+## Phase A.71 — one glyph, two conductors (2026-07-30)
+
+A.70 established a narrow fact: `father` increased the probability that the
+other side of Flom (`woman`) appeared, while same-glyph `man` did not replicate
+that effect broadly. A.71 does not test a new population claim and changes no
+reader. It conditions on the nine `father/person`-discordant A.70 cases and
+asks which already-existing path carried the observed difference.
+
+The source A.70 life is rebuilt inside the runner. Its 64-case summary, exact
+nine-case witness set, and all default replies must reproduce before any
+ablation is admitted. A dedicated branch fixture then reloads the saved state
+between every turn, exactly like the CLI. It produced byte-identical default
+replies for all nine cases, three surfaces, and four turns.
+
+Two observer defects were rejected before the result was accepted:
+
+1. The first fixture printed hidden lines after an embedded newline while
+   A.70 measures the first visible `leo>` line. The fixture was corrected to
+   preserve the full state mutation but expose the same visible line.
+2. The first classifier compared only `father` with `person`. That locates the
+   whole Flom complement, not the surface-specific excess. Its run was rejected
+   and the contract was resealed with two contrasts: `father-person` and the
+   same-glyph control `father-man`.
+
+The pre-generation field map uses all **64** exact A.70 states, not only the
+selected witnesses. For every state it maps `man`, `father`, and `person`
+before and after the cause prompt is ingested:
+
+```text
+phase  states  mean woman-associated field mass       father greater than
+               father      man       person            person       man
+pre      64    0.011639   0.004176   0.004230           56/64      56/64
+post     64    0.011639   0.004176   0.004230           56/64      56/64
+```
+
+The equality of pre/post values matters. The current prompt did not manufacture
+the association. `father` entered an already-lived co-occurrence geometry with
+about 2.8 times the mean `woman` mass of either control. Its top constellation
+is distributed (`leo`, `way`, `small`, `name`, `answer`, `king`, and other
+grown words), so this is not a hard-coded `father -> mother` dictionary.
+
+The conditional intervention matrix contains 12 arms, three surfaces, nine
+states, and four turns: **1,296** visible reply rows. School outcome/candidate
+remained identical within every case/arm and no branch named `flom`.
+
+The default selected cases contain two different baselines:
+
+```text
+contrast         helped / harmed   conditional lift   exact p
+father-person         8 / 1            +0.777778       0.039062
+father-man            7 / 1            +0.666667       0.070312
+```
+
+The p-values describe the selected witness set only. They are not a fourth
+holdout and must not be promoted to population evidence.
+
+Two conductors emerged:
+
+```text
+ablation        father-person              father-man
+no-presence     3 / 1, mixed               0 / 0, erased 7/7 positive
+no-capsule      2 / 0, erased 6/8 positive 2 / 0, erased 5/7 positive
+```
+
+`presence` is the necessary candidate for the **surface excess**: without the
+prompt's co-occurrence tilt, `father` and same-glyph `man` are outcome-identical
+in all nine witnesses. Yet some `man/woman` complement remains, so presence is
+not the whole Flom path.
+
+The capsule is a candidate conductor for both layers. This does not yet name
+its internal mechanism: `--no-capsule` jointly removes gamma pull, BE/ASK
+dependence, prompt-meaning resonance, and the meaning face of spore recall.
+Calling any one of those the cause would outrun the intervention.
+
+`SPA` and lexical breath reproduce the default outcome table exactly.
+Continuation theme, leash, and consolidation retain enough positive witnesses
+to be non-necessary under the sealed rule. Dario, remembered trace, and
+Santaclaus are mixed modifiers rather than localized roots; register is
+non-necessary for the same-glyph surface excess.
+
+Two complete raw A.71 lives reproduced A.70 manifest/results, all 384
+cartography rows, all 1,296 branch rows, and all 324 aggregate result rows byte
+for byte. The final end-to-end runner also passed its pinned receipts. No
+member of `Leo`, state schema, weight, threshold, sampler, or speech path
+changed. The receipt is:
+
+```sh
+make deferred-wonder-father-path-localization
+```
+
+The next admissible experiment is a capsule factorial over the same exact
+states: existing `--no-be` and `--no-ask` arms, plus a diagnostic separation of
+gamma affect from prompt-meaning/spore resonance. It must preserve `presence`
+as the measured surface conductor rather than adding a new boost for
+`father`.

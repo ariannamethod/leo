@@ -1,0 +1,13 @@
+arm	flag	family
+default	none	baseline
+no-presence	--no-presence	presence-root
+no-dario	--no-dario	presence-boundary
+no-heard	--no-heard	remembered-surface
+no-cont-theme	--no-cont-theme	presence-continuation
+no-leash	--no-leash	presence-restoring-force
+no-spa	--no-spa	cross-sentence-rewrite
+no-santaclaus	--no-santaclaus	spore-recall
+no-capsule	--no-capsule	glyph-capsule
+no-consolidation	--no-consolidation	shard-memory
+no-breath	--no-breath	lexical-breath
+no-register	--no-register	chamber-voice
