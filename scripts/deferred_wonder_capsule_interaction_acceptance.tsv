@@ -1,0 +1,10 @@
+hypothesis	contrast	direction	breadth	interpretation
+ASK-main	father-person	mean>0	positive_seeds>=3/4	replicated only with matching father-man row
+ASK-main	father-man	mean>0	positive_seeds>=3/4	replicated only with matching father-person row
+ASKxmeaning	father-person	mean>0	positive_seeds>=3/4	replicated only with matching father-man row
+ASKxmeaning	father-man	mean>0	positive_seeds>=3/4	replicated only with matching father-person row
+ASKxBE	father-person	mean>0	positive_seeds>=3/4	generalized only with matching father-man row
+ASKxBE	father-man	mean>0	positive_seeds>=3/4	generalized only with matching father-person row
+population	all	32 sealed cases; no outcome selection	no exclusions	new lives localize generalization, not universal speech
+geometry	all	School stable within case/arm; no Flom names	no confounds	surface intervention only
+body	all	pull=1 and diary=1 in factorial	no tuning	default behavior and learned body unchanged
