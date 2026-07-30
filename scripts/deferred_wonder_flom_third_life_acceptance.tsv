@@ -1,0 +1,7 @@
+criterion	contrast	requirement
+direction-target	target-neutral	paired_lift>0
+direction-synonym	synonym-neutral	paired_lift>0
+breadth-target	target-neutral	positive_seeds>=4/8
+breadth-synonym	synonym-neutral	positive_seeds>=4/8
+measured-target	target-neutral	exact_p<=0.05
+measured-synonym	synonym-neutral	exact_p<=0.05
