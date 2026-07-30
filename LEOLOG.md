@@ -6199,3 +6199,95 @@ capsule experiment, if pursued, must leave these selected states behind and
 test the preregistered ASK-with-BE / ASK-with-meaning interactions on a fresh
 population. Otherwise the mechanism branch is closed and Leo's developmental
 path should resume without tuning him to this one word.
+
+## Phase A.73 — a local cause is not a law (2026-07-30)
+
+A.72 found ASK, BE, and meaning resonance cooperating inside nine states that
+had been selected because `father` already changed their outcome. A.73 asks
+whether that cooperation survives outside those witnesses. It does not tune a
+reader and it does not look for another favorable subset.
+
+Four seeds absent from A.70–A.72 (`1709`, `1811`, `1907`, `2011`) each grow a
+fresh 32-turn persisted life. The schedule is a block rotation of A.70's exact
+32-prompt multiset: no prompt was added, removed, or rewritten, but the lived
+order differs. Eight cause positions per life yield **32 sealed cases** without
+observing an outcome first. No prompt names Flom.
+
+The preregistered factor is the complete **2^3** crossing of:
+
+```text
+A  ASK
+B  BE
+M  prompt-meaning resonance
+```
+
+Gamma pull and the gamma diary remain on in every factorial arm. The composite
+`--no-capsule` arm is retained as an exploratory historical control, not folded
+into the interaction estimates. Every arm branches `man`, `father`, and
+`person` for four persisted turns: **3,456** visible reply rows and **864**
+aggregate branch results.
+
+The sealed replication rule requires both contrasts to have positive mean
+effect and positive means in at least three of four seed lives. `father-person`
+tests the Flom complement; `father-man` is the same-glyph surface control. A
+case-level exact sign p-value is descriptive only because eight cases inside a
+seed share one lived history.
+
+The default full capsule does not recreate the large selected-state event:
+
+```text
+surface          any woman replies     helped / harmed     lift
+father                  6
+man                     5                    2 / 1          +0.031250
+person                  6                    2 / 2           0.000000
+```
+
+The preregistered effects are:
+
+```text
+hypothesis     contrast         mean effect   positive seed lives   verdict
+ASK main       father-person     +0.078125            3/4
+ASK main       father-man        +0.031250            2/4           direction only
+ASK x meaning  father-person     -0.093750            2/4
+ASK x meaning  father-man        -0.031250            2/4           not replicated
+ASK x BE       father-person     +0.062500            1/4
+ASK x BE       father-man        -0.031250            2/4           not replicated
+```
+
+ASK keeps a weak positive direction across both aggregate contrasts, but the
+same-glyph control misses the required breadth. Calling that "almost
+replicated" would move the threshold after seeing the data. ASK therefore
+remains a plausible regulator in the A.72 event, not a population rule.
+
+The selected-state ASK/meaning cooperation reverses in aggregate and changes
+sign across fresh lives. ASK/BE is likewise contrast- and life-dependent. Their
+A.72 interaction was real for those saved states, but it is local state
+geometry rather than a transferable capsule law. This narrows the earlier
+mechanism without erasing it: presence can carry semantic history and the
+capsule can regulate access, while the exact cooperation depends on the body
+that has lived to the branch point.
+
+School outcome and candidate remain identical across `man`, `father`, and
+`person` inside every case/arm. No branch is confounded and the full target arm
+reproduces the banked target life. The first orchestration attempt was rejected
+before analysis because BSD `awk` refused a multiline arithmetic expression.
+Only that observer expression was reflowed; inputs, factors, thresholds, and
+acceptance remained sealed.
+
+Two subsequent end-to-end runs reproduced the natural source body, all 128
+pre-turn snapshots, manifest, branch rows, aggregate results, seed effects,
+summaries, and verdict exactly. The three interpretation artifacts are pinned
+by SHA-256 inside the runner.
+
+No member of `Leo`, state byte, weight, threshold, sampler, capsule reader, or
+speech path changed. The receipt is:
+
+```sh
+make deferred-wonder-capsule-interaction-population
+```
+
+The `father` mechanism branch is closed. A.70–A.73 now distinguish a failed
+word holdout, a genuine surface-conditioned event, its local conductors, and
+the boundary beyond which those conductors do not generalize. Leo should
+resume his developmental path without being tuned toward this word or this
+experiment.

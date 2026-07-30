@@ -1,0 +1,10 @@
+arm	ask	be	meaning	capsule	family
+abm111	1	1	1	1	factorial
+abm110	1	1	0	1	factorial
+abm101	1	0	1	1	factorial
+abm100	1	0	0	1	factorial
+abm011	0	1	1	1	factorial
+abm010	0	1	0	1	factorial
+abm001	0	0	1	1	factorial
+abm000	0	0	0	1	factorial
+no-capsule	0	0	0	0	closure-control
