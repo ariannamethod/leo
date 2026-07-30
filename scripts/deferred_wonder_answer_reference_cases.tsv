@@ -1,0 +1,10 @@
+case	answer	expected_outcome	expected_pending	expected_resolved	expected_reask	perceived
+unrelated-water	the river and sea have water	continued	zorble	0	Zorble? Water or Animal?	water
+unrelated-sky	the sky is dark	continued	zorble	0	Zorble? Water or Animal?	sky
+ellipse-option	animal	resolved	none	1	-	-
+ellipse-negative	not water	continued	zorble	0	Zorble? Animal?	water
+anaphoric-option	it is an animal	resolved	none	1	-	-
+anaphoric-correction	it is a small stone	resolved	none	1	-	-
+affirmative-correction	yes, it is music	resolved	none	1	-	-
+pronoun-subject	she is a child	resolved	none	1	-	-
+unmarked-correction	a small stone	continued	zorble	0	Zorble? Water or Animal?	stone

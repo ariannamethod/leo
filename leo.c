@@ -5592,6 +5592,15 @@ typedef struct {
     int rejected_total;
 } LeoSchoolAnswerEvidence;
 
+typedef enum {
+    LEO_SCHOOL_ANSWER_UNREFERENCED = 0,
+    LEO_SCHOOL_ANSWER_EXPLICIT,
+    LEO_SCHOOL_ANSWER_ANAPHORIC,
+    LEO_SCHOOL_ANSWER_ELLIPTIC
+} LeoSchoolAnswerReference;
+
+static int leo_school_text_has_word(const char *text, const char *word);
+
 static int leo_school_word_negates(const char *word) {
     static const char *negators[] = {
         "not", "no", "never", "neither", "nor", "without",
@@ -5627,6 +5636,16 @@ static int leo_school_word_is_discourse_subject(const char *word) {
     return 0;
 }
 
+static int leo_school_word_is_affirmation(const char *word) {
+    static const char *affirmations[] = {
+        "yes", "yeah", "yep", "okay", "ok"
+    };
+    for (size_t i = 0;
+         i < sizeof affirmations / sizeof affirmations[0]; i++)
+        if (!strcmp(word, affirmations[i])) return 1;
+    return 0;
+}
+
 static int leo_school_negation_punctuation(unsigned char ch) {
     return ch == ',' || ch == '.' || ch == ';' || ch == ':' ||
            ch == '!' || ch == '?';
@@ -5638,7 +5657,7 @@ static void leo_school_answer_evidence(
     if (!leo || !text) return;
 
     char cur[LEO_HEARD_WORDLEN];
-    int wi = 0, negated = 0, word_index = 0;
+    int wi = 0, negated = 0, word_index = 0, clause_words = 0;
     for (const char *p = text; ; p++) {
         unsigned char ch = (unsigned char)*p;
         if (ch && (isalpha(ch) || ch == '\'')) {
@@ -5650,6 +5669,7 @@ static void leo_school_answer_evidence(
             cur[wi] = 0;
             if (leo_school_word_ends_negation(cur)) {
                 negated = 0;
+                clause_words = 0;
             } else if (leo_school_word_negates(cur)) {
                 /* Leo's existing dialogue often says "no a zorble is water"
                  * without a comma. A leading `no` may therefore introduce a
@@ -5675,7 +5695,14 @@ static void leo_school_answer_evidence(
                         negated = 1;
                 }
                 int g = leo_semtok_word(leo, cur);
-                if (leo_glyph_teachable(g)) {
+                int dialogue_marker =
+                    clause_words == 0 &&
+                    leo_school_word_is_affirmation(cur);
+                int referential_subject =
+                    clause_words == 0 &&
+                    leo_school_word_is_discourse_subject(cur);
+                if (!dialogue_marker && !referential_subject &&
+                    leo_glyph_teachable(g)) {
                     if (negated != 0) {
                         evidence->rejected[g]++;
                         evidence->rejected_total++;
@@ -5684,13 +5711,83 @@ static void leo_school_answer_evidence(
                         evidence->asserted_total++;
                     }
                 }
+                if (!dialogue_marker) clause_words++;
             }
             word_index++;
         }
         wi = 0;
         if (!ch) break;
-        if (leo_school_negation_punctuation(ch)) negated = 0;
+        if (leo_school_negation_punctuation(ch)) {
+            negated = 0;
+            clause_words = 0;
+        }
     }
+}
+
+static int leo_school_prompt_has_anaphoric_subject(const char *text) {
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0;
+    for (const char *p = text; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (leo_school_word_is_affirmation(cur) ||
+                leo_school_word_negates(cur)) {
+                wi = 0;
+                if (!ch) break;
+                continue;
+            }
+            return leo_school_word_is_discourse_subject(cur);
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
+/* Adjacency is an answer window, not ownership. A rich answer may teach only
+ * when it names the pending word or begins with an anaphoric subject. The one
+ * unmarked form admitted by adjacency is an elliptical answer over Leo's own
+ * offered alternatives: one asserted option, or one/more rejected options.
+ * Other concept mass makes the turn new life rather than a counterfeit lesson. */
+static LeoSchoolAnswerReference leo_school_answer_reference(
+        const Leo *leo, const char *prompt,
+        const LeoSchoolAnswerEvidence *evidence) {
+    if (!leo || !prompt || !evidence || !leo->school.pending[0])
+        return LEO_SCHOOL_ANSWER_UNREFERENCED;
+    if (leo_school_text_has_word(prompt, leo->school.pending))
+        return LEO_SCHOOL_ANSWER_EXPLICIT;
+    if (leo->school.pending_turns != 0)
+        return LEO_SCHOOL_ANSWER_UNREFERENCED;
+    if (leo_school_prompt_has_anaphoric_subject(prompt))
+        return LEO_SCHOOL_ANSWER_ANAPHORIC;
+
+    int offered[2] = {
+        leo->school.pending_glyph,
+        leo->school.pending_alt_glyph
+    };
+    int asserted_options = 0, rejected_options = 0;
+    for (int g = 0; g < GLYPH_COUNT; g++) {
+        int offered_here =
+            (offered[0] == g || offered[1] == g);
+        if (!offered_here &&
+            (evidence->asserted[g] > 0 ||
+             evidence->rejected[g] > 0))
+            return LEO_SCHOOL_ANSWER_UNREFERENCED;
+        if (offered_here && evidence->asserted[g] > 0)
+            asserted_options++;
+        if (offered_here && evidence->rejected[g] > 0)
+            rejected_options++;
+    }
+    if (asserted_options == 1 ||
+        (asserted_options == 0 && rejected_options > 0))
+        return LEO_SCHOOL_ANSWER_ELLIPTIC;
+    return LEO_SCHOOL_ANSWER_UNREFERENCED;
 }
 
 /* Shared semantic support for one unfinished question. Two matching votes are
@@ -6260,19 +6357,26 @@ static int leo_school_text_has_word(const char *text, const char *word) {
     return 0;
 }
 
-/* A human answer must assert grounded, teachable glyph evidence. A rejected
- * concept remains perceptible but cannot become the learned answer. Adjacency
- * gives the first turn after Leo asks a conversational answer window; after
- * that, the unknown word must be named again. Questions never close questions. */
+/* A human answer must assert grounded, teachable glyph evidence and refer to
+ * the open Wonder. The first turn after Leo asks admits an anaphoric answer or
+ * one elliptical choice among his own offered alternatives; richer corrections
+ * name the unknown. Adjacency alone cannot assign an unrelated clause to Leo's
+ * question. Questions never close questions. */
 static int leo_school_grounded_answer(
         const Leo *leo, const char *prompt,
-        LeoSchoolAnswerEvidence *observed) {
+        LeoSchoolAnswerEvidence *observed,
+        LeoSchoolAnswerReference *reference) {
     LeoSchoolAnswerEvidence evidence;
     memset(&evidence, 0, sizeof evidence);
     if (observed) *observed = evidence;
+    if (reference) *reference = LEO_SCHOOL_ANSWER_UNREFERENCED;
     if (!leo->school.pending[0] || strchr(prompt, '?')) return -1;
     leo_school_answer_evidence(leo, prompt, &evidence);
     if (observed) *observed = evidence;
+    LeoSchoolAnswerReference ref =
+        leo_school_answer_reference(leo, prompt, &evidence);
+    if (reference) *reference = ref;
+    if (ref == LEO_SCHOOL_ANSWER_UNREFERENCED) return -1;
 
     int best = -1, bestn = 0;
     for (int i = 0; i < GLYPH_COUNT; i++)
@@ -6281,12 +6385,7 @@ static int leo_school_grounded_answer(
             bestn = evidence.asserted[i];
             best = i;
         }
-    if (best < 0) return -1;
-    if (leo_school_text_has_word(prompt, leo->school.pending) ||
-        (leo->school.pending_turns == 0 &&
-         evidence.asserted_total + evidence.rejected_total >= 2))
-        return best;
-    return -1;
+    return best;
 }
 
 static void leo_school_title(char *out, size_t out_sz, const char *word) {
@@ -10287,20 +10386,22 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                     occupied_unknown[0] = 0;
             }
             LeoSchoolAnswerEvidence answer_evidence;
+            LeoSchoolAnswerReference answer_reference =
+                LEO_SCHOOL_ANSWER_UNREFERENCED;
             int g = leo_school_grounded_answer(
-                leo, prompt, &answer_evidence);
+                leo, prompt, &answer_evidence,
+                &answer_reference);
             if (g >= 0 && occupied_unknown[0])
                 g = -1;
-            if (g >= 0 && address_veto) {
-                g = -1;
+            if (address_veto) {
+                if (g >= 0) g = -1;
                 address_guarded = 1;
                 leo->wonder_address.guarded = 1;
             }
             if (g < 0 && !occupied_unknown[0] &&
                 !address_veto &&
-                (leo_school_text_has_word(
-                     prompt, leo->school.pending) ||
-                 leo->school.pending_turns == 0))
+                answer_reference !=
+                    LEO_SCHOOL_ANSWER_UNREFERENCED)
                 leo_school_narrow_pending(
                     leo, &answer_evidence);
             if (g >= 0) {
