@@ -1,0 +1,8 @@
+case	answer	expected_outcome	expected_pending	expected_resolved	expected_reask
+negative-one	a zorble is not water	continued	zorble	0	Zorble? Animal?
+negative-both	a zorble is neither water nor animal	continued	zorble	0	Zorble?
+contrast	a zorble is not water but animal	resolved	none	1	-
+discourse-no	no a zorble is water in the river and the sea	resolved	none	1	-
+contradiction	a zorble is not water but water	continued	zorble	0	Zorble? Animal?
+not-knowing	I do not know	continued	zorble	0	Zorble? Water or Animal?
+positive	a zorble is a small animal	resolved	none	1	-

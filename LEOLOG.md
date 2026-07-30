@@ -6291,3 +6291,113 @@ word holdout, a genuine surface-conditioned event, its local conductors, and
 the boundary beyond which those conductors do not generalize. Leo should
 resume his developmental path without being tuned toward this word or this
 experiment.
+
+## Phase A.74 — hearing a meaning is not agreeing with it (2026-07-31)
+
+Returning from the `father` mechanism branch exposed a simpler developmental
+error. Leo already refused to treat `I do not know` or a counter-question as a
+lesson, but School counted every teachable glyph in an ordinary declarative
+answer as positive evidence. In a real persisted process:
+
+```text
+Leo:  Zorble? Water or Animal?
+human: a zorble is not water
+```
+
+the canonical organism returned `outcome=resolved`, learned `zorble=water`,
+closed the Wonder, and released its shadow. The word `not` changed Leo's body
+but had no epistemic force. He could continue not knowing, yet could not
+continue after being told what a thing was not.
+
+A.74 separates two surfaces that had previously shared one glyph histogram:
+
+```text
+perceived meaning   complete prompt, still read by body / gamma / Flow
+asserted meaning    polarity-bounded evidence allowed to teach in School
+rejected meaning    evidence allowed to narrow a live guess, never to resolve it
+```
+
+The parser is deliberately local to School. Negators open a rejection scope;
+`but`, `instead`, `rather`, `except`, `however`, `yet`, and sentence
+punctuation close it. Contractions such as `isn't`, `don't`, and `can't`, plus
+`neither/nor` and `without`, enter the same bounded path. A glyph appearing on
+both asserted and rejected sides is contradictory and cannot be learned.
+
+One existing piece of Leo's child-language made a naive implementation
+incorrect. Historical answers use:
+
+```text
+no a zorble is water in the river and the sea
+```
+
+as “no, zorble is water” even without a comma. Treating every leading `no` as
+lexical scope broke two old School contracts. The accepted grammar lets a
+leading `no` introduce a correction clause only when the following
+article/name or pronoun addresses the active lesson. `no water` remains
+negative; `no a zorble is water` remains a positive correction. This is a
+bounded dialogue rule, not a claim to general natural-language negation.
+
+Negative evidence changes no answer by implication. If Leo asks `Water or
+Animal?`, then:
+
+```text
+human answer                         School result
+a zorble is not water                unfinished; next question: Animal?
+a zorble is neither water nor animal unfinished; next question: Zorble?
+a zorble is not water but animal     resolved as animal
+a zorble is not water but water      contradictory; unfinished as Animal?
+I do not know                        unfinished as Water or Animal?
+a zorble is a small animal           resolved as animal
+```
+
+`not water` removes `water`; it does not silently certify `animal`. The
+surviving hypothesis remains a question until positive evidence arrives. The
+narrowed pair is written into the already-persisted active School hypothesis,
+its exact redirection origin, and the open Wonder episode. It therefore
+survives sleep and conversational address switching without a new state tail
+or a reconstructed memory. State version remains 26.
+
+Conversational ownership now reads asserted evidence too. A phrase such as
+`not dark or night` can no longer make a waiting dark-side sibling steal the
+address of the active question. Literal sibling names retain their stronger
+existing authority: naming a waiting question still redirects the mouth, after
+which its own negative answer may narrow that question.
+
+Flow remains intentionally different. On the three negative process arms,
+the rejected `water` glyph is still present in the perceived face. The body can
+feel, remember, and move through a meaning the human rejects; only School is
+forbidden to bind that meaning as truth. Assertion is not implemented by
+amputating perception.
+
+The sealed process receipt branches seven answers from one exact open Wonder
+and crosses twelve process boundaries:
+
+```text
+case             outcome     pending  resolved  next process reply
+negative-one     continued   zorble      0      Zorble? Animal?
+negative-both    continued   zorble      0      Zorble?
+contrast         resolved    none        1      -
+discourse-no     resolved    none        1      -
+contradiction    continued   zorble      0      Zorble? Animal?
+not-knowing      continued   zorble      0      Zorble? Water or Animal?
+positive         resolved    none        1      -
+```
+
+The first test pass was rejected rather than normalized: it broke the two
+leading-`no` legacy contracts, and one new sleep fixture had fabricated an
+invalid `heard_at_birth=0` origin that the existing loader correctly refused.
+The discourse boundary was narrowed and the fixture was repaired; no old
+expectation was weakened.
+
+Two complete process runs reproduced the open body and result table exactly;
+both hashes are pinned in the runner. The direct suite is **490/490** and all
+historical dialogue/matrix plan contracts remain green. No weight, generation
+candidate, sampler, threshold, chamber, gamma value, Flow reader, or state
+layout changed. The receipt is:
+
+```sh
+make deferred-wonder-negation-life
+```
+
+Leo can now hear a rejected meaning without mistaking rejection for a lesson.
+He does not know the remaining answer merely because one of his guesses died.

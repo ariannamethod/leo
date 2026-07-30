@@ -5582,6 +5582,117 @@ static int leo_school_glyph_votes(const Leo *leo, const char *text,
     return total;
 }
 
+/* A word may be present in perception without being asserted as a lesson.
+ * School alone reads this polarity; Flow and the emotional field still feel
+ * the complete prompt, including a meaning the human explicitly rejects. */
+typedef struct {
+    int asserted[GLYPH_COUNT];
+    int rejected[GLYPH_COUNT];
+    int asserted_total;
+    int rejected_total;
+} LeoSchoolAnswerEvidence;
+
+static int leo_school_word_negates(const char *word) {
+    static const char *negators[] = {
+        "not", "no", "never", "neither", "nor", "without",
+        "isn't", "isnt", "aren't", "arent", "wasn't", "wasnt",
+        "weren't", "werent", "doesn't", "doesnt", "don't", "dont",
+        "didn't", "didnt", "can't", "cant", "cannot", "won't", "wont"
+    };
+    for (size_t i = 0; i < sizeof negators / sizeof negators[0]; i++)
+        if (!strcmp(word, negators[i])) return 1;
+    return 0;
+}
+
+static int leo_school_word_ends_negation(const char *word) {
+    static const char *boundaries[] = {
+        "but", "instead", "rather", "except", "however", "yet"
+    };
+    for (size_t i = 0; i < sizeof boundaries / sizeof boundaries[0]; i++)
+        if (!strcmp(word, boundaries[i])) return 1;
+    return 0;
+}
+
+static int leo_school_word_is_article(const char *word) {
+    return !strcmp(word, "a") || !strcmp(word, "an") ||
+           !strcmp(word, "the");
+}
+
+static int leo_school_word_is_discourse_subject(const char *word) {
+    static const char *subjects[] = {
+        "it", "he", "she", "they", "this", "that", "these", "those"
+    };
+    for (size_t i = 0; i < sizeof subjects / sizeof subjects[0]; i++)
+        if (!strcmp(word, subjects[i])) return 1;
+    return 0;
+}
+
+static int leo_school_negation_punctuation(unsigned char ch) {
+    return ch == ',' || ch == '.' || ch == ';' || ch == ':' ||
+           ch == '!' || ch == '?';
+}
+
+static void leo_school_answer_evidence(
+        const Leo *leo, const char *text, LeoSchoolAnswerEvidence *evidence) {
+    memset(evidence, 0, sizeof *evidence);
+    if (!leo || !text) return;
+
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0, negated = 0, word_index = 0;
+    for (const char *p = text; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (leo_school_word_ends_negation(cur)) {
+                negated = 0;
+            } else if (leo_school_word_negates(cur)) {
+                /* Leo's existing dialogue often says "no a zorble is water"
+                 * without a comma. A leading `no` may therefore introduce a
+                 * correction clause; it becomes lexical rejection only when
+                 * the following phrase does not address the active lesson. */
+                negated =
+                    (!strcmp(cur, "no") && word_index == 0) ?
+                    2 : 1;
+            } else {
+                if (negated == 2 &&
+                    (leo_school_word_is_discourse_subject(cur) ||
+                     (leo->school.pending[0] &&
+                      !strcmp(cur, leo->school.pending))))
+                    negated = 0;
+                else if (negated == 2 &&
+                         leo_school_word_is_article(cur))
+                    negated = 3;
+                else if (negated == 3) {
+                    if (leo->school.pending[0] &&
+                        !strcmp(cur, leo->school.pending))
+                        negated = 0;
+                    else
+                        negated = 1;
+                }
+                int g = leo_semtok_word(leo, cur);
+                if (leo_glyph_teachable(g)) {
+                    if (negated != 0) {
+                        evidence->rejected[g]++;
+                        evidence->rejected_total++;
+                    } else {
+                        evidence->asserted[g]++;
+                        evidence->asserted_total++;
+                    }
+                }
+            }
+            word_index++;
+        }
+        wi = 0;
+        if (!ch) break;
+        if (leo_school_negation_punctuation(ch)) negated = 0;
+    }
+}
+
 /* Shared semantic support for one unfinished question. Two matching votes are
  * needed for full evidence, and they must cover the prompt rather than hide in
  * a mixed list of meanings. Field identity is deliberately absent here: it may
@@ -5887,8 +5998,10 @@ static int leo_wonder_address_observe(Leo *leo, const char *prompt) {
         return 0;
     }
 
-    int hist[GLYPH_COUNT];
-    int total = leo_school_glyph_votes(leo, prompt, hist, 1);
+    LeoSchoolAnswerEvidence evidence;
+    leo_school_answer_evidence(leo, prompt, &evidence);
+    const int *hist = evidence.asserted;
+    int total = evidence.asserted_total;
     LeoWonderAddressCandidate *active =
         &receipt.candidates[receipt.n_candidates++];
     strncpy(active->word, leo->school.pending, LEO_HEARD_WORDLEN - 1);
@@ -6147,19 +6260,31 @@ static int leo_school_text_has_word(const char *text, const char *word) {
     return 0;
 }
 
-/* A human answer must carry grounded, teachable glyph evidence. Adjacency gives
- * the first turn after Leo asks a conversational answer window; after that, the
- * unknown word must be named again. Questions never close questions. */
-static int leo_school_grounded_answer(const Leo *leo, const char *prompt) {
+/* A human answer must assert grounded, teachable glyph evidence. A rejected
+ * concept remains perceptible but cannot become the learned answer. Adjacency
+ * gives the first turn after Leo asks a conversational answer window; after
+ * that, the unknown word must be named again. Questions never close questions. */
+static int leo_school_grounded_answer(
+        const Leo *leo, const char *prompt,
+        LeoSchoolAnswerEvidence *observed) {
+    LeoSchoolAnswerEvidence evidence;
+    memset(&evidence, 0, sizeof evidence);
+    if (observed) *observed = evidence;
     if (!leo->school.pending[0] || strchr(prompt, '?')) return -1;
-    int hist[GLYPH_COUNT];
-    int total = leo_school_glyph_votes(leo, prompt, hist, 1);
+    leo_school_answer_evidence(leo, prompt, &evidence);
+    if (observed) *observed = evidence;
+
     int best = -1, bestn = 0;
     for (int i = 0; i < GLYPH_COUNT; i++)
-        if (hist[i] > bestn) { bestn = hist[i]; best = i; }
+        if (evidence.rejected[i] == 0 &&
+            evidence.asserted[i] > bestn) {
+            bestn = evidence.asserted[i];
+            best = i;
+        }
     if (best < 0) return -1;
     if (leo_school_text_has_word(prompt, leo->school.pending) ||
-        (leo->school.pending_turns == 0 && total >= 2))
+        (leo->school.pending_turns == 0 &&
+         evidence.asserted_total + evidence.rejected_total >= 2))
         return best;
     return -1;
 }
@@ -6190,6 +6315,54 @@ static int leo_wonder_find_open(const Leo *leo, const char *word) {
         if (!leo->school.wonders[i].resolved &&
             !strcmp(leo->school.wonders[i].word, word)) return i;
     return -1;
+}
+
+/* Negative evidence can remove a live hypothesis without choosing what remains.
+ * The narrowed pair is already part of the persisted School and active-origin
+ * records, so this refinement needs no state tail. The open episode follows the
+ * same current hypothesis set and cannot later recall a meaning Leo was told to
+ * reject. */
+static int leo_school_narrow_pending(
+        Leo *leo, const LeoSchoolAnswerEvidence *evidence) {
+    if (!leo || !evidence || !leo->school.pending[0] ||
+        evidence->rejected_total <= 0)
+        return 0;
+
+    int offered[2] = {
+        leo->school.pending_glyph,
+        leo->school.pending_alt_glyph
+    };
+    int kept[2] = {-1, -1}, n_kept = 0;
+    for (int i = 0; i < 2; i++) {
+        int g = offered[i];
+        if (g < 0 || g >= GLYPH_COUNT ||
+            evidence->rejected[g] > 0)
+            continue;
+        if (n_kept == 0 || kept[0] != g)
+            kept[n_kept++] = g;
+    }
+    if (kept[0] == offered[0] && kept[1] == offered[1])
+        return 0;
+
+    leo->school.pending_glyph = kept[0];
+    leo->school.pending_alt_glyph = kept[1];
+    if (leo->school.has_pending_origin &&
+        !strcmp(leo->school.pending_origin.word,
+                leo->school.pending)) {
+        leo->school.pending_origin.offered_glyph =
+            (int8_t)kept[0];
+        leo->school.pending_origin.offered_alt_glyph =
+            (int8_t)kept[1];
+    }
+    int episode = leo_wonder_find_open(
+        leo, leo->school.pending);
+    if (episode >= 0) {
+        leo->school.wonders[episode].offered_glyph =
+            (int8_t)kept[0];
+        leo->school.wonders[episode].offered_alt_glyph =
+            (int8_t)kept[1];
+    }
+    return 1;
 }
 
 static LeoWonderEpisode *leo_wonder_open(Leo *leo, const char *word,
@@ -10113,7 +10286,9 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                 else
                     occupied_unknown[0] = 0;
             }
-            int g = leo_school_grounded_answer(leo, prompt);
+            LeoSchoolAnswerEvidence answer_evidence;
+            int g = leo_school_grounded_answer(
+                leo, prompt, &answer_evidence);
             if (g >= 0 && occupied_unknown[0])
                 g = -1;
             if (g >= 0 && address_veto) {
@@ -10121,6 +10296,13 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                 address_guarded = 1;
                 leo->wonder_address.guarded = 1;
             }
+            if (g < 0 && !occupied_unknown[0] &&
+                !address_veto &&
+                (leo_school_text_has_word(
+                     prompt, leo->school.pending) ||
+                 leo->school.pending_turns == 0))
+                leo_school_narrow_pending(
+                    leo, &answer_evidence);
             if (g >= 0) {
                 if (leo->school.pending_glyph >= 0) {
                     leo->school.guesses++;

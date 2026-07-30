@@ -54,6 +54,28 @@ static void seed_wonder_redirection_body(Leo *leo) {
         leo->school.pending_alt_glyph, 1, field_token, field_weight);
 }
 
+static void seed_wonder_negation_body(Leo *leo) {
+    leo_init(leo);
+    leo_ingest(
+        leo,
+        "the rain falls. his mother is warm. the cat drinks water.");
+    leo->school.turn_clock = 1;
+    strncpy(leo->school.pending, "zorble",
+            sizeof leo->school.pending - 1);
+    leo->school.pending_glyph = semtok_word("water");
+    leo->school.pending_alt_glyph = semtok_word("animal");
+    leo->school.pending_turns = 0;
+    leo_pending_wonder_origin_begin(
+        leo, leo->school.pending,
+        leo->school.pending_glyph,
+        leo->school.pending_alt_glyph,
+        1, NULL, NULL);
+    leo_wonder_open(
+        leo, leo->school.pending,
+        leo->school.pending_glyph,
+        leo->school.pending_alt_glyph);
+}
+
 static long test_appetite_and_later_tail_size(const Leo *leo) {
     return (long)(2 * sizeof(int32_t) +
         leo->wonder_appetite_calibration.n *
@@ -5173,7 +5195,8 @@ int main(void) {
         CHECK(w.school.n_wonders == 1 && !w.school.wonders[0].resolved &&
               !strcmp(w.school.wonders[0].word, "zorble"),
               "wonder: opening a question births one unfinished episode");
-        CHECK(leo_school_grounded_answer(&w, "I think about zorble") < 0,
+        CHECK(leo_school_grounded_answer(
+                  &w, "I think about zorble", NULL) < 0,
               "wonder: talking about thinking is not a definition");
 
         char rel[LEO_HEARD_WORDLEN] = {0};
@@ -5339,6 +5362,154 @@ int main(void) {
               "wonder: --no-wonder is the pre-wonder one-turn School contract");
         leo_free(&ab);
         g_leo_school_on = prev_school; g_leo_wonder_on = prev_wonder;
+    }
+
+    /* A.74: School distinguishes a meaning the human asserts from one the
+     * human rejects. Negative evidence may narrow Leo's live alternatives, but
+     * it cannot resolve the Wonder or silently choose the surviving guess. */
+    {
+        Leo *neg = calloc(1, sizeof *neg);
+        Leo *woke = calloc(1, sizeof *woke);
+        Leo *address = calloc(1, sizeof *address);
+        CHECK(neg && woke && address,
+              "wonder-negation: heap fixtures allocated");
+        if (neg && woke && address) {
+            int prev_school = g_leo_school_on;
+            int prev_wonder = g_leo_wonder_on;
+            int prev_attribution =
+                g_leo_wonder_attribution_on;
+            g_leo_school_on = 1;
+            g_leo_wonder_on = 1;
+            g_leo_wonder_attribution_on = 1;
+            int water = semtok_word("water");
+            int animal = semtok_word("animal");
+            char out[1024];
+
+            seed_wonder_negation_body(neg);
+            leo_respond(
+                neg, "a zorble is not water",
+                out, sizeof out);
+            const LeoFlowSnapshot *negative_flow =
+                leo_flow_at(&neg->flow, neg->flow.n - 1);
+            CHECK(!leo_school_is_learned(neg, "zorble") &&
+                  !strcmp(neg->school.pending, "zorble") &&
+                  neg->school.pending_glyph == animal &&
+                  neg->school.pending_alt_glyph == -1 &&
+                  !neg->school.wonders[0].resolved,
+                  "wonder-negation: rejecting water narrows the live question without resolving it");
+            CHECK(negative_flow &&
+                  negative_flow->perceived[water] > 0.0f &&
+                  neg->school.pending_origin.offered_glyph ==
+                      animal &&
+                  neg->school.wonders[0].offered_glyph ==
+                      animal,
+                  "wonder-negation: rejected meaning remains perceived while School and provenance narrow");
+
+            const char *path =
+                "/tmp/leo_wonder_negation.state";
+            int saved = leo_save_state(neg, path);
+            leo_init(woke);
+            int loaded =
+                saved && leo_load_state(woke, path);
+            CHECK(loaded &&
+                  !strcmp(woke->school.pending, "zorble") &&
+                  woke->school.pending_glyph == animal &&
+                  woke->school.pending_alt_glyph == -1 &&
+                  woke->school.has_pending_origin &&
+                  woke->school.pending_origin.offered_glyph ==
+                      animal &&
+                  !woke->school.wonders[0].resolved,
+                  "wonder-negation: narrowed uncertainty survives sleep without a new state tail");
+            leo_respond(
+                woke, "what is zorble?", out, sizeof out);
+            CHECK(strstr(out, "Zorble? Animal?") &&
+                  !strstr(out, "Water") &&
+                  woke->school.wonders[0].returns == 1,
+                  "wonder-negation: the next return asks only the surviving hypothesis");
+            leo_respond(
+                woke, "a zorble is animal",
+                out, sizeof out);
+            CHECK(!woke->school.pending[0] &&
+                  leo_semtok_word(woke, "zorble") == animal &&
+                  woke->school.wonders[0].resolved,
+                  "wonder-negation: later positive evidence can still ground the narrowed question");
+
+            leo_free(neg);
+            seed_wonder_negation_body(neg);
+            leo_respond(
+                neg, "a zorble is not water but animal",
+                out, sizeof out);
+            CHECK(!neg->school.pending[0] &&
+                  leo_semtok_word(neg, "zorble") == animal &&
+                  neg->school.wonders[0].answer_glyph ==
+                      animal,
+                  "wonder-negation: contrast ends rejection and grounds the asserted meaning");
+
+            leo_free(neg);
+            seed_wonder_negation_body(neg);
+            leo_respond(
+                neg, "a zorble is neither water nor animal",
+                out, sizeof out);
+            const LeoFlowSnapshot *neither_flow =
+                leo_flow_at(&neg->flow, neg->flow.n - 1);
+            CHECK(!leo_school_is_learned(neg, "zorble") &&
+                  !strcmp(neg->school.pending, "zorble") &&
+                  neg->school.pending_glyph == -1 &&
+                  neg->school.pending_alt_glyph == -1 &&
+                  !neg->school.wonders[0].resolved &&
+                  neither_flow &&
+                  neither_flow->perceived[water] > 0.0f &&
+                  neither_flow->perceived[animal] > 0.0f,
+                  "wonder-negation: neither/nor rejects both guesses without erasing perception");
+
+            leo_free(neg);
+            seed_wonder_negation_body(neg);
+            leo_respond(
+                neg, "no, a zorble is animal",
+                out, sizeof out);
+            CHECK(!neg->school.pending[0] &&
+                  leo_semtok_word(neg, "zorble") == animal,
+                  "wonder-negation: punctuation ends discourse negation before a positive lesson");
+
+            leo_free(neg);
+            seed_wonder_negation_body(neg);
+            leo_respond(
+                neg, "a zorble is not water but water",
+                out, sizeof out);
+            CHECK(!leo_school_is_learned(neg, "zorble") &&
+                  !strcmp(neg->school.pending, "zorble") &&
+                  neg->school.pending_glyph == animal &&
+                  !neg->school.wonders[0].resolved,
+                  "wonder-negation: contradictory evidence fails closed instead of teaching");
+
+            LeoSchoolAnswerEvidence contraction;
+            leo_school_answer_evidence(
+                neg, "zorble isn't water, but animal",
+                &contraction);
+            CHECK(contraction.rejected[water] > 0 &&
+                  contraction.asserted[animal] > 0,
+                  "wonder-negation: contractions and punctuation preserve polarity");
+
+            seed_wonder_address_body(address);
+            int veto = leo_wonder_address_observe(
+                address, "not dark or night");
+            CHECK(!veto &&
+                  address->wonder_address.status ==
+                      LEO_WONDER_ADDRESS_ADJACENT,
+                  "wonder-negation: rejected sibling meaning cannot steal conversational address");
+
+            remove(path);
+            g_leo_school_on = prev_school;
+            g_leo_wonder_on = prev_wonder;
+            g_leo_wonder_attribution_on =
+                prev_attribution;
+        }
+        if (neg) leo_free(neg);
+        if (woke) leo_free(woke);
+        if (address) leo_free(address);
+        free(neg);
+        free(woke);
+        free(address);
     }
 
     /* W-4: a resolved question later returns as glyph attention, not text. The
