@@ -1,0 +1,9 @@
+arm	anchor	word	synonym	neutral	external_side	self_side	class
+side-a	tree	lume	forest	place	a	b	control
+side-a	man	flom	father	person	a	b	susceptible
+side-a	light	nareth	sun	time	a	b	control
+side-a	body	cavin	hand	food	a	b	control
+side-b	sky	lume	cloud	place	b	a	control
+side-b	woman	flom	mother	person	b	a	control
+side-b	dark	nareth	night	time	b	a	control
+side-b	love	cavin	kiss	food	b	a	susceptible
