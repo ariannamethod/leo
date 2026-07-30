@@ -6099,3 +6099,103 @@ states: existing `--no-be` and `--no-ask` arms, plus a diagnostic separation of
 gamma affect from prompt-meaning/spore resonance. It must preserve `presence`
 as the measured surface conductor rather than adding a new boost for
 `father`.
+
+## Phase A.72 — five doors, one capsule (2026-07-30)
+
+A.71 localized a particular A.70 event to `presence` plus a composite capsule
+ablation. A.72 asks what that composite switch removed. It is still a
+conditional mechanism experiment on the same nine outcome-selected states,
+not a new holdout and not an invitation to tune Leo toward `father`.
+
+Reading the implementation exposed a fifth path that the A.71 prose had left
+implicit. The capsule does not only pull the current body, bias tokens through
+BE, heat the register through ASK, and add prompt meaning to spore resonance.
+Its post-reply diary updates `gamma_gap`; that gap raises debt, and debt can
+widen the curiosity gate independently of ASK temperature. The sealed
+factorial therefore contains five binary channels:
+
+```text
+P  gamma pull              running-self prior -> present chambers
+B  BE                      gamma chamber -> candidate-token bias
+A  ASK                     gamma gap + debt -> sampling temperature
+M  meaning resonance       meaning-aware spore blend vs historical fallback
+D  gamma diary             spoken body/meaning -> future gamma and gap
+```
+
+Three default-on diagnostic switches separate P, M, and D. BE and ASK already
+had independent switches. All switches guard existing calls; their default is
+one. No constant, learned field, weight, threshold, sampler, state member, or
+state schema changed.
+
+The preregistered experiment runs the complete **2^5 = 32** factorial plus the
+historical `--no-capsule` control. Each of nine states receives `man`,
+`father`, and `person` branches over four persisted turns: **3,564** visible
+reply rows and **891** aggregate branch results. The runner first rebuilds A.71
+and requires both its default and its `no-capsule` replies to reproduce.
+
+The closure test passed. With all five readers off but the capsule object still
+alive (`f00000`), every one of 108 visible replies was byte-identical to
+`--no-capsule`. Thus these five channels exhaust the capsule's speech influence
+on this four-turn surface. The closure concerns visible speech, not state
+identity: the diary-only arm changed `gamma_gap` in all 27 surface branches
+(mean final delta `+0.017744`) while debt remained saturated at `1` and the
+reply stayed identical. The diary is active; its change simply did not cross a
+speech boundary here.
+
+Single-channel deletions from the full organism gave:
+
+```text
+channel deleted    father-person positives    father-man positives
+ASK                       3/8 preserved             3/7 preserved
+BE                        5/8                       5/7
+gamma pull                5/8                       5/7
+meaning resonance         6/8                       6/7
+gamma diary               8/8                       7/7
+```
+
+ASK is the largest gate, but the sealed threshold correctly refuses to call it
+a solitary necessary cause: three positive witnesses survive without it.
+Across every opposite-factor context, each channel has 16 paired
+configurations and nine states (**144 paired cases per contrast**):
+
+```text
+channel             mean marginal father-person    mean marginal father-man
+ASK                            +0.333333                    +0.305556
+BE                             +0.083333                    +0.083333
+gamma pull                     +0.027778                    -0.013889
+meaning resonance              -0.041667                     0.000000
+gamma diary                    -0.013889                     0.000000
+```
+
+These averages reveal a cooperative regulator, not one hidden dictionary.
+ASK alone preserves 4/8 complement and 4/7 surface-positive witnesses. ASK
+with BE preserves 6/8 and 6/7; ASK with meaning resonance also preserves 6/8
+and 6/7. BE alone preserves 3/8 and 3/7; meaning alone preserves 2/8 and 2/7.
+The M intervention switches the complete meaning-aware `0.45/0.30/0.25`
+chamber/retention/meaning blend back to the historical `0.55/0.45`
+chamber/retention blend; it is not a subtraction holding the other
+coefficients fixed. Meaning's near-zero marginal is therefore not evidence
+that it is dead or harmful: its contribution is conditional on both that
+rebalancing and the sampling regime ASK opens.
+
+The division of labour is now sharper. `presence` carries the surface-specific
+history by which `father` differs from same-glyph `man`. The capsule regulates
+whether that lived geometry is likely to surface. ASK is the widest regulator
+in this selected event, with BE and semantic spore resonance providing
+alternative cooperative paths. A regulator of access to meaning is not the
+meaning itself.
+
+Two complete raw A.72 lives reproduced A.70 manifest/results, the A.71 witness
+set, all 3,564 branch rows, all 891 results, and every analysis table byte for
+byte. The summary, single-ablation, and marginal tables are pinned inside the
+runner. The receipt is:
+
+```sh
+make deferred-wonder-capsule-path-factorial
+```
+
+The result does not justify changing ASK, BE, or capsule strength. A next
+capsule experiment, if pursued, must leave these selected states behind and
+test the preregistered ASK-with-BE / ASK-with-meaning interactions on a fresh
+population. Otherwise the mechanism branch is closed and Leo's developmental
+path should resume without tuning him to this one word.

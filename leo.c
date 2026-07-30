@@ -2797,6 +2797,9 @@ static int g_leo_shadow_on = 1;         /* counterfactual next-turn proposals. -
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
 static int g_leo_capsule_on = 1;        /* E-11: the γ-capsule lives + tints the breath. --no-capsule → 0 (ablation). */
+static int g_leo_gamma_pull_on = 1;     /* capsule diagnostic: running-self prior only. --no-gamma-pull leaves diary/BE/ASK/meaning alive. */
+static int g_leo_spore_meaning_on = 1;  /* capsule diagnostic: meaning-aware spore blend; off restores the historical chamber/retention blend. --no-spore-meaning. */
+static int g_leo_gamma_diary_on = 1;    /* capsule diagnostic: post-reply gamma body/meaning update only. --no-gamma-diary. */
 static int g_leo_arc_on = 0;            /* reply-arc LAB organ, opt-in with --arc. Its carrier is an FNV token
                                          * fingerprint, not a semantic embedding; default-on narrowed Leo's voice
                                          * and amplified frame echo. --no-arc remains the explicit off control. */
@@ -3312,7 +3315,8 @@ static float leo_spore_resonance(const Leo *leo, const LeoSpore *s) {
      * meaning axis JOINS the resonance, rebalanced 0.45/0.30/0.25 so topic-matching
      * moments surface (the rebalance gives meaning real leverage on the bleed, not just
      * an inflating offset); otherwise the pre-#3 0.55/0.45 stands (byte-identical). */
-    if (g_leo_capsule_on && leo->prompt_meaning) {
+    if (g_leo_capsule_on && g_leo_spore_meaning_on &&
+        leo->prompt_meaning) {
         float mn = leo_vec_cosine(leo->prompt_meaning, s->meaning_snap, GLYPH_COUNT);
         return 0.45f * ch + 0.30f * ret + LEO_MEANING_RESONANCE_W * mn;
     }
@@ -10001,7 +10005,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                                        * emotion BEFORE speaking, so the register channel reads a
                                        * live felt-state from token 1 (phase 3b field->voice) */
     if (g_leo_klaus_on) leo_field_scars_update(leo);  /* scars decay + accumulate from the PURE settled body */
-    if (g_leo_capsule_on) leo_gamma_pull(leo);         /* E-11 prior: the running self tints the present (BEFORE the floor) */
+    if (g_leo_capsule_on && g_leo_gamma_pull_on)
+        leo_gamma_pull(leo);                           /* E-11 prior: the running self tints the present (BEFORE the floor) */
     if (g_leo_klaus_on) {
         /* klaus-memory: accumulated scar floors the distress chambers — the carried unease is the
          * LAST word on distress (applied AFTER the capsule pull, so the gamma tint cannot soften it;
@@ -10431,7 +10436,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
         }
         produced = leo_chain(leo, chain_len, out, max_len);
     }
-    if (g_leo_capsule_on) { leo_gamma_absorb(leo); leo_gamma_meaning(leo, prompt); }  /* E-11 diary: record the body that SPOKE + the meaning perceived (post-reply, like santaclaus) */
+    if (g_leo_capsule_on && g_leo_gamma_diary_on) {
+        leo_gamma_absorb(leo);
+        leo_gamma_meaning(leo, prompt);
+    }  /* E-11 diary: record the body that SPOKE + the meaning perceived (post-reply, like santaclaus) */
     leo_conatus_debt(leo);   /* Damasio: the reply's carried gap raises the standing debt */
     if (leo->school.returned_episode >= 0) flow_event |= LEO_FLOW_WONDER_RECALLED;
     leo_flow_observe(leo, prompt, out, pm, flow_field_token, flow_field_weight,
@@ -12893,6 +12901,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
         else if (!strcmp(argv[i], "--no-capsule")) g_leo_capsule_on = 0;
+        else if (!strcmp(argv[i], "--no-gamma-pull")) g_leo_gamma_pull_on = 0;
+        else if (!strcmp(argv[i], "--no-spore-meaning")) g_leo_spore_meaning_on = 0;
+        else if (!strcmp(argv[i], "--no-gamma-diary")) g_leo_gamma_diary_on = 0;
         else if (!strcmp(argv[i], "--arc")) g_leo_arc_on = 1;
         else if (!strcmp(argv[i], "--no-arc")) g_leo_arc_on = 0;
         else if (!strcmp(argv[i], "--no-consolidation")) g_leo_consol_on = 0;
