@@ -5929,3 +5929,77 @@ path changed. The receipt is:
 ```sh
 make deferred-wonder-appetite-susceptibility-holdout
 ```
+
+## Phase A.70 — a glyph may agree while its surfaces disagree (2026-07-30)
+
+A.69 rejected the two-cell susceptibility class, but side-A Flom alone carried
+both `man` and same-glyph `father` across its second surface with `3 helped /
+0 harmed` each. Because that narrower hypothesis was selected after reading
+A.69, A.70 spends a third independent life to test it.
+
+The new 32-turn schedule contains eight Flom cause turns, each followed by
+three background turns before another Flom invitation. Eight unused seeds
+`907/1013/1109/1213/1307/1423/1511/1601` produce **64** exact pre-turn cases.
+Each branches into:
+
+```text
+target    man
+synonym   father, the same School glyph
+neutral   person, neither Flom side
+```
+
+All 24 background prompts are Flom-null. Together with the three variants at
+each of the eight cause surfaces, **48/48** preflight geometries pass Leo's
+actual glyph map. The target branch again reproduces its lived trajectory byte
+for byte.
+
+The acceptance contract is stricter than a pooled sign:
+
+```text
+target lift > 0 and synonym lift > 0
+target-positive lives >= 4/8
+synonym-positive lives >= 4/8
+measured replication additionally requires exact p <= 0.05 for both surfaces
+```
+
+The result separates the two nominally identical glyph surfaces:
+
+```text
+surface   any / neutral   helped / harmed   lift        exact p   positive lives
+man          13 / 12           2 / 1       +0.015625    1.000000       2/8
+father       19 / 12           8 / 1       +0.109375    0.039062       5/8
+```
+
+`man` is not broad and not measured. One seed is negative, two are positive,
+and five are tied. `father` crosses both its paired exact and life-breadth
+boundaries: five lives are positive, two tied, and only one has balanced
+discordance. Yet the preregistered hypothesis requires both surfaces.
+The verdict is therefore **`not-replicated`**.
+
+This is not a null result. It is a sharper distinction:
+
+- **Flom is not established as a glyph-level causal mechanism.**
+- **`father` is a measured surface-conditioned causal witness in this life.**
+
+School cannot produce the split as a branch conflict. All **64/64** cases keep
+the same School outcome and candidate across `man`, `father`, and `person`.
+The surfaces share School's glyph, but they do not share the same causal
+effect on generation. `father` may travel through its own learned
+co-occurrence, emotional chamber, continuous-theme, spore, or other existing
+path. A glyph alias is therefore evidence of semantic recognition, not proof
+that every alias has interchangeable generative physics.
+
+No weight or reader is changed to reward `father`. The next admissible step is
+mechanism localization: hold exact states fixed, compare additional Flom
+surfaces, and ablate existing channels one at a time. That work may identify
+why `father` moves Leo, but it cannot retroactively turn A.70 into a successful
+Flom holdout.
+
+Two complete runs reproduced the natural body, all eight target lives, 64
+snapshots, 192 branch states and evidence streams, 768 replies, summary,
+per-seed breadth, and verdict byte for byte. No member of `Leo`, state byte,
+sampler, threshold, weight, or speech path changed. The receipt is:
+
+```sh
+make deferred-wonder-appetite-flom-third-life
+```
