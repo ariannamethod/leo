@@ -3596,7 +3596,7 @@ int main(void) {
         leo_respond(&constellation, "flom", out, sizeof out);
         flom = leo_deferred_wonder_find(&constellation, "flom");
         CHECK(constellation.curiosity.outcome ==
-                  LEO_CURIOSITY_CONTINUED &&
+                  LEO_CURIOSITY_ADDRESS_GUARDED &&
               !strcmp(constellation.school.pending, "nareth") &&
               flom >= 0 &&
               constellation.school.deferred[flom].offered_glyph ==
@@ -3604,7 +3604,7 @@ int main(void) {
               constellation.school.deferred[flom].offered_alt_glyph ==
                   flom_before.offered_alt_glyph &&
               constellation.school.n_deferred == 2,
-              "pre-wonder constellation: an occupied Wonder makes another exact return wait unchanged");
+              "pre-wonder constellation: an occupied Wonder guards another exact return without changing it");
 
         leo_respond(&constellation, "A nareth is dark night.",
                     out, sizeof out);
@@ -3727,12 +3727,12 @@ int main(void) {
         leo_respond(&occupied, "nareth", out, sizeof out);
         nareth = leo_deferred_wonder_find(&occupied, "nareth");
         CHECK(occupied.curiosity.outcome ==
-                  LEO_CURIOSITY_CONTINUED &&
+                  LEO_CURIOSITY_ADDRESS_GUARDED &&
               !strcmp(occupied.school.pending, "suvin") &&
               nareth >= 0 &&
               !memcmp(&occupied.school.deferred[nareth],
                       &nareth_birth, sizeof nareth_birth),
-              "pre-wonder constellation: a newly queued sibling inherits A.40's unchanged wait");
+              "pre-wonder constellation: a newly queued sibling inherits A.40's unchanged guarded wait");
 
         srand(5703);
         leo_respond(&occupied, "A suvin is bright light.",
@@ -3989,12 +3989,12 @@ int main(void) {
         g_leo_wonder_attribution_on = 0;
         srand(4201);
         leo_respond(&legacy, "Cat bird. Dark night.", out, sizeof out);
-        CHECK(!legacy.school.pending[0] &&
-              leo_school_is_learned(&legacy, "suvin") &&
-              legacy.curiosity.outcome == LEO_CURIOSITY_RESOLVED &&
+        CHECK(!strcmp(legacy.school.pending, "suvin") &&
+              !leo_school_is_learned(&legacy, "suvin") &&
+              legacy.curiosity.outcome == LEO_CURIOSITY_CONTINUED &&
               legacy.wonder_address.status ==
                   LEO_WONDER_ADDRESS_EMPTY,
-              "wonder-address: ablation reproduces the prior cross-attribution exactly");
+              "wonder-address: attribution ablation cannot reopen the closed adjacency bug");
         leo_free(&legacy);
 
         Leo correction;
@@ -5196,7 +5196,7 @@ int main(void) {
               !strcmp(w.school.wonders[0].word, "zorble"),
               "wonder: opening a question births one unfinished episode");
         CHECK(leo_school_grounded_answer(
-                  &w, "I think about zorble", NULL) < 0,
+                  &w, "I think about zorble", NULL, NULL) < 0,
               "wonder: talking about thinking is not a definition");
 
         char rel[LEO_HEARD_WORDLEN] = {0};
@@ -5510,6 +5510,134 @@ int main(void) {
         free(neg);
         free(woke);
         free(address);
+    }
+
+    /* A.75: adjacency opens an answer window but does not assign every nearby
+     * declaration to Leo's Wonder. Explicit names and immediate anaphora may
+     * carry rich corrections; an unmarked ellipse may only select or reject
+     * Leo's offered alternatives. The rest remains perceived ordinary life. */
+    {
+        Leo *ref = calloc(1, sizeof *ref);
+        Leo *woke = calloc(1, sizeof *woke);
+        CHECK(ref && woke,
+              "wonder-reference: heap fixtures allocated");
+        if (ref && woke) {
+            int prev_school = g_leo_school_on;
+            int prev_wonder = g_leo_wonder_on;
+            g_leo_school_on = 1;
+            g_leo_wonder_on = 1;
+            int water = semtok_word("water");
+            int animal = semtok_word("animal");
+            int sky = semtok_word("sky");
+            int stone = semtok_word("stone");
+            int music = semtok_word("music");
+            int child = semtok_word("child");
+            char out[1024];
+
+            seed_wonder_negation_body(ref);
+            leo_respond(
+                ref, "the river and sea have water",
+                out, sizeof out);
+            const LeoFlowSnapshot *unrelated_flow =
+                leo_flow_at(&ref->flow, ref->flow.n - 1);
+            CHECK(!leo_school_is_learned(ref, "zorble") &&
+                  !strcmp(ref->school.pending, "zorble") &&
+                  ref->school.pending_turns == 1 &&
+                  !ref->school.wonders[0].resolved &&
+                  ref->curiosity.outcome ==
+                      LEO_CURIOSITY_CONTINUED,
+                  "wonder-reference: adjacent ordinary life cannot counterfeit an answer");
+            CHECK(unrelated_flow &&
+                  unrelated_flow->perceived[water] > 0.0f,
+                  "wonder-reference: unassigned meaning remains fully perceived");
+
+            const char *path =
+                "/tmp/leo_wonder_reference.state";
+            int saved = leo_save_state(ref, path);
+            leo_init(woke);
+            int loaded = saved && leo_load_state(woke, path);
+            leo_respond(
+                woke, "what is zorble?", out, sizeof out);
+            CHECK(loaded &&
+                  strstr(out, "Zorble? Water or Animal?") &&
+                  !woke->school.wonders[0].resolved,
+                  "wonder-reference: the unanswered question survives topic change and sleep");
+            leo_respond(
+                woke, "a zorble is animal",
+                out, sizeof out);
+            CHECK(leo_semtok_word(woke, "zorble") == animal &&
+                  woke->school.wonders[0].resolved,
+                  "wonder-reference: a later explicit answer still grounds the Wonder");
+
+            leo_free(ref);
+            seed_wonder_negation_body(ref);
+            leo_respond(ref, "animal", out, sizeof out);
+            CHECK(!ref->school.pending[0] &&
+                  leo_semtok_word(ref, "zorble") == animal,
+                  "wonder-reference: one offered option is a valid elliptical answer");
+
+            leo_free(ref);
+            seed_wonder_negation_body(ref);
+            leo_respond(ref, "not water", out, sizeof out);
+            CHECK(!leo_school_is_learned(ref, "zorble") &&
+                  ref->school.pending_glyph == animal &&
+                  ref->school.pending_alt_glyph == -1,
+                  "wonder-reference: an elliptical rejection narrows without resolving");
+
+            leo_free(ref);
+            seed_wonder_negation_body(ref);
+            leo_respond(
+                ref, "it is an animal", out, sizeof out);
+            CHECK(leo_semtok_word(ref, "zorble") == animal,
+                  "wonder-reference: immediate anaphora owns a rich answer");
+
+            leo_free(ref);
+            seed_wonder_negation_body(ref);
+            leo_respond(
+                ref, "yes, it is music", out, sizeof out);
+            CHECK(leo_semtok_word(ref, "zorble") == music,
+                  "wonder-reference: affirmation cannot become the lesson it introduces");
+
+            leo_free(ref);
+            seed_wonder_negation_body(ref);
+            leo_respond(
+                ref, "she is a child", out, sizeof out);
+            CHECK(leo_semtok_word(ref, "zorble") == child,
+                  "wonder-reference: a referential subject cannot outrank its predicate");
+
+            leo_free(ref);
+            seed_wonder_negation_body(ref);
+            leo_respond(
+                ref, "the sky is dark", out, sizeof out);
+            const LeoFlowSnapshot *sky_flow =
+                leo_flow_at(&ref->flow, ref->flow.n - 1);
+            CHECK(!leo_school_is_learned(ref, "zorble") &&
+                  !ref->school.wonders[0].resolved &&
+                  sky_flow && sky_flow->perceived[sky] > 0.0f,
+                  "wonder-reference: a new subject remains life rather than a lesson");
+
+            leo_free(ref);
+            seed_wonder_negation_body(ref);
+            leo_respond(
+                ref, "a small stone", out, sizeof out);
+            CHECK(!leo_school_is_learned(ref, "zorble") &&
+                  !ref->school.wonders[0].resolved,
+                  "wonder-reference: an unaddressed correction outside offered options fails closed");
+            leo_free(ref);
+            seed_wonder_negation_body(ref);
+            leo_respond(
+                ref, "it is a small stone", out, sizeof out);
+            CHECK(leo_semtok_word(ref, "zorble") == stone,
+                  "wonder-reference: anaphora admits a correction beyond Leo's guesses");
+
+            remove(path);
+            g_leo_school_on = prev_school;
+            g_leo_wonder_on = prev_wonder;
+        }
+        if (ref) leo_free(ref);
+        if (woke) leo_free(woke);
+        free(ref);
+        free(woke);
     }
 
     /* W-4: a resolved question later returns as glyph attention, not text. The

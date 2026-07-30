@@ -6401,3 +6401,132 @@ make deferred-wonder-negation-life
 
 Leo can now hear a rejected meaning without mistaking rejection for a lesson.
 He does not know the remaining answer merely because one of his guesses died.
+
+## Phase A.75 — nearness is not reference (2026-07-31)
+
+A.74 made assertion distinct from perception, but its first-turn answer window
+still treated conversational adjacency as ownership. One exact persisted
+Wonder exposed the error:
+
+```text
+Leo:  Zorble? Water or Animal?
+human: the river and sea have water
+```
+
+The canonical organism learned `zorble=water`, resolved the episode, and
+released its shadow. A second unrelated turn, `the sky is dark`, learned
+`zorble=sky`. The defect was symmetric: short natural answers did not work.
+`animal` and `it is an animal` left the question open because the old adjacency
+rule required at least two concept votes.
+
+A third probe found a different false lesson:
+
+```text
+human: yes, it is music
+```
+
+Both `yes` and `music` entered School evidence. Since `agree` precedes `music`
+in the glyph table, Leo resolved the Wonder as `agree`. The conversational act
+of accepting an answer had become the content of the answer.
+
+A.75 gives the current human turn a bounded reference contract before any
+positive or negative evidence can teach:
+
+```text
+explicit    the turn names the active unknown
+anaphoric   the immediate turn begins with it/this/that/he/she/they...
+elliptic    the immediate turn selects or rejects only Leo's offered options
+none        the turn is perceived life, not an answer
+```
+
+Explicit reference remains strongest and is not limited to the first answer
+window. It permits a rich correction outside Leo's guesses:
+
+```text
+a zorble is a small stone
+```
+
+Immediate anaphora permits the same correction without repeating the name:
+
+```text
+it is a small stone
+```
+
+After another turn has intervened, anaphora is no longer assigned
+retroactively; the unknown must be named. This is deliberate. A pronoun after
+a topic change cannot prove which unfinished question owns it.
+
+Ellipsis is narrower. A bare `animal` can choose Leo's offered Animal option,
+and `not water` can reject Water. `not water but animal` can reject one offered
+path and assert the other. Two positively asserted alternatives remain
+ambiguous. Concept mass outside the offered pair makes an unmarked turn
+unreferenced:
+
+```text
+a small stone
+```
+
+That phrase may be an answer in human pragmatics, but adjacency cannot prove
+it. Leo keeps the Wonder open until the human says `it` or `zorble`. The
+contract prefers an explicit continuation over false permanent learning.
+
+Clause-initial affirmations and referential subjects are dialogue structure,
+not lesson content. `yes, it is music` now teaches Music, not Agree.
+`she is a child` teaches Child, not Woman. The same words remain present in
+ordinary perception; they are excluded only from School's answer vote when
+they occupy those bounded clause roles.
+
+The attribution observer remains independent. A named or semantically strong
+waiting sibling still emits an address guard even when the new School gate
+would also refuse false grounding. Disabling the observer therefore removes
+its diagnostic witness but can no longer resurrect the adjacency bug. Two old
+tests had encoded that old bug as an ablation expectation; they were rejected
+on the first pass and rewritten to test the new boundary instead. Exact sibling
+returns with redirection disabled are now reported as `address-guarded`, while
+their queue entries and hypotheses remain unchanged.
+
+Flow is untouched. In all four unassigned process arms, the new turn remains
+the top perceived glyph:
+
+```text
+human turn                       School        Flow
+the river and sea have water     continued     water
+the sky is dark                  continued     sky
+not water                        narrowed      water
+a small stone                    continued     stone
+```
+
+One real open body branches nine answers and crosses fourteen process
+boundaries:
+
+```text
+case                    outcome     next process reply
+unrelated-water         continued   Zorble? Water or Animal?
+unrelated-sky           continued   Zorble? Water or Animal?
+ellipse-option          resolved    -
+ellipse-negative        continued   Zorble? Animal?
+anaphoric-option        resolved    -
+anaphoric-correction    resolved    -
+affirmative-correction  resolved    -
+pronoun-subject         resolved    -
+unmarked-correction     continued   Zorble? Water or Animal?
+```
+
+Three complete process lives reproduced the open state and result table
+exactly. The open body remains byte-identical to A.74; the A.75 result table is
+pinned independently. The direct suite is **503/503**, and all historical
+dialogue/matrix plan contracts remain green. A heap-only A.75 responder smoke
+also passed ASan/UBSan. The monolithic unit harness itself cannot start under
+ASan because its pre-existing stack-resident `Leo` fixtures overflow sanitizer
+redzones before the first check; that limitation was not mislabeled as an A.75
+failure or a successful full sanitizer run.
+
+No weight, candidate, sampler, chamber, gamma value, Flow reader, or state
+layout changed. The receipt is:
+
+```sh
+make deferred-wonder-answer-reference-life
+```
+
+Leo may ask a nearby human turn whether it belongs to his question. He may not
+decide that nearness itself is the answer.
