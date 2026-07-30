@@ -14,7 +14,7 @@ ifneq ($(wildcard $(AML_SRC)),)   # the ONLY AML source is the vendored copy in 
   AML_FLAGS := -DHAVE_AML -Iariannamethod
 endif
 
-.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics deferred-wonder-attribution deferred-wonder-redirection deferred-wonder-appetite deferred-wonder-appetite-calibration deferred-wonder-appetite-reliability deferred-wonder-appetite-drift deferred-wonder-appetite-policy deferred-wonder-appetite-regret deferred-wonder-appetite-readiness deferred-wonder-appetite-holdout deferred-wonder-appetite-admission deferred-wonder-appetite-transport deferred-wonder-appetite-transport-chronology deferred-wonder-appetite-checkpoint deferred-wonder-appetite-checkpoint-life deferred-wonder-appetite-source-ecology-life deferred-wonder-appetite-cadence-life deferred-wonder-appetite-source-cadence-life deferred-wonder-appetite-shift-anatomy deferred-wonder-appetite-visible-signal deferred-wonder-appetite-natural-life deferred-wonder-appetite-temporal-counterfactual deferred-wonder-appetite-exchange-attribution deferred-wonder-appetite-external-life deferred-wonder-appetite-provenance-shadow deferred-wonder-appetite-matched-counterfactual deferred-wonder-appetite-population-causal-lift deferred-wonder-appetite-susceptibility-holdout deferred-wonder-appetite-flom-third-life deferred-wonder-father-path-localization deferred-wonder-capsule-path-factorial deferred-wonder-capsule-interaction-population
+.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics deferred-wonder-attribution deferred-wonder-redirection deferred-wonder-appetite deferred-wonder-appetite-calibration deferred-wonder-appetite-reliability deferred-wonder-appetite-drift deferred-wonder-appetite-policy deferred-wonder-appetite-regret deferred-wonder-appetite-readiness deferred-wonder-appetite-holdout deferred-wonder-appetite-admission deferred-wonder-appetite-transport deferred-wonder-appetite-transport-chronology deferred-wonder-appetite-checkpoint deferred-wonder-appetite-checkpoint-life deferred-wonder-appetite-source-ecology-life deferred-wonder-appetite-cadence-life deferred-wonder-appetite-source-cadence-life deferred-wonder-appetite-shift-anatomy deferred-wonder-appetite-visible-signal deferred-wonder-appetite-natural-life deferred-wonder-appetite-temporal-counterfactual deferred-wonder-appetite-exchange-attribution deferred-wonder-appetite-external-life deferred-wonder-appetite-provenance-shadow deferred-wonder-appetite-matched-counterfactual deferred-wonder-appetite-population-causal-lift deferred-wonder-appetite-susceptibility-holdout deferred-wonder-appetite-flom-third-life deferred-wonder-father-path-localization deferred-wonder-capsule-path-factorial deferred-wonder-capsule-interaction-population deferred-wonder-negation-life
 
 all: leo
 
@@ -154,6 +154,9 @@ deferred-wonder-capsule-path-factorial: leo
 deferred-wonder-capsule-interaction-population: leo
 	./scripts/deferred_wonder_capsule_interaction_population.sh
 
+deferred-wonder-negation-life: leo
+	./scripts/deferred_wonder_negation_life.sh
+
 # unit tests — test_leo.c #includes leo.c with LEO_NO_MAIN
 test: tests/test_leo.c leo.c
 	$(CC) -DLEO_NO_MAIN tests/test_leo.c $(CFLAGS) -o tests/test_leo
@@ -210,6 +213,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_deferred_wonder_father_path_localization.sh
 	./scripts/test_deferred_wonder_capsule_path_factorial.sh
 	./scripts/test_deferred_wonder_capsule_interaction_population.sh
+	./scripts/test_deferred_wonder_negation_life.sh
 
 # address + undefined behaviour sanitizers on the smoke run
 asan: leo.c
