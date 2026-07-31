@@ -3421,6 +3421,45 @@ int main(void) {
         CHECK(sc.curiosity.outcome == LEO_CURIOSITY_NO_CANDIDATE &&
               !sc.curiosity.candidate[0],
               "curiosity: familiar meaning records an honest absence of candidate");
+
+        Leo direct; leo_init(&direct);
+        leo_ingest(&direct, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(&direct, "a flom is warm fire", buf, sizeof buf);
+        CHECK(leo_semtok_word(&direct, "flom") == semtok_word("fire") &&
+              !direct.school.pending[0] &&
+              direct.curiosity.outcome == LEO_CURIOSITY_RESOLVED &&
+              !strcmp(direct.curiosity.candidate, "flom") &&
+              !strstr(buf, "Flom?"),
+              "school: a copular definition teaches an unknown on first mention");
+
+        Leo composite; leo_init(&composite);
+        leo_ingest(&composite, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(&composite,
+                    "Flom is the gentle comfort of warm light or cool rain",
+                    buf, sizeof buf);
+        CHECK(leo_school_is_learned(&composite, "flom") &&
+              !composite.school.pending[0] &&
+              composite.curiosity.outcome == LEO_CURIOSITY_RESOLVED,
+              "school: a rich first-turn definition is admitted instead of re-asked");
+
+        Leo incidental; leo_init(&incidental);
+        leo_ingest(&incidental, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(&incidental, "I saw a nareth beside water", buf, sizeof buf);
+        CHECK(!leo_school_is_learned(&incidental, "nareth"),
+              "school: co-presence cannot counterfeit a first-turn definition");
+
+        Leo negative; leo_init(&negative);
+        leo_ingest(&negative, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(&negative, "a suvin is not water", buf, sizeof buf);
+        CHECK(!leo_school_is_learned(&negative, "suvin"),
+              "school: rejection alone cannot assign a first-turn meaning");
+
+        Leo unknown_rhs; leo_init(&unknown_rhs);
+        leo_ingest(&unknown_rhs, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(&unknown_rhs, "a tral is glorp", buf, sizeof buf);
+        CHECK(!leo_school_is_learned(&unknown_rhs, "tral"),
+              "school: an unknown right-hand side cannot counterfeit grounding");
+
         Leo deferred; leo_init(&deferred);
         leo_ingest(&deferred, "suvin suvin suvin");
         char selected[LEO_HEARD_WORDLEN], delayed[LEO_HEARD_WORDLEN];
@@ -3436,7 +3475,9 @@ int main(void) {
               sc.curiosity.outcome == LEO_CURIOSITY_DISABLED,
               "school: --no-school suppresses the question and says why");
         g_leo_school_on = prev;
-        leo_free(&sc); leo_free(&deferred);
+        leo_free(&sc); leo_free(&direct); leo_free(&composite);
+        leo_free(&incidental); leo_free(&negative); leo_free(&unknown_rhs);
+        leo_free(&deferred);
     }
 
     /* A.37: Pre-Wonder remembers a question the body could not safely ask.

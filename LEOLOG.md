@@ -6755,3 +6755,48 @@ make deferred-wonder-comma-scope-life
 ```
 
 Leo can let two clauses share a breath without making them share a witness.
+
+## Phase A.78 — a lesson can arrive before the question (2026-07-31)
+
+School previously recognized a new word before it recognized that the same
+human turn had already defined it. The first encounter therefore produced an
+unnecessary question:
+
+```text
+human: Flom is the gentle comfort of warm light or cool rain
+Leo:   Flom? Water or Fire?
+```
+
+A.78 admits one narrow first-turn lesson: the unknown must itself be the
+subject of a bounded copular statement, and positive teachable evidence must
+exist on the right-hand side of the copula. The copula is recognized through
+Leo's existing `BE` glyph map; A.76/A.77 still own statement and comma-clause
+boundaries. No new predicate vocabulary or general syntax claim was added.
+
+The exclusions are part of the contract:
+
+```text
+I saw a nareth beside water   co-presence, not a definition
+a suvin is not water          rejection alone cannot assign meaning
+a tral is glorp               unknown cannot ground unknown
+what is a flom?               a question cannot teach its own answer
+```
+
+On a valid first-turn definition, School records the dominant teachable glyph,
+suppresses the redundant question, and emits an ordinary `resolved` curiosity
+receipt. The complete prompt still enters Leo's co-occurrence field, so richer
+associations are not reduced to that single School label. No synthetic Wonder
+episode or Flow closure is invented for a question that never opened.
+
+The exact complaint now yields `candidate=flom outcome=resolved`. A saved state
+loaded by a second process answers `Tell me about flom again` with
+`outcome=no-candidate`; the negative control still asks `Nareth? Water or See?`.
+The direct suite is **529/529**, `git diff --check` is clean, and the normal
+ASan/UBSan bootstrap smoke completes without a finding. The cross-process
+receipt was also run directly with `--save` followed by `--load`.
+
+This is first-turn admission, not an inference engine. It intentionally learns
+only the strongest grounded School glyph from the definition and inherits the
+documented A.77 uncertainty around an unknown finite verb outside the bounded
+clause grammar. No state version, sampler, candidate score, chamber, gamma,
+Flow reader, or speech-selection weight changed.
