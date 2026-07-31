@@ -6657,6 +6657,81 @@ static int leo_school_grounded_answer(
     return best;
 }
 
+/* A first mention may already be a human lesson. Admit only a bounded copular
+ * definition whose subject is the unknown itself: "a flom is warm fire". The
+ * BE relation comes from Leo's glyph map, while meaning evidence comes solely
+ * from the right-hand side of that statement. Mere co-presence ("I saw flom
+ * near water"), questions, negation-only evidence, and unknown-to-unknown
+ * equations remain unfinished knowledge rather than counterfeit lessons. */
+static int leo_school_same_turn_grounding(
+        const Leo *leo, const char *prompt, const char *unknown,
+        LeoSchoolAnswerEvidence *observed) {
+    LeoSchoolAnswerEvidence empty;
+    memset(&empty, 0, sizeof empty);
+    if (observed) *observed = empty;
+    if (!leo || !prompt || !unknown || !unknown[0] ||
+        strchr(prompt, '?'))
+        return -1;
+
+    int be = semtok_find_glyph("BE");
+    const char *begin = prompt;
+    for (const char *p = prompt; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && !leo_school_answer_scope_boundary_at(p))
+            continue;
+
+        char cur[LEO_HEARD_WORDLEN];
+        int wi = 0, words_before = 0, subject_seen = 0;
+        const char *meaning_begin = NULL;
+        for (const char *q = begin; ; q++) {
+            unsigned char qch = q < p ? (unsigned char)*q : 0;
+            if (qch && (isalpha(qch) || qch == '\'')) {
+                if (wi < LEO_HEARD_WORDLEN - 1)
+                    cur[wi++] = (char)tolower(qch);
+                continue;
+            }
+            if (wi > 0) {
+                cur[wi] = 0;
+                if (!subject_seen) {
+                    if (!strcmp(cur, unknown)) {
+                        subject_seen = 1;
+                    } else if (!leo_school_word_is_article(cur) &&
+                               !leo_school_word_is_affirmation(cur)) {
+                        words_before++;
+                    }
+                } else if (!meaning_begin) {
+                    if (leo_semtok_word(leo, cur) == be &&
+                        words_before == 0)
+                        meaning_begin = q + 1;
+                    else
+                        break;
+                }
+            }
+            wi = 0;
+            if (!qch) break;
+        }
+
+        if (meaning_begin && meaning_begin <= p) {
+            LeoSchoolAnswerEvidence evidence;
+            leo_school_answer_evidence_range(
+                leo, meaning_begin, p, &evidence);
+            if (observed) *observed = evidence;
+            int best = -1, bestn = 0;
+            for (int g = 0; g < GLYPH_COUNT; g++)
+                if (evidence.rejected[g] == 0 &&
+                    evidence.asserted[g] > bestn) {
+                    bestn = evidence.asserted[g];
+                    best = g;
+                }
+            if (best >= 0) return best;
+        }
+
+        if (!ch) break;
+        begin = p + 1;
+    }
+    return -1;
+}
+
 static void leo_school_title(char *out, size_t out_sz, const char *word) {
     if (out_sz == 0) return;
     snprintf(out, out_sz, "%s", word ? word : "");
@@ -10850,6 +10925,17 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     int has_unknown = g_leo_school_on && !was_answer && !wonder_reask &&
                       leo_school_scan_unknown(leo, prompt, unk, deferred,
                                               &deferred_heard, &from_deferred);
+    int same_turn_grounded = 0;
+    if (has_unknown) {
+        LeoSchoolAnswerEvidence same_turn_evidence;
+        int same_turn_glyph = leo_school_same_turn_grounding(
+            leo, prompt, unk, &same_turn_evidence);
+        if (same_turn_glyph >= 0) {
+            leo_school_learn(leo, unk, same_turn_glyph);
+            same_turn_grounded = 1;
+            has_unknown = 0;
+        }
+    }
     if (g && g_leo_wonder_on && g_leo_deferred_wonder_on &&
         prewonder_field_token[0] < 0 && has_unknown)
         leo_prewonder_field_constellation(
@@ -10882,7 +10968,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     curiosity.turn = (uint64_t)leo->school.turn_clock;
     curiosity.distress = ask_distress;
     curiosity.gate = ask_gate;
-    if (has_unknown) {
+    if (has_unknown || same_turn_grounded) {
         strncpy(curiosity.candidate, unk, LEO_HEARD_WORDLEN - 1);
         curiosity.candidate[LEO_HEARD_WORDLEN - 1] = 0;
     } else if (occupied_queued) {
@@ -10909,6 +10995,8 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     else if (was_answer)
         curiosity.outcome = (flow_event & LEO_FLOW_WONDER_RESOLVED) ?
             LEO_CURIOSITY_RESOLVED : LEO_CURIOSITY_CONTINUED;
+    else if (same_turn_grounded)
+        curiosity.outcome = LEO_CURIOSITY_RESOLVED;
     else if (!has_unknown)
         curiosity.outcome = LEO_CURIOSITY_NO_CANDIDATE;
     else if (ask_distress >= ask_gate)
