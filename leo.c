@@ -5651,15 +5651,17 @@ static int leo_school_negation_punctuation(unsigned char ch) {
            ch == '!' || ch == '?';
 }
 
-static void leo_school_answer_evidence(
-        const Leo *leo, const char *text, LeoSchoolAnswerEvidence *evidence) {
+static void leo_school_answer_evidence_range(
+        const Leo *leo, const char *begin, const char *end,
+        LeoSchoolAnswerEvidence *evidence) {
     memset(evidence, 0, sizeof *evidence);
-    if (!leo || !text) return;
+    if (!leo || !begin || !end || end < begin) return;
 
     char cur[LEO_HEARD_WORDLEN];
     int wi = 0, negated = 0, word_index = 0, clause_words = 0;
-    for (const char *p = text; ; p++) {
-        unsigned char ch = (unsigned char)*p;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch =
+            p < end ? (unsigned char)*p : 0;
         if (ch && (isalpha(ch) || ch == '\'')) {
             if (wi < LEO_HEARD_WORDLEN - 1)
                 cur[wi++] = (char)tolower(ch);
@@ -5724,11 +5726,49 @@ static void leo_school_answer_evidence(
     }
 }
 
-static int leo_school_prompt_has_anaphoric_subject(const char *text) {
+static void leo_school_answer_evidence(
+        const Leo *leo, const char *text,
+        LeoSchoolAnswerEvidence *evidence) {
+    if (!text) {
+        memset(evidence, 0, sizeof *evidence);
+        return;
+    }
+    leo_school_answer_evidence_range(
+        leo, text, text + strlen(text), evidence);
+}
+
+static int leo_school_range_has_word(
+        const char *begin, const char *end, const char *word) {
+    if (!begin || !end || end < begin || !word || !word[0])
+        return 0;
     char cur[LEO_HEARD_WORDLEN];
     int wi = 0;
-    for (const char *p = text; ; p++) {
-        unsigned char ch = (unsigned char)*p;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch =
+            p < end ? (unsigned char)*p : 0;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (!strcmp(cur, word)) return 1;
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
+static int leo_school_range_has_anaphoric_subject(
+        const char *begin, const char *end) {
+    if (!begin || !end || end < begin) return 0;
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch =
+            p < end ? (unsigned char)*p : 0;
         if (ch && (isalpha(ch) || ch == '\'')) {
             if (wi < LEO_HEARD_WORDLEN - 1)
                 cur[wi++] = (char)tolower(ch);
@@ -5750,23 +5790,9 @@ static int leo_school_prompt_has_anaphoric_subject(const char *text) {
     return 0;
 }
 
-/* Adjacency is an answer window, not ownership. A rich answer may teach only
- * when it names the pending word or begins with an anaphoric subject. The one
- * unmarked form admitted by adjacency is an elliptical answer over Leo's own
- * offered alternatives: one asserted option, or one/more rejected options.
- * Other concept mass makes the turn new life rather than a counterfeit lesson. */
-static LeoSchoolAnswerReference leo_school_answer_reference(
-        const Leo *leo, const char *prompt,
-        const LeoSchoolAnswerEvidence *evidence) {
-    if (!leo || !prompt || !evidence || !leo->school.pending[0])
-        return LEO_SCHOOL_ANSWER_UNREFERENCED;
-    if (leo_school_text_has_word(prompt, leo->school.pending))
-        return LEO_SCHOOL_ANSWER_EXPLICIT;
-    if (leo->school.pending_turns != 0)
-        return LEO_SCHOOL_ANSWER_UNREFERENCED;
-    if (leo_school_prompt_has_anaphoric_subject(prompt))
-        return LEO_SCHOOL_ANSWER_ANAPHORIC;
-
+static int leo_school_evidence_is_elliptic(
+        const Leo *leo, const LeoSchoolAnswerEvidence *evidence) {
+    if (!leo || !evidence) return 0;
     int offered[2] = {
         leo->school.pending_glyph,
         leo->school.pending_alt_glyph
@@ -5778,15 +5804,179 @@ static LeoSchoolAnswerReference leo_school_answer_reference(
         if (!offered_here &&
             (evidence->asserted[g] > 0 ||
              evidence->rejected[g] > 0))
-            return LEO_SCHOOL_ANSWER_UNREFERENCED;
+            return 0;
         if (offered_here && evidence->asserted[g] > 0)
             asserted_options++;
         if (offered_here && evidence->rejected[g] > 0)
             rejected_options++;
     }
-    if (asserted_options == 1 ||
-        (asserted_options == 0 && rejected_options > 0))
-        return LEO_SCHOOL_ANSWER_ELLIPTIC;
+    return asserted_options == 1 ||
+           (asserted_options == 0 && rejected_options > 0);
+}
+
+static int leo_school_word_is_elliptic_grammar(
+        const char *word) {
+    static const char *grammar[] = {
+        "and", "or", "either"
+    };
+    if (leo_school_word_is_article(word) ||
+        leo_school_word_is_affirmation(word) ||
+        leo_school_word_negates(word) ||
+        leo_school_word_ends_negation(word))
+        return 1;
+    for (size_t i = 0; i < sizeof grammar / sizeof grammar[0]; i++)
+        if (!strcmp(word, grammar[i])) return 1;
+    return 0;
+}
+
+/* Glyph purity alone cannot prove ellipsis: "the river has water" can collapse
+ * entirely onto WATER. The surface must also lack an independent predicate.
+ * Every lexical word is therefore either bounded answer grammar or a word Leo
+ * maps to one of the alternatives he actually offered. */
+static int leo_school_range_is_elliptic(
+        const Leo *leo, const char *begin, const char *end,
+        const LeoSchoolAnswerEvidence *evidence) {
+    if (!leo_school_evidence_is_elliptic(leo, evidence))
+        return 0;
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0, content = 0;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch =
+            p < end ? (unsigned char)*p : 0;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (!leo_school_word_is_elliptic_grammar(cur)) {
+                int g = leo_semtok_word(leo, cur);
+                if (!leo_glyph_teachable(g) ||
+                    (g != leo->school.pending_glyph &&
+                     g != leo->school.pending_alt_glyph))
+                    return 0;
+                content++;
+            }
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return content > 0;
+}
+
+static int leo_school_range_is_dialogue_marker(
+        const char *begin, const char *end) {
+    if (!begin || !end || end < begin) return 0;
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0, words = 0;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch =
+            p < end ? (unsigned char)*p : 0;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            words++;
+            if (!leo_school_word_is_affirmation(cur) &&
+                strcmp(cur, "no"))
+                return 0;
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return words > 0;
+}
+
+static int leo_school_range_has_words(
+        const char *begin, const char *end) {
+    if (!begin || !end || end < begin) return 0;
+    for (const char *p = begin; p < end; p++)
+        if (isalpha((unsigned char)*p)) return 1;
+    return 0;
+}
+
+static int leo_school_answer_scope_boundary(unsigned char ch) {
+    return ch == '.' || ch == ';' || ch == ':' ||
+           ch == '!' || ch == '?';
+}
+
+static void leo_school_answer_evidence_add(
+        LeoSchoolAnswerEvidence *dst,
+        const LeoSchoolAnswerEvidence *src) {
+    if (!dst || !src) return;
+    for (int g = 0; g < GLYPH_COUNT; g++) {
+        dst->asserted[g] += src->asserted[g];
+        dst->rejected[g] += src->rejected[g];
+    }
+    dst->asserted_total += src->asserted_total;
+    dst->rejected_total += src->rejected_total;
+}
+
+/* A reference licenses evidence from a bounded statement, not every sentence
+ * that happens to share the same human turn. Explicitly named statements may
+ * occur later and may cooperate with one another. Without a name, only the
+ * first substantive statement after optional yes/no markers may answer: it
+ * must begin anaphorically or be an ellipse over Leo's offered alternatives.
+ * Sensorium, gamma, and Flow still receive the complete prompt. */
+static LeoSchoolAnswerReference leo_school_answer_scope(
+        const Leo *leo, const char *prompt,
+        LeoSchoolAnswerEvidence *evidence) {
+    memset(evidence, 0, sizeof *evidence);
+    if (!leo || !prompt || !leo->school.pending[0])
+        return LEO_SCHOOL_ANSWER_UNREFERENCED;
+
+    int explicit_statements = 0;
+    const char *begin = prompt;
+    for (const char *p = prompt; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && !leo_school_answer_scope_boundary(ch))
+            continue;
+        if (leo_school_range_has_word(
+                begin, p, leo->school.pending)) {
+            LeoSchoolAnswerEvidence part;
+            leo_school_answer_evidence_range(
+                leo, begin, p, &part);
+            leo_school_answer_evidence_add(
+                evidence, &part);
+            explicit_statements++;
+        }
+        if (!ch) break;
+        begin = p + 1;
+    }
+    if (explicit_statements > 0)
+        return LEO_SCHOOL_ANSWER_EXPLICIT;
+    if (leo->school.pending_turns != 0)
+        return LEO_SCHOOL_ANSWER_UNREFERENCED;
+
+    begin = prompt;
+    for (const char *p = prompt; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && !leo_school_answer_scope_boundary(ch))
+            continue;
+        if (leo_school_range_has_words(begin, p) &&
+            !leo_school_range_is_dialogue_marker(begin, p)) {
+            LeoSchoolAnswerEvidence part;
+            leo_school_answer_evidence_range(
+                leo, begin, p, &part);
+            if (leo_school_range_has_anaphoric_subject(
+                    begin, p)) {
+                *evidence = part;
+                return LEO_SCHOOL_ANSWER_ANAPHORIC;
+            }
+            if (leo_school_range_is_elliptic(
+                    leo, begin, p, &part)) {
+                *evidence = part;
+                return LEO_SCHOOL_ANSWER_ELLIPTIC;
+            }
+            return LEO_SCHOOL_ANSWER_UNREFERENCED;
+        }
+        if (!ch) break;
+        begin = p + 1;
+    }
     return LEO_SCHOOL_ANSWER_UNREFERENCED;
 }
 
@@ -6371,10 +6561,9 @@ static int leo_school_grounded_answer(
     if (observed) *observed = evidence;
     if (reference) *reference = LEO_SCHOOL_ANSWER_UNREFERENCED;
     if (!leo->school.pending[0] || strchr(prompt, '?')) return -1;
-    leo_school_answer_evidence(leo, prompt, &evidence);
-    if (observed) *observed = evidence;
     LeoSchoolAnswerReference ref =
-        leo_school_answer_reference(leo, prompt, &evidence);
+        leo_school_answer_scope(leo, prompt, &evidence);
+    if (observed) *observed = evidence;
     if (reference) *reference = ref;
     if (ref == LEO_SCHOOL_ANSWER_UNREFERENCED) return -1;
 
