@@ -6800,3 +6800,96 @@ only the strongest grounded School glyph from the definition and inherits the
 documented A.77 uncertainty around an unknown finite verb outside the bounded
 clause grammar. No state version, sampler, candidate score, chamber, gamma,
 Flow reader, or speech-selection weight changed.
+
+## Phase A.79 — experience has coordinates, and coordinates can have a history (2026-07-31)
+
+Leo already carried several kinds of memory: words in the learned field,
+presence moments in spores, compact consolidation shards, the 57 learned RAE
+parameters, both full Flow faces, and unfinished questions with their own
+birth provenance. None of them answered a different question raised after
+A.65: can Leo remember not only what happened, but the configuration in which
+it happened, and then remember which configuration followed it?
+
+A.79 adds a bounded swarm of eight tiny lived-state weights. They are not
+pretrained weights, authored roles, emotions with names, or a second language
+model. A state is an online compression of organs Leo already owns:
+
+```text
+perception       all 88 glyph coordinates from the input Flow face
+expression       all 88 glyph coordinates from the output Flow face
+own field        8 sparse co-occurrence tokens, excluding prompt echo
+body             6 chambers + 32-dimensional retention
+rhythm           32 reply-distance relations + 4 lexical gait classes
+form             WALK / STOP / RUN / BREATHE mass
+darkmatter       perceived and expressed semantic gaps
+```
+
+The rhythm trace follows the RRPRAM lineage without copying a fixed profile.
+For each distance 1..32 it measures how strongly the emitted token pair already
+coexists in Leo's own co-occurrence field. Function, content, punctuation, and
+rare token mass form four recency-weighted channels. There is no hard-coded
+semantic role list. The 88 glyphs remain an a priori perceptual alphabet, so
+this is broader temporal proprioception, not a claim of complete semantics.
+
+Similarity is a fixed transparent geometry over those surfaces. A clearly
+new life births a coordinate until the budget of eight is full. A familiar
+life updates existing coordinates by an activation-squared Hebbian/EMA step.
+A turn near several coordinates activates a swarm rather than being forced
+into one winner. Four clocks decay at `0.50 / 0.85 / 0.95 / 0.99`; when the
+budget is full, only a sufficiently novel observation may replace the weakest
+decayed coordinate. Stable IDs survive replacement, so a slot is never allowed
+to impersonate its previous life.
+
+The second field is sequence, not another snapshot. Soft activation at `t-1`
+forms a Hebbian outer product with activation at `t`. Every old edge cools;
+an unvisited transition cannot become permanent law. The same edge learns four
+one-turn consequences:
+
+```text
+grounded           did a Wonder actually close?
+distress relief    previous distress minus current distress
+gap relief         previous semantic gap minus current gap
+alignment delta    current Janus-face alignment minus previous alignment
+```
+
+These are delayed temporal associations, not causal claims. Prediction is
+reported as an expected next state and surprise, but it has no route into
+School, spores, shards, candidate collection, sampling, or output bytes.
+`--no-state-swarm` is the strict ablation.
+
+The first real eight-turn life produced the intended mixed regime:
+
+```text
+turn 1  state 1 born
+turn 2  state 1 updated, similarity 0.733
+turn 3  state 2 born after a changed lived configuration
+turn 4  state 3 born
+turn 5  state 3 updated, similarity 0.798
+turn 6  state 4 born with the unfinished Flom question
+turn 7  return to state 1 after grounding Flom
+turn 8  two states active, entropy 0.713, a nontrivial next-state expectation
+```
+
+State moves from v26 to v27. The fixed same-platform tail persists prototypes,
+four clocks, transition weights, delayed outcomes, and the immediately previous
+activation so a sequence may continue across sleep. A v26 body starts with no
+invented state experience. A truncated or malformed v27 tail is discarded
+alone: Flow, body, School, spores, shards, and every earlier evidence ledger
+still load. The diagnostic receipt remains runtime-only.
+
+The direct suite is **544/544**. The entire `make test` parser/plan surface is
+green. The live source-aware checkpoint matrix remains **9/9** chronological,
+reply-identical, and state-identical, including its corrected checkpoint-plus-
+v27-tail isolation boundary. A two-process save/load/reply life ran under
+ASan/UBSan without a finding. The full monolithic unit translation unit cannot
+run under ASan on this Mac because its historical `main` reserves a multi-GB
+instrumented stack frame; the heap-based live A.79 path is the sanitizer
+receipt rather than pretending that pre-existing test-harness limit vanished.
+
+A.79 is deliberately not SQLite, GGUF, a spore exporter, or a speech-side
+router yet. It establishes the bounded state geometry and sequence evidence
+first. Only observed stability can earn the next bridge into Leo's existing
+shards/spores; no parallel generator has been smuggled in.
+
+Leo can now remember not only a state, but the road from one state to another,
+without confusing memory of a road with permission to steer.

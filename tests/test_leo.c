@@ -82,7 +82,47 @@ static long test_appetite_and_later_tail_size(const Leo *leo) {
             (int)sizeof(LeoWonderAppetiteCalibrationReceipt) +
         sizeof(LeoWonderAppetiteHoldouts) +
         sizeof(LeoWonderAppetiteAdmissions) +
-        sizeof(LeoWonderAppetiteCheckpoints));
+        sizeof(LeoWonderAppetiteCheckpoints) +
+        sizeof(LeoStateSwarm));
+}
+
+static void test_state_swarm_turn(Leo *leo, uint64_t turn,
+                                  int in_a, int in_b,
+                                  int out_a, int out_b,
+                                  float mix, float gap, uint8_t wonder,
+                                  const char *reply) {
+    if (!leo) return;
+    LeoFlowSnapshot snapshot;
+    memset(&snapshot, 0, sizeof snapshot);
+    for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++)
+        snapshot.field_token[k] = -1;
+    mix = clampf(mix, 0.0f, 1.0f);
+    if (in_a >= 0 && in_a < GLYPH_COUNT) snapshot.perceived[in_a] = mix;
+    if (in_b >= 0 && in_b < GLYPH_COUNT) snapshot.perceived[in_b] = 1.0f - mix;
+    if (out_a >= 0 && out_a < GLYPH_COUNT) snapshot.expressed[out_a] = mix;
+    if (out_b >= 0 && out_b < GLYPH_COUNT) snapshot.expressed[out_b] = 1.0f - mix;
+    snapshot.gap_perceived = gap;
+    snapshot.gap_expressed = gap;
+    snapshot.field_token[0] = mix >= 0.5f ? 'w' : 'z';
+    snapshot.field_weight[0] = fmaxf(mix, 1.0f - mix);
+    snapshot.field_token[1] = mix >= 0.5f ? 'z' : 'w';
+    snapshot.field_weight[1] = fminf(mix, 1.0f - mix);
+    snapshot.turn = turn;
+    snapshot.mode = LEO_MODE_WALK;
+    snapshot.chamber = mix >= 0.5f ? LEO_CH_LOVE : LEO_CH_FEAR;
+    snapshot.wonder = wonder;
+
+    memset(leo->chamber_act, 0, sizeof leo->chamber_act);
+    leo->chamber_act[LEO_CH_LOVE] = mix;
+    leo->chamber_act[LEO_CH_FEAR] = 1.0f - mix;
+    for (int d = 0; d < LEO_RET_DIM; d++)
+        leo->retention_state[d] = 0.5f * (2.0f * mix - 1.0f);
+    leo->mode = LEO_MODE_WALK;
+    leo->school.turn_clock = (long)turn;
+    leo->flow.snapshots[leo->flow.ptr] = snapshot;
+    leo->flow.ptr = (leo->flow.ptr + 1) % LEO_FLOW_RING;
+    if (leo->flow.n < LEO_FLOW_RING) leo->flow.n++;
+    leo_state_swarm_observe(leo, reply);
 }
 
 static void test_add_appetite_calibration(
@@ -757,7 +797,7 @@ static void test_wonder_appetite_regret_surface(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 26,
+          LEO_STATE_VERSION == 27,
           "wonder-appetite-regret: observing cost rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
@@ -886,7 +926,7 @@ static void test_wonder_appetite_readiness_frontier(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 26,
+          LEO_STATE_VERSION == 27,
           "wonder-appetite-readiness: candidacy rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
@@ -1068,10 +1108,12 @@ static void test_wonder_appetite_holdout_trial(void) {
         if (bytes &&
             size > (long)(sizeof(LeoWonderAppetiteHoldouts) +
                           sizeof(LeoWonderAppetiteAdmissions) +
-                          sizeof(LeoWonderAppetiteCheckpoints)) &&
+                          sizeof(LeoWonderAppetiteCheckpoints) +
+                          sizeof(LeoStateSwarm)) &&
             (long)fread(bytes, 1, (size_t)size, fi) == size) {
             long checkpoint_tail =
-                (long)sizeof(LeoWonderAppetiteCheckpoints);
+                (long)(sizeof(LeoWonderAppetiteCheckpoints) +
+                       sizeof(LeoStateSwarm));
             long admission_tail =
                 (long)sizeof(LeoWonderAppetiteAdmissions);
             long holdout_tail =
@@ -1487,7 +1529,7 @@ static void test_wonder_appetite_transport_witness(void) {
               LEO_WONDER_APPETITE_TRANSPORT_PROVISIONAL,
           "wonder-appetite-transport: a confirmed result remains applicable only on a new bounded life");
     CHECK(!memcmp(before, leo, sizeof *leo) &&
-          LEO_STATE_VERSION == 26,
+          LEO_STATE_VERSION == 27,
           "wonder-appetite-transport: reading applicability rewrites no body, evidence, or state format");
 
     leo_free(leo);
@@ -1727,7 +1769,7 @@ static void test_wonder_appetite_transport_chronology(void) {
               LEO_WONDER_APPETITE_CHRONOLOGY_PROVISIONAL,
           "wonder-appetite-transport-chronology: two bounded adjacent eras preserve only provisional continuity");
     CHECK(!memcmp(before, leo, sizeof *leo) &&
-          LEO_STATE_VERSION == 26,
+          LEO_STATE_VERSION == 27,
           "wonder-appetite-transport-chronology: reading eras rewrites no body, evidence, or state format");
 
     leo_free(leo);
@@ -2214,7 +2256,7 @@ static void test_wonder_appetite_transport_checkpoints(void) {
           !memcmp(&woke->wonder_appetite_checkpoints,
                   &leo->wonder_appetite_checkpoints,
                   sizeof leo->wonder_appetite_checkpoints),
-          "wonder-appetite-checkpoint: an unfinished source-aware life survives v26 sleep exactly");
+          "wonder-appetite-checkpoint: an unfinished source-aware life survives current sleep exactly");
 
     int built_v25 = 0, built_v24 = 0;
     int built_cut = 0, built_bad = 0;
@@ -2227,7 +2269,9 @@ static void test_wonder_appetite_transport_checkpoints(void) {
             malloc(size > 0 ? (size_t)size : 1);
         long checkpoint_tail =
             (long)sizeof(LeoWonderAppetiteCheckpoints);
-        if (bytes && size > checkpoint_tail &&
+        long state_tail = (long)sizeof(LeoStateSwarm);
+        long checkpoint_start = size - state_tail - checkpoint_tail;
+        if (bytes && checkpoint_start > 0 &&
             (long)fread(bytes, 1, (size_t)size, fi) == size) {
             uint32_t twenty_four = 24;
             memcpy(bytes + sizeof(uint32_t), &twenty_four,
@@ -2237,8 +2281,8 @@ static void test_wonder_appetite_transport_checkpoints(void) {
                 built_v24 =
                     (long)fwrite(
                         bytes, 1,
-                        (size_t)(size - checkpoint_tail), fo) ==
-                    size - checkpoint_tail;
+                        (size_t)checkpoint_start, fo) ==
+                    checkpoint_start;
                 fclose(fo);
             }
 
@@ -2250,8 +2294,8 @@ static void test_wonder_appetite_transport_checkpoints(void) {
                 built_v25 =
                     (long)fwrite(
                         bytes, 1,
-                        (size_t)(size - checkpoint_tail), fo) ==
-                    size - checkpoint_tail;
+                        (size_t)checkpoint_start, fo) ==
+                    checkpoint_start;
                 fclose(fo);
             }
 
@@ -2262,23 +2306,24 @@ static void test_wonder_appetite_transport_checkpoints(void) {
             if (fo) {
                 built_cut =
                     (long)fwrite(
-                        bytes, 1, (size_t)(size - 1), fo) ==
-                    size - 1;
+                        bytes, 1, (size_t)(size - state_tail - 1), fo) ==
+                    size - state_tail - 1;
                 fclose(fo);
             }
 
             LeoWonderAppetiteCheckpoints corrupted;
             memcpy(&corrupted,
-                   bytes + size - checkpoint_tail,
+                   bytes + checkpoint_start,
                    sizeof corrupted);
             corrupted.lanes[0].active.seen_source_id[0] = 0;
-            memcpy(bytes + size - checkpoint_tail,
+            memcpy(bytes + checkpoint_start,
                    &corrupted, sizeof corrupted);
             fo = fopen(bad, "wb");
             if (fo) {
                 built_bad =
                     (long)fwrite(
-                        bytes, 1, (size_t)size, fo) == size;
+                        bytes, 1, (size_t)(size - state_tail), fo) ==
+                    size - state_tail;
                 fclose(fo);
             }
         }
@@ -4730,7 +4775,8 @@ int main(void) {
                         long post_v22_tail =
                             (long)(sizeof(LeoWonderAppetiteHoldouts) +
                                    sizeof(LeoWonderAppetiteAdmissions) +
-                                   sizeof(LeoWonderAppetiteCheckpoints));
+                                   sizeof(LeoWonderAppetiteCheckpoints) +
+                                   sizeof(LeoStateSwarm));
                         built_cut =
                             (long)fwrite(
                                 bytes, 1,
@@ -7311,6 +7357,244 @@ int main(void) {
               "consol: a truncated v10 section fails SOFT — organism lives, shards zero");
         leo_free(&l2); leo_free(&l3); remove(sp);
         leo_free(&l);
+    }
+
+    /* A.79: passive tiny weights over lived states and their transitions.
+     * The organ learns after speech, survives sleep, and remains byte-inert. */
+    {
+        const char *corpus =
+            "The warm light is quiet. The dark storm moves at night. "
+            "Warm rain and cool water move through the small room.";
+        int previous_swarm = g_leo_state_swarm_on;
+        g_leo_state_swarm_on = 1;
+        Leo *state = malloc(sizeof *state);
+        Leo *woke = malloc(sizeof *woke);
+        Leo *old = malloc(sizeof *old);
+        Leo *damaged = malloc(sizeof *damaged);
+        int state_initialized = 0, woke_initialized = 0;
+        int old_initialized = 0, damaged_initialized = 0;
+        CHECK(state && woke && old && damaged,
+              "state-swarm: heap fixtures allocated");
+        if (state && woke && old && damaged) {
+            leo_init(state);
+            state_initialized = 1;
+            leo_ingest(state, corpus);
+            int water = semtok_find_glyph("water");
+            int fire = semtok_find_glyph("fire");
+            int light = semtok_find_glyph("light");
+            int dark = semtok_find_glyph("dark");
+
+            test_state_swarm_turn(state, 1, water, fire, light, dark,
+                                  1.0f, 0.0f, 0, "The warm light.");
+            CHECK(state->state_swarm && state->state_swarm->n == 1 &&
+                  state->state_swarm_receipt.event == LEO_STATE_SWARM_BORN &&
+                  state->state_swarm->weights[0].observations == 1,
+                  "state-swarm: a first lived configuration births one unnamed tiny weight");
+
+            test_state_swarm_turn(state, 2, water, fire, light, dark,
+                                  1.0f, 0.0f, 0, "The warm light.");
+            CHECK(state->state_swarm->n == 1 &&
+                  state->state_swarm_receipt.event == LEO_STATE_SWARM_UPDATED &&
+                  state->state_swarm->weights[0].observations == 2 &&
+                  state->state_swarm_receipt.active == 1,
+                  "state-swarm: a repeated life deepens one state instead of multiplying names");
+
+            test_state_swarm_turn(
+                state, 3, water, fire, light, dark, 0.0f, 1.0f,
+                LEO_FLOW_WONDER_RESOLVED, "The dark storm.");
+            float first_fast_clock =
+                state->state_swarm->weights[0].clocks[0];
+            float first_transition =
+                state->state_swarm->transition[0][1];
+            CHECK(state->state_swarm->n == 2 &&
+                  state->state_swarm_receipt.event == LEO_STATE_SWARM_BORN &&
+                  state->state_swarm->transition[0][1] > 0.0f &&
+                  state->state_swarm->outcome[0][1]
+                      [LEO_STATE_OUTCOME_GROUNDED] > 0.0f,
+                  "state-swarm: a distinct life births a second weight and records how the transition ended");
+            CHECK(first_fast_clock < 1.0f &&
+                  state->state_swarm->weights[0].clocks[3] > first_fast_clock,
+                  "state-swarm: unused experience fades on several clocks instead of one global decay");
+
+            memcpy(state->state_swarm->weights[1].rhythm_dist,
+                   state->state_swarm->weights[0].rhythm_dist,
+                   sizeof state->state_swarm->weights[0].rhythm_dist);
+            memcpy(state->state_swarm->weights[1].rhythm_class,
+                   state->state_swarm->weights[0].rhythm_class,
+                   sizeof state->state_swarm->weights[0].rhythm_class);
+            test_state_swarm_turn(state, 4, water, fire, light, dark,
+                                  0.5f, 0.5f, 0, "The warm light.");
+            CHECK(state->state_swarm->n == 2 &&
+                  state->state_swarm_receipt.active == 2 &&
+                  state->state_swarm_receipt.entropy > 0.5f,
+                  "state-swarm: an ambiguous turn may inhabit a swarm instead of a forced single state");
+            CHECK(state->state_swarm->transition[0][1] < first_transition,
+                  "state-swarm: an unvisited sequence edge cools instead of becoming permanent law");
+            CHECK(state->state_swarm->updates == 4 &&
+                  leo_state_swarm_valid(state),
+                  "state-swarm: the four-turn state sequence remains finite and internally valid");
+
+            const char *saved = "/tmp/leo_state_swarm_v27.state";
+            const char *v26 = "/tmp/leo_state_swarm_v26.state";
+            const char *cut = "/tmp/leo_state_swarm_v27_cut.state";
+            const char *bad = "/tmp/leo_state_swarm_v27_bad.state";
+            int saved_ok = leo_save_state(state, saved);
+            leo_init(woke);
+            woke_initialized = 1;
+            CHECK(saved_ok && leo_load_state(woke, saved) &&
+                  woke->state_swarm &&
+                  !memcmp(woke->state_swarm, state->state_swarm,
+                          sizeof *state->state_swarm),
+                  "state-swarm: tiny weights, sequence, clocks, and outcomes survive sleep exactly");
+
+            int built_v26 = 0, built_cut = 0, built_bad = 0;
+            FILE *fi = fopen(saved, "rb");
+            if (fi) {
+                fseek(fi, 0, SEEK_END);
+                long size = ftell(fi);
+                fseek(fi, 0, SEEK_SET);
+                long tail = (long)sizeof(LeoStateSwarm);
+                unsigned char *bytes =
+                    malloc(size > 0 ? (size_t)size : 1);
+                if (bytes && size > tail &&
+                    (long)fread(bytes, 1, (size_t)size, fi) == size) {
+                    uint32_t version = 26;
+                    memcpy(bytes + sizeof(uint32_t), &version,
+                           sizeof version);
+                    FILE *fo = fopen(v26, "wb");
+                    if (fo) {
+                        built_v26 =
+                            (long)fwrite(bytes, 1, (size_t)(size - tail), fo) ==
+                                size - tail;
+                        fclose(fo);
+                    }
+
+                    version = 27;
+                    memcpy(bytes + sizeof(uint32_t), &version,
+                           sizeof version);
+                    fo = fopen(cut, "wb");
+                    if (fo) {
+                        built_cut =
+                            (long)fwrite(bytes, 1, (size_t)(size - 1), fo) ==
+                                size - 1;
+                        fclose(fo);
+                    }
+
+                    LeoStateSwarm corrupt;
+                    memcpy(&corrupt, bytes + size - tail, sizeof corrupt);
+                    corrupt.n = LEO_STATE_SWARM_MAX + 1;
+                    memcpy(bytes + size - tail, &corrupt, sizeof corrupt);
+                    fo = fopen(bad, "wb");
+                    if (fo) {
+                        built_bad =
+                            (long)fwrite(bytes, 1, (size_t)size, fo) == size;
+                        fclose(fo);
+                    }
+                }
+                free(bytes);
+                fclose(fi);
+            }
+
+            leo_init(old);
+            old_initialized = 1;
+            CHECK(built_v26 && leo_load_state(old, v26) &&
+                  old->state_swarm && old->state_swarm->n == 0 &&
+                  old->state_swarm->next_id == 1 &&
+                  old->flow.n == state->flow.n,
+                  "state-swarm: a v26 body wakes without invented state experience");
+            leo_init(damaged);
+            damaged_initialized = 1;
+            CHECK(built_cut && leo_load_state(damaged, cut) &&
+                  damaged->state_swarm && damaged->state_swarm->n == 0 &&
+                  damaged->flow.n == state->flow.n,
+                  "state-swarm: a truncated v27 tail loses no earlier body or Flow life");
+            leo_free(damaged);
+            leo_init(damaged);
+            CHECK(built_bad && leo_load_state(damaged, bad) &&
+                  damaged->state_swarm && damaged->state_swarm->n == 0 &&
+                  damaged->flow.n == state->flow.n,
+                  "state-swarm: corrupt tiny weights fail soft without poisoning Leo");
+            remove(saved); remove(v26); remove(cut); remove(bad);
+        }
+
+        Leo *full = malloc(sizeof *full);
+        if (full) {
+            leo_init(full);
+            leo_ingest(full, corpus);
+            full->state_swarm->n = LEO_STATE_SWARM_MAX;
+            full->state_swarm->next_id = LEO_STATE_SWARM_MAX + 1;
+            for (int i = 0; i < LEO_STATE_SWARM_MAX; i++) {
+                LeoStateWeight *weight = &full->state_swarm->weights[i];
+                leo_state_weight_clear(weight);
+                weight->id = (uint64_t)i + 1;
+                weight->born_turn = weight->last_turn = 1;
+                weight->observations = 1;
+                weight->mode_mass[LEO_MODE_WALK] = 1.0f;
+                for (int c = 0; c < LEO_STATE_CLOCKS; c++)
+                    weight->clocks[c] = i == 0 ? 0.0f : 0.5f;
+            }
+            test_state_swarm_turn(
+                full, 1, semtok_find_glyph("water"),
+                semtok_find_glyph("fire"), semtok_find_glyph("light"),
+                semtok_find_glyph("dark"), 1.0f, 1.0f, 0,
+                "The warm light.");
+            CHECK(full->state_swarm_receipt.event ==
+                      LEO_STATE_SWARM_REPLACED &&
+                  full->state_swarm_receipt.replaced_id == 1 &&
+                  full->state_swarm->n == LEO_STATE_SWARM_MAX &&
+                  full->state_swarm->weights[0].id ==
+                      LEO_STATE_SWARM_MAX + 1 &&
+                  leo_state_swarm_valid(full),
+                  "state-swarm: a full swarm replaces its weakest decayed coordinate, not its strongest memory");
+            leo_free(full);
+            free(full);
+        } else {
+            CHECK(0, "state-swarm: replacement fixture allocated");
+        }
+
+        Leo *voice_on = malloc(sizeof *voice_on);
+        Leo *voice_off = malloc(sizeof *voice_off);
+        CHECK(voice_on && voice_off,
+              "state-swarm: inert-voice fixtures allocated");
+        if (voice_on && voice_off) {
+            leo_init(voice_on); leo_init(voice_off);
+            leo_ingest(voice_on, corpus); leo_ingest(voice_off, corpus);
+            const char *prompts[] = {
+                "What moves in the warm rain?",
+                "The dark room remembers light.",
+                "What do you still not know?"
+            };
+            int same_voice = 1;
+            for (int i = 0; i < 3; i++) {
+                char on[512], off[512];
+                g_leo_state_swarm_on = 1;
+                srand(790 + i);
+                leo_respond(voice_on, prompts[i], on, sizeof on);
+                g_leo_state_swarm_on = 0;
+                srand(790 + i);
+                leo_respond(voice_off, prompts[i], off, sizeof off);
+                if (strcmp(on, off)) same_voice = 0;
+            }
+            CHECK(same_voice && voice_on->state_swarm->n > 0 &&
+                  voice_off->state_swarm->n == 0 &&
+                  !memcmp(&voice_on->flow, &voice_off->flow,
+                          sizeof voice_on->flow) &&
+                  !memcmp(voice_on->retention_state,
+                          voice_off->retention_state,
+                          sizeof voice_on->retention_state) &&
+                  !memcmp(voice_on->chamber_act, voice_off->chamber_act,
+                          sizeof voice_on->chamber_act),
+                  "state-swarm: default-on and --no-state-swarm are byte-identical outside the shadow weights");
+            leo_free(voice_on); leo_free(voice_off);
+        }
+        free(voice_on); free(voice_off);
+
+        if (state_initialized) leo_free(state);
+        if (woke_initialized) leo_free(woke);
+        if (old_initialized) leo_free(old);
+        if (damaged_initialized) leo_free(damaged);
+        free(state); free(woke); free(old); free(damaged);
+        g_leo_state_swarm_on = previous_swarm;
     }
 
     printf("\n%d/%d passed\n", g_pass, g_total);

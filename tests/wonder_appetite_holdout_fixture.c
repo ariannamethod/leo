@@ -434,17 +434,21 @@ int main(int argc, char **argv) {
         printf("%zu\n",
                sizeof(LeoWonderAppetiteHoldouts) +
                sizeof(LeoWonderAppetiteAdmissions) +
-               sizeof(LeoWonderAppetiteCheckpoints));
+               sizeof(LeoWonderAppetiteCheckpoints) +
+               sizeof(LeoStateSwarm));
         return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "--admission-tail-size")) {
         printf("%zu\n",
                sizeof(LeoWonderAppetiteAdmissions) +
-               sizeof(LeoWonderAppetiteCheckpoints));
+               sizeof(LeoWonderAppetiteCheckpoints) +
+               sizeof(LeoStateSwarm));
         return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "--checkpoint-tail-size")) {
-        printf("%zu\n", sizeof(LeoWonderAppetiteCheckpoints));
+        printf("%zu\n",
+               sizeof(LeoWonderAppetiteCheckpoints) +
+               sizeof(LeoStateSwarm));
         return 0;
     }
     if (argc != 3 ||

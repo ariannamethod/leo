@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <limits.h>
+#include <float.h>
 
 #define LEO_VERSION  "0.3.0-phase3a.4"
 
@@ -1583,6 +1584,92 @@ typedef struct {
     float expressed_velocity[GLYPH_COUNT];
 } LeoFlowShortCurrent;
 
+/* A.79: tiny lived-state weights. These are not pretrained parameters and
+ * they do not duplicate Leo's vocabulary, spores, or consolidation shards.
+ * Each weight compresses a configuration already present in Flow, the body,
+ * and the reply's RRPRAM-like rhythm. The transition field remembers which
+ * configurations followed which; consequence channels are learned one turn
+ * later. This entire organ is shadow-only: no sampler or speech path reads it. */
+#define LEO_STATE_SWARM_MAX          8
+#define LEO_STATE_RHYTHM_DIST       32
+#define LEO_STATE_RHYTHM_CLASSES     4
+#define LEO_STATE_CLOCKS             4
+#define LEO_STATE_OUTCOMES           4
+#define LEO_STATE_NOVELTY_GATE    0.55f
+#define LEO_STATE_REPLACE_GATE    0.40f
+#define LEO_STATE_ACTIVE_GATE     0.15f
+
+enum {
+    LEO_STATE_RHYTHM_FUNCTION = 0,
+    LEO_STATE_RHYTHM_CONTENT,
+    LEO_STATE_RHYTHM_PUNCT,
+    LEO_STATE_RHYTHM_RARE
+};
+
+enum {
+    LEO_STATE_OUTCOME_GROUNDED = 0,
+    LEO_STATE_OUTCOME_DISTRESS_RELIEF,
+    LEO_STATE_OUTCOME_GAP_RELIEF,
+    LEO_STATE_OUTCOME_ALIGNMENT_DELTA
+};
+
+enum {
+    LEO_STATE_SWARM_UPDATED = 0,
+    LEO_STATE_SWARM_BORN,
+    LEO_STATE_SWARM_REPLACED
+};
+
+typedef struct {
+    uint64_t id;
+    uint64_t born_turn;
+    uint64_t last_turn;
+    uint32_t observations;
+    float perceived[GLYPH_COUNT];
+    float expressed[GLYPH_COUNT];
+    int32_t field_token[LEO_FLOW_CONSTELLATION];
+    float field_weight[LEO_FLOW_CONSTELLATION];
+    float chambers[LEO_N_CHAMBERS];
+    float retention[LEO_RET_DIM];
+    float rhythm_dist[LEO_STATE_RHYTHM_DIST];
+    float rhythm_class[LEO_STATE_RHYTHM_CLASSES];
+    float mode_mass[LEO_MODE_COUNT];
+    float gap_perceived;
+    float gap_expressed;
+    float clocks[LEO_STATE_CLOCKS];
+} LeoStateWeight;
+
+typedef struct {
+    LeoStateWeight weights[LEO_STATE_SWARM_MAX];
+    uint32_t n;
+    uint64_t next_id;
+    float transition[LEO_STATE_SWARM_MAX][LEO_STATE_SWARM_MAX];
+    float outcome[LEO_STATE_SWARM_MAX][LEO_STATE_SWARM_MAX]
+                 [LEO_STATE_OUTCOMES];
+    float previous_activation[LEO_STATE_SWARM_MAX];
+    float previous_gap;
+    float previous_distress;
+    float previous_alignment;
+    uint64_t previous_turn;
+    uint64_t updates;
+    uint8_t has_previous;
+} LeoStateSwarm;
+
+/* Runtime receipt only. It explains what the shadow learner saw without
+ * becoming another persisted belief about itself. */
+typedef struct {
+    uint64_t turn;
+    uint64_t winner_id;
+    uint64_t born_id;
+    uint64_t replaced_id;
+    uint64_t expected_id;
+    float similarity;
+    float entropy;
+    float expected_probability;
+    float surprise;
+    uint8_t active;
+    uint8_t event;
+} LeoStateSwarmReceipt;
+
 /* Shadow scheduling is a counterfactual diary, not a controller. It records
  * what a future speech-side organ might do on the NEXT turn, after the current
  * reply and both Flow clocks are already fixed. No generation path reads it. */
@@ -2507,6 +2594,10 @@ typedef struct {
     /* passive temporal proprioception (state v13): a bounded archaeological
      * record of what has been flowing through lived replies. No speech reader. */
     LeoFlow flow;
+    /* A.79/state v27: bounded tiny weights over lived configurations and their
+     * one-turn transitions. Persisted experience, still no speech reader. */
+    LeoStateSwarm *state_swarm;       /* separately owned: Leo is already a ~2.4 MB value */
+    LeoStateSwarmReceipt state_swarm_receipt;
     /* v16 counterfactual proposals derived after a lived reply. This remains a
      * witness surface until a later phase independently earns authority. */
     LeoShadow shadow;
@@ -2590,6 +2681,15 @@ static void leo_init(Leo *leo) {
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
     leo->temp_mult = 1.0f;
+    leo->state_swarm = calloc(1, sizeof *leo->state_swarm);
+    if (leo->state_swarm) {
+        leo->state_swarm->next_id = 1;
+        for (int i = 0; i < LEO_STATE_SWARM_MAX; i++)
+            for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++)
+                leo->state_swarm->weights[i].field_token[k] = -1;
+    } else {
+        fprintf(stderr, "[leo] WARNING: state-swarm allocation failed — lived-state weights disabled.\n");
+    }
     leo_heard_init(&leo->heard);
     /* Phase 3a — retention fingerprints: deterministic FNV-1a per (id,d), same
      * token → same vector across sessions (canon leo.c:1730-1746). Allocated for
@@ -2621,6 +2721,7 @@ static void leo_free(Leo *leo) {
     leo_heard_free(&leo->heard);
     free(leo->w_embed); leo->w_embed = NULL;
     free(leo->chamber_tag); leo->chamber_tag = NULL;
+    free(leo->state_swarm); leo->state_swarm = NULL;
 }
 
 /* Leo hears text: unigram freq, bigrams (+ pair counting for online
@@ -2793,6 +2894,7 @@ static int g_leo_wonder_attribution_on = 1; /* address witness: semantic sibling
 static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibling may receive the mouth while the active origin returns to the queue. */
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
 static int g_leo_flow_on = 1;           /* passive temporal proprioception. --no-flow stops snapshots; no generation path reads them. */
+static int g_leo_state_swarm_on = 1;     /* A.79: learned state/sequence weights; observation only, no generation reader. */
 static int g_leo_shadow_on = 1;         /* counterfactual next-turn proposals. --no-shadow keeps Flow but writes no receipts. */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
@@ -10097,6 +10199,568 @@ static void leo_flow_observe(Leo *leo, const char *prompt, const char *reply,
     if (flow->n < LEO_FLOW_RING) flow->n++;
 }
 
+static void leo_state_weight_clear(LeoStateWeight *weight) {
+    if (!weight) return;
+    memset(weight, 0, sizeof *weight);
+    for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++)
+        weight->field_token[k] = -1;
+}
+
+static void leo_state_swarm_clear(LeoStateSwarm *swarm) {
+    if (!swarm) return;
+    memset(swarm, 0, sizeof *swarm);
+    swarm->next_id = 1;
+    for (int i = 0; i < LEO_STATE_SWARM_MAX; i++)
+        for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++)
+            swarm->weights[i].field_token[k] = -1;
+}
+
+static int leo_state_token_class(const Leo *leo, int id) {
+    if (!leo || id < 0 || id >= leo->bpe.vocab_size)
+        return LEO_STATE_RHYTHM_RARE;
+    const uint8_t *bytes = leo->bpe.vocab_bytes[id];
+    int len = leo->bpe.vocab_len[id];
+    int word = 0;
+    for (int i = 0; i < len; i++)
+        if (isalnum(bytes[i]) || bytes[i] == '\'') { word = 1; break; }
+    if (!word) return LEO_STATE_RHYTHM_PUNCT;
+    if (id >= leo->cooc.freq_size || leo->cooc.freq[id] < 2.0f)
+        return LEO_STATE_RHYTHM_RARE;
+    if (leo_token_is_function(&leo->bpe, id))
+        return LEO_STATE_RHYTHM_FUNCTION;
+    return LEO_STATE_RHYTHM_CONTENT;
+}
+
+/* A local RRPRAM-like trace: distance channels measure how strongly token
+ * pairs at that reply-distance already coexist in Leo's own field; four
+ * lexical classes carry the reply's recency-weighted gait. It observes the
+ * actual emitted bytes and invents no semantic labels. */
+static void leo_state_reply_rhythm(const Leo *leo, const char *reply,
+                                   float distance[LEO_STATE_RHYTHM_DIST],
+                                   float classes[LEO_STATE_RHYTHM_CLASSES]) {
+    memset(distance, 0, sizeof(float) * LEO_STATE_RHYTHM_DIST);
+    memset(classes, 0, sizeof(float) * LEO_STATE_RHYTHM_CLASSES);
+    if (!leo || !reply || !reply[0]) return;
+    size_t bytes = strlen(reply);
+    if (bytes > (size_t)INT_MAX) bytes = (size_t)INT_MAX;
+    int *ids = malloc((bytes ? bytes : 1) * sizeof *ids);
+    if (!ids) return;
+    int n = bpe_encode(&leo->bpe, (const uint8_t *)reply, (int)bytes,
+                       ids, (int)bytes);
+
+    float class_mass = 0.0f;
+    for (int i = 0; i < n; i++) {
+        float recency = powf(0.97f, (float)(n - 1 - i));
+        classes[leo_state_token_class(leo, ids[i])] += recency;
+        class_mass += recency;
+    }
+    if (class_mass > 0.0f)
+        for (int c = 0; c < LEO_STATE_RHYTHM_CLASSES; c++)
+            classes[c] /= class_mass;
+
+    for (int d = 1; d <= LEO_STATE_RHYTHM_DIST && d < n; d++) {
+        float sum = 0.0f;
+        int pairs = 0;
+        for (int i = d; i < n; i++) {
+            int a = ids[i - d], b = ids[i];
+            float fa = a >= 0 && a < leo->cooc.freq_size ?
+                leo->cooc.freq[a] : 0.0f;
+            float fb = b >= 0 && b < leo->cooc.freq_size ?
+                leo->cooc.freq[b] : 0.0f;
+            float denom = sqrtf((fa + 1.0f) * (fb + 1.0f));
+            float relation = denom > 0.0f ?
+                (cooc_get(&leo->cooc, a, b) +
+                 cooc_get(&leo->cooc, b, a)) / denom : 0.0f;
+            sum += clampf(relation, 0.0f, 1.0f);
+            pairs++;
+        }
+        distance[d - 1] = pairs ? sum / (float)pairs : 0.0f;
+    }
+    free(ids);
+}
+
+static float leo_state_cosine(const float *a, const float *b, int n) {
+    float aa = 0.0f, bb = 0.0f;
+    for (int i = 0; i < n; i++) {
+        aa += a[i] * a[i];
+        bb += b[i] * b[i];
+    }
+    if (aa <= 1e-12f && bb <= 1e-12f) return 1.0f;
+    if (aa <= 1e-12f || bb <= 1e-12f) return 0.0f;
+    return clampf(leo_vec_cosine(a, b, n), 0.0f, 1.0f);
+}
+
+static float leo_state_field_similarity(const LeoStateWeight *a,
+                                        const LeoStateWeight *b) {
+    float dot = 0.0f, aa = 0.0f, bb = 0.0f;
+    for (int i = 0; i < LEO_FLOW_CONSTELLATION; i++) {
+        if (a->field_token[i] >= 0)
+            aa += a->field_weight[i] * a->field_weight[i];
+        if (b->field_token[i] >= 0)
+            bb += b->field_weight[i] * b->field_weight[i];
+        if (a->field_token[i] < 0) continue;
+        for (int j = 0; j < LEO_FLOW_CONSTELLATION; j++)
+            if (a->field_token[i] == b->field_token[j]) {
+                dot += a->field_weight[i] * b->field_weight[j];
+                break;
+            }
+    }
+    if (aa <= 1e-12f && bb <= 1e-12f) return 1.0f;
+    if (aa <= 1e-12f || bb <= 1e-12f) return 0.0f;
+    return clampf(dot / sqrtf(aa * bb), 0.0f, 1.0f);
+}
+
+static float leo_state_similarity(const LeoStateWeight *state,
+                                  const LeoStateWeight *observation) {
+    float gap = 1.0f - 0.5f *
+        (fabsf(state->gap_perceived - observation->gap_perceived) +
+         fabsf(state->gap_expressed - observation->gap_expressed));
+    return clampf(
+        0.19f * leo_state_cosine(state->perceived,
+                                 observation->perceived, GLYPH_COUNT) +
+        0.19f * leo_state_cosine(state->expressed,
+                                 observation->expressed, GLYPH_COUNT) +
+        0.10f * leo_state_field_similarity(state, observation) +
+        0.10f * leo_state_cosine(state->chambers,
+                                 observation->chambers, LEO_N_CHAMBERS) +
+        0.10f * leo_state_cosine(state->retention,
+                                 observation->retention, LEO_RET_DIM) +
+        0.12f * leo_state_cosine(state->rhythm_dist,
+                                 observation->rhythm_dist,
+                                 LEO_STATE_RHYTHM_DIST) +
+        0.06f * leo_state_cosine(state->rhythm_class,
+                                 observation->rhythm_class,
+                                 LEO_STATE_RHYTHM_CLASSES) +
+        0.07f * clampf(gap, 0.0f, 1.0f) +
+        0.07f * leo_state_cosine(state->mode_mass,
+                                 observation->mode_mass, LEO_MODE_COUNT),
+        0.0f, 1.0f);
+}
+
+static void leo_state_observation(const Leo *leo,
+                                  const LeoFlowSnapshot *snapshot,
+                                  const char *reply,
+                                  LeoStateWeight *observation) {
+    leo_state_weight_clear(observation);
+    if (!leo || !snapshot) return;
+    memcpy(observation->perceived, snapshot->perceived,
+           sizeof observation->perceived);
+    memcpy(observation->expressed, snapshot->expressed,
+           sizeof observation->expressed);
+    memcpy(observation->field_token, snapshot->field_token,
+           sizeof observation->field_token);
+    memcpy(observation->field_weight, snapshot->field_weight,
+           sizeof observation->field_weight);
+    memcpy(observation->chambers, leo->chamber_act,
+           sizeof observation->chambers);
+    memcpy(observation->retention, leo->retention_state,
+           sizeof observation->retention);
+    leo_state_reply_rhythm(leo, reply, observation->rhythm_dist,
+                           observation->rhythm_class);
+    observation->mode_mass[snapshot->mode < LEO_MODE_COUNT ?
+                           snapshot->mode : LEO_MODE_WALK] = 1.0f;
+    observation->gap_perceived = snapshot->gap_perceived;
+    observation->gap_expressed = snapshot->gap_expressed;
+}
+
+static void leo_state_update_vector(float *state, const float *observation,
+                                    int n, float rate) {
+    for (int i = 0; i < n; i++)
+        state[i] += rate * (observation[i] - state[i]);
+}
+
+static void leo_state_update_field(LeoStateWeight *state,
+                                   const LeoStateWeight *observation,
+                                   float rate) {
+    for (int i = 0; i < LEO_FLOW_CONSTELLATION; i++)
+        if (state->field_token[i] >= 0)
+            state->field_weight[i] *= 1.0f - rate;
+    for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++) {
+        int token = observation->field_token[k];
+        float value = observation->field_weight[k];
+        if (token < 0 || value <= 0.0f) continue;
+        int slot = -1;
+        for (int i = 0; i < LEO_FLOW_CONSTELLATION; i++)
+            if (state->field_token[i] == token) { slot = i; break; }
+        if (slot < 0)
+            for (int i = 0; i < LEO_FLOW_CONSTELLATION; i++)
+                if (state->field_token[i] < 0 || state->field_weight[i] <= 1e-6f) {
+                    slot = i; break;
+                }
+        if (slot < 0) {
+            slot = 0;
+            for (int i = 1; i < LEO_FLOW_CONSTELLATION; i++)
+                if (state->field_weight[i] < state->field_weight[slot]) slot = i;
+            if (rate * value <= state->field_weight[slot]) continue;
+        }
+        if (state->field_token[slot] != token) {
+            state->field_token[slot] = token;
+            state->field_weight[slot] = 0.0f;
+        }
+        state->field_weight[slot] += rate * value;
+    }
+    for (int i = 1; i < LEO_FLOW_CONSTELLATION; i++) {
+        int j = i;
+        while (j > 0 && state->field_weight[j] > state->field_weight[j - 1]) {
+            float w = state->field_weight[j - 1];
+            int32_t t = state->field_token[j - 1];
+            state->field_weight[j - 1] = state->field_weight[j];
+            state->field_token[j - 1] = state->field_token[j];
+            state->field_weight[j] = w;
+            state->field_token[j] = t;
+            j--;
+        }
+    }
+}
+
+static void leo_state_weight_update(LeoStateWeight *state,
+                                    const LeoStateWeight *observation,
+                                    float activation, uint64_t turn) {
+    float rate = 0.18f * activation * activation;
+    if (rate <= 1e-5f) return;
+    leo_state_update_vector(state->perceived, observation->perceived,
+                            GLYPH_COUNT, rate);
+    leo_state_update_vector(state->expressed, observation->expressed,
+                            GLYPH_COUNT, rate);
+    leo_state_update_field(state, observation, rate);
+    leo_state_update_vector(state->chambers, observation->chambers,
+                            LEO_N_CHAMBERS, rate);
+    leo_state_update_vector(state->retention, observation->retention,
+                            LEO_RET_DIM, rate);
+    leo_state_update_vector(state->rhythm_dist, observation->rhythm_dist,
+                            LEO_STATE_RHYTHM_DIST, rate);
+    leo_state_update_vector(state->rhythm_class, observation->rhythm_class,
+                            LEO_STATE_RHYTHM_CLASSES, rate);
+    leo_state_update_vector(state->mode_mass, observation->mode_mass,
+                            LEO_MODE_COUNT, rate);
+    state->gap_perceived += rate *
+        (observation->gap_perceived - state->gap_perceived);
+    state->gap_expressed += rate *
+        (observation->gap_expressed - state->gap_expressed);
+    if (activation >= LEO_STATE_ACTIVE_GATE && state->observations < UINT32_MAX)
+        state->observations++;
+    if (activation >= 0.05f) state->last_turn = turn;
+}
+
+static void leo_state_reset_slot(LeoStateSwarm *swarm, int slot) {
+    if (!swarm || slot < 0 || slot >= LEO_STATE_SWARM_MAX) return;
+    leo_state_weight_clear(&swarm->weights[slot]);
+    for (int i = 0; i < LEO_STATE_SWARM_MAX; i++) {
+        swarm->transition[slot][i] = 0.0f;
+        swarm->transition[i][slot] = 0.0f;
+        memset(swarm->outcome[slot][i], 0,
+               sizeof swarm->outcome[slot][i]);
+        memset(swarm->outcome[i][slot], 0,
+               sizeof swarm->outcome[i][slot]);
+    }
+    swarm->previous_activation[slot] = 0.0f;
+}
+
+static int leo_state_weakest(const LeoStateSwarm *swarm) {
+    static const float clock_weight[LEO_STATE_CLOCKS] =
+        {0.40f, 0.30f, 0.20f, 0.10f};
+    int weakest = 0;
+    float weakest_value = FLT_MAX;
+    for (uint32_t i = 0; i < swarm->n; i++) {
+        float value = 0.02f * log1pf((float)swarm->weights[i].observations);
+        for (int c = 0; c < LEO_STATE_CLOCKS; c++)
+            value += clock_weight[c] * swarm->weights[i].clocks[c];
+        if (value < weakest_value) {
+            weakest_value = value;
+            weakest = (int)i;
+        }
+    }
+    return weakest;
+}
+
+static float leo_state_distress(const Leo *leo) {
+    if (!leo) return 0.0f;
+    float distress = fmaxf(leo->chamber_act[LEO_CH_FEAR],
+                           leo->chamber_act[LEO_CH_RAGE]);
+    distress = fmaxf(distress, leo->chamber_act[LEO_CH_VOID]);
+    return clampf(distress, 0.0f, 1.0f);
+}
+
+/* Learn after the reply has become a Flow fact. Soft activation lets a clear
+ * turn inhabit one weight and an ambiguous turn inhabit several. Transition
+ * consequences describe temporal association only; they are not causal
+ * claims, and nothing here can alter the reply that produced them. */
+static void leo_state_swarm_observe(Leo *leo, const char *reply) {
+    if (!g_leo_state_swarm_on || !g_leo_flow_on || !leo ||
+        !leo->state_swarm || leo->flow.n <= 0)
+        return;
+    const LeoFlowSnapshot *snapshot =
+        leo_flow_at(&leo->flow, leo->flow.n - 1);
+    if (!snapshot) return;
+    LeoStateSwarm *swarm = leo->state_swarm;
+    LeoStateSwarmReceipt receipt;
+    LeoStateWeight observation;
+    float similarity[LEO_STATE_SWARM_MAX] = {0};
+    float activation[LEO_STATE_SWARM_MAX] = {0};
+    static const float clock_decay[LEO_STATE_CLOCKS] =
+        {0.50f, 0.85f, 0.95f, 0.99f};
+    memset(&receipt, 0, sizeof receipt);
+    receipt.turn = snapshot->turn;
+    leo_state_observation(leo, snapshot, reply, &observation);
+
+    for (uint32_t i = 0; i < swarm->n; i++)
+        for (int c = 0; c < LEO_STATE_CLOCKS; c++)
+            swarm->weights[i].clocks[c] *= clock_decay[c];
+
+    int best = -1;
+    float best_similarity = -1.0f;
+    for (uint32_t i = 0; i < swarm->n; i++) {
+        similarity[i] = leo_state_similarity(&swarm->weights[i], &observation);
+        if (similarity[i] > best_similarity) {
+            best_similarity = similarity[i];
+            best = (int)i;
+        }
+    }
+    receipt.similarity = best >= 0 ? best_similarity : 0.0f;
+
+    int slot = -1;
+    if (swarm->n == 0 ||
+        (best_similarity < LEO_STATE_NOVELTY_GATE &&
+         swarm->n < LEO_STATE_SWARM_MAX)) {
+        slot = (int)swarm->n++;
+        receipt.event = LEO_STATE_SWARM_BORN;
+    } else if (best_similarity < LEO_STATE_REPLACE_GATE &&
+               swarm->n == LEO_STATE_SWARM_MAX) {
+        slot = leo_state_weakest(swarm);
+        receipt.event = LEO_STATE_SWARM_REPLACED;
+        receipt.replaced_id = swarm->weights[slot].id;
+        leo_state_reset_slot(swarm, slot);
+        float remaining = 0.0f;
+        for (uint32_t i = 0; i < swarm->n; i++)
+            remaining += swarm->previous_activation[i];
+        if (remaining > 0.0f)
+            for (uint32_t i = 0; i < swarm->n; i++)
+                swarm->previous_activation[i] /= remaining;
+        else
+            swarm->has_previous = 0;
+    }
+
+    if (slot >= 0) {
+        LeoStateWeight *born = &swarm->weights[slot];
+        *born = observation;
+        born->id = swarm->next_id++;
+        born->born_turn = snapshot->turn;
+        born->last_turn = snapshot->turn;
+        born->observations = 1;
+        for (int c = 0; c < LEO_STATE_CLOCKS; c++) born->clocks[c] = 1.0f;
+        activation[slot] = 1.0f;
+        best = slot;
+        receipt.born_id = born->id;
+    } else {
+        float total = 0.0f;
+        const float temperature = 0.12f;
+        for (uint32_t i = 0; i < swarm->n; i++) {
+            activation[i] = expf((similarity[i] - best_similarity) /
+                                 temperature);
+            total += activation[i];
+        }
+        if (total > 0.0f)
+            for (uint32_t i = 0; i < swarm->n; i++) activation[i] /= total;
+    }
+
+    for (uint32_t i = 0; i < swarm->n; i++) {
+        if (slot < 0) leo_state_weight_update(&swarm->weights[i], &observation,
+                                              activation[i], snapshot->turn);
+        for (int c = 0; c < LEO_STATE_CLOCKS; c++)
+            swarm->weights[i].clocks[c] = clampf(
+                swarm->weights[i].clocks[c] +
+                (1.0f - clock_decay[c]) * activation[i], 0.0f, 1.0f);
+        if (activation[i] >= LEO_STATE_ACTIVE_GATE) receipt.active++;
+    }
+
+    if (swarm->n > 1) {
+        float entropy = 0.0f;
+        for (uint32_t i = 0; i < swarm->n; i++)
+            if (activation[i] > 0.0f)
+                entropy -= activation[i] * logf(activation[i]);
+        receipt.entropy = entropy / logf((float)swarm->n);
+    }
+    receipt.winner_id = best >= 0 ? swarm->weights[best].id : 0;
+
+    int adjacent = swarm->has_previous &&
+        swarm->previous_turn != UINT64_MAX &&
+        snapshot->turn == swarm->previous_turn + 1;
+    if (adjacent) {
+        for (uint32_t i = 0; i < swarm->n; i++)
+            for (uint32_t j = 0; j < swarm->n; j++)
+                swarm->transition[i][j] *= 0.997f;
+        float prediction[LEO_STATE_SWARM_MAX] = {0};
+        float prediction_total = 0.0f;
+        for (uint32_t i = 0; i < swarm->n; i++)
+            for (uint32_t j = 0; j < swarm->n; j++) {
+                prediction[j] += swarm->previous_activation[i] *
+                    swarm->transition[i][j];
+                prediction_total += swarm->previous_activation[i] *
+                    swarm->transition[i][j];
+            }
+        if (prediction_total > 0.0f) {
+            int expected = 0;
+            float overlap = 0.0f;
+            for (uint32_t j = 0; j < swarm->n; j++) {
+                prediction[j] /= prediction_total;
+                overlap += prediction[j] * activation[j];
+                if (prediction[j] > prediction[expected]) expected = (int)j;
+            }
+            receipt.expected_id = swarm->weights[expected].id;
+            receipt.expected_probability = prediction[expected];
+            receipt.surprise = -logf(fmaxf(overlap, 1e-6f));
+        }
+
+        float outcome[LEO_STATE_OUTCOMES] = {
+            (snapshot->wonder & LEO_FLOW_WONDER_RESOLVED) ? 1.0f : 0.0f,
+            clampf(swarm->previous_distress - leo_state_distress(leo),
+                   -1.0f, 1.0f),
+            clampf(swarm->previous_gap - snapshot->gap_perceived,
+                   -1.0f, 1.0f),
+            clampf(leo_flow_alignment(snapshot) - swarm->previous_alignment,
+                   -1.0f, 1.0f)
+        };
+        for (uint32_t i = 0; i < swarm->n; i++)
+            for (uint32_t j = 0; j < swarm->n; j++) {
+                float pair = swarm->previous_activation[i] * activation[j];
+                if (pair <= 1e-6f) continue;
+                swarm->transition[i][j] = clampf(
+                    swarm->transition[i][j] + 0.20f * pair,
+                    0.0f, 1000000.0f);
+                float rate = 0.12f * pair;
+                for (int o = 0; o < LEO_STATE_OUTCOMES; o++)
+                    swarm->outcome[i][j][o] += rate *
+                        (outcome[o] - swarm->outcome[i][j][o]);
+            }
+    }
+
+    memcpy(swarm->previous_activation, activation,
+           sizeof swarm->previous_activation);
+    swarm->previous_gap = snapshot->gap_perceived;
+    swarm->previous_distress = leo_state_distress(leo);
+    swarm->previous_alignment = leo_flow_alignment(snapshot);
+    swarm->previous_turn = snapshot->turn;
+    swarm->has_previous = 1;
+    swarm->updates++;
+    leo->state_swarm_receipt = receipt;
+}
+
+static int leo_state_finite_range(const float *values, int n,
+                                  float low, float high) {
+    for (int i = 0; i < n; i++)
+        if (!isfinite(values[i]) || values[i] < low || values[i] > high)
+            return 0;
+    return 1;
+}
+
+static int leo_state_swarm_valid(const Leo *leo) {
+    if (!leo || !leo->state_swarm) return 0;
+    const LeoStateSwarm *swarm = leo->state_swarm;
+    if (swarm->n > LEO_STATE_SWARM_MAX || swarm->next_id == 0 ||
+        swarm->has_previous > 1 ||
+        swarm->previous_turn > (uint64_t)leo->school.turn_clock ||
+        !isfinite(swarm->previous_gap) || swarm->previous_gap < 0.0f ||
+        swarm->previous_gap > 1.0f ||
+        !isfinite(swarm->previous_distress) ||
+        swarm->previous_distress < 0.0f || swarm->previous_distress > 1.0f ||
+        !isfinite(swarm->previous_alignment) ||
+        swarm->previous_alignment < 0.0f ||
+        swarm->previous_alignment > 1.0001f)
+        return 0;
+
+    uint64_t max_id = 0;
+    for (uint32_t i = 0; i < swarm->n; i++) {
+        const LeoStateWeight *weight = &swarm->weights[i];
+        if (!weight->id || !weight->observations ||
+            weight->born_turn > weight->last_turn ||
+            weight->last_turn > (uint64_t)leo->school.turn_clock)
+            return 0;
+        if (weight->id > max_id) max_id = weight->id;
+        for (uint32_t j = 0; j < i; j++)
+            if (swarm->weights[j].id == weight->id) return 0;
+        if (!leo_state_finite_range(weight->perceived, GLYPH_COUNT,
+                                    0.0f, 1.0001f) ||
+            !leo_state_finite_range(weight->expressed, GLYPH_COUNT,
+                                    0.0f, 1.0001f) ||
+            !leo_state_finite_range(weight->chambers, LEO_N_CHAMBERS,
+                                    -4.0f, 4.0f) ||
+            !leo_state_finite_range(weight->retention, LEO_RET_DIM,
+                                    -100.0f, 100.0f) ||
+            !leo_state_finite_range(weight->rhythm_dist,
+                                    LEO_STATE_RHYTHM_DIST, 0.0f, 1.0001f) ||
+            !leo_state_finite_range(weight->rhythm_class,
+                                    LEO_STATE_RHYTHM_CLASSES, 0.0f, 1.0001f) ||
+            !leo_state_finite_range(weight->mode_mass, LEO_MODE_COUNT,
+                                    0.0f, 1.0001f) ||
+            !leo_state_finite_range(weight->clocks, LEO_STATE_CLOCKS,
+                                    0.0f, 1.0001f) ||
+            !isfinite(weight->gap_perceived) ||
+            weight->gap_perceived < 0.0f || weight->gap_perceived > 1.0f ||
+            !isfinite(weight->gap_expressed) ||
+            weight->gap_expressed < 0.0f || weight->gap_expressed > 1.0f)
+            return 0;
+        float perceived_sum = 0.0f, expressed_sum = 0.0f;
+        float rhythm_sum = 0.0f, mode_sum = 0.0f;
+        for (int g = 0; g < GLYPH_COUNT; g++) {
+            perceived_sum += weight->perceived[g];
+            expressed_sum += weight->expressed[g];
+        }
+        for (int c = 0; c < LEO_STATE_RHYTHM_CLASSES; c++)
+            rhythm_sum += weight->rhythm_class[c];
+        for (int m = 0; m < LEO_MODE_COUNT; m++)
+            mode_sum += weight->mode_mass[m];
+        if (perceived_sum > 1.0001f || expressed_sum > 1.0001f ||
+            rhythm_sum > 1.0001f ||
+            fabsf(mode_sum - 1.0f) > 1e-3f)
+            return 0;
+        float previous_weight = 2.0f;
+        for (int k = 0; k < LEO_FLOW_CONSTELLATION; k++) {
+            if ((weight->field_token[k] < -1 ||
+                 weight->field_token[k] >= leo->bpe.vocab_size) ||
+                !isfinite(weight->field_weight[k]) ||
+                weight->field_weight[k] < 0.0f ||
+                weight->field_weight[k] > 1.0001f ||
+                (weight->field_token[k] < 0 &&
+                 weight->field_weight[k] != 0.0f))
+                return 0;
+            if (weight->field_weight[k] > previous_weight + 1e-6f)
+                return 0;
+            for (int j = 0; j < k; j++)
+                if (weight->field_token[k] >= 0 &&
+                    weight->field_token[j] == weight->field_token[k])
+                    return 0;
+            previous_weight = weight->field_weight[k];
+        }
+    }
+    if (max_id >= swarm->next_id) return 0;
+
+    float previous_sum = 0.0f;
+    for (int i = 0; i < LEO_STATE_SWARM_MAX; i++) {
+        float activation = swarm->previous_activation[i];
+        if (!isfinite(activation) || activation < 0.0f || activation > 1.0001f)
+            return 0;
+        if ((uint32_t)i >= swarm->n && activation != 0.0f) return 0;
+        previous_sum += activation;
+        for (int j = 0; j < LEO_STATE_SWARM_MAX; j++) {
+            float transition = swarm->transition[i][j];
+            if (!isfinite(transition) || transition < 0.0f ||
+                transition > 1000000.0f)
+                return 0;
+            if (!leo_state_finite_range(swarm->outcome[i][j],
+                                        LEO_STATE_OUTCOMES,
+                                        -1.0001f, 1.0001f))
+                return 0;
+        }
+    }
+    if (swarm->has_previous) {
+        if (swarm->n == 0 || fabsf(previous_sum - 1.0f) > 1e-3f)
+            return 0;
+    } else if (previous_sum != 0.0f) {
+        return 0;
+    }
+    return 1;
+}
+
 static const LeoShadowReceipt *leo_shadow_at(const LeoShadow *shadow, int pos) {
     if (!shadow || pos < 0 || pos >= shadow->n) return NULL;
     int start = shadow->n == LEO_SHADOW_RING ? shadow->ptr : 0;
@@ -11084,6 +11748,7 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
     if (leo->school.returned_episode >= 0) flow_event |= LEO_FLOW_WONDER_RECALLED;
     leo_flow_observe(leo, prompt, out, pm, flow_field_token, flow_field_weight,
                      flow_event, flow_wonder_id);  /* observation only: no generation path reads flow */
+    leo_state_swarm_observe(leo, out);              /* A.79: learn lived state/sequence after speech; no reader */
     leo_wonder_appetite_observe(
         leo, prompt, prewonder_field_token, prewonder_field_weight);
     leo_wonder_appetite_calibrate(leo, prompt);
@@ -11143,9 +11808,10 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
  *   v24      : immutable A.50 admission receipts for those trials
  *   v25      : non-overlapping raw transport checkpoints and their sequence
  *   v26      : source identities and ecology for transport checkpoints
+ *   v27      : tiny lived-state weights, transitions, and delayed outcomes
  * ======================================================================== */
 #define LEO_STATE_MAGIC   0x5300454C   /* "LE\0S" — little-endian LEOS */
-#define LEO_STATE_VERSION 26  /* A.56 carries checkpoint source ecology; v5..v25 soft-migrate */
+#define LEO_STATE_VERSION 27  /* A.79 carries the passive state/sequence swarm; v5..v26 soft-migrate */
 
 static int st_w32(FILE *f, int32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
 static int st_wu(FILE *f, uint32_t v)  { return fwrite(&v, sizeof v, 1, f) == 1; }
@@ -11386,6 +12052,16 @@ static int leo_save_state(const Leo *leo, const char *path) {
      * Wonder cannot impersonate semantic transport. No speech path reads this. */
     fwrite(&leo->wonder_appetite_checkpoints,
            sizeof leo->wonder_appetite_checkpoints, 1, f);
+
+    /* A.79 (v27): same-platform tiny lived-state weights. This tail is
+     * observational and independently disposable on truncation/corruption. */
+    if (leo->state_swarm)
+        fwrite(leo->state_swarm, sizeof *leo->state_swarm, 1, f);
+    else {
+        LeoStateSwarm empty;
+        leo_state_swarm_clear(&empty);
+        fwrite(&empty, sizeof empty, 1, f);
+    }
 
     int ok = (ferror(f) == 0);
     if (fclose(f) != 0) ok = 0;                 /* L-2: the final flush can fail (ENOSPC) — never report success on a truncated file */
@@ -12183,6 +12859,20 @@ static int leo_load_state_inner(Leo *leo, const char *path) {
         }
     }
     leo_wonder_appetite_checkpoint_anchor_existing(leo);
+
+    /* A.79 state/sequence swarm (v27). Older bodies begin without fabricated
+     * experience; a damaged tail loses only these learned coordinates. */
+    if (version >= 27) {
+        int swarm_ok = leo->state_swarm &&
+            fread(leo->state_swarm, sizeof *leo->state_swarm, 1, f) == 1 &&
+            leo_state_swarm_valid(leo);
+        if (!leo->state_swarm)
+            fseek(f, (long)sizeof(LeoStateSwarm), SEEK_CUR);
+        if (!swarm_ok) {
+            fprintf(stderr, "[leo] WARNING: v27 state-swarm tail truncated/corrupt — organism lives without state weights.\n");
+            leo_state_swarm_clear(leo->state_swarm);
+        }
+    }
 
     fclose(f);
     /* rebuild the derived tables (same as the main startup path) */
@@ -13467,6 +14157,41 @@ static void print_flow_stats(const Leo *leo) {
                leo_calibration_verdict_name(cal->verdict),
                scored, confirmed, scored ? (double)(brier_sum / (float)scored) : 0.0);
     }
+
+    const LeoStateSwarmReceipt *state_receipt = &leo->state_swarm_receipt;
+    if (g_leo_state_swarm_on && state_receipt->turn == s->turn &&
+        state_receipt->winner_id) {
+        static const char *events[] = {"updated", "born", "replaced"};
+        const LeoStateWeight *winner = NULL;
+        for (uint32_t i = 0; leo->state_swarm &&
+                             i < leo->state_swarm->n; i++)
+            if (leo->state_swarm->weights[i].id == state_receipt->winner_id) {
+                winner = &leo->state_swarm->weights[i];
+                break;
+            }
+        printf("     [state-swarm: turn=%llu states=%u active=%u winner=%llu event=%s similarity=%.3f entropy=%.3f",
+               (unsigned long long)state_receipt->turn,
+               leo->state_swarm ? leo->state_swarm->n : 0,
+               (unsigned)state_receipt->active,
+               (unsigned long long)state_receipt->winner_id,
+               state_receipt->event <= LEO_STATE_SWARM_REPLACED ?
+                   events[state_receipt->event] : "unknown",
+               (double)state_receipt->similarity,
+               (double)state_receipt->entropy);
+        if (state_receipt->replaced_id)
+            printf(" replaced=%llu",
+                   (unsigned long long)state_receipt->replaced_id);
+        if (state_receipt->expected_id)
+            printf(" expected=%llu(%.3f) surprise=%.3f",
+                   (unsigned long long)state_receipt->expected_id,
+                   (double)state_receipt->expected_probability,
+                   (double)state_receipt->surprise);
+        if (winner)
+            printf(" clocks=%.2f/%.2f/%.2f/%.2f",
+                   (double)winner->clocks[0], (double)winner->clocks[1],
+                   (double)winner->clocks[2], (double)winner->clocks[3]);
+        printf("]\n");
+    }
 }
 
 /* callback for the bigram-successor probe */
@@ -13537,6 +14262,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-redirection")) g_leo_wonder_redirection_on = 0;
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
         else if (!strcmp(argv[i], "--no-flow")) g_leo_flow_on = 0;
+        else if (!strcmp(argv[i], "--no-state-swarm")) g_leo_state_swarm_on = 0;
         else if (!strcmp(argv[i], "--no-shadow")) g_leo_shadow_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;

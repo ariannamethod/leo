@@ -93,7 +93,8 @@ sequence_status() {
 }
 
 # Writer isolation: identical evidence with the organ on/off may differ only
-# in the fixed v26 tail, and the distinct states must still speak identically.
+# in the checkpoint-and-later fixed tail, and the distinct states must still
+# speak identically. v27 appends the passive state swarm after the v26 ledger.
 "$OUT/holdout-fixture" "$OUT/writer-on.state" checkpoint-one
 "$OUT/holdout-fixture" "$OUT/writer-off.state" checkpoint-ablated
 checkpoint_tail="$("$OUT/holdout-fixture" --checkpoint-tail-size)"
@@ -103,7 +104,7 @@ writer_prefix=$((writer_size - checkpoint_tail))
     cmp -s -n "$writer_prefix" \
         "$OUT/writer-on.state" "$OUT/writer-off.state" &&
     ! cmp -s "$OUT/writer-on.state" "$OUT/writer-off.state" || {
-        printf 'checkpoint writer escaped its v26 tail\n' >&2
+        printf 'checkpoint writer escaped its checkpoint tail\n' >&2
         exit 1
     }
 for side in on off; do
