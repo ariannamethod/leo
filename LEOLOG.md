@@ -6646,3 +6646,112 @@ make deferred-wonder-answer-scope-life
 
 Leo can hear everything a person says without making every sentence answer
 the question he happened to ask first.
+
+## Phase A.77 — a comma may separate lives without erasing dialogue (2026-07-31)
+
+A.76 bounded reference at strong punctuation but deliberately left commas
+untouched. The next exact branch reproduced the same attribution leak without
+ending a sentence:
+
+```text
+Leo:  Zorble? Water or Animal?
+human: it is an animal, the river has water
+```
+
+Canon pooled ANIMAL with WATER and learned `zorble=water`. The error held for
+all three immediate reference forms:
+
+```text
+a zorble is an animal, the river has water
+it is an animal, the river has water
+animal, the river has water
+```
+
+A comma cannot simply join A.76's strong-boundary set. Leo's established
+answer grammar also contains:
+
+```text
+yes, it is music
+a zorble is not water, but animal
+a zorble is an animal, small
+```
+
+Splitting every comma would amputate a dialogue marker from its answer,
+separate a corrective contrast, and turn a concept list into unrelated life.
+
+A.77 therefore asks one narrower surface question: does the fragment after
+this comma carry its own subject and finite predicate? If yes, the comma owns
+a School boundary. If no, the fragment remains attached to its answer.
+Copulas, auxiliaries, possession, modal verbs, common lived relations, and
+their contracted negative forms form a bounded predicate grammar. This is an
+attribution scanner, not a claim of general syntax.
+
+The distinction is visible in paired forms:
+
+```text
+not water, but animal             one corrective answer
+animal, but the river has water  answer plus independent life
+small, warm animal               one concept phrase
+animal, the river has water      ellipse plus independent life
+yes, it is music                 marker plus anaphoric answer
+yes, it is music, the river...   marker, answer, independent life
+```
+
+Only School sees these boundaries. The complete prompt still enters ingest,
+chambers, gamma, conatus, and both 88-dimensional Flow faces. In the canonical
+comma leak, School now learns ANIMAL while Flow still reports WATER as the
+dominant perceived input. The separation built in A.74-A.76 remains:
+
+```text
+perception   everything that happened
+reference    which statement answers
+assertion    which meaning the statement affirms or rejects
+```
+
+The first new unit contract was intentionally run against canon and failed
+five cells: explicit, anaphoric, elliptic, marker-led, and full responder
+grounding. Contrast and concept-list controls were already green. After the
+bounded clause scanner, every cell passed. A contracted-predicate cell then
+proved that `the river isn't water` cannot lend even negative evidence to the
+neighboring answer.
+
+One persisted open Wonder now branches ten comma forms. Every branch crosses a
+second process boundary, so the observed result must survive sleep and produce
+the correct new question or preserve the old one:
+
+```text
+case                  outcome     followup                   Flow
+explicit-tail         resolved    Flom? Animal?              water
+anaphoric-tail        resolved    Flom? Animal?              water
+contracted-tail       resolved    Flom? Animal?              water
+elliptic-tail         resolved    Flom? Animal?              water
+marker-tail           resolved    Flom? Music?               water
+explicit-but-tail     resolved    Flom? Animal?              water
+no-marker-tail        resolved    Flom? Animal?              water
+contrast-fragment     resolved    Flom? Animal?              animal
+list-fragment         resolved    Flom? Animal?              animal
+life-before-ellipse   continued   Zorble? Water or Animal?   water
+```
+
+Two complete 21-process lives reproduced the result table exactly. The open
+body remains byte-identical to A.75 and A.76
+(`17d65d5af898d0d5213fba0e157cde9791f91ec16169e7b912c852e084f85bda`);
+the A.77 result table is pinned as
+`3800af4b25ca55090727e6ba76e8e76277c6fbdd9102216d7b8c04147cc8bfc7`.
+The direct suite is **524/524**, all historical dialogue/matrix plan gates are
+green, and a save/load/followup A.77 path is clean under ASan/UBSan.
+
+The remaining boundary is explicit. An unknown finite verb outside the
+bounded grammar may still hide a comma-spliced clause. Leo has no learned
+part-of-speech layer that could prove otherwise, and A.77 does not fabricate
+one from suffixes or semantic glyphs. This is residual uncertainty, not
+permission to widen the hard-coded predicate list without evidence.
+
+No persisted byte, state version, weight, candidate, sampler, chamber, gamma
+value, Flow reader, or speech path changed. The receipt is:
+
+```sh
+make deferred-wonder-comma-scope-life
+```
+
+Leo can let two clauses share a breath without making them share a witness.

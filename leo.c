@@ -5904,6 +5904,86 @@ static int leo_school_answer_scope_boundary(unsigned char ch) {
            ch == '!' || ch == '?';
 }
 
+/* A comma is weaker than a statement boundary. It owns School scope only when
+ * the following fragment carries both a subject and a finite predicate. This
+ * deliberately small grammar covers the clause-bearing relations Leo already
+ * hears; fragments such as "but animal" and "small, warm animal" stay attached
+ * to the answer. Perception is not segmented here, only lesson attribution. */
+static int leo_school_word_is_finite_predicate(const char *word) {
+    static const char *predicates[] = {
+        "am", "is", "are", "was", "were", "be", "been", "being",
+        "become", "becomes", "became",
+        "have", "has", "had", "own", "owns", "owned",
+        "do", "does", "did",
+        "can", "could", "will", "would", "shall", "should",
+        "may", "might", "must",
+        "isn't", "isnt", "aren't", "arent", "wasn't", "wasnt",
+        "weren't", "werent", "hasn't", "hasnt", "haven't", "havent",
+        "hadn't", "hadnt", "doesn't", "doesnt", "don't", "dont",
+        "didn't", "didnt", "can't", "cant", "cannot", "won't", "wont",
+        "couldn't", "couldnt", "wouldn't", "wouldnt",
+        "shouldn't", "shouldnt", "mustn't", "mustnt",
+        "feel", "feels", "felt", "seem", "seems", "seemed",
+        "look", "looks", "looked", "sound", "sounds", "sounded",
+        "smell", "smells", "smelled", "taste", "tastes", "tasted",
+        "contain", "contains", "contained", "carry", "carries", "carried",
+        "like", "likes", "liked", "love", "loves", "loved",
+        "know", "knows", "knew", "see", "sees", "saw",
+        "hear", "hears", "heard", "want", "wants", "wanted",
+        "need", "needs", "needed", "live", "lives", "lived",
+        "flow", "flows", "flowed", "fall", "falls", "fell",
+        "rise", "rises", "rose", "make", "makes", "made",
+        "give", "gives", "gave", "hold", "holds", "held",
+        "keep", "keeps", "kept"
+    };
+    for (size_t i = 0;
+         i < sizeof predicates / sizeof predicates[0]; i++)
+        if (!strcmp(word, predicates[i])) return 1;
+    return 0;
+}
+
+static int leo_school_range_has_independent_clause(
+        const char *begin, const char *end) {
+    if (!begin || !end || end < begin) return 0;
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0, subject_words = 0;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch =
+            p < end ? (unsigned char)*p : 0;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (leo_school_word_is_finite_predicate(cur))
+                return subject_words > 0;
+            if (strcmp(cur, "and") && strcmp(cur, "or") &&
+                strcmp(cur, "but") && strcmp(cur, "so") &&
+                strcmp(cur, "then") &&
+                !leo_school_word_is_affirmation(cur) &&
+                strcmp(cur, "no"))
+                subject_words++;
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
+static int leo_school_answer_scope_boundary_at(const char *p) {
+    if (!p || !*p) return 1;
+    unsigned char ch = (unsigned char)*p;
+    if (leo_school_answer_scope_boundary(ch)) return 1;
+    if (ch != ',') return 0;
+    const char *end = p + 1;
+    while (*end && *end != ',' &&
+           !leo_school_answer_scope_boundary((unsigned char)*end))
+        end++;
+    return leo_school_range_has_independent_clause(p + 1, end);
+}
+
 static void leo_school_answer_evidence_add(
         LeoSchoolAnswerEvidence *dst,
         const LeoSchoolAnswerEvidence *src) {
@@ -5933,7 +6013,7 @@ static LeoSchoolAnswerReference leo_school_answer_scope(
     const char *begin = prompt;
     for (const char *p = prompt; ; p++) {
         unsigned char ch = (unsigned char)*p;
-        if (ch && !leo_school_answer_scope_boundary(ch))
+        if (ch && !leo_school_answer_scope_boundary_at(p))
             continue;
         if (leo_school_range_has_word(
                 begin, p, leo->school.pending)) {
@@ -5955,7 +6035,7 @@ static LeoSchoolAnswerReference leo_school_answer_scope(
     begin = prompt;
     for (const char *p = prompt; ; p++) {
         unsigned char ch = (unsigned char)*p;
-        if (ch && !leo_school_answer_scope_boundary(ch))
+        if (ch && !leo_school_answer_scope_boundary_at(p))
             continue;
         if (leo_school_range_has_words(begin, p) &&
             !leo_school_range_is_dialogue_marker(begin, p)) {
