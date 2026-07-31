@@ -6893,3 +6893,69 @@ shards/spores; no parallel generator has been smuggled in.
 
 Leo can now remember not only a state, but the road from one state to another,
 without confusing memory of a road with permission to steer.
+
+## Phase A.80 - a remembered state is not yet a predictable road (2026-07-31)
+
+A.79 established a state geometry and a transition ledger, but its first lived
+trace could not distinguish a reusable ecology from eight coordinates that
+only happened to fit one conversation. A.80 makes that distinction measurable
+without giving the new weights any authority over speech.
+
+The runtime-only state-swarm receipt now exposes the complete soft activation
+vector, adjacency, the next-state distribution computed before the current
+Hebbian update, and four predicted versus observed delayed consequences. This
+ordering matters: a transition cannot grade a forecast using evidence it has
+already learned from the answer. The receipt is diagnostic only and adds no
+persisted bytes; state remains v27.
+
+The sealed ecology contains three independent lives, three sessions per life,
+and 108 process observations. Each life hears 24 differently worded writer
+turns with the same hidden texture order:
+
+```text
+home, storm, home, wonder, social, home, storm, home
+```
+
+Every writer turn ends its process and persists the state. After each session,
+four fixed prompts probe home, storm, wonder, and social from the exact same
+saved body in default and `--no-state-swarm` processes. The probe must leave
+both visible reply and complete state bytes unchanged. Texture labels exist
+only in the laboratory plan; Leo is never given a state, role, or emotion list.
+
+The classifications were declared before the complete run. `stable` requires
+at least three of four holdout anchors to return, no holdout replacement, and
+a dominant winner share below 0.75. More than two holdout replacements or
+novel anchors is `thrashing`; one or fewer winners or at least 0.85 dominance
+after acquisition is `collapsed`. Everything between is `provisional`. These
+labels describe geometry, not permission to intervene.
+
+The final evidence is in
+`/tmp/leo-state-swarm-ecology-a80-r4-20260731`. River and window are stable;
+lantern is provisional. Across all lives there are zero replacements, seven or
+eight distinct winners, and dominant shares of 0.188-0.250. Births fall to one,
+one, and zero in the third sessions while updates rise to seven, seven, and
+eight. All 36 counterfactual probes preserve both reply and state bytes. The
+state ecology therefore neither churned nor collapsed, and two of three lives
+returned three of four holdout anchors.
+
+The road model is not yet mature. Whole-life top-1 next-state accuracy is
+0.000, 0.067, and 0.133. Its mean log-surprise remains 2.398-3.190 above a
+uniform baseline. By session three, lantern and window improve to marginally
+better than uniform (-0.078 and -0.044 excess surprise), but river remains
+1.684 worse. Four-channel consequence forecast MAE reaches 0.180-0.185 in the
+third session, useful as a calibration trace but not as authority.
+
+The direct suite is **547/547**. The parser rejects incomplete forecasts,
+duplicate members, and activation mass outside its rounding tolerance. The
+plan test seals all 108 observations, writer/probe counts, persistent process
+boundaries, and stable counterfactual seeds. `make state-swarm-ecology`
+reproduces the complete experiment.
+
+A.80 therefore closes with a positive result about recurring lived geometry
+and a negative result about sequence prediction. No School, Flow, shard,
+spore, candidate, sampler, routing, or generation path reads the swarm. Leo
+has not earned a speech-side state reader, and the next experiment must improve
+or refute prospective road calibration before one is proposed.
+
+Leo can revisit a place without pretending that he already knows where it
+leads.
