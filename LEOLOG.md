@@ -6530,3 +6530,119 @@ make deferred-wonder-answer-reference-life
 
 Leo may ask a nearby human turn whether it belongs to his question. He may not
 decide that nearness itself is the answer.
+
+## Phase A.76 — a reference licenses a statement, not a turn (2026-07-31)
+
+A.75 established whether a human turn referred to Leo's question, but then
+gave every teachable glyph in that turn the same authority. One exact open
+Wonder exposed the leak:
+
+```text
+Leo:  Zorble? Water or Animal?
+human: it is an animal. the river has water
+```
+
+The first statement was an immediate anaphoric answer. The second was ordinary
+life. Canon nevertheless pooled both statements, tied ANIMAL with WATER, and
+learned `zorble=water` because WATER has the lower glyph index. Naming the word
+did not help:
+
+```text
+a zorble is an animal. the river has water
+```
+
+also learned WATER. Reference had become permission to conscript a whole turn.
+
+A.76 makes School evidence range-bounded. Strong statement punctuation
+(`. ; : ! ?`) divides the human turn before epistemic evidence is collected:
+
+- every statement that explicitly names the pending word may contribute;
+- without an explicit name, only the first substantive statement after
+  optional standalone `yes/no` markers may answer;
+- that first statement must begin anaphorically or satisfy the existing
+  offered-option ellipse contract;
+- a later anaphor after a new subject cannot reach backward and seize the
+  old question.
+
+This preserves useful composition without restoring adjacency. Two separately
+explicit statements may cooperate:
+
+```text
+a zorble is not water. a zorble is an animal
+```
+
+The first rejects WATER and the second asserts ANIMAL. By contrast:
+
+```text
+the river has water. it is an animal
+```
+
+remains unfinished. The first statement established a new subject before the
+pronoun appeared.
+
+The first red A.76 test found a second defect rather than a bad expectation.
+`the river has water` projected entirely onto Leo's WATER glyph and therefore
+passed the semantic ellipse test despite being a complete proposition. A
+bounded surface check now requires every unmarked elliptical word to be either
+answer grammar or a word mapped to one of Leo's offered alternatives. An
+independent predicate such as `has` or `flows` fails closed. Copulas are not
+ellipse grammar: `the river is water` is also a proposition, while `it is
+water` remains valid through its separate anaphoric reference.
+
+This parser still does not claim general syntax or coreference. Commas remain
+inside one statement because Leo's established answer grammar uses them for
+`yes, it is music` and `not water, but animal`. Attribution across independent
+comma-spliced clauses remains a later boundary requiring its own evidence.
+
+Only School receives the scoped evidence. `leo_ingest`, chambers, gamma,
+conatus, and both Flow faces continue to receive the complete prompt. On:
+
+```text
+it is an animal. the river has water
+```
+
+School learns ANIMAL while Flow still reports WATER as the dominant perceived
+glyph. The distinction from A.74 and A.75 therefore remains intact:
+
+```text
+perception   the complete lived human turn
+reference    which bounded statement belongs to the Wonder
+assertion    which meanings inside that statement may teach
+```
+
+One persisted open body branches ten answers, and every branch crosses a
+second process boundary. A resolved branch asks about a new `flom`; its
+question can name the correct glyph only if the saved `zorble` lesson is
+correct. An unresolved branch must re-ask the original or narrowed Wonder:
+
+```text
+case                outcome     followup                   learned
+anaphoric-tail      resolved    Flom? Animal?              animal
+explicit-tail       resolved    Flom? Animal?              animal
+explicit-late       resolved    Flom? Animal?              animal
+later-anaphora      continued   Zorble? Water or Animal?   none
+marker-anaphora     resolved    Flom? Music?               music
+negative-tail       continued   Zorble? Animal?            none
+explicit-pair       resolved    Flom? Animal?              animal
+elliptic-tail       resolved    Flom? Animal?              animal
+predicate-ellipse   continued   Zorble? Water or Animal?   none
+copula-ellipse      continued   Zorble? Water or Animal?   none
+```
+
+Two complete 21-process lives reproduced the table exactly. The open state is
+still byte-identical to A.75
+(`17d65d5af898d0d5213fba0e157cde9791f91ec16169e7b912c852e084f85bda`);
+the A.76 result table is pinned as
+`b9b4f65613097427ee22636422d623397d0f90e812cfe513d484e915eb45ccef`.
+The direct suite is **515/515**, all historical dialogue/matrix plan gates are
+green, and a heap-only A.76 responder smoke passes ASan/UBSan.
+
+No persisted byte, state version, weight, candidate, sampler, chamber, gamma
+value, Flow reader, or speech path changed. The receipt is:
+
+```sh
+make deferred-wonder-answer-scope-life
+```
+
+Leo can hear everything a person says without making every sentence answer
+the question he happened to ask first.

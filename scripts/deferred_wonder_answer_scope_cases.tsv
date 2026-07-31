@@ -1,0 +1,11 @@
+case	answer	outcome	pending	resolved	followup_prompt	followup_reply	perceived	learned
+anaphoric-tail	it is an animal. the river has water	resolved	none	1	is a flom zorble or cat	Flom? Animal?	water	animal
+explicit-tail	a zorble is an animal. the river has water	resolved	none	1	is a flom zorble or cat	Flom? Animal?	water	animal
+explicit-late	the river has water. a zorble is an animal	resolved	none	1	is a flom zorble or cat	Flom? Animal?	water	animal
+later-anaphora	the river has water. it is an animal	continued	zorble	0	what is zorble?	Zorble? Water or Animal?	water	none
+marker-anaphora	yes. it is music	resolved	none	1	is a flom zorble or music	Flom? Music?	music	music
+negative-tail	a zorble is not water. the sky is dark	continued	zorble	0	what is zorble?	Zorble? Animal?	water	none
+explicit-pair	a zorble is not water. a zorble is an animal	resolved	none	1	is a flom zorble or cat	Flom? Animal?	animal	animal
+elliptic-tail	animal. the river has water	resolved	none	1	is a flom zorble or cat	Flom? Animal?	water	animal
+predicate-ellipse	the river has water	continued	zorble	0	what is zorble?	Zorble? Water or Animal?	water	none
+copula-ellipse	the river is water	continued	zorble	0	what is zorble?	Zorble? Water or Animal?	water	none

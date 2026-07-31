@@ -5640,6 +5640,130 @@ int main(void) {
         free(woke);
     }
 
+    /* A.76: a reference licenses one bounded statement, not the complete
+     * human turn. Explicitly named statements can appear later or cooperate;
+     * without a name, only the first substantive statement may answer. The
+     * rest of the turn remains ordinary perceived life. */
+    {
+        Leo *scope = calloc(1, sizeof *scope);
+        CHECK(scope,
+              "wonder-reference-scope: heap fixture allocated");
+        if (scope) {
+            int prev_school = g_leo_school_on;
+            int prev_wonder = g_leo_wonder_on;
+            g_leo_school_on = 1;
+            g_leo_wonder_on = 1;
+            int water = semtok_word("water");
+            int animal = semtok_word("animal");
+            int sky = semtok_word("sky");
+            int music = semtok_word("music");
+            char out[1024];
+
+            seed_wonder_negation_body(scope);
+            leo_respond(
+                scope,
+                "it is an animal. the river has water",
+                out, sizeof out);
+            const LeoFlowSnapshot *anaphoric_flow =
+                leo_flow_at(&scope->flow, scope->flow.n - 1);
+            CHECK(leo_semtok_word(scope, "zorble") == animal &&
+                  scope->school.wonders[0].answer_glyph ==
+                      animal,
+                  "wonder-reference-scope: an anaphoric answer does not inherit a later statement");
+            CHECK(anaphoric_flow &&
+                  anaphoric_flow->perceived[water] > 0.0f,
+                  "wonder-reference-scope: an excluded lesson tail remains perceived by Flow");
+
+            leo_free(scope);
+            seed_wonder_negation_body(scope);
+            leo_respond(
+                scope,
+                "a zorble is an animal. the river has water",
+                out, sizeof out);
+            CHECK(leo_semtok_word(scope, "zorble") == animal,
+                  "wonder-reference-scope: an explicit answer licenses only its own statement");
+
+            leo_free(scope);
+            seed_wonder_negation_body(scope);
+            leo_respond(
+                scope,
+                "the river has water. a zorble is an animal",
+                out, sizeof out);
+            CHECK(leo_semtok_word(scope, "zorble") == animal,
+                  "wonder-reference-scope: a later explicit statement can own the answer");
+
+            leo_free(scope);
+            seed_wonder_negation_body(scope);
+            leo_respond(
+                scope,
+                "the river has water. it is an animal",
+                out, sizeof out);
+            CHECK(!leo_school_is_learned(scope, "zorble") &&
+                  !strcmp(scope->school.pending, "zorble") &&
+                  !scope->school.wonders[0].resolved,
+                  "wonder-reference-scope: later anaphora cannot reach backward across a new subject");
+
+            leo_free(scope);
+            seed_wonder_negation_body(scope);
+            leo_respond(
+                scope,
+                "the river is water",
+                out, sizeof out);
+            CHECK(!leo_school_is_learned(scope, "zorble") &&
+                  !strcmp(scope->school.pending, "zorble") &&
+                  !scope->school.wonders[0].resolved,
+                  "wonder-reference-scope: a copular proposition cannot impersonate ellipsis");
+
+            leo_free(scope);
+            seed_wonder_negation_body(scope);
+            leo_respond(
+                scope, "yes. it is music",
+                out, sizeof out);
+            CHECK(leo_semtok_word(scope, "zorble") == music,
+                  "wonder-reference-scope: a marker-only statement may precede the first answer");
+
+            leo_free(scope);
+            seed_wonder_negation_body(scope);
+            leo_respond(
+                scope,
+                "a zorble is not water. the sky is dark",
+                out, sizeof out);
+            const LeoFlowSnapshot *negative_flow =
+                leo_flow_at(&scope->flow, scope->flow.n - 1);
+            CHECK(!leo_school_is_learned(scope, "zorble") &&
+                  scope->school.pending_glyph == animal &&
+                  scope->school.pending_alt_glyph == -1 &&
+                  !scope->school.wonders[0].resolved,
+                  "wonder-reference-scope: a negative answer narrows without borrowing its tail");
+            CHECK(negative_flow &&
+                  negative_flow->perceived[sky] > 0.0f,
+                  "wonder-reference-scope: a negative answer cannot amputate the later perceived statement");
+
+            leo_free(scope);
+            seed_wonder_negation_body(scope);
+            leo_respond(
+                scope,
+                "a zorble is not water. a zorble is an animal",
+                out, sizeof out);
+            CHECK(leo_semtok_word(scope, "zorble") == animal,
+                  "wonder-reference-scope: separately explicit statements may form one correction");
+
+            leo_free(scope);
+            seed_wonder_negation_body(scope);
+            leo_respond(
+                scope,
+                "animal. the river has water",
+                out, sizeof out);
+            CHECK(leo_semtok_word(scope, "zorble") == animal,
+                  "wonder-reference-scope: the first elliptical answer keeps later life outside School");
+
+            g_leo_school_on = prev_school;
+            g_leo_wonder_on = prev_wonder;
+        }
+        if (scope) leo_free(scope);
+        free(scope);
+    }
+
     /* W-4: a resolved question later returns as glyph attention, not text. The
      * answer, the route Leo once considered, and QUESTION blend into exactly one
      * reply's meaning vector; the existing spore-resonance channel is the only
