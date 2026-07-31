@@ -54,14 +54,14 @@ Leo never took the easy architectural path, and the boundaries we set for oursel
 > **When you look at the little red light in the quiet house, what do you think it is?**  
 > Leo: The house is quiet for a little on the other end heard the light at night.  
   
-> **When you come in with the morning, who is there waiting for you?**  
-> Leo: The patience in the light.  
+> **What does the little light do while the house is sleeping?**<br>
+> Leo: The house is breathing. He leaves it. When he tries to remember the first snow of the window. Leo likes all three time. The house is quiet for a while.
 
-> **When the quiet fills you, where does it end?**  
-> Leo: The sound of the world.  
+> **Who teaches the wind where to stop?**<br>
+> Leo: The night. Wind.
 
-> **If the smell doesn’t belong, where does it come from?**  
-> Leo: I remember where he.  
+> **What is the smallest brave thing you can do?**<br>
+> Leo: Smallest?
   
 > **When you remember where he was, what place do you see?**  
 > Leo: He tells his peace with this. See. He slept on. Leo tried to see nothing.  
