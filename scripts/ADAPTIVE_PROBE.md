@@ -734,3 +734,82 @@ states still produce the same reply.
 A.55 persists evidence, not authority. School, Flow, shadow, routing,
 sampling, scheduling, and generation do not read the checkpoint or its
 sequence.
+
+## A.80: state-swarm ecology and prospective road calibration
+
+Run the complete readerless ecology:
+
+```sh
+make state-swarm-ecology
+```
+
+The matrix creates three independent lives (`river`, `window`, and `lantern`).
+Each life receives three eight-turn writer sessions. Surface language changes
+between sessions while the sealed laboratory texture order remains:
+
+```text
+home, storm, home, wonder, social, home, storm, home
+```
+
+The labels are not passed to Leo. Every writer turn runs in a fresh process,
+loads the previous state when one exists, and saves the next state. Each
+session is followed by four fixed counterfactual probes. A probe forks one
+saved body between default and `--no-state-swarm`; both processes must emit the
+same visible reply, and neither may change the state file.
+
+The run contains 108 observations:
+
+```text
+3 lives * (24 persisted writer turns + 12 counterfactual probes)
+```
+
+The runtime receipt records the full activation membership, its rounded mass,
+adjacency, observed delayed consequences, and a next-state/outcome forecast
+made from the transition ledger before the current update. The strict parser
+rejects partial predictions, duplicate state IDs, malformed channels, and
+activation mass outside `[0.995, 1.005]`.
+
+Outputs are written to a new timestamped directory under `${TMPDIR:-/tmp}`:
+
+```text
+plan.tsv       sealed chronology, prompts, process boundaries, and seeds
+receipts.tsv   one parsed state-swarm receipt per observation
+epochs.tsv     per-life, per-session acquisition and forecast measurements
+summary.tsv    whole-life ecology, anchor, and forecast measurements
+verdict.txt    aggregate invariants and predeclared classifications
+lives/         saved bodies and raw default/ablation logs
+```
+
+Classification is fixed before observing a run:
+
+```text
+stable       >=3/4 holdout anchors return, zero holdout replacements,
+             and dominant share <0.75
+thrashing    >2 holdout replacements or >2 novel holdout anchors
+collapsed    <=1 winner or dominant share >=0.85 after acquisition
+provisional  everything between those boundaries
+```
+
+An ecological classification never fails the command. Only receipt shape,
+chronology, visible-voice equality, or state-file equality can do that. The
+matrix also reports forecast accuracy, probability assigned to the observed
+winner, log-surprise against a uniform-state baseline, and four-channel
+forecast MAE. Those measurements grade the road model separately from the
+state geometry.
+
+The recorded 2026-07-31 run is
+`/tmp/leo-state-swarm-ecology-a80-r4-20260731`. It produced two stable lives
+and one provisional life, with no thrashing or collapse. All 36 probes were
+reply-identical and state-identical. No life replaced a state; each retained
+seven or eight distinct winners with a 0.188-0.250 dominant share. Acquisition
+mostly settled by session three.
+
+Forecasting did not pass the same bar. Whole-life top-1 accuracy was at most
+0.133 and excess log-surprise over uniform remained positive by 2.398-3.190.
+Two lives became marginally better than uniform during session three, while
+one remained worse. Consequence MAE improved to roughly 0.18. The warranted
+conclusion is therefore narrow: Leo can revisit configurations, but this
+experiment does not establish a reliable model of their sequence.
+
+A.80 changes no persisted state version and adds no generation reader. It is
+not evidence for routing, sampling, scheduling, or speech intervention.

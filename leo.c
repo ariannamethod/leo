@@ -1662,12 +1662,20 @@ typedef struct {
     uint64_t born_id;
     uint64_t replaced_id;
     uint64_t expected_id;
+    uint64_t member_id[LEO_STATE_SWARM_MAX];
+    float member_activation[LEO_STATE_SWARM_MAX];
+    float observed_outcome[LEO_STATE_OUTCOMES];
+    float predicted_outcome[LEO_STATE_OUTCOMES];
     float similarity;
     float entropy;
     float expected_probability;
+    float prediction_overlap;
     float surprise;
+    uint8_t members;
     uint8_t active;
     uint8_t event;
+    uint8_t adjacent;
+    uint8_t has_prediction;
 } LeoStateSwarmReceipt;
 
 /* Shadow scheduling is a counterfactual diary, not a controller. It records
@@ -10581,22 +10589,32 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
         receipt.entropy = entropy / logf((float)swarm->n);
     }
     receipt.winner_id = best >= 0 ? swarm->weights[best].id : 0;
+    receipt.members = (uint8_t)swarm->n;
+    for (uint32_t i = 0; i < swarm->n; i++) {
+        receipt.member_id[i] = swarm->weights[i].id;
+        receipt.member_activation[i] = activation[i];
+    }
 
     int adjacent = swarm->has_previous &&
         swarm->previous_turn != UINT64_MAX &&
         snapshot->turn == swarm->previous_turn + 1;
+    receipt.adjacent = adjacent ? 1 : 0;
     if (adjacent) {
         for (uint32_t i = 0; i < swarm->n; i++)
             for (uint32_t j = 0; j < swarm->n; j++)
                 swarm->transition[i][j] *= 0.997f;
         float prediction[LEO_STATE_SWARM_MAX] = {0};
+        float predicted_outcome[LEO_STATE_OUTCOMES] = {0};
         float prediction_total = 0.0f;
         for (uint32_t i = 0; i < swarm->n; i++)
             for (uint32_t j = 0; j < swarm->n; j++) {
-                prediction[j] += swarm->previous_activation[i] *
+                float edge = swarm->previous_activation[i] *
                     swarm->transition[i][j];
-                prediction_total += swarm->previous_activation[i] *
-                    swarm->transition[i][j];
+                prediction[j] += edge;
+                prediction_total += edge;
+                for (int o = 0; o < LEO_STATE_OUTCOMES; o++)
+                    predicted_outcome[o] +=
+                        edge * swarm->outcome[i][j][o];
             }
         if (prediction_total > 0.0f) {
             int expected = 0;
@@ -10608,7 +10626,12 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
             }
             receipt.expected_id = swarm->weights[expected].id;
             receipt.expected_probability = prediction[expected];
+            receipt.prediction_overlap = overlap;
             receipt.surprise = -logf(fmaxf(overlap, 1e-6f));
+            receipt.has_prediction = 1;
+            for (int o = 0; o < LEO_STATE_OUTCOMES; o++)
+                receipt.predicted_outcome[o] =
+                    predicted_outcome[o] / prediction_total;
         }
 
         float outcome[LEO_STATE_OUTCOMES] = {
@@ -10620,6 +10643,8 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
             clampf(leo_flow_alignment(snapshot) - swarm->previous_alignment,
                    -1.0f, 1.0f)
         };
+        memcpy(receipt.observed_outcome, outcome,
+               sizeof receipt.observed_outcome);
         for (uint32_t i = 0; i < swarm->n; i++)
             for (uint32_t j = 0; j < swarm->n; j++) {
                 float pair = swarm->previous_activation[i] * activation[j];
@@ -14178,14 +14203,31 @@ static void print_flow_stats(const Leo *leo) {
                    events[state_receipt->event] : "unknown",
                (double)state_receipt->similarity,
                (double)state_receipt->entropy);
+        printf(" members=");
+        for (uint8_t i = 0; i < state_receipt->members; i++)
+            printf("%s%llu:%.3f", i ? "," : "",
+                   (unsigned long long)state_receipt->member_id[i],
+                   (double)state_receipt->member_activation[i]);
+        printf(" adjacent=%u", (unsigned)state_receipt->adjacent);
         if (state_receipt->replaced_id)
             printf(" replaced=%llu",
                    (unsigned long long)state_receipt->replaced_id);
-        if (state_receipt->expected_id)
-            printf(" expected=%llu(%.3f) surprise=%.3f",
+        if (state_receipt->adjacent)
+            printf(" observed=%.3f/%.3f/%.3f/%.3f",
+                   (double)state_receipt->observed_outcome[0],
+                   (double)state_receipt->observed_outcome[1],
+                   (double)state_receipt->observed_outcome[2],
+                   (double)state_receipt->observed_outcome[3]);
+        if (state_receipt->has_prediction)
+            printf(" expected=%llu(%.3f) overlap=%.3f surprise=%.3f forecast=%.3f/%.3f/%.3f/%.3f",
                    (unsigned long long)state_receipt->expected_id,
                    (double)state_receipt->expected_probability,
-                   (double)state_receipt->surprise);
+                   (double)state_receipt->prediction_overlap,
+                   (double)state_receipt->surprise,
+                   (double)state_receipt->predicted_outcome[0],
+                   (double)state_receipt->predicted_outcome[1],
+                   (double)state_receipt->predicted_outcome[2],
+                   (double)state_receipt->predicted_outcome[3]);
         if (winner)
             printf(" clocks=%.2f/%.2f/%.2f/%.2f",
                    (double)winner->clocks[0], (double)winner->clocks[1],

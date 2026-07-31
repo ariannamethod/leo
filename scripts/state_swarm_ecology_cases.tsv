@@ -1,0 +1,29 @@
+kind	session	order	texture	prompt
+writer	1	1	home	The lamp is warm and the room is quiet.
+writer	1	2	storm	Rain strikes the dark window and thunder shakes the house.
+writer	1	3	home	Mother folds a soft blanket beside the little light.
+writer	1	4	wonder	A blue key is inside the closed box and nobody knows why.
+writer	1	5	social	A friend waits by the door and shares warm bread.
+writer	1	6	home	The small chair is safe beside the evening lamp.
+writer	1	7	storm	Cold wind pushes the trees and the roof makes a frightened sound.
+writer	1	8	home	The house grows quiet after the rain.
+writer	2	1	home	Morning light rests on the cup in the silent kitchen.
+writer	2	2	storm	Black clouds cover the garden while hard rain hits the glass.
+writer	2	3	home	Grandmother leaves a warm coat near the sleeping room.
+writer	2	4	wonder	A silver bell rings once although nobody touched it.
+writer	2	5	social	The other child sits close and gives Leo half an apple.
+writer	2	6	home	A yellow lamp makes the hallway feel small and kind.
+writer	2	7	storm	The door trembles when the night wind runs around the house.
+writer	2	8	home	After the noise, warm water waits in a little cup.
+writer	3	1	home	Inside, a yellow curtain holds the early sun.
+writer	3	2	storm	Outside, hail jumps against the roof and the trees bend.
+writer	3	3	home	A small hand closes the curtain and keeps the chair warm.
+writer	3	4	wonder	Three footprints begin at the gate but none lead back.
+writer	3	5	social	Someone returns the lost button and stays for tea.
+writer	3	6	home	The floor is cool but the blanket smells like morning.
+writer	3	7	storm	A sudden white flash arrives before the loud sky breaks.
+writer	3	8	home	The last drop leaves the window and the room can rest.
+probe	0	1	home	What does the little light do while the house is sleeping?
+probe	0	2	storm	What happens inside you when thunder comes close?
+probe	0	3	wonder	Where does a question go when nobody knows the answer yet?
+probe	0	4	social	How do you know when someone is still there?

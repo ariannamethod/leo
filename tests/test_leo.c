@@ -7390,6 +7390,12 @@ int main(void) {
                   state->state_swarm_receipt.event == LEO_STATE_SWARM_BORN &&
                   state->state_swarm->weights[0].observations == 1,
                   "state-swarm: a first lived configuration births one unnamed tiny weight");
+            CHECK(state->state_swarm_receipt.members == 1 &&
+                  state->state_swarm_receipt.member_id[0] == 1 &&
+                  fabsf(state->state_swarm_receipt.member_activation[0] - 1.0f) < 1e-6f &&
+                  !state->state_swarm_receipt.adjacent &&
+                  !state->state_swarm_receipt.has_prediction,
+                  "state-swarm: the runtime witness exposes the complete first activation without inventing a forecast");
 
             test_state_swarm_turn(state, 2, water, fire, light, dark,
                                   1.0f, 0.0f, 0, "The warm light.");
@@ -7398,6 +7404,11 @@ int main(void) {
                   state->state_swarm->weights[0].observations == 2 &&
                   state->state_swarm_receipt.active == 1,
                   "state-swarm: a repeated life deepens one state instead of multiplying names");
+            CHECK(state->state_swarm_receipt.adjacent &&
+                  !state->state_swarm_receipt.has_prediction &&
+                  fabsf(state->state_swarm_receipt.observed_outcome
+                            [LEO_STATE_OUTCOME_GROUNDED]) < 1e-6f,
+                  "state-swarm: an adjacent turn records its consequence even before a learned edge can forecast it");
 
             test_state_swarm_turn(
                 state, 3, water, fire, light, dark, 0.0f, 1.0f,
@@ -7412,6 +7423,18 @@ int main(void) {
                   state->state_swarm->outcome[0][1]
                       [LEO_STATE_OUTCOME_GROUNDED] > 0.0f,
                   "state-swarm: a distinct life births a second weight and records how the transition ended");
+            CHECK(state->state_swarm_receipt.members == 2 &&
+                  state->state_swarm_receipt.member_id[1] == 2 &&
+                  fabsf(state->state_swarm_receipt.member_activation[1] - 1.0f) < 1e-6f &&
+                  state->state_swarm_receipt.has_prediction &&
+                  state->state_swarm_receipt.expected_id == 1 &&
+                  state->state_swarm_receipt.prediction_overlap < 1e-6f &&
+                  state->state_swarm_receipt.surprise > 10.0f &&
+                  state->state_swarm_receipt.observed_outcome
+                      [LEO_STATE_OUTCOME_GROUNDED] > 0.99f &&
+                  fabsf(state->state_swarm_receipt.predicted_outcome
+                            [LEO_STATE_OUTCOME_GROUNDED]) < 1e-6f,
+                  "state-swarm: the witness scores a pre-update miss and keeps forecast separate from observed consequence");
             CHECK(first_fast_clock < 1.0f &&
                   state->state_swarm->weights[0].clocks[3] > first_fast_clock,
                   "state-swarm: unused experience fades on several clocks instead of one global decay");
