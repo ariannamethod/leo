@@ -2406,6 +2406,120 @@ static void test_wonder_appetite_transport_checkpoints(void) {
     free(damaged);
 }
 
+/* A.77: a comma starts a new School statement only when its right side
+ * carries an independent subject-predicate clause. Contrast fragments,
+ * dialogue markers, and adjective/concept lists remain one answer. */
+__attribute__((noinline))
+static void test_wonder_comma_scope(void) {
+    Leo *scope = calloc(1, sizeof *scope);
+    LeoSchoolAnswerEvidence *evidence =
+        calloc(1, sizeof *evidence);
+    char *out = calloc(1024, 1);
+    CHECK(scope && evidence && out,
+          "wonder-comma-scope: heap fixtures allocated");
+    if (scope && evidence && out) {
+        int water = semtok_word("water");
+        int animal = semtok_word("animal");
+        int music = semtok_word("music");
+        int small = semtok_word("small");
+        int fire = semtok_word("warm");
+        LeoSchoolAnswerReference reference;
+
+        seed_wonder_negation_body(scope);
+        reference = leo_school_answer_scope(
+            scope,
+            "a zorble is an animal, the river has water",
+            evidence);
+        CHECK(reference == LEO_SCHOOL_ANSWER_EXPLICIT &&
+              evidence->asserted[animal] == 1 &&
+              evidence->asserted[water] == 0,
+              "wonder-comma-scope: an explicit answer cannot inherit an independent comma tail");
+
+        leo_free(scope);
+        seed_wonder_negation_body(scope);
+        reference = leo_school_answer_scope(
+            scope,
+            "it is an animal, the river has water",
+            evidence);
+        CHECK(reference == LEO_SCHOOL_ANSWER_ANAPHORIC &&
+              evidence->asserted[animal] == 1 &&
+              evidence->asserted[water] == 0,
+              "wonder-comma-scope: anaphora cannot lend its reference to a new comma clause");
+
+        leo_free(scope);
+        seed_wonder_negation_body(scope);
+        reference = leo_school_answer_scope(
+            scope,
+            "it is an animal, the river isn't water",
+            evidence);
+        CHECK(reference == LEO_SCHOOL_ANSWER_ANAPHORIC &&
+              evidence->asserted[animal] == 1 &&
+              evidence->rejected[water] == 0,
+              "wonder-comma-scope: a contracted predicate still begins an independent clause");
+
+        leo_free(scope);
+        seed_wonder_negation_body(scope);
+        reference = leo_school_answer_scope(
+            scope,
+            "animal, the river has water",
+            evidence);
+        CHECK(reference == LEO_SCHOOL_ANSWER_ELLIPTIC &&
+              evidence->asserted[animal] == 1 &&
+              evidence->asserted[water] == 0,
+              "wonder-comma-scope: ellipsis ends before an independent comma clause");
+
+        leo_free(scope);
+        seed_wonder_negation_body(scope);
+        reference = leo_school_answer_scope(
+            scope,
+            "a zorble is not water, but animal",
+            evidence);
+        CHECK(reference == LEO_SCHOOL_ANSWER_EXPLICIT &&
+              evidence->rejected[water] == 1 &&
+              evidence->asserted[animal] == 1,
+              "wonder-comma-scope: a contrast fragment remains inside its answer");
+
+        leo_free(scope);
+        seed_wonder_negation_body(scope);
+        reference = leo_school_answer_scope(
+            scope,
+            "yes, it is music, the river has water",
+            evidence);
+        CHECK(reference == LEO_SCHOOL_ANSWER_ANAPHORIC &&
+              evidence->asserted[music] == 1 &&
+              evidence->asserted[water] == 0,
+              "wonder-comma-scope: a dialogue marker may introduce one anaphoric clause");
+
+        leo_free(scope);
+        seed_wonder_negation_body(scope);
+        reference = leo_school_answer_scope(
+            scope,
+            "a zorble is a small, warm animal",
+            evidence);
+        CHECK(reference == LEO_SCHOOL_ANSWER_EXPLICIT &&
+              evidence->asserted[small] == 1 &&
+              evidence->asserted[fire] == 1 &&
+              evidence->asserted[animal] == 1,
+              "wonder-comma-scope: a concept list is not mistaken for a new clause");
+
+        leo_free(scope);
+        seed_wonder_negation_body(scope);
+        leo_respond(
+            scope,
+            "it is an animal, the river has water",
+            out, 1024);
+        const LeoFlowSnapshot *flow =
+            leo_flow_at(&scope->flow, scope->flow.n - 1);
+        CHECK(leo_semtok_word(scope, "zorble") == animal &&
+              flow && flow->perceived[water] > 0.0f,
+              "wonder-comma-scope: excluded School life remains perceived by Flow");
+    }
+    if (scope) leo_free(scope);
+    free(scope);
+    free(evidence);
+    free(out);
+}
+
 int main(void) {
     printf("test_leo (step 0)\n");
 
@@ -5763,6 +5877,8 @@ int main(void) {
         if (scope) leo_free(scope);
         free(scope);
     }
+
+    test_wonder_comma_scope();
 
     /* W-4: a resolved question later returns as glyph attention, not text. The
      * answer, the route Leo once considered, and QUESTION blend into exactly one
