@@ -937,3 +937,60 @@ that they are episodic coordinates rather than a stable texture/order
 alphabet. No C code, state version, backoff, or speech reader changes. The next
 candidate experiment is per-organ similarity factorization, still diagnostic
 and still pre-update.
+
+## A.83: decompose state similarity before dividing the organism
+
+Run the exact A.82 crossover with pre-update organ receipts:
+
+```sh
+make state-swarm-organs
+```
+
+The runner first executes `state_swarm_alphabet_matrix.sh` unchanged, including
+all save/load boundaries and 96 default/`--no-state-swarm` probes. It then
+extracts seven existing similarity components for every prior state:
+
+```text
+perception  expression  own-field  body  rhythm  form  darkmatter
+```
+
+`body` preserves the equal chamber/retention contribution and `rhythm`
+preserves the 2:1 rhythm-distance/rhythm-class contribution. Their seven
+weighted values reconstruct the old holistic score. The component receipt is
+runtime-only and separately allocated; the persisted v27 swarm is unchanged.
+
+Birth and replacement slots are emitted as `na` and excluded because their
+prototype is the current observation itself. Every other component is captured
+before the state update. Each organ independently converts similarity to soft
+activation with temperature `0.12`, then builds texture and position prototypes
+from sessions one through four and scores sessions five through eight with the
+same Bhattacharyya classifier and thresholds as A.82.
+
+Coverage is factor-specific:
+
+```text
+texture   at least 4 valid acquisition turns per texture
+position  at least 2 valid acquisition turns per temporal position
+holdout   all 32 observations valid, with no birth/replacement exclusion
+```
+
+The recorded run is
+`/tmp/leo-state-swarm-organs-a83-20260802-r4`. Texture has three adequate lives;
+position has two because River's sparsest acquisition position has one valid
+turn after birth exclusion. All seven organs are `unformed`. Perception alone
+has positive texture margins in every life (`+0.0132`, `+0.0160`, `+0.0029`),
+but none reaches both `0.50` accuracy and `+0.02` margin. Body repeats `14/32`
+texture hits in every life with negative margins. Every adequate position
+margin is negative.
+
+The embedded synthetic scorer creates a pure texture code in perception and a
+pure position code in expression. Each must score `32/32` only on its own
+factor; the other five uniform organs remain `unformed`. The live holistic
+scores exactly reproduce A.82, and all 96 counterfactual pairs remain reply-
+and state-identical.
+
+A.83 therefore forbids factorized weights for now. Its next warranted test is
+a settled-organ crossover: use an unscored warm-up to finish births, then begin
+a fully balanced acquisition half with no tautological holes. That experiment
+can decide whether perception's small positive margin deserves its own shadow
+prototype or remains only an episodic trace.

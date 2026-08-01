@@ -1595,6 +1595,7 @@ typedef struct {
 #define LEO_STATE_RHYTHM_CLASSES     4
 #define LEO_STATE_CLOCKS             4
 #define LEO_STATE_OUTCOMES           4
+#define LEO_STATE_ORGANS             7
 #define LEO_STATE_NOVELTY_GATE    0.55f
 #define LEO_STATE_REPLACE_GATE    0.40f
 #define LEO_STATE_ACTIVE_GATE     0.15f
@@ -1611,6 +1612,16 @@ enum {
     LEO_STATE_OUTCOME_DISTRESS_RELIEF,
     LEO_STATE_OUTCOME_GAP_RELIEF,
     LEO_STATE_OUTCOME_ALIGNMENT_DELTA
+};
+
+enum {
+    LEO_STATE_ORGAN_PERCEPTION = 0,
+    LEO_STATE_ORGAN_EXPRESSION,
+    LEO_STATE_ORGAN_FIELD,
+    LEO_STATE_ORGAN_BODY,
+    LEO_STATE_ORGAN_RHYTHM,
+    LEO_STATE_ORGAN_FORM,
+    LEO_STATE_ORGAN_DARKMATTER
 };
 
 enum {
@@ -1677,6 +1688,19 @@ typedef struct {
     uint8_t adjacent;
     uint8_t has_prediction;
 } LeoStateSwarmReceipt;
+
+/* A.83: a runtime-only decomposition of the last pre-update match. The
+ * allocation wrapper keeps it off Leo's already large value and beyond the
+ * exact LeoStateSwarm prefix written by state v27. */
+typedef struct {
+    float similarity[LEO_STATE_SWARM_MAX][LEO_STATE_ORGANS];
+    uint8_t valid[LEO_STATE_SWARM_MAX];
+} LeoStateOrganReceipt;
+
+typedef struct {
+    LeoStateSwarm swarm;
+    LeoStateOrganReceipt organ_receipt;
+} LeoStateSwarmRuntime;
 
 /* Shadow scheduling is a counterfactual diary, not a controller. It records
  * what a future speech-side organ might do on the NEXT turn, after the current
@@ -2613,6 +2637,16 @@ typedef struct {
     LeoCalibration calibration;
 } Leo;
 
+static LeoStateOrganReceipt *leo_state_organ_receipt_mut(Leo *leo) {
+    if (!leo || !leo->state_swarm) return NULL;
+    return &((LeoStateSwarmRuntime *)leo->state_swarm)->organ_receipt;
+}
+
+static const LeoStateOrganReceipt *leo_state_organ_receipt(const Leo *leo) {
+    if (!leo || !leo->state_swarm) return NULL;
+    return &((const LeoStateSwarmRuntime *)leo->state_swarm)->organ_receipt;
+}
+
 /* A.4 RAE — micrograd MLP (fixed 5→8→1, hand-rolled scalar autograd, zero deps). */
 static void leo_rae_init(LeoRae *r) {
     const uint64_t fnv_offset = 0xcbf29ce484222325ULL, fnv_prime = 0x100000001b3ULL;
@@ -2689,7 +2723,8 @@ static void leo_init(Leo *leo) {
     leo->prompt_pieces = NULL;
     leo->prompt_meaning = NULL;
     leo->temp_mult = 1.0f;
-    leo->state_swarm = calloc(1, sizeof *leo->state_swarm);
+    LeoStateSwarmRuntime *state_runtime = calloc(1, sizeof *state_runtime);
+    leo->state_swarm = state_runtime ? &state_runtime->swarm : NULL;
     if (leo->state_swarm) {
         leo->state_swarm->next_id = 1;
         for (int i = 0; i < LEO_STATE_SWARM_MAX; i++)
@@ -10318,30 +10353,50 @@ static float leo_state_field_similarity(const LeoStateWeight *a,
     return clampf(dot / sqrtf(aa * bb), 0.0f, 1.0f);
 }
 
-static float leo_state_similarity(const LeoStateWeight *state,
-                                  const LeoStateWeight *observation) {
+static float leo_state_similarity_components(
+        const LeoStateWeight *state, const LeoStateWeight *observation,
+        float organ[LEO_STATE_ORGANS]) {
+    float perception = leo_state_cosine(state->perceived,
+                                         observation->perceived, GLYPH_COUNT);
+    float expression = leo_state_cosine(state->expressed,
+                                         observation->expressed, GLYPH_COUNT);
+    float field = leo_state_field_similarity(state, observation);
+    float chambers = leo_state_cosine(state->chambers,
+                                       observation->chambers, LEO_N_CHAMBERS);
+    float retention = leo_state_cosine(state->retention,
+                                        observation->retention, LEO_RET_DIM);
+    float rhythm_dist = leo_state_cosine(state->rhythm_dist,
+                                          observation->rhythm_dist,
+                                          LEO_STATE_RHYTHM_DIST);
+    float rhythm_class = leo_state_cosine(state->rhythm_class,
+                                           observation->rhythm_class,
+                                           LEO_STATE_RHYTHM_CLASSES);
     float gap = 1.0f - 0.5f *
         (fabsf(state->gap_perceived - observation->gap_perceived) +
          fabsf(state->gap_expressed - observation->gap_expressed));
+    float darkmatter = clampf(gap, 0.0f, 1.0f);
+    float form = leo_state_cosine(state->mode_mass,
+                                  observation->mode_mass, LEO_MODE_COUNT);
+    if (organ) {
+        organ[LEO_STATE_ORGAN_PERCEPTION] = perception;
+        organ[LEO_STATE_ORGAN_EXPRESSION] = expression;
+        organ[LEO_STATE_ORGAN_FIELD] = field;
+        organ[LEO_STATE_ORGAN_BODY] = 0.5f * (chambers + retention);
+        organ[LEO_STATE_ORGAN_RHYTHM] =
+            (2.0f * rhythm_dist + rhythm_class) / 3.0f;
+        organ[LEO_STATE_ORGAN_FORM] = form;
+        organ[LEO_STATE_ORGAN_DARKMATTER] = darkmatter;
+    }
     return clampf(
-        0.19f * leo_state_cosine(state->perceived,
-                                 observation->perceived, GLYPH_COUNT) +
-        0.19f * leo_state_cosine(state->expressed,
-                                 observation->expressed, GLYPH_COUNT) +
-        0.10f * leo_state_field_similarity(state, observation) +
-        0.10f * leo_state_cosine(state->chambers,
-                                 observation->chambers, LEO_N_CHAMBERS) +
-        0.10f * leo_state_cosine(state->retention,
-                                 observation->retention, LEO_RET_DIM) +
-        0.12f * leo_state_cosine(state->rhythm_dist,
-                                 observation->rhythm_dist,
-                                 LEO_STATE_RHYTHM_DIST) +
-        0.06f * leo_state_cosine(state->rhythm_class,
-                                 observation->rhythm_class,
-                                 LEO_STATE_RHYTHM_CLASSES) +
-        0.07f * clampf(gap, 0.0f, 1.0f) +
-        0.07f * leo_state_cosine(state->mode_mass,
-                                 observation->mode_mass, LEO_MODE_COUNT),
+        0.19f * perception +
+        0.19f * expression +
+        0.10f * field +
+        0.10f * chambers +
+        0.10f * retention +
+        0.12f * rhythm_dist +
+        0.06f * rhythm_class +
+        0.07f * darkmatter +
+        0.07f * form,
         0.0f, 1.0f);
 }
 
@@ -10507,7 +10562,11 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
     float activation[LEO_STATE_SWARM_MAX] = {0};
     static const float clock_decay[LEO_STATE_CLOCKS] =
         {0.50f, 0.85f, 0.95f, 0.99f};
+    LeoStateOrganReceipt *organ_receipt =
+        leo_state_organ_receipt_mut(leo);
     memset(&receipt, 0, sizeof receipt);
+    if (organ_receipt)
+        memset(organ_receipt, 0, sizeof *organ_receipt);
     receipt.turn = snapshot->turn;
     leo_state_observation(leo, snapshot, reply, &observation);
 
@@ -10518,7 +10577,10 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
     int best = -1;
     float best_similarity = -1.0f;
     for (uint32_t i = 0; i < swarm->n; i++) {
-        similarity[i] = leo_state_similarity(&swarm->weights[i], &observation);
+        similarity[i] = leo_state_similarity_components(
+            &swarm->weights[i], &observation,
+            organ_receipt ? organ_receipt->similarity[i] : NULL);
+        if (organ_receipt) organ_receipt->valid[i] = 1;
         if (similarity[i] > best_similarity) {
             best_similarity = similarity[i];
             best = (int)i;
@@ -10537,6 +10599,7 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
         slot = leo_state_weakest(swarm);
         receipt.event = LEO_STATE_SWARM_REPLACED;
         receipt.replaced_id = swarm->weights[slot].id;
+        if (organ_receipt) organ_receipt->valid[slot] = 0;
         leo_state_reset_slot(swarm, slot);
         float remaining = 0.0f;
         for (uint32_t i = 0; i < swarm->n; i++)
@@ -14184,6 +14247,8 @@ static void print_flow_stats(const Leo *leo) {
     }
 
     const LeoStateSwarmReceipt *state_receipt = &leo->state_swarm_receipt;
+    const LeoStateOrganReceipt *organ_receipt =
+        leo_state_organ_receipt(leo);
     if (g_leo_state_swarm_on && state_receipt->turn == s->turn &&
         state_receipt->winner_id) {
         static const char *events[] = {"updated", "born", "replaced"};
@@ -14208,6 +14273,18 @@ static void print_flow_stats(const Leo *leo) {
             printf("%s%llu:%.3f", i ? "," : "",
                    (unsigned long long)state_receipt->member_id[i],
                    (double)state_receipt->member_activation[i]);
+        printf(" organs=");
+        for (uint8_t i = 0; i < state_receipt->members; i++) {
+            printf("%s%llu:", i ? "," : "",
+                   (unsigned long long)state_receipt->member_id[i]);
+            if (!organ_receipt || !organ_receipt->valid[i]) {
+                printf("na");
+                continue;
+            }
+            for (int o = 0; o < LEO_STATE_ORGANS; o++)
+                printf("%s%.6f", o ? "/" : "",
+                       (double)organ_receipt->similarity[i][o]);
+        }
         printf(" adjacent=%u", (unsigned)state_receipt->adjacent);
         if (state_receipt->replaced_id)
             printf(" replaced=%llu",
