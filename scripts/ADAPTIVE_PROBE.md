@@ -875,3 +875,65 @@ less than `0.001` nat. Raw also remains within `0.003-0.014` of rolling
 marginal. More exposure clearly reduces early surprise, but A.81 does not show
 that the transition ledger learned specific order beyond occupancy. Therefore
 no backoff, state format, update law, or generation reader is added.
+
+## A.82: factor the state alphabet before predicting its sequence
+
+Run the balanced crossover:
+
+```sh
+make state-swarm-alphabet
+```
+
+The case file defines eight sessions of eight writer turns plus four fixed
+probes. `home`, `storm`, `wonder`, and `social` are laboratory labels only and
+never enter Leo. Each session contains every texture twice. Within both the
+four-session acquisition half and four-session holdout half, every texture
+appears exactly once at every temporal position. Holdout changes adjacency and
+uses entirely new prompts.
+
+The matrix runs three independent lives with a real save/load process boundary
+after every writer. Four default/`--no-state-swarm` probes follow every
+session. The complete experiment therefore contains:
+
+```text
+3 lives * (64 persisted writers + 32 counterfactual probes) = 288 processes
+```
+
+Acquisition averages full soft activation distributions into texture and
+position prototypes. A joint prototype preserves each of the 32 crossed
+cells. Held-out similarity is the Bhattacharyya coefficient, which remains
+bounded and does not reward a prototype merely for being more diffuse.
+
+Predeclared boundaries are:
+
+```text
+texture alphabet   accuracy >=0.50, mean true-vs-best-other margin >=0.02
+position alphabet  accuracy >=0.25, mean margin >=0.01
+joint interaction  accuracy >=0.125, mean margin >=0.005
+geometry veto      >1 holdout birth or any holdout replacement
+```
+
+Passing texture and position is `factorized`; only one passing yields
+`texture-alphabet` or `order-alphabet`. Joint passing without either main
+effect is `entangled`. No passing factor is `unformed`. Geometry veto is
+`unstable-geometry`. These are descriptions of a readerless measurement, not
+authority for state updates or generation.
+
+The recorded run is
+`/tmp/leo-state-swarm-alphabet-a82-r2-20260801`. Texture accuracy is
+`0.4375`, `0.5000`, and `0.4688` against chance `0.25`, but all three margins
+are negative (`-0.0115`, `-0.0037`, `-0.0177`). Position is at or below its
+`0.125` chance rate with negative margins. Joint accuracy is zero. All lives
+finish with eight states and holdout contains no birth or replacement. The
+verdict is three `unformed` lives.
+
+The synthetic contract test supplies a perfect four-state texture code. It
+must score `32/32` for texture and zero for both position and joint because
+their prototypes tie under exact balance. This prevents a successful factor
+from leaking into another label.
+
+A.82 does not conclude that holistic tiny weights are useless. It concludes
+that they are episodic coordinates rather than a stable texture/order
+alphabet. No C code, state version, backoff, or speech reader changes. The next
+candidate experiment is per-organ similarity factorization, still diagnostic
+and still pre-update.
