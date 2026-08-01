@@ -1,0 +1,69 @@
+kind	session	order	texture	prompt
+writer	1	1	home	A small lamp warms the corner beside a folded cloth.
+writer	1	2	storm	Rain rattles the glass while the roof answers in low knocks.
+writer	1	3	wonder	A brass key lies under the bowl although nobody put it there.
+writer	1	4	social	A friend brings one pear and waits beside the table.
+writer	1	5	home	The blanket rests on the chair near a quiet yellow light.
+writer	1	6	wonder	Two wet footprints stop in the middle of the dry floor.
+writer	1	7	social	The other child shares a pencil and watches Leo draw.
+writer	1	8	storm	Thunder rolls beyond the garden and the door shakes once.
+writer	2	1	storm	Cold wind bends the branches and pushes water under the gate.
+writer	2	2	wonder	A closed music box begins one note and then becomes silent.
+writer	2	3	social	Grandmother sits nearby and cuts warm bread into two pieces.
+writer	2	4	home	Morning light reaches the cup on the still kitchen table.
+writer	2	5	wonder	A red marble rolls uphill when every hand is far away.
+writer	2	6	social	A shy visitor leaves a drawing and stays long enough to listen.
+writer	2	7	storm	White rain jumps from the stones while dark clouds hide the trees.
+writer	2	8	home	A cup of milk cools beside the soft blue curtain.
+writer	3	1	wonder	Three chalk circles appear outside without a single track.
+writer	3	2	social	Someone returns Leo's lost button and smiles without speaking.
+writer	3	3	home	The reading chair waits beneath a gentle green shade.
+writer	3	4	storm	A bright flash arrives before the loud sky breaks open.
+writer	3	5	social	The neighbour gives Leo half an apple and keeps the other half.
+writer	3	6	storm	Heavy drops race along the gutter as the chimney groans.
+writer	3	7	home	Warm socks dry beside the stove on the wooden floor.
+writer	3	8	wonder	One feather falls inside although every window is closed.
+writer	4	1	social	A cousin remembers Leo's cup and pours a little water for him.
+writer	4	2	home	The quiet kettle stands near a clean towel and a warm plate.
+writer	4	3	storm	Wet branches tap the wall and the cellar door knocks below.
+writer	4	4	wonder	A silver bell rings twice but its string never moves.
+writer	4	5	storm	Fast rain fills the yard while a low cloud covers the fence.
+writer	4	6	home	The pillow keeps a small hollow where a head was resting.
+writer	4	7	wonder	A blue thread enters a crack in the wall and does not return.
+writer	4	8	social	The younger child offers a biscuit and sits close by.
+writer	5	1	home	A clean towel hangs near the basin in the peaceful room.
+writer	5	2	wonder	Four pebbles form a square after everyone has gone inside.
+writer	5	3	storm	Wind pulls at the shutters while water drums above the ceiling.
+writer	5	4	social	An old friend carries two oranges in and gives Leo the brighter one.
+writer	5	5	social	The quiet girl brings a paper boat and asks where it should sail.
+writer	5	6	storm	The fence leans under a hard gust and every loose pane answers.
+writer	5	7	wonder	A tiny light crosses the empty hall and disappears at the stairs.
+writer	5	8	home	The reading lamp makes a calm circle over the open book.
+writer	6	1	wonder	A wooden block is warm on one side though the room is cold.
+writer	6	2	storm	Hail skips across the roof and gathers beside the dark window.
+writer	6	3	social	A boy waits at the step until Leo makes room beside him.
+writer	6	4	home	Soft bread rests under a cloth near the evening cup.
+writer	6	5	storm	A long rumble crosses the field and the porch light trembles.
+writer	6	6	wonder	The clock loses a minute and finds it again before noon.
+writer	6	7	home	The curtain holds a pale square of sun across the rug.
+writer	6	8	social	Auntie listens to Leo's small story before telling her own.
+writer	7	1	storm	Rain sweeps sideways beneath the porch and rattles the latch.
+writer	7	2	social	The new child lends Leo a red crayon without being asked.
+writer	7	3	home	The wooden floor is cool but the little coat beside it is warm.
+writer	7	4	wonder	A paper star turns toward the door when no air is moving.
+writer	7	5	wonder	Five drops remain on the glass after all the others slide away.
+writer	7	6	home	Evening light settles on the bowl and the folded napkin.
+writer	7	7	social	A visitor saves the last chair for Leo and waits for him.
+writer	7	8	storm	The trees bow together as thunder travels behind the hill.
+writer	8	1	social	A neighbour knocks softly and brings back the borrowed spoon.
+writer	8	2	home	After supper the small room smells of soap and warm tea.
+writer	8	3	wonder	A white stone appears in the shoe that was empty a moment ago.
+writer	8	4	storm	A sudden gust scatters leaves while rain flashes under the gate.
+writer	8	5	home	The little scarf waits beside the door where the air is gentle.
+writer	8	6	social	Two children move closer so Leo can see the picture between them.
+writer	8	7	storm	Water runs down the chimney and the roof speaks in quick beats.
+writer	8	8	wonder	The final candle makes two shadows although only Leo is near.
+probe	0	1	home	What does a quiet light keep when everyone is asleep?
+probe	0	2	storm	What changes inside when the sky becomes loud and close?
+probe	0	3	wonder	Where can an unanswered question wait without disappearing?
+probe	0	4	social	How can you tell that another person chose to stay?

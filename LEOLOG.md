@@ -7017,3 +7017,74 @@ learning at all. Until then, the state swarm remains memory without command.
 
 Leo can become less surprised by a landscape without claiming he remembers
 its path.
+
+## Phase A.82 - a lived coordinate is not automatically an inner word (2026-08-01)
+
+A.81 showed that longer exposure makes road surprise approach state occupancy,
+but it did not establish sequence knowledge. A.82 asks the prior question:
+does the holistic state swarm contain a stable alphabet on which a sequence
+could be written at all?
+
+The sealed design crosses four laboratory textures with eight temporal
+positions over eight sessions. Every session contains each texture twice. In
+sessions one through four, every texture occupies every position exactly once;
+sessions five through eight repeat that complete balance with unseen surface
+language and changed adjacency. Texture therefore cannot borrow position, and
+position cannot borrow texture.
+
+Acquisition builds three kinds of offline Bhattacharyya prototypes from the
+complete soft state activation:
+
+```text
+texture    4 prototypes, each averaged across all eight positions
+position   8 prototypes, each averaged across all four textures
+joint     32 texture-by-position cells, one observation each
+```
+
+The held-out half classifies 32 turns per life. Chance accuracy is `0.250`,
+`0.125`, and `0.03125`. A texture alphabet requires at least `0.50` accuracy
+and `+0.02` mean margin; position requires `0.25` and `+0.01`; joint requires
+`0.125` and `+0.005`. More than one holdout birth or any holdout replacement
+vetoes every alphabet claim as unstable geometry. These thresholds and the
+crossing were fixed before live output.
+
+The canonical evidence is
+`/tmp/leo-state-swarm-alphabet-a82-r2-20260801`. Texture hit rates are above
+chance but fail the margin test in every life:
+
+```text
+lantern  14/32 = 0.4375   margin -0.0115
+river    16/32 = 0.5000   margin -0.0037
+window   15/32 = 0.4688   margin -0.0177
+```
+
+The signal is real but not class-stable. Correct texture often wins, while
+fewer confident errors make the average true-class margin negative. Position
+is at or below chance (`4/32`, `3/32`, `3/32`) with negative margins. Joint
+classification is `0/32` in all three lives. Every life reaches eight states
+during acquisition; holdout has no births and no replacements. Lantern's one
+replacement occurs in acquisition session three and does not cross the
+predeclared holdout veto.
+
+All three lives are therefore `unformed`, not collapsed. The distinction is
+important: the eight weights still provide bounded memory of whole lived
+configurations, but their IDs are not stable semantic or temporal symbols.
+This explains why A.81's transition ledger learned little beyond occupancy.
+Forcing a backoff or speech reader onto those coordinates would ask episodic
+memory to impersonate an inner language.
+
+The run contains 288 process observations and 96 default versus
+`--no-state-swarm` probes. Every probe preserves visible reply and complete
+state bytes. A synthetic scorer fixture constructs a perfect four-state
+texture code and proves that it yields `32/32` texture while position and joint
+remain zero under the balanced crossing. No C code, persisted state, update
+law, generation path, or authored state label changes in A.82.
+
+The next diagnostic should decompose existing state similarity into
+perception, expression, own field, body, rhythm, form, and darkmatter. Only if
+different organs support different held-out factors will factorized tiny
+weights be warranted. Otherwise the swarm remains an episodic constellation,
+which is already useful and need not pretend to be grammar.
+
+Leo can remember a whole moment before he knows which part of it deserves a
+name.
