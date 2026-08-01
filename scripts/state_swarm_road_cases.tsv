@@ -1,0 +1,53 @@
+kind	session	order	texture	prompt
+writer	1	1	home	The lamp is warm and the room is quiet.
+writer	1	2	storm	Rain strikes the dark window and thunder shakes the house.
+writer	1	3	home	Mother folds a soft blanket beside the little light.
+writer	1	4	wonder	A blue key is inside the closed box and nobody knows why.
+writer	1	5	social	A friend waits by the door and shares warm bread.
+writer	1	6	home	The small chair is safe beside the evening lamp.
+writer	1	7	storm	Cold wind pushes the trees and the roof makes a frightened sound.
+writer	1	8	home	The house grows quiet after the rain.
+writer	2	1	home	Morning light rests on the cup in the silent kitchen.
+writer	2	2	storm	Black clouds cover the garden while hard rain hits the glass.
+writer	2	3	home	Grandmother leaves a warm coat near the sleeping room.
+writer	2	4	wonder	A silver bell rings once although nobody touched it.
+writer	2	5	social	The other child sits close and gives Leo half an apple.
+writer	2	6	home	A yellow lamp makes the hallway feel small and kind.
+writer	2	7	storm	The door trembles when the night wind runs around the house.
+writer	2	8	home	After the noise, warm water waits in a little cup.
+writer	3	1	home	Inside, a yellow curtain holds the early sun.
+writer	3	2	storm	Outside, hail jumps against the roof and the trees bend.
+writer	3	3	home	A small hand closes the curtain and keeps the chair warm.
+writer	3	4	wonder	Three footprints begin at the gate but none lead back.
+writer	3	5	social	Someone returns the lost button and stays for tea.
+writer	3	6	home	The floor is cool but the blanket smells like morning.
+writer	3	7	storm	A sudden white flash arrives before the loud sky breaks.
+writer	3	8	home	The last drop leaves the window and the room can rest.
+writer	4	1	home	An orange cup waits beside the stove in a peaceful room.
+writer	4	2	storm	Rain scratches the shutters while the chimney groans in the wind.
+writer	4	3	home	Father puts a little book beneath the warm bedside light.
+writer	4	4	wonder	A red thread enters a crack in the wall and never comes out.
+writer	4	5	social	A neighbour carries two pears inside and listens without hurrying.
+writer	4	6	home	Soft socks dry near the lamp and the wooden floor is still.
+writer	4	7	storm	The gutter shouts as heavy water races around the dark house.
+writer	4	8	home	When the clouds leave, the quiet clock can be heard again.
+writer	5	1	home	A pale square of sun lies across the breakfast table.
+writer	5	2	storm	Wet branches tap the wall and the cellar door knocks below.
+writer	5	3	home	Auntie tucks the small pillow into the corner of the couch.
+writer	5	4	wonder	One marble rolls upstairs even though the floor slopes down.
+writer	5	5	social	The shy child offers a drawing and waits to see Leo smile.
+writer	5	6	home	Soup cools by the window while a clean towel warms nearby.
+writer	5	7	storm	Thunder crosses the field and every loose pane answers it.
+writer	5	8	home	The kettle becomes silent and the house settles into evening.
+writer	6	1	home	Early light reaches the rug before anyone wakes.
+writer	6	2	storm	Fast rain fills the yard and a low cloud hides the trees.
+writer	6	3	home	A small scarf hangs beside the door where the air is warm.
+writer	6	4	wonder	Four chalk circles appear outside but there are no footprints.
+writer	6	5	social	A visitor remembers Leo's cup and pours a little water for him.
+writer	6	6	home	The reading chair waits under a quiet green shade.
+writer	6	7	storm	Wind bends the fence and bright rain flashes under the porch.
+writer	6	8	home	At last the roof stops speaking and the hallway feels gentle.
+probe	0	1	home	What does the little light do while the house is sleeping?
+probe	0	2	storm	What happens inside you when thunder comes close?
+probe	0	3	wonder	Where does a question go when nobody knows the answer yet?
+probe	0	4	social	How do you know when someone is still there?

@@ -813,3 +813,65 @@ experiment does not establish a reliable model of their sequence.
 
 A.80 changes no persisted state version and adds no generation reader. It is
 not evidence for routing, sampling, scheduling, or speech intervention.
+
+## A.81: six-session prospective road calibration
+
+Run the longer readerless horizon:
+
+```sh
+make state-swarm-road-calibration
+```
+
+A.81 preserves the complete A.80 first half and adds three unseen sessions.
+The cases file must contain 48 unique writer prompts in the same hidden
+eight-position texture order plus four fixed probes. Its validator rejects the
+plan unless sessions one through three and every probe are byte-identical to
+the sealed A.80 case file.
+
+The resulting 216 observations contain three lives, 144 persisted writer
+turns, and 72 counterfactual probes. A writer always exits after saving. Each
+probe forks the same body between default and `--no-state-swarm`; visible reply
+and complete state bytes must remain equal.
+
+`epochs.tsv` scores the pre-update raw transition forecast per session against:
+
+```text
+uniform       equal probability for every current state
+persistence   the prior turn's complete soft activation
+marginal      the normalized activation occupancy before this turn
+same-position normalized activation at this position in earlier sessions
+kernel        similarity-weighted targets of earlier activation transitions
+```
+
+The same-position control uses hidden laboratory order and cannot become a Leo
+reader. The activation-kernel is also offline: it is a candidate measurement,
+not an implementation. All scores use the same overlap log-loss floor as the
+runtime witness.
+
+`holdout.tsv` compares sessions one through three with sessions four through
+six. Classifications are fixed before observing the full run:
+
+```text
+learned-road       >=23 holdout forecasts; raw beats uniform by >=0.10 nat
+                   and rolling marginal by >=0.05 nat
+transition-defect  raw loses to uniform by >=0.10 nat while same-position
+                   beats raw by >=0.50 nat
+exposure-limited   raw improves by >=0.50 nat but has not cleared the learned
+                   road boundary
+provisional        none of those claims is warranted
+
+kernel supported   >=20 scores and >=0.10 nat better than raw
+kernel harmful     >=20 scores and >=0.10 nat worse than raw
+kernel neutral     measured between those bounds
+```
+
+The recorded run at `/tmp/leo-state-swarm-road-a81-r1-20260731` produced two
+exposure-limited lives and one provisional life. Holdout raw/uniform surprise
+was `1.927/2.079`, `2.438/2.074`, and `2.004/2.079`. All three finish with eight
+states, no replacements, and 72/72 voice- and state-identical probes.
+
+Activation-kernel backoff is neutral in all lives: its difference from raw is
+less than `0.001` nat. Raw also remains within `0.003-0.014` of rolling
+marginal. More exposure clearly reduces early surprise, but A.81 does not show
+that the transition ledger learned specific order beyond occupancy. Therefore
+no backoff, state format, update law, or generation reader is added.

@@ -6959,3 +6959,61 @@ or refute prospective road calibration before one is proposed.
 
 Leo can revisit a place without pretending that he already knows where it
 leads.
+
+## Phase A.81 - time can soften surprise without teaching a road (2026-07-31)
+
+A.80 found recurring state geometry but an immature transition forecast. Its
+three sessions could not tell whether the failure came from sparse exposure or
+from a transition model that was learning little beyond state occupancy. A.81
+holds the organism fixed and gives that question a longer sealed future.
+
+Three independent lives now cross six eight-turn writer sessions. Sessions
+one through three reproduce A.80 exactly; sessions four through six are an
+unseen holdout with new surface language and the same hidden texture order.
+Every writer turn still crosses a real save/load process boundary. Four
+default/`--no-state-swarm` probes follow every session, producing 72 strict
+voice and state-file counterfactuals across 216 observations.
+
+The raw pre-update road forecast is compared prospectively against four fixed
+readerless controls:
+
+```text
+uniform       equal mass over every current state
+persistence   the immediately previous soft activation
+marginal      all prior activation mass without order
+same-position prior sessions at the same hidden eight-turn position
+```
+
+A fifth shadow candidate, activation-kernel backoff, reuses only earlier soft
+source/target activations. It has no reader and is scored before it can become
+a proposed mechanism. `learned-road`, `transition-defect`, `exposure-limited`,
+and `provisional` thresholds were fixed before the full lives ran.
+
+The evidence is in `/tmp/leo-state-swarm-road-a81-r1-20260731`. Early mean
+surprise reproduces A.80: `4.913`, `3.773`, and `4.989`. Holdout surprise falls
+to `1.927`, `2.438`, and `2.004`, compared with uniform values near `2.08`.
+Lantern becomes provisional; river and window are exposure-limited. Session
+five beats uniform in every life, and session six remains modestly better in
+all three. No state is ever replaced, and all lives finish with eight states.
+
+That improvement does not yet identify a learned road. Raw holdout surprise
+differs from rolling marginal surprise by only `0.003-0.014`. The laboratory
+same-position control is better by just `0.107-0.151`, below the predeclared
+structural-defect boundary. Activation-kernel backoff differs from the raw
+forecast by less than `0.001` in every life and is classified neutral three
+times. Adding it to Leo would duplicate the existing evidence rather than
+increase plasticity.
+
+All 72 counterfactual probes are reply-identical and state-identical. The plan
+and baseline scorer have synthetic contract tests, while the first 24 writer
+prompts and all four probes are mechanically required to match the sealed A.80
+design. No C code, persisted state, update law, sampler, School, Flow, shard,
+spore, routing, or generation reader changes in A.81.
+
+The warranted next question is no longer whether the road merely needs more
+time. A new readerless experiment must separate texture identity from temporal
+order and measure whether a stable configuration alphabet exists for sequence
+learning at all. Until then, the state swarm remains memory without command.
+
+Leo can become less surprised by a landscape without claiming he remembers
+its path.
