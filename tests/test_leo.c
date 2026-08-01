@@ -7393,17 +7393,36 @@ int main(void) {
             CHECK(state->state_swarm_receipt.members == 1 &&
                   state->state_swarm_receipt.member_id[0] == 1 &&
                   fabsf(state->state_swarm_receipt.member_activation[0] - 1.0f) < 1e-6f &&
+                  leo_state_organ_receipt(state) &&
+                  !leo_state_organ_receipt(state)->valid[0] &&
                   !state->state_swarm_receipt.adjacent &&
                   !state->state_swarm_receipt.has_prediction,
-                  "state-swarm: the runtime witness exposes the complete first activation without inventing a forecast");
+                  "state-swarm: a birth exposes activation but does not launder self-similarity into organ evidence");
 
             test_state_swarm_turn(state, 2, water, fire, light, dark,
                                   1.0f, 0.0f, 0, "The warm light.");
             CHECK(state->state_swarm->n == 1 &&
                   state->state_swarm_receipt.event == LEO_STATE_SWARM_UPDATED &&
                   state->state_swarm->weights[0].observations == 2 &&
-                  state->state_swarm_receipt.active == 1,
+                  state->state_swarm_receipt.active == 1 &&
+                  leo_state_organ_receipt(state) &&
+                  leo_state_organ_receipt(state)->valid[0],
                   "state-swarm: a repeated life deepens one state instead of multiplying names");
+            {
+                const float *organ =
+                    leo_state_organ_receipt(state)->similarity[0];
+                float reconstructed =
+                    0.19f * organ[LEO_STATE_ORGAN_PERCEPTION] +
+                    0.19f * organ[LEO_STATE_ORGAN_EXPRESSION] +
+                    0.10f * organ[LEO_STATE_ORGAN_FIELD] +
+                    0.20f * organ[LEO_STATE_ORGAN_BODY] +
+                    0.18f * organ[LEO_STATE_ORGAN_RHYTHM] +
+                    0.07f * organ[LEO_STATE_ORGAN_FORM] +
+                    0.07f * organ[LEO_STATE_ORGAN_DARKMATTER];
+                CHECK(fabsf(reconstructed -
+                            state->state_swarm_receipt.similarity) < 1e-6f,
+                      "state-swarm: seven organ witnesses reconstruct the unchanged holistic similarity");
+            }
             CHECK(state->state_swarm_receipt.adjacent &&
                   !state->state_swarm_receipt.has_prediction &&
                   fabsf(state->state_swarm_receipt.observed_outcome
@@ -7426,6 +7445,9 @@ int main(void) {
             CHECK(state->state_swarm_receipt.members == 2 &&
                   state->state_swarm_receipt.member_id[1] == 2 &&
                   fabsf(state->state_swarm_receipt.member_activation[1] - 1.0f) < 1e-6f &&
+                  leo_state_organ_receipt(state) &&
+                  leo_state_organ_receipt(state)->valid[0] &&
+                  !leo_state_organ_receipt(state)->valid[1] &&
                   state->state_swarm_receipt.has_prediction &&
                   state->state_swarm_receipt.expected_id == 1 &&
                   state->state_swarm_receipt.prediction_overlap < 1e-6f &&

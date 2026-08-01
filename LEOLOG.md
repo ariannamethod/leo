@@ -7088,3 +7088,78 @@ which is already useful and need not pretend to be grammar.
 
 Leo can remember a whole moment before he knows which part of it deserves a
 name.
+
+## Phase A.83 - a trace inside an organ is not yet an organ's word (2026-08-02)
+
+A.82 found a weak but unstable texture trace in holistic lived states. A.83
+asks whether that failure came from combining incompatible evidence: perhaps
+perception remembers texture while rhythm or body remembers position, even
+though their weighted sum forms no alphabet.
+
+The existing similarity was decomposed without changing its value or update
+law:
+
+```text
+S = .19 perception + .19 expression + .10 own-field
+  + .20 body + .18 rhythm + .07 form + .07 darkmatter
+
+body   = .5 chambers + .5 retention
+rhythm = (2 rhythm-distance + rhythm-class) / 3
+```
+
+The returned holistic expression preserves the original primitive operations
+and coefficients. A unit witness independently reconstructs it from the seven
+reported organs. The per-state components live in a separately allocated
+runtime receipt; they do not enter the v27 state body. Each value is captured
+before prototype update. On birth or replacement the new state is reported as
+`na`, because similarity to the observation that just created it would be a
+tautology, not recognition.
+
+The sealed A.82 texture-by-position crossover was then replayed exactly. For
+each organ alone, its similarities were converted to a soft state activation
+with the existing `0.12` temperature. Birth/replacement observations were
+excluded, acquisition prototypes were averaged by texture and position, and
+held-out classification again used the Bhattacharyya coefficient and A.82's
+fixed thresholds. A texture factor required at least four acquisition examples
+per texture; position required at least two per position. Adequacy was judged
+separately so a sparse temporal cell could not erase valid texture evidence.
+
+The canonical run is
+`/tmp/leo-state-swarm-organs-a83-20260802-r4`. Lantern has 23 valid acquisition
+turns and nine excluded events; River and Window each have 24 and eight. All
+32 held-out turns in every life are valid. Texture coverage is sufficient in
+all three lives. River has only one valid example at its sparsest position, so
+its position result is explicitly `position-insufficient`; Window and Lantern
+both meet the temporal coverage floor.
+
+No organ passes. Perception is the only consistent texture seed:
+
+```text
+life      texture accuracy   true-vs-best-other margin
+river          17/32                    +0.013168
+window         11/32                    +0.016007
+lantern        13/32                    +0.002907
+```
+
+River exceeds the `0.50` accuracy boundary but misses the predeclared `+0.02`
+margin; the other lives miss accuracy as well. Body reaches `14/32` in all
+three lives but has negative margins (`-0.0107` to `-0.0208`). Every other
+organ has negative texture margins. Position has zero support in both adequate
+lives for all seven organs; every mean position margin is negative.
+
+The holistic replay is byte-for-byte numerically consistent with A.82: texture
+hits remain `14/32`, `16/32`, and `15/32`, all three verdicts remain
+`unformed`, and there are no holdout births or replacements. Across 96 paired
+default/`--no-state-swarm` probes, all 96 replies and all 96 complete state
+files are identical. Synthetic contracts prove that a texture-only organ and a
+position-only organ pass their own factor without leaking through the balanced
+crossing.
+
+Therefore A.83 does not authorize factorized tiny weights. It does identify a
+cleaner next diagnostic: settle the eight-state geometry in an unscored warm-up
+before beginning a newly balanced acquisition half. That will test whether the
+small perception margin is being diluted by holistic ownership or whether it
+is only an episodic trace. No state version, persisted weight, update law,
+sampler, routing path, or speech reader changes here.
+
+An organ may feel the difference before it has learned how to keep it.
