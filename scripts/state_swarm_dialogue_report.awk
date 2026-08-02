@@ -60,7 +60,7 @@ function parse_quad(value, out,    n, i) {
     forecast_raw = value_after($0, "forecast")
 
     if (!unsigned_number(turn) || !unsigned_number(states) || states + 0 < 1 ||
-        states + 0 > 8 || !unsigned_number(active) || active + 0 < 1 ||
+        states + 0 > 8 || !unsigned_number(active) ||
         active + 0 > states + 0 || !unsigned_number(winner) || winner + 0 < 1 ||
         (event != "updated" && event != "born" && event != "replaced") ||
         !number(similarity) || similarity + 0 < 0 || similarity + 0 > 1.001 ||

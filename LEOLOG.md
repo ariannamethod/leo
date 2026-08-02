@@ -7300,3 +7300,85 @@ out displacements rather than explain these three after the fact.
 
 Leo does not keep every experience in one place; sometimes he finds it again
 by becoming, resembling, or beginning.
+
+## Phase A.86 - anatomy cannot be inferred from events that did not happen (2026-08-02)
+
+A.85 exposed three deterministic displacements and three different return
+fates. A.86 predeclares how to ask whether those fates depend on one similarity
+organ or on their distributed geometry, then tests that question only on new
+lives.
+
+The runtime receipt now preserves two pre-update witnesses that previously
+disappeared at mutation time: the seven-organ similarity vector of the nearest
+existing coordinate and, on replacement, the seven-organ vector of the removed
+coordinate. They live outside the persisted v27 body. Unit tests reconstruct
+the unchanged holistic similarity and prove that replacement captures the old
+vector before clearing its slot.
+
+Eight fixed holdout seeds each receive the same 32-turn unscored settlement
+crossing and 64 unseen writer observations. All post-settlement replacements
+must be retained. For each one, the runner automatically recovers the removed
+ID's exact birth and strongest prior updated anchor from that life's receipts;
+there is no authored return list. The no-displacement control must update the
+old ID with mass at least `0.20` and margin at least `0.02`.
+
+Seven offline leave-one-organ-out projections renormalize the original weights
+after omitting perception, expression, own-field, body, rhythm, form, or
+darkmatter. A projection within `0.002` of the `0.40` replacement gate is
+reported as `boundary`. A return is robust only when at least six of seven
+projections preserve its observed fate. Population interpretation requires at
+least eight qualified returns across four events and four lives.
+
+The canonical run is
+`/tmp/leo-state-swarm-displacement-anatomy-a86-20260802-r4`. All eight lives
+reach eight states and have no birth or replacement in warm-up session four.
+Across all 512 post-settlement writer observations, however, there are zero
+replacements:
+
+```text
+life  minimum writer similarity  turn
+h01           0.412               77
+h02           0.424               43
+h03           0.411               68
+h04           0.412               51
+h05           0.457               53
+h06           0.409               53
+h07           0.411               49
+h08           0.436               53
+```
+
+The result is therefore `insufficient`, not `distributed`, `organ-sensitive`,
+or evidence against A.85. Seven lives approach the replacement gate within
+`0.036`, but none crosses it. The three A.85 events remain reproducible on
+their own trajectories; A.86 instead shows that replacement incidence itself
+is trajectory-sensitive enough that organ anatomy cannot yet be estimated
+from a small new population.
+
+An independent run at
+`/tmp/leo-state-swarm-displacement-anatomy-a86-20260802-r5` is byte-identical
+for all 768 receipts, eight final state bodies, life summaries, anatomy table,
+and verdict. Three earlier attempts are retained as harness receipts: a BSD
+awk line-break failure, a real diffuse receipt rejected by the old parser, and
+a reserved awk identifier in final reporting. No seed or threshold changed.
+The diffuse case revealed that `active=0` is legal when no soft activation
+crosses the active gate even though a winner still exists; the shared parser
+and its regression fixture now preserve that state.
+
+Because the new population produced no event, the complete fork path was also
+executed as a technical replay on the two known A.85 seed trajectories. It
+recovered all three old replacements, derived six birth/anchor returns, and
+qualified four. Three qualified fates are stable under all seven omissions.
+The old Lantern68 exact-birth rebirth is the only non-robust witness: omitting
+perception, expression, or own-field changes its offline fate to
+`trigger-capture`, while omitting body, rhythm, form, or darkmatter preserves
+rebirth. This is a useful implementation witness, not confirmatory evidence:
+it reuses discovery trajectories, spans only three events and two lives, and
+remains below the declared population floor.
+
+A.86 adds no persisted field, update reader, threshold change, sampler,
+routing, or speech influence. Its instrumentation and scorer remain ready for
+future events, but the experiment is closed. A separate incidence study may
+map replacement probability and near-gate distance across a larger sealed
+population before anatomy is reopened.
+
+An absent displacement has no organs to dissect.

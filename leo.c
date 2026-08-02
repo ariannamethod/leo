@@ -1672,6 +1672,7 @@ typedef struct {
     uint64_t winner_id;
     uint64_t born_id;
     uint64_t replaced_id;
+    uint64_t nearest_id;
     uint64_t expected_id;
     uint64_t member_id[LEO_STATE_SWARM_MAX];
     float member_activation[LEO_STATE_SWARM_MAX];
@@ -1694,7 +1695,11 @@ typedef struct {
  * exact LeoStateSwarm prefix written by state v27. */
 typedef struct {
     float similarity[LEO_STATE_SWARM_MAX][LEO_STATE_ORGANS];
+    float nearest_similarity[LEO_STATE_ORGANS];
+    float removed_similarity[LEO_STATE_ORGANS];
     uint8_t valid[LEO_STATE_SWARM_MAX];
+    uint8_t nearest_valid;
+    uint8_t removed_valid;
 } LeoStateOrganReceipt;
 
 typedef struct {
@@ -10587,6 +10592,15 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
         }
     }
     receipt.similarity = best >= 0 ? best_similarity : 0.0f;
+    if (best >= 0) {
+        receipt.nearest_id = swarm->weights[best].id;
+        if (organ_receipt && organ_receipt->valid[best]) {
+            memcpy(organ_receipt->nearest_similarity,
+                   organ_receipt->similarity[best],
+                   sizeof organ_receipt->nearest_similarity);
+            organ_receipt->nearest_valid = 1;
+        }
+    }
 
     int slot = -1;
     if (swarm->n == 0 ||
@@ -10599,7 +10613,13 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
         slot = leo_state_weakest(swarm);
         receipt.event = LEO_STATE_SWARM_REPLACED;
         receipt.replaced_id = swarm->weights[slot].id;
-        if (organ_receipt) organ_receipt->valid[slot] = 0;
+        if (organ_receipt) {
+            memcpy(organ_receipt->removed_similarity,
+                   organ_receipt->similarity[slot],
+                   sizeof organ_receipt->removed_similarity);
+            organ_receipt->removed_valid = organ_receipt->valid[slot];
+            organ_receipt->valid[slot] = 0;
+        }
         leo_state_reset_slot(swarm, slot);
         float remaining = 0.0f;
         for (uint32_t i = 0; i < swarm->n; i++)
@@ -14285,10 +14305,24 @@ static void print_flow_stats(const Leo *leo) {
                 printf("%s%.6f", o ? "/" : "",
                        (double)organ_receipt->similarity[i][o]);
         }
+        printf(" nearest=%llu nearest_organs=",
+               (unsigned long long)state_receipt->nearest_id);
+        if (!organ_receipt || !organ_receipt->nearest_valid) printf("na");
+        else
+            for (int o = 0; o < LEO_STATE_ORGANS; o++)
+                printf("%s%.6f", o ? "/" : "",
+                       (double)organ_receipt->nearest_similarity[o]);
         printf(" adjacent=%u", (unsigned)state_receipt->adjacent);
-        if (state_receipt->replaced_id)
+        if (state_receipt->replaced_id) {
             printf(" replaced=%llu",
                    (unsigned long long)state_receipt->replaced_id);
+            printf(" removed_organs=");
+            if (!organ_receipt || !organ_receipt->removed_valid) printf("na");
+            else
+                for (int o = 0; o < LEO_STATE_ORGANS; o++)
+                    printf("%s%.6f", o ? "/" : "",
+                           (double)organ_receipt->removed_similarity[o]);
+        }
         if (state_receipt->adjacent)
             printf(" observed=%.3f/%.3f/%.3f/%.3f",
                    (double)state_receipt->observed_outcome[0],
