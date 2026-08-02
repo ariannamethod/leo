@@ -52,6 +52,22 @@ printf '%s\n' "$first" | awk -F '\t' '
     END { exit !ok }
 '
 
+cat > "$TMP/diffuse.log" <<'EOF'
+     [state-swarm: turn=31 states=8 active=0 winner=4 event=updated similarity=0.482 entropy=0.993 members=1:0.135,2:0.117,9:0.075,4:0.146,5:0.131,6:0.127,7:0.137,8:0.132 adjacent=1 observed=0.000/0.000/-0.233/-0.500 expected=2(0.250) overlap=0.122 surprise=2.104 forecast=0.000/-0.002/0.002/0.008 clocks=0.11/0.10/0.32/0.78]
+EOF
+diffuse="$(
+    awk -v cell=diffuse -v cohort=holdout -v base_seed=20873 \
+        -v phase=warm -v session=4 -v order=7 -v texture=wonder \
+        -v run_seed=24280 -v prompt='A blue thread enters a crack.' \
+        -v reply='It waits.' \
+        -f "$ROOT/scripts/state_swarm_dialogue_report.awk" \
+        "$TMP/diffuse.log"
+)"
+printf '%s\n' "$diffuse" | awk -F '\t' '
+    NR == 1 { ok = NF == 34 && $9 == 31 && $10 == 8 && $11 == 0 && $12 == 4 }
+    END { exit !(ok && NR == 1) }
+'
+
 cat > "$TMP/bad.log" <<'EOF'
      [state-swarm: turn=7 states=2 active=1 winner=1 event=updated similarity=0.700 entropy=0.500 members=1:0.400,2:0.400 adjacent=1 observed=0.000/0.000/0.000/0.000 clocks=1.00/1.00/1.00/1.00]
 EOF

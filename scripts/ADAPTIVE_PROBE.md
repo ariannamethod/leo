@@ -1098,3 +1098,56 @@ activation over all replay turns before displacement.
 A.85 changes no organism code or speech path. Its next use is to predeclare an
 offline per-organ fate analysis and test it on new displacement events before
 considering any reader, freeze, or replacement-policy change.
+
+## A.86: require new displacements before explaining their anatomy
+
+Run the sealed eight-life population:
+
+```sh
+make state-swarm-displacement-anatomy
+```
+
+Each life receives 32 unscored settlement observations followed by all 64
+A.82 writer observations. The eight seed rows are fixed in
+`state_swarm_displacement_anatomy_lives.tsv`; do not add lives after seeing the
+event count. Every post-settlement replacement is admitted automatically.
+
+For an admitted event the runner forks the exact pre-trigger body, repeats the
+trigger with `--no-state-swarm`, and requires equal reply and normalized
+non-swarm diagnostics with different saved bodies. It then derives at most two
+returns from the event's own earlier receipts:
+
+```text
+exact-birth   the observation and seed that created the displaced ID
+exact-anchor  the strongest earlier updated observation won by that ID
+```
+
+Each return enters control and displaced bodies without saving. The control
+qualifies only when the old ID wins with mass `>=0.20` and margin `>=0.02`.
+The displaced receipt is recomputed seven times offline while omitting one
+organ and renormalizing the remaining holistic weights. Values within `0.002`
+of the `0.40` gate are `boundary`; at least `6/7` matching fates is robust.
+
+Population adequacy requires at least eight qualified returns, four events,
+and four lives. The recorded run at
+`/tmp/leo-state-swarm-displacement-anatomy-a86-20260802-r4` has eight settled
+lives but zero replacements in 512 scored writer observations. Its result is
+therefore `insufficient`. Writer minimum similarities range from `0.409` to
+`0.457`; the population approaches but never crosses the gate. Independent
+`r5` receipts, final states, and scientific tables are byte-identical.
+
+The fork/provenance/scorer path is separately exercised on the two old A.85
+seed trajectories. It recovers all three known replacements and processes six
+automatic returns without changing the A.86 population result. Treat those
+rows as a technical receipt only: they reuse discovery lives and fail the
+predeclared event/life adequacy floor.
+
+The runtime-only receipt exposes nearest and removed pre-update seven-organ
+vectors so a future qualified event can be scored without reconstructing lost
+state. It changes no persisted body or update. The shared dialogue parser also
+now accepts the legitimate diffuse case `active=0`: the winner exists even
+when no soft activation reaches the active-membership threshold.
+
+Do not extend A.86 until it produces a preferred answer. If replacement
+incidence itself needs explanation, open a separately sealed population study
+of event rate and near-gate distance first.

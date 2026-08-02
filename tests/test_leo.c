@@ -7395,6 +7395,8 @@ int main(void) {
                   fabsf(state->state_swarm_receipt.member_activation[0] - 1.0f) < 1e-6f &&
                   leo_state_organ_receipt(state) &&
                   !leo_state_organ_receipt(state)->valid[0] &&
+                  !leo_state_organ_receipt(state)->nearest_valid &&
+                  !state->state_swarm_receipt.nearest_id &&
                   !state->state_swarm_receipt.adjacent &&
                   !state->state_swarm_receipt.has_prediction,
                   "state-swarm: a birth exposes activation but does not launder self-similarity into organ evidence");
@@ -7405,8 +7407,10 @@ int main(void) {
                   state->state_swarm_receipt.event == LEO_STATE_SWARM_UPDATED &&
                   state->state_swarm->weights[0].observations == 2 &&
                   state->state_swarm_receipt.active == 1 &&
+                  state->state_swarm_receipt.nearest_id == 1 &&
                   leo_state_organ_receipt(state) &&
-                  leo_state_organ_receipt(state)->valid[0],
+                  leo_state_organ_receipt(state)->valid[0] &&
+                  leo_state_organ_receipt(state)->nearest_valid,
                   "state-swarm: a repeated life deepens one state instead of multiplying names");
             {
                 const float *organ =
@@ -7589,8 +7593,26 @@ int main(void) {
                   full->state_swarm->n == LEO_STATE_SWARM_MAX &&
                   full->state_swarm->weights[0].id ==
                       LEO_STATE_SWARM_MAX + 1 &&
+                  full->state_swarm_receipt.nearest_id > 0 &&
+                  leo_state_organ_receipt(full)->nearest_valid &&
+                  leo_state_organ_receipt(full)->removed_valid &&
                   leo_state_swarm_valid(full),
                   "state-swarm: a full swarm replaces its weakest decayed coordinate, not its strongest memory");
+            {
+                const float *nearest =
+                    leo_state_organ_receipt(full)->nearest_similarity;
+                float reconstructed =
+                    0.19f * nearest[LEO_STATE_ORGAN_PERCEPTION] +
+                    0.19f * nearest[LEO_STATE_ORGAN_EXPRESSION] +
+                    0.10f * nearest[LEO_STATE_ORGAN_FIELD] +
+                    0.20f * nearest[LEO_STATE_ORGAN_BODY] +
+                    0.18f * nearest[LEO_STATE_ORGAN_RHYTHM] +
+                    0.07f * nearest[LEO_STATE_ORGAN_FORM] +
+                    0.07f * nearest[LEO_STATE_ORGAN_DARKMATTER];
+                CHECK(fabsf(reconstructed -
+                            full->state_swarm_receipt.similarity) < 1e-6f,
+                      "state-swarm: replacement preserves the nearest pre-update organ witness");
+            }
             leo_free(full);
             free(full);
         } else {
