@@ -4,6 +4,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CASES="${LEO_STATE_ALPHABET_CASES:-$ROOT/scripts/state_swarm_alphabet_cases.tsv}"
+INITIAL_ROOT="${LEO_STATE_ALPHABET_INITIAL_ROOT:-}"
+TURN_OFFSET="${LEO_STATE_ALPHABET_TURN_OFFSET:-0}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="${1:-${TMPDIR:-/tmp}/leo-state-swarm-alphabet-$STAMP}"
 
@@ -13,6 +15,16 @@ OUT="${1:-${TMPDIR:-/tmp}/leo-state-swarm-alphabet-$STAMP}"
 }
 [ -f "$CASES" ] || {
     printf 'state alphabet cases not found: %s\n' "$CASES" >&2
+    exit 2
+}
+case "$TURN_OFFSET" in
+    ''|*[!0-9]*)
+        printf 'invalid state alphabet turn offset: %s\n' "$TURN_OFFSET" >&2
+        exit 2
+        ;;
+esac
+[ -z "$INITIAL_ROOT" ] || [ -d "$INITIAL_ROOT" ] || {
+    printf 'initial state root not found: %s\n' "$INITIAL_ROOT" >&2
     exit 2
 }
 
@@ -134,6 +146,14 @@ while IFS=$'\t' read -r wanted_cell wanted_cohort wanted_seed; do
     life="$OUT/lives/$wanted_cell"
     mkdir -p "$life/logs"
     state="$life/leo.state"
+    if [ -n "$INITIAL_ROOT" ]; then
+        initial_state="$INITIAL_ROOT/$wanted_cell/leo.state"
+        [ -s "$initial_state" ] || {
+            printf 'initial state not found: %s\n' "$initial_state" >&2
+            exit 1
+        }
+        cp "$initial_state" "$state"
+    fi
 
     awk -F '\t' -v cell="$wanted_cell" 'NR > 1 && $1 == cell' "$PLAN" |
     while IFS=$'\t' read -r cell cohort base_seed phase session order \
@@ -186,18 +206,19 @@ while IFS=$'\t' read -r wanted_cell wanted_cohort wanted_seed; do
     done
 done
 
-awk -F '\t' '
+awk -F '\t' -v turn_offset="$TURN_OFFSET" '
     NR == 1 { next }
     {
         rows++
         life[$1]++
         if ($4 == "writer") {
             writers[$1]++
-            if ($9 != writers[$1] || ($9 == 1 && $18 != 0) ||
-                ($9 > 1 && $18 != 1)) exit 1
+            expected_turn = turn_offset + writers[$1]
+            expected_adjacent = expected_turn > 1 ? 1 : 0
+            if ($9 != expected_turn || $18 != expected_adjacent) exit 1
         } else if ($4 == "probe") {
             probes[$1]++
-            if ($9 != $5 * 8 + 1 || $18 != 1 ||
+            if ($9 != turn_offset + $5 * 8 + 1 || $18 != 1 ||
                 $35 != "true" || $36 != "true") exit 1
         } else exit 1
     }
@@ -213,7 +234,8 @@ awk -F '\t' '
 }
 
 printf 'cell\tcohort\tbase_seed\tholdout_turns\ttexture_hits\ttexture_accuracy\ttexture_margin\ttexture_similarity\tposition_hits\tposition_accuracy\tposition_margin\tposition_similarity\tjoint_hits\tjoint_accuracy\tjoint_margin\tjoint_similarity\tfinal_states\tacquisition_births\tholdout_births\tacquisition_replacements\tholdout_replacements\tverdict\n' > "$ALPHABET"
-awk -f "$ROOT/scripts/state_swarm_alphabet_report.awk" "$RECEIPTS" | sort \
+awk -v turn_offset="$TURN_OFFSET" \
+    -f "$ROOT/scripts/state_swarm_alphabet_report.awk" "$RECEIPTS" | sort \
     >> "$ALPHABET"
 
 awk -F '\t' '

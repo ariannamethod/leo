@@ -99,4 +99,14 @@ awk -F '\t' '
     END { if (rows != 3) exit 1 }
 ' "$TMP/alphabet.tsv"
 
+awk -F '\t' '
+    BEGIN { OFS = "\t" }
+    NR == 1 { print; next }
+    { $9 += 32; print }
+' "$RECEIPTS" > "$TMP/offset-receipts.tsv"
+awk -v turn_offset=32 \
+    -f "$ROOT/scripts/state_swarm_alphabet_report.awk" \
+    "$TMP/offset-receipts.tsv" > "$TMP/offset-alphabet.tsv"
+cmp -s "$TMP/alphabet.tsv" "$TMP/offset-alphabet.tsv"
+
 printf 'state-swarm alphabet crossover plan: ok\n'

@@ -994,3 +994,46 @@ a settled-organ crossover: use an unscored warm-up to finish births, then begin
 a fully balanced acquisition half with no tautological holes. That experiment
 can decide whether perception's small positive margin deserves its own shadow
 prototype or remains only an episodic trace.
+
+## A.84: test whether local settlement survives a new life surface
+
+Run the unscored warm-up followed by the sealed A.82/A.83 crossover:
+
+```sh
+make state-swarm-settled-organs
+```
+
+The warm-up is a four-session Latin crossing of four laboratory textures and
+eight positions. It contributes 32 unique prompts per life and is excluded
+from every classifier prototype. The runner admits the scored experiment only
+after each life has eight states and its entire fourth warm-up session contains
+updates rather than births or replacements.
+
+The resulting v27 bodies begin A.82 at persisted turn 33. A.82's acquisition,
+holdout, process boundaries, seeds, and counterfactual probes are otherwise
+unchanged. The report distinguishes two claims:
+
+```text
+local settlement    warm-up session four has no structural change
+settlement transfer no birth or replacement anywhere in scored acquisition
+                    or holdout, in all three lives
+```
+
+Only complete transfer may admit an organ verdict. An empirical failure still
+exits successfully and records every replacement and partial factor row;
+malformed plans, broken chronology, counterfactual voice/state differences,
+or incomplete receipts remain command failures.
+
+The recorded run at
+`/tmp/leo-state-swarm-settled-organs-a84-20260802-r2` passes local settlement
+in `3/3` lives but complete transfer in only `1/3`. Window replaces one state
+during scored acquisition and Lantern replaces two during holdout. All organs
+are therefore `not-admitted`. The result is reproducible byte-for-byte against
+an independent first run for warm-up receipts, holistic receipts, and factor
+rows.
+
+This is evidence about plasticity, not an update defect. A full swarm replaces
+its weakest coordinate only when every existing holistic similarity is below
+`0.40`; further arbitrary warm-up cannot guarantee that an unseen moment will
+clear that gate. A.84 consequently changes no novelty/replacement threshold,
+state format, generation path, or reader.

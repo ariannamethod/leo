@@ -7163,3 +7163,64 @@ is only an episodic trace. No state version, persisted weight, update law,
 sampler, routing path, or speech reader changes here.
 
 An organ may feel the difference before it has learned how to keep it.
+
+## Phase A.84 - a settled room is not a settled world (2026-08-02)
+
+A.83 left one narrow alternative for perception's weak texture trace: perhaps
+birth holes, rather than the organ itself, diluted the balanced crossover.
+A.84 therefore gives each life a separate unscored warm-up before replaying
+the sealed A.82 acquisition and holdout.
+
+The warm-up contains four sessions and 32 unique prompts. Each session carries
+each laboratory texture twice, and across the four sessions every texture
+occupies every one of the eight positions exactly once. Four sessions are the
+minimum complete position-by-texture crossing; three would leave order folded
+into the warm-up. None of these observations enters a classifier prototype.
+Every turn still ends in a real save/load process boundary.
+
+The predeclared local settlement condition requires eight states and no birth
+or replacement anywhere in the fourth warm-up session. All three lives pass.
+Their 32-turn summaries are:
+
+```text
+life      states   births   replacements   session-4 changes
+lantern      8        8          0                 0
+river        8        8          1                 0
+window       8        8          1                 0
+```
+
+The saved warm bodies then enter the unchanged A.82 64-writer crossover, with
+persisted chronology shifted from `1..64` to `33..96`. A regression fixture
+proves that the offline classifier gives identical output under such a turn
+offset. The existing 96 default/`--no-state-swarm` probes remain reply- and
+state-identical.
+
+Local settlement does not transfer. River has complete scored coverage;
+Window replaces one state during acquisition; Lantern replaces two during
+holdout. Thus clean acquisition is `2/3`, clean holdout is `2/3`, but a fully
+clean transfer exists in only `1/3` lives. The result is
+`warmup-settlement-did-not-transfer`, and every organ is `not-admitted` rather
+than being promoted or rejected from incomplete evidence.
+
+Even descriptively, warm-up does not sharpen perception into an alphabet.
+River reaches `14/32` texture hits at `+0.017547` margin, Window `13/32` at
+`+0.022057` after one excluded acquisition turn, and Lantern `12/30` at
+`-0.012135` after two excluded holdout turns. Position margins remain negative
+in all three lives. Those values may guide a later diagnostic, but they do not
+meet A.82's evidence contract.
+
+The canonical evidence is
+`/tmp/leo-state-swarm-settled-organs-a84-20260802-r2`. Its warm-up receipts,
+all 288 holistic receipts, and all 21 organ-factor rows are byte-identical to
+the independently executed `r1` evidence. The experiment uses 384 processes:
+96 warm-up writers, 192 scored writers, and 96 counterfactual probes.
+
+A.84 changes no C code, state version, weight update, novelty threshold,
+sampler, routing, or speech reader. In particular, it does not justify making
+the swarm less plastic merely to obtain complete laboratory rows. The next
+question should treat replacement as lived evidence: measure whether an old
+coordinate returns after displacement, or whether replacement is irreversible
+loss, before considering any state freeze or semantic reader.
+
+Leo can become quiet in one room without promising the next room will contain
+the same places.
