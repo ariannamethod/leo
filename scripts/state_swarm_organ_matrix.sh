@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="${1:-${TMPDIR:-/tmp}/leo-state-swarm-organs-$STAMP}"
+HOLISTIC_SOURCE="${LEO_STATE_ORGAN_HOLISTIC:-}"
 
 [ ! -e "$OUT" ] || {
     printf 'output path already exists: %s\n' "$OUT" >&2
@@ -12,15 +13,22 @@ OUT="${1:-${TMPDIR:-/tmp}/leo-state-swarm-organs-$STAMP}"
 }
 mkdir -p "$OUT"
 
-HOLISTIC="$OUT/holistic"
+HOLISTIC="${HOLISTIC_SOURCE:-$OUT/holistic}"
 ORGANS="$OUT/organs.tsv"
 FACTORS="$OUT/factors.tsv"
 VERDICT="$OUT/verdict.txt"
 
 # The child runner owns the sealed cases, chronology, save/load boundary, and
 # default/--no-state-swarm counterfactual. A.83 only reads its new receipts.
-"$ROOT/scripts/state_swarm_alphabet_matrix.sh" "$HOLISTIC" \
-    > "$OUT/holistic.stdout"
+if [ -z "$HOLISTIC_SOURCE" ]; then
+    "$ROOT/scripts/state_swarm_alphabet_matrix.sh" "$HOLISTIC" \
+        > "$OUT/holistic.stdout"
+else
+    [ -s "$HOLISTIC/plan.tsv" ] && [ -s "$HOLISTIC/receipts.tsv" ] || {
+        printf 'holistic evidence is incomplete: %s\n' "$HOLISTIC" >&2
+        exit 2
+    }
+fi
 
 printf 'cell\tcohort\tbase_seed\tphase\tsession\torder\ttexture\trun_seed\tturn\tevent\tstates\tmember_id\tholistic_activation\torgan_valid\tperception\texpression\town_field\tbody\trhythm\tform\tdarkmatter\tprompt\treply\n' \
     > "$ORGANS"

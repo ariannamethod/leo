@@ -63,7 +63,7 @@ $4 != "writer" { next }
     position = $6 + 0
     texture = $7
     turn = ++turns[cell]
-    if (turn != $9 + 0 || session < 1 || session > 8 ||
+    if (turn + turn_offset != $9 + 0 || session < 1 || session > 8 ||
         position < 1 || position > 8)
         exit 2
     parse_members($16, cell, turn)
