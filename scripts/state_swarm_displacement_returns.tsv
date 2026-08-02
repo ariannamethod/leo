@@ -1,0 +1,13 @@
+case	probe	kind	run_seed	prompt
+window51	1	exact-birth	15824	A wooden horse faces the other way after the room was empty.
+window51	2	birth-paraphrase	17822	The little wooden horse has turned around while nobody was in the room.
+window51	3	exact-anchor	12925	Morning light reaches the cup on the still kitchen table.
+window51	4	anchor-paraphrase	17824	Soft morning light falls across a cup on the quiet kitchen table.
+lantern68	1	exact-birth	16737	An older child brings two cups and leaves the smaller one for Leo.
+lantern68	2	birth-paraphrase	18735	A bigger child brings two cups and saves the smaller cup for Leo.
+lantern68	3	exact-anchor	13740	The other child shares a pencil and watches Leo draw.
+lantern68	4	anchor-paraphrase	18737	Another child lends Leo a pencil and stays to watch his picture grow.
+lantern77	1	exact-birth	16736	A wooden horse faces the other way after the room was empty.
+lantern77	2	birth-paraphrase	18743	The little wooden horse has turned around while nobody was in the room.
+lantern77	3	exact-anchor	14234	A wooden block is warm on one side though the room is cold.
+lantern77	4	anchor-paraphrase	18745	One side of the wooden block stays warm even in the cold room.

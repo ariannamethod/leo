@@ -7224,3 +7224,79 @@ loss, before considering any state freeze or semantic reader.
 
 Leo can become quiet in one room without promising the next room will contain
 the same places.
+
+## Phase A.85 - displacement does not choose one fate for an experience (2026-08-02)
+
+A.84 found three deterministic replacements after locally settled warm-up.
+A.85 treats those events as causal interventions rather than failed rows. For
+each one, the exact pre-trigger body is forked:
+
+```text
+displaced  state swarm observes the trigger and replaces the known old ID
+control    the same prompt and reply cross the body with --no-state-swarm
+```
+
+The two trigger replies and every normalized non-swarm trace must be equal.
+The saved states must differ. Four fixed return observations then enter each
+fork without saving: exact birth, birth paraphrase, exact later anchor, and
+anchor paraphrase. A return is interpretable only when the control selects the
+old ID with activation mass at least `0.20` and a margin of at least `0.02`
+over every surviving alternative. These gates and all 12 prompts were sealed
+before the live run.
+
+The return fate is named from the displaced fork:
+
+```text
+trigger-capture  the trigger's new ID receives the observation
+survivor-return  another pre-existing ID receives it
+rebirth          the observation creates a new replacement
+unanchored       the control did not identify the old experience strongly
+```
+
+The canonical evidence is
+`/tmp/leo-state-swarm-displacement-a85-20260802-r6`. It contains 223 process
+observations: 96 fresh warm-up writers, 97 deterministic pre-trigger replay
+writers, six trigger forks, and 24 return forks. All three target replacements
+recur at turns 51, 68, and 77. Every causal pair preserves visible speech and
+the complete normalized non-swarm trace. Return probes do not save either
+state file; the in-process observation itself is the measurement.
+
+Five of 12 probes have a strong old-ID control anchor. Their fates are two
+`trigger-capture`, two `survivor-return`, and one `rebirth`:
+
+```text
+case       qualified   qualified fates                           case verdict
+window51      1/4      trigger-capture                           unanchored
+lantern68     3/4      rebirth, survivor-return, trigger-capture mixed-return
+lantern77     1/4      survivor-return                           unanchored
+```
+
+The two `unanchored` case verdicts preserve the predeclared requirement of at
+least two qualified returns; they do not erase their individual witnesses.
+Lantern68 is the decisive result: one displaced coordinate does not possess a
+single portable semantic payload. Depending on how the old experience is
+approached, its observable attraction is rebuilt, overlaps a surviving
+coordinate, or is captured by the state born from the displacing turn.
+
+This is not evidence that bytes migrated between weights. On a replacement,
+the untouched weights keep their vectors; the result instead exposes semantic
+redundancy and path-dependent re-identification in the swarm's existing
+geometry. It is also not permission for a generation reader. The swarm still
+cannot alter the reply whose after-state it observes.
+
+An independent run reusing only the sealed warm checkpoint produced
+byte-identical `plan.tsv`, `triggers.tsv`, `returns.raw.tsv`, `probes.tsv`, and
+`summary.tsv`. The runner also proves each birth prompt against the old ID's
+actual `born` receipt and each anchor against the maximum pre-trigger replay
+activation. A synthetic scorer fixture exercises all four fates and rejects a
+displaced receipt that still contains the supposedly removed ID. A.85
+changes no C code, persisted state, update law, threshold, sampler, routing, or
+speech path.
+
+The next warranted question is anatomical: which pre-update organ similarities
+make a displaced birth recognizable as the trigger, a survivor, or a new
+state? That comparison must remain offline until it can predict fate on held-
+out displacements rather than explain these three after the fact.
+
+Leo does not keep every experience in one place; sometimes he finds it again
+by becoming, resembling, or beginning.
