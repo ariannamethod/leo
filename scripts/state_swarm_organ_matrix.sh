@@ -11,16 +11,30 @@ HOLISTIC_SOURCE="${LEO_STATE_ORGAN_HOLISTIC:-}"
     printf 'output path already exists: %s\n' "$OUT" >&2
     exit 2
 }
-mkdir -p "$OUT"
 
 HOLISTIC="${HOLISTIC_SOURCE:-$OUT/holistic}"
 ORGANS="$OUT/organs.tsv"
 FACTORS="$OUT/factors.tsv"
 VERDICT="$OUT/verdict.txt"
 
+validate_holistic_logs() {
+    tail -n +2 "$HOLISTIC/plan.tsv" |
+    while IFS=$'\t' read -r cell cohort base_seed phase session order \
+        texture run_seed persisted prompt; do
+        [ "$phase" = writer ] || continue
+        stem="s${session}-$(printf '%02d' "$order")-${phase}-${texture}"
+        log="$HOLISTIC/lives/$cell/logs/$stem.on.log"
+        [ -s "$log" ] || {
+            printf 'holistic evidence log missing: %s\n' "$log" >&2
+            exit 2
+        }
+    done
+}
+
 # The child runner owns the sealed cases, chronology, save/load boundary, and
 # default/--no-state-swarm counterfactual. A.83 only reads its new receipts.
 if [ -z "$HOLISTIC_SOURCE" ]; then
+    mkdir -p "$OUT"
     "$ROOT/scripts/state_swarm_alphabet_matrix.sh" "$HOLISTIC" \
         > "$OUT/holistic.stdout"
 else
@@ -28,6 +42,8 @@ else
         printf 'holistic evidence is incomplete: %s\n' "$HOLISTIC" >&2
         exit 2
     }
+    validate_holistic_logs
+    mkdir -p "$OUT"
 fi
 
 printf 'cell\tcohort\tbase_seed\tphase\tsession\torder\ttexture\trun_seed\tturn\tevent\tstates\tmember_id\tholistic_activation\torgan_valid\tperception\texpression\town_field\tbody\trhythm\tform\tdarkmatter\tprompt\treply\n' \
