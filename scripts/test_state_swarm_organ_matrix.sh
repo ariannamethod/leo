@@ -9,6 +9,19 @@ LEO_STATE_ALPHABET_PLAN_ONLY=1 \
     "$ROOT/scripts/state_swarm_alphabet_matrix.sh" "$TMP/plan" \
     > "$TMP/plan.tsv"
 
+mkdir -p "$TMP/incomplete-holistic"
+cp "$TMP/plan.tsv" "$TMP/incomplete-holistic/plan.tsv"
+printf 'receipt\n' > "$TMP/incomplete-holistic/receipts.tsv"
+if LEO_STATE_ORGAN_HOLISTIC="$TMP/incomplete-holistic" \
+    "$ROOT/scripts/state_swarm_organ_matrix.sh" "$TMP/incomplete-output" \
+    > "$TMP/incomplete.out" 2> "$TMP/incomplete.err"; then
+    printf 'external holistic evidence without raw logs unexpectedly passed\n' >&2
+    exit 1
+fi
+grep -Fx "holistic evidence log missing: $TMP/incomplete-holistic/lives/river/logs/s1-01-writer-home.on.log" \
+    "$TMP/incomplete.err" >/dev/null
+[ ! -e "$TMP/incomplete-output" ]
+
 printf 'cell\tcohort\tbase_seed\tphase\tsession\torder\ttexture\trun_seed\tturn\tevent\tstates\tmember_id\tholistic_activation\torgan_valid\tperception\texpression\town_field\tbody\trhythm\tform\tdarkmatter\tprompt\treply\n' \
     > "$TMP/organs.tsv"
 

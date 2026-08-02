@@ -27,6 +27,10 @@ esac
     printf 'initial state root not found: %s\n' "$INITIAL_ROOT" >&2
     exit 2
 }
+[ "$TURN_OFFSET" -eq 0 ] || [ -n "$INITIAL_ROOT" ] || {
+    printf 'state alphabet turn offset requires an initial state root\n' >&2
+    exit 2
+}
 
 awk -F '\t' '
     BEGIN {

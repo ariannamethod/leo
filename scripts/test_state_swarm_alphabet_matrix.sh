@@ -10,6 +10,17 @@ LEO_STATE_ALPHABET_PLAN_ONLY=1 \
     "$ROOT/scripts/state_swarm_alphabet_matrix.sh" "$OUT" > "$TMP/plan.out"
 cmp -s "$OUT/plan.tsv" "$TMP/plan.out"
 
+if LEO_STATE_ALPHABET_PLAN_ONLY=1 \
+    LEO_STATE_ALPHABET_TURN_OFFSET=32 \
+    "$ROOT/scripts/state_swarm_alphabet_matrix.sh" "$TMP/no-root" \
+    > "$TMP/no-root.out" 2> "$TMP/no-root.err"; then
+    printf 'turn offset without initial state root unexpectedly passed\n' >&2
+    exit 1
+fi
+grep -Fx 'state alphabet turn offset requires an initial state root' \
+    "$TMP/no-root.err" >/dev/null
+[ ! -e "$TMP/no-root" ]
+
 awk -F '\t' '
     BEGIN {
         label[1] = "home"
