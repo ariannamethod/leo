@@ -1037,3 +1037,64 @@ its weakest coordinate only when every existing holistic similarity is below
 `0.40`; further arbitrary warm-up cannot guarantee that an unseen moment will
 clear that gate. A.84 consequently changes no novelty/replacement threshold,
 state format, generation path, or reader.
+
+## A.85: follow an experience after its coordinate is displaced
+
+Run the sealed causal return matrix:
+
+```sh
+make state-swarm-displacement-return
+```
+
+A.85 reuses the three deterministic replacement events exposed by A.84. Each
+target is replayed from a freshly settled warm body to the turn immediately
+before replacement. The runner then forks that body: the default branch lets
+the state swarm observe the trigger, while a one-turn `--no-state-swarm`
+control preserves the old coordinate. Prompt, seed, reply, and all normalized
+non-swarm diagnostics must match; the two saved state files must differ.
+
+Four predeclared observations return independently to both forks:
+
+```text
+exact birth       original observation that first formed the displaced ID
+birth paraphrase  new surface form of that observation
+exact anchor      later observation with the displaced ID's highest prior mass
+anchor paraphrase new surface form of that later anchor
+```
+
+The return commands deliberately omit `--save`. Leo still performs the normal
+in-process post-speech state observation, whose receipt is the measurement,
+but the input state bytes remain unchanged for every independent probe.
+
+A fate is qualified only when the no-displacement control updates the old ID,
+assigns it at least `0.20` activation mass, and separates it from the next
+state by at least `0.02`. The displaced receipt is then classified as:
+
+```text
+trigger-capture  winner is the ID born from the displacement trigger
+survivor-return  winner is another surviving ID
+rebirth          the return itself produces a replacement
+unanchored       the control does not strongly identify the old ID
+```
+
+A case needs at least two qualified probes. One qualified fate yields that
+case label; multiple qualified fates yield `mixed-return`; fewer than two
+remain `unanchored`. These are topology descriptions, not proof of semantic
+transfer between weights.
+
+The recorded run at
+`/tmp/leo-state-swarm-displacement-a85-20260802-r6` reproduced all three A.84
+replacements and qualified five of 12 return probes. Window51 and Lantern77
+remain case-level `unanchored` with one witness each. Lantern68 qualifies
+three probes and visits all three fates, producing `mixed-return`. A second
+run from the sealed warm checkpoint is byte-identical across the plan, trigger
+receipts, raw returns, classified probes, and case summary.
+
+The runner verifies provenance rather than trusting the labels in the return
+file: every exact-birth prompt must match the displaced ID's real warm-up
+`born` receipt, and every exact-anchor prompt must attain that ID's maximum
+activation over all replay turns before displacement.
+
+A.85 changes no organism code or speech path. Its next use is to predeclare an
+offline per-organ fate analysis and test it on new displacement events before
+considering any reader, freeze, or replacement-policy change.

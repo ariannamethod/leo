@@ -150,6 +150,12 @@ awk -F '\t' '
     exit 1
 }
 
+if [ "${LEO_STATE_SETTLED_WARMUP_ONLY:-0}" = 1 ]; then
+    cat "$SUMMARY"
+    printf '\nwarm-up: %s\n' "$OUT/warmup"
+    exit 0
+fi
+
 LEO_STATE_ALPHABET_INITIAL_ROOT="$OUT/warmup/lives" \
 LEO_STATE_ALPHABET_TURN_OFFSET=32 \
     "$ROOT/scripts/state_swarm_alphabet_matrix.sh" "$HOLISTIC" \
