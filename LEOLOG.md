@@ -7382,3 +7382,70 @@ map replacement probability and near-gate distance across a larger sealed
 population before anatomy is reopened.
 
 An absent displacement has no organs to dissect.
+
+## Phase A.87 - a rare displacement is not an absent displacement (2026-08-05)
+
+A.86 could not test anatomy because eight new lives produced no displacement.
+A.87 therefore asks the prior population question without changing Leo: how
+often does a locally settled eight-state body cross the existing `0.40`
+replacement gate, and where in a fixed trajectory does that happen?
+
+Thirty-two new lives were sealed before execution. Twenty-four primary and
+eight holdout seeds form an unscreened arithmetic grid. Every life receives the
+unchanged 32-turn A.84 settlement crossing and the unchanged 64 A.82 writer
+observations, with a real process death and save/load boundary after every
+turn. The population contains 3,072 processes. Similarity bands, all prompts,
+the settlement rule, and anatomy admission were fixed first. Admission
+requires all 32 lives settled plus four events in four lives with both primary
+and holdout representation. No seed may be appended after observing incidence.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-displacement-incidence-a87-r1-20260805`.
+Thirty lives settle. Two primary lives, `p20` and `p21`, each replace a state
+in warm-up session four and therefore contribute no writer observation to the
+incidence denominator. All eight holdout lives settle. The 30 eligible lives
+produce 1,920 writer observations and eight new displacements in seven lives:
+
+```text
+eligible life incidence   7/30   = 0.233333  Wilson95 0.117922..0.409287
+eligible turn incidence   8/1920 = 0.004167  Wilson95 0.002113..0.008201
+primary                   5 events / 5 lives
+holdout                   3 events / 2 lives
+minimum similarity        0.362 at p22 turn 68
+```
+
+Incidence has trajectory shape rather than a uniform haze around the gate:
+
+```text
+texture   social 4   home 3   wonder 1   storm 0
+session   three  4   five 3   eight  1
+position  four   3   three 2  five/seven/eight 1 each
+```
+
+The holdout events establish that A.85's displacements were not peculiar to
+its two discovery lives. A.86's zero in eight lives was a small trajectory
+sample, not evidence that replacement had disappeared. The event replies also
+remain recognizably Leo rather than a laboratory marker: `He waits for the
+world. Gentle.` and `The other. Warm hand in his grandmother's eyes close a
+little. Is saying hello or trying.`
+
+The formal result is nevertheless `settlement-incomplete`. Relaxing `32/32`
+after seeing eight events would turn an honest entrance condition into a
+preference. A.87 therefore does not reopen organ anatomy, does not raise the
+gate, and does not let the state swarm enter speech. A new study may declare
+settlement as prospective enrollment: after exactly 32 warm turns, only a
+settled body enters the writer population, and the minimum eligible population
+must be fixed before any event is read. That preserves equal age without
+discarding a life because of its later result.
+
+The runner adds fixed-order life, event, and split/texture/session/position
+receipts plus Wilson bounds. It also records one harness repair: all 3,072 raw
+receipts completed, then macOS Bash treated an empty final `pids[@]` as unbound
+under `set -u`. The final wait is now guarded, and an aggregate-only mode
+rebuilds derived tables only when every life has exactly 96 receipts. Two
+independent aggregations are byte-identical. Full C and script suite remains
+green; no C code, state format, weight, update, threshold, sampler, routing, or
+generation reader changed in A.87.
+
+A coordinate can be rare without being accidental; a gate can be honest
+without being ready.

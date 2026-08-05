@@ -1151,3 +1151,65 @@ when no soft activation reaches the active-membership threshold.
 Do not extend A.86 until it produces a preferred answer. If replacement
 incidence itself needs explanation, open a separately sealed population study
 of event rate and near-gate distance first.
+
+## A.87: map displacement incidence before reopening anatomy
+
+Run the 32-life sealed population:
+
+```sh
+make state-swarm-displacement-incidence
+```
+
+The population is fixed in
+`state_swarm_displacement_incidence_lives.tsv`: 24 primary and eight holdout
+lives on an arithmetic seed grid that was declared without screening for
+replacement. Every life receives the unchanged 32-turn A.84 settlement
+crossover followed by the unchanged 64 A.82 writer observations. Each turn is
+a separate process with a real save/load boundary.
+
+The runner changes no state body, update law, `0.40` replacement threshold,
+sampler, routing path, or speech reader. It retains one complete receipt per
+turn, all visible replies and local logs, final states, a life table, every
+replacement event, and fixed-order strata by split, texture, session, and
+position. Similarities are partitioned before the run into `<0.400`,
+`0.400..0.405`, `0.405..0.410`, `0.410..0.420`, `0.420..0.450`, and `>=0.450`.
+The debug similarity is printed to three decimals, so the below-gate band is
+classified by the actual `replaced` event; an unrounded value just below the
+gate may legitimately render as `0.400`.
+
+Anatomy may reopen only if all 32 lives meet A.84 settlement and at least four
+new replacements occur in four lives with representation in both primary and
+holdout. Fewer events are an underpowered incidence result, not permission to
+raise the gate, append seeds, or reuse A.85 discovery lives as confirmation.
+`LEO_STATE_INCIDENCE_PLAN_ONLY=1` validates and prints all 3,072 observations
+without launching Leo. Independent lives may run concurrently through
+`LEO_STATE_INCIDENCE_JOBS`; receipts are concatenated in the sealed TSV order.
+If the process is interrupted after all per-life receipts are complete,
+`LEO_STATE_INCIDENCE_AGGREGATE_ONLY=1` rebuilds only the derived tables in the
+same output directory and refuses any life that does not contain 96 receipts.
+
+The recorded run is
+`/private/tmp/leo-state-swarm-displacement-incidence-a87-r1-20260805`.
+Thirty of 32 lives met the fixed settlement condition; `p20` and `p21` each
+made one replacement during warm-up session four and are excluded from every
+incidence denominator. The 30 eligible lives contribute 1,920 writer
+observations and eight replacements across seven lives. Primary contributes
+five events in five lives; holdout independently contributes three events in
+two lives. Eligible life incidence is `7/30 = 0.233333` (Wilson 95%
+`0.117922..0.409287`); turn incidence is `8/1920 = 0.004167` (Wilson 95%
+`0.002113..0.008201`).
+
+Events are not evenly distributed across the sealed trajectory: social has
+four, home three, wonder one, and storm zero. Sessions three, five, and eight
+contain four, three, and one respectively. This establishes that A.86's zero
+events in eight lives was an underpowered trajectory sample, not proof that
+displacement vanished.
+
+The predeclared `32/32` settlement gate still fails, so the formal result is
+`settlement-incomplete` and A.87 does not admit organ anatomy. Do not append
+lives or discard only the two failures. A new population may instead declare
+settlement as a prospective enrollment condition before any writer turn,
+retain a fixed age of 32 warm observations, and require a minimum eligible
+population before capturing new events. Re-aggregation after the BSD-Bash
+empty-array harness fix is byte-identical for `life-summary.tsv`, `events.tsv`,
+`strata.tsv`, and `verdict.txt`.
