@@ -1269,3 +1269,55 @@ remains `0.40`; no state body, update law, sampler, routing path, speech reader,
 or Leo reply was changed. A second aggregate-only pass is byte-identical for
 `screening.tsv`, `enrollment.tsv`, `writer-plan.tsv`, `life-summary.tsv`,
 `events.tsv`, `strata.tsv`, and `verdict.txt`.
+
+## A.89: a balanced reservoir captures events before explaining them
+
+Run the sealed population:
+
+```sh
+make state-swarm-balanced-event-reservoir
+```
+
+The manifest in `state_swarm_balanced_event_reservoir_candidates.tsv` fixes 40
+primary and 40 holdout candidates on a new arithmetic seed grid. Every
+candidate receives exactly 32 unchanged warm turns. The first 32 settled lives
+in each split are then enrolled in manifest order before any writer turn. A
+missing quota closes the run; no later outcome can alter enrollment.
+
+Each enrolled body receives the unchanged 64-turn writer trajectory. Before
+each turn the runner may copy the state, but it retains that copy only when the
+existing state-swarm law reports `replaced`. Every such event becomes an inert
+package containing `pretrigger.state`, `displaced.state`, and the unmodified
+`trigger.log`, plus a validated row in `trigger-events.tsv`. The capture path
+has no reader in generation. A.89 runs no return probe, no organ omission, and
+no other anatomy analysis: it preserves the moment before asking what caused
+it.
+
+The recorded run is
+`/private/tmp/leo-state-swarm-balanced-event-reservoir-a89-r1-20260807`.
+Seventy-three of 80 candidates settle: 36/40 primary and 37/40 holdout. Both
+32-life quotas fill prospectively. Exactly 64 enrolled lives produce 4,096
+writer observations with zero post-writer exclusions; only those 64 have
+writer ledgers.
+
+Nineteen replacements occur in 18 lives. Primary contributes ten events in
+nine lives, and holdout independently contributes nine events in nine lives.
+Eligible life incidence is `18/64 = 0.281250` (Wilson 95%
+`0.185932..0.401342`); turn incidence is `19/4096 = 0.004639` (Wilson 95%
+`0.002972..0.007234`). The minimum similarity is `0.335` at `p23` turn 68.
+Social carries 13 events, wonder four, home two, and storm none. Sessions
+three, five, and eight carry six, eight, and five events respectively.
+
+The predeclared anatomy gate requires at least four events in four lives with
+both split representations. A.89 therefore returns
+`balanced-reservoir-anatomy-admissible`, while also stating
+`anatomy_analysis=not-run`. All 19 event rows have exactly one complete package;
+the packages are evidence for a separately declared next experiment, not
+permission to explain themselves retrospectively.
+
+The common prospective runner remains A.88 by default. Re-aggregating the
+canonical A.88 directory through the parameterized engine preserves all seven
+old SHA-256 values. A second A.89 aggregation is byte-identical for all eight
+derived evidence files, including `trigger-events.tsv`. A.89 changes no C
+code, persisted body, state-swarm law, threshold, sampler, routing path, or
+speech reader.
