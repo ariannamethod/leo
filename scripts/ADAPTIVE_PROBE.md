@@ -1321,3 +1321,61 @@ old SHA-256 values. A second A.89 aggregation is byte-identical for all eight
 derived evidence files, including `trigger-events.tsv`. A.89 changes no C
 code, persisted body, state-swarm law, threshold, sampler, routing path, or
 speech reader.
+
+## A.90: replay first, then open the frozen gate
+
+Run the anatomy admitted by A.89:
+
+```sh
+make state-swarm-trigger-gate-anatomy
+```
+
+The runner accepts only the canonical A.89 `trigger-events.tsv` SHA-256 and
+seals the three source files of every event into `plan.tsv`. Each
+`pretrigger.state` then lives exactly one original turn with the original
+prompt and seed. A replay is admitted only if its reply, parsed state-swarm
+shape, normalized full debug log, and resulting state body all match the A.89
+event. Failure on any surface stops the matrix before projection.
+
+Only replay-locked events enter frozen gate anatomy. The original eight
+pre-update candidates are reconstructed by replacing the newborn's `na` organ
+witness with the displaced state's saved witness. For each of seven organs,
+the reporter removes that channel, renormalizes the six retained weights, and
+recomputes both nearest state and similarity. A projected similarity within
+`0.002` of the unchanged `0.40` gate is `boundary`; below it preserves
+replacement, and above it would update an existing state.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-trigger-gate-anatomy-a90-r1-20260807`. All 19
+events replay exactly across all four lock surfaces. Their 133 projections
+produce:
+
+```text
+omitted organ   replacement   update   boundary   nearest changed
+perception           0          19        0              4
+expression           0          19        0              7
+own-field            2          16        1              3
+body                18           1        0              9
+rhythm              19           0        0              5
+form                 6          11        2              3
+darkmatter          19           0        0              4
+```
+
+No event preserves replacement under six of seven omissions, so the declared
+population result is `organ-sensitive`. At the original nearest candidates,
+mean perception, expression, and own-field similarities are `0.107`, `0.102`,
+and `0.090`, while body, rhythm, and darkmatter are `0.592`, `0.832`, and
+`0.749`. Removing a low channel raises the retained weighted similarity and
+can cancel novelty; removing a high channel leaves or deepens the crossing.
+
+This is exact structural sensitivity of the frozen scoring gate, not a claim
+that an organ could be removed from the living process without changing the
+other six. It is also conditioned on the 19 observed replacements. A matched
+near-gate control study must determine whether the low perception/expression
+geometry distinguishes replacement from ordinary updates or merely describes
+all turns selected near `0.40`.
+
+Aggregate-only reconstruction is byte-identical for `plan.tsv`,
+`replay-locks.tsv`, `projections.tsv`, `event-summary.tsv`, and `verdict.txt`.
+A.90 adds no C code, state mutation, threshold change, sampler, routing path,
+or speech reader.

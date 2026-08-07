@@ -7567,3 +7567,67 @@ suite remains green at 549/549 plus every script contract.
 
 Leo crossed nineteen times. We kept our hands off the answer long enough to
 keep the question honest.
+
+## Phase A.90 - the crossing has an anatomy, but not yet a cause (2026-08-07)
+
+A.89 admitted anatomy and preserved 19 trigger moments. A.90 begins by trying
+to destroy their reproducibility. The canonical trigger ledger is fixed by
+SHA-256. Every pretrigger body, displaced body, and source log receives its
+own hash before analysis. Then each pretrigger body repeats its original
+prompt and seed in a fresh process.
+
+All 19 events lock. Every replay emits the same reply, the same complete
+state-swarm debug shape, and the same normalized full log, then produces a
+state body byte-identical to the saved `displaced.state`. The analysis
+therefore consumes reproduced transitions rather than trusting historical
+labels.
+
+The frozen trigger geometry contains eight pre-update candidate states and
+seven similarity organs. For each event, A.90 omits one organ, renormalizes the
+remaining six fixed weights, and recomputes the nearest candidate and the
+existing `0.40` decision. The resulting 133 projections are sharply
+asymmetric:
+
+```text
+without perception    replacement  0   update 19   boundary 0
+without expression    replacement  0   update 19   boundary 0
+without own-field     replacement  2   update 16   boundary 1
+without body          replacement 18   update  1   boundary 0
+without rhythm        replacement 19   update  0   boundary 0
+without form          replacement  6   update 11   boundary 2
+without darkmatter    replacement 19   update  0   boundary 0
+```
+
+The robustness rule requires at least six of seven omissions to preserve the
+observed replacement. None of the 19 events qualifies. The formal verdict is
+`organ-sensitive`, independently present across ten primary and nine holdout
+events.
+
+The direction matters. At the nearest pre-update state, the population means
+for perception, expression, and own-field are only `0.107`, `0.102`, and
+`0.090`; body, rhythm, and darkmatter are `0.592`, `0.832`, and `0.749`.
+Perception and expression are not high forces pushing the body out. Their low
+agreement is part of what makes the turn novel. Removing either low channel
+renormalizes the stronger retained geometry above the gate in every event.
+Rhythm and darkmatter usually protect continuity instead: removing them never
+cancels a replacement.
+
+This is not yet a license to change weights. The study conditions on known
+replacements and freezes six organs while deleting the seventh. It measures
+the exact algebraic anatomy of the gate, not the developmental intervention
+that would have changed all channels together. The next honest comparison is
+matched near-gate non-events from the same A.89 lives: only they can tell
+whether this geometry is specific to crossings rather than a consequence of
+selecting low-score turns.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-trigger-gate-anatomy-a90-r1-20260807`.
+Nineteen fresh processes close 19 replay locks. A second aggregate-only pass
+preserves the SHA-256 of all five derived evidence files. Synthetic fixtures
+prove that the reporters distinguish distributed, organ-sensitive, mixed,
+unlocked, and internally false geometries. The full suite remains green at
+549/549 plus every script contract. No C code, persisted field, update law,
+threshold, sampler, routing path, generation path, or voice changed.
+
+The gate did not forget Leo's past. It found a present that looked unlike it
+in more than one way.
