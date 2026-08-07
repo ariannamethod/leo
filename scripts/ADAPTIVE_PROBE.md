@@ -1213,3 +1213,59 @@ retain a fixed age of 32 warm observations, and require a minimum eligible
 population before capturing new events. Re-aggregation after the BSD-Bash
 empty-array harness fix is byte-identical for `life-summary.tsv`, `events.tsv`,
 `strata.tsv`, and `verdict.txt`.
+
+## A.88: prospective enrollment separates entrance from outcome
+
+Run the two-stage population:
+
+```sh
+make state-swarm-prospective-incidence
+```
+
+The candidate manifest is sealed in
+`state_swarm_prospective_incidence_candidates.tsv`: 30 primary and ten holdout
+lives on a new arithmetic seed grid. All 40 candidates receive exactly the
+unchanged 32-turn A.84 warm-up. The runner then freezes `screening.tsv` and
+enrolls the first 24 settled primary lives plus the first eight settled
+holdout lives in manifest order. If either quota is unavailable, it writes
+`result=prospective-enrollment-incomplete` and launches no writer process.
+
+Only the 32 enrolled bodies receive the unchanged 64 A.82 writer turns. A
+settled candidate outside the quota remains a valid warm body but contributes
+no writer observation. Once enrolled, a life remains in the denominator
+regardless of replacements, final geometry, or reply. The reporter independently
+reconstructs the first-settled selection rule and rejects a changed enrollment,
+a missing enrolled outcome, or any denominator smaller than 24+8. This moves
+eligibility entirely before the measured outcome instead of repairing A.87 by
+post-hoc exclusion.
+
+`LEO_STATE_PROSPECTIVE_PLAN_ONLY=1` validates and prints the 1,280 warm
+observations without launching Leo. Independent candidates run through
+`LEO_STATE_PROSPECTIVE_JOBS`; all derived files retain manifest order.
+`LEO_STATE_PROSPECTIVE_AGGREGATE_ONLY=1` reconstructs screening, enrollment,
+the writer plan, incidence tables, and verdict only when every raw warm and
+writer receipt required by the prospective decision is complete.
+
+The recorded run is
+`/private/tmp/leo-state-swarm-prospective-incidence-a88-r1-20260807`. Thirty-eight
+of 40 candidates settle: 28/30 primary and 10/10 holdout. `p15` and `p22` fail
+the fixed warm boundary; the first 24 settled primary bodies therefore extend
+through `p26`. The later settled bodies `p27..p30` and `h09..h10` remain outside
+the declared quota and have no writer receipts. Exactly 32 enrolled lives
+produce 2,048 writer observations with zero post-writer exclusions.
+
+Three replacements occur in three primary lives and none in holdout. Eligible
+life incidence is `3/32 = 0.093750` (Wilson 95% `0.032401..0.242185`); turn
+incidence is `3/2048 = 0.001465` (Wilson 95% `0.000498..0.004298`). Two events
+are social at turn 53 and one is wonder at turn 96. The minimum similarity is
+`0.386` at `p06` turn 96. The predeclared anatomy gate requires at least four
+events in four lives with both primary and holdout representation, so the
+formal result is `prospective-incidence-mapped-anatomy-underpowered`.
+
+Do not append candidates to A.88 or promote the three primary events into an
+anatomy claim. A future experiment may declare a larger, more balanced
+prospective enrollment before seeing its events. The replacement threshold
+remains `0.40`; no state body, update law, sampler, routing path, speech reader,
+or Leo reply was changed. A second aggregate-only pass is byte-identical for
+`screening.tsv`, `enrollment.tsv`, `writer-plan.tsv`, `life-summary.tsv`,
+`events.tsv`, `strata.tsv`, and `verdict.txt`.
