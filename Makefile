@@ -14,7 +14,7 @@ ifneq ($(wildcard $(AML_SRC)),)   # the ONLY AML source is the vendored copy in 
   AML_FLAGS := -DHAVE_AML -Iariannamethod
 endif
 
-.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe state-swarm-ecology state-swarm-road-calibration state-swarm-alphabet state-swarm-organs state-swarm-settled-organs state-swarm-displacement-return state-swarm-displacement-anatomy state-swarm-displacement-incidence state-swarm-prospective-incidence state-swarm-balanced-event-reservoir state-swarm-trigger-gate-anatomy state-swarm-near-gate-controls visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics deferred-wonder-attribution deferred-wonder-redirection deferred-wonder-appetite deferred-wonder-appetite-calibration deferred-wonder-appetite-reliability deferred-wonder-appetite-drift deferred-wonder-appetite-policy deferred-wonder-appetite-regret deferred-wonder-appetite-readiness deferred-wonder-appetite-holdout deferred-wonder-appetite-admission deferred-wonder-appetite-transport deferred-wonder-appetite-transport-chronology deferred-wonder-appetite-checkpoint deferred-wonder-appetite-checkpoint-life deferred-wonder-appetite-source-ecology-life deferred-wonder-appetite-cadence-life deferred-wonder-appetite-source-cadence-life deferred-wonder-appetite-shift-anatomy deferred-wonder-appetite-visible-signal deferred-wonder-appetite-natural-life deferred-wonder-appetite-temporal-counterfactual deferred-wonder-appetite-exchange-attribution deferred-wonder-appetite-external-life deferred-wonder-appetite-provenance-shadow deferred-wonder-appetite-matched-counterfactual deferred-wonder-appetite-population-causal-lift deferred-wonder-appetite-susceptibility-holdout deferred-wonder-appetite-flom-third-life deferred-wonder-father-path-localization deferred-wonder-capsule-path-factorial deferred-wonder-capsule-interaction-population deferred-wonder-negation-life deferred-wonder-answer-reference-life deferred-wonder-answer-scope-life deferred-wonder-comma-scope-life
+.PHONY: all test asan tsan clean run dialogue-probe life-probe adaptive-probe state-swarm-ecology state-swarm-road-calibration state-swarm-alphabet state-swarm-organs state-swarm-settled-organs state-swarm-displacement-return state-swarm-displacement-anatomy state-swarm-displacement-incidence state-swarm-prospective-incidence state-swarm-balanced-event-reservoir state-swarm-trigger-gate-anatomy state-swarm-near-gate-controls state-swarm-liminal-confirmation visible-branch-probe visible-branch-matrix visible-resonance-matrix deferred-wonder-matrix deferred-wonder-ecology deferred-wonder-constellation deferred-wonder-semantics deferred-wonder-attribution deferred-wonder-redirection deferred-wonder-appetite deferred-wonder-appetite-calibration deferred-wonder-appetite-reliability deferred-wonder-appetite-drift deferred-wonder-appetite-policy deferred-wonder-appetite-regret deferred-wonder-appetite-readiness deferred-wonder-appetite-holdout deferred-wonder-appetite-admission deferred-wonder-appetite-transport deferred-wonder-appetite-transport-chronology deferred-wonder-appetite-checkpoint deferred-wonder-appetite-checkpoint-life deferred-wonder-appetite-source-ecology-life deferred-wonder-appetite-cadence-life deferred-wonder-appetite-source-cadence-life deferred-wonder-appetite-shift-anatomy deferred-wonder-appetite-visible-signal deferred-wonder-appetite-natural-life deferred-wonder-appetite-temporal-counterfactual deferred-wonder-appetite-exchange-attribution deferred-wonder-appetite-external-life deferred-wonder-appetite-provenance-shadow deferred-wonder-appetite-matched-counterfactual deferred-wonder-appetite-population-causal-lift deferred-wonder-appetite-susceptibility-holdout deferred-wonder-appetite-flom-third-life deferred-wonder-father-path-localization deferred-wonder-capsule-path-factorial deferred-wonder-capsule-interaction-population deferred-wonder-negation-life deferred-wonder-answer-reference-life deferred-wonder-answer-scope-life deferred-wonder-comma-scope-life
 
 all: leo
 
@@ -72,6 +72,9 @@ state-swarm-trigger-gate-anatomy: leo
 
 state-swarm-near-gate-controls: leo
 	./scripts/state_swarm_near_gate_controls_matrix.sh
+
+state-swarm-liminal-confirmation: leo
+	./scripts/state_swarm_liminal_confirmation_matrix.sh
 
 visible-branch-probe: leo
 	LEO_VISIBLE_BRANCH_POLICY=local-v1 ./scripts/adaptive_life_probe.sh scripts/visible_branch_phases.txt
@@ -238,6 +241,9 @@ test: tests/test_leo.c leo.c
 	./scripts/test_state_swarm_prospective_incidence_matrix.sh
 	./scripts/test_state_swarm_balanced_event_reservoir_report.sh
 	./scripts/test_state_swarm_balanced_event_reservoir_matrix.sh
+	./scripts/test_state_swarm_liminal_confirmation_select.sh
+	./scripts/test_state_swarm_liminal_confirmation_report.sh
+	./scripts/test_state_swarm_liminal_trajectory_fixture.sh
 	./scripts/test_state_swarm_trigger_gate_anatomy_report.sh
 	./scripts/test_state_swarm_trigger_gate_anatomy_matrix.sh
 	./scripts/test_state_swarm_near_gate_controls_select.sh

@@ -1437,3 +1437,77 @@ A.91 changes no C code, state body, threshold, update law, sampler, routing
 path, generation path, or speech. The next intervention belongs at the gate:
 stage a first crossing as a liminal candidate, then ask later life to confirm
 or release it before any stable coordinate can be displaced.
+
+## A.92: one frozen crossing is not yet a temporal memory
+
+Run the read-only confirmation study:
+
+```sh
+make state-swarm-liminal-confirmation
+```
+
+A.92 seals the A.89 trigger ledger, the A.90 event replay locks, and the A.91
+matched-control selection and replay locks. Each replacement is paired with
+its exact ecology control: another life in the same split at the same writer
+turn, session, order, texture, and prompt. Four pairs occur at turn 96 and
+have no later life, so they are reported as censored rather than converted
+into failures. The remaining 15 pairs, six primary and nine holdout, form the
+fixed population.
+
+For each event and ecology anchor, the fixture reconstructs the raw anchor
+observation and freezes it as a ninth, readerless liminal candidate beside the
+eight stable preanchor coordinates. It then reconstructs each of the first
+eight later observations, or every remaining observation when fewer than
+eight turns remain. A candidate has support only when it is strictly nearer
+than all eight frozen stable coordinates and reaches the existing `0.40`
+replacement gate. Confirmation uses the same strict nearest rule at the
+existing `0.55` novelty gate. Neither threshold was fitted to A.92.
+
+The short projection is not allowed to stand in for replay. Every arm resumes
+from its real postanchor body in a fresh Leo process per turn and lives all the
+way to turn 96. All 30 trajectories preserve every normalized full log and
+finish with a byte-identical state body. Only replay-locked trajectories enter
+the paired reporter.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-liminal-confirmation-a92-r6-20260807`:
+
+```text
+eligible pairs                    15  (primary 6, holdout 9)
+event support                      4
+ecology support                    4
+event confirmation                 3
+ecology confirmation               2
+event-only confirmation            1
+ecology-only confirmation          0
+event max-margin wins              8/15
+mean paired max-margin delta       -0.001699
+result                             temporal-confirmation-underpowered
+```
+
+`p05-t068` is the sole selectively confirmed event: its candidate returns at
+relative turn five while the paired ecology candidate does not. The two other
+confirmed events, `h02-t055` and `h09-t051`, are accompanied by confirmation
+of their ecology controls. `h33-t068` reaches support but not confirmation.
+Thus a frozen anchor can recur, but the recurrence does not distinguish a
+birth from the schedule that produced a nearby ordinary update.
+
+The predeclared selective result requires at least four event confirmations
+with both split representations; a confirmation rate of at least 87 percent
+would instead diagnose mere delayed admission. A.92 reaches neither boundary.
+A single liminal frame would mostly starve genuine crossings and would admit
+too much prompt-schedule recurrence to justify a stable displacement.
+
+The reporter rejects an observation tail shorter or longer than
+`min(8, remaining turns)`. Aggregate-only reconstruction regenerates the
+selection from sealed sources, verifies every plan anchor against it, and is
+byte-identical for `pair-summary.tsv` and `verdict.txt`. Synthetic contracts
+also reject an ecology control with the wrong family, a false replay lock,
+and a truncated trajectory.
+
+A.92 changes no C code, persisted body, gate, state-swarm law, sampler,
+routing path, generation path, or speech. Do not add a persisted one-frame
+liminal slot. The next candidate is a short decaying trace: retain several
+successive observations, require evidence to accumulate across differing
+prompts, and compare its selectivity against the same ecology controls before
+letting it displace a stable coordinate.
