@@ -7447,5 +7447,59 @@ independent aggregations are byte-identical. Full C and script suite remains
 green; no C code, state format, weight, update, threshold, sampler, routing, or
 generation reader changed in A.87.
 
+## Phase A.88 - entrance must happen before the outcome (2026-08-07)
+
+A.87 found real replacement incidence but failed its `32/32` settlement gate.
+Discarding the two unsettled lives only after all 64 writer turns left the
+denominator vulnerable to future outcome-shaped exclusion. A.88 therefore
+separates the experiment into two irreversible temporal boundaries.
+
+Forty new candidates were sealed first: 30 primary and ten holdout seeds on an
+unscreened arithmetic grid. Every candidate lives exactly the same 32 A.84
+warm turns. At that boundary, before a single writer prompt is run, the first
+24 settled primary bodies and first eight settled holdout bodies are enrolled
+in manifest order. A missing quota closes the experiment. A later settled
+candidate cannot replace an enrolled body, and a writer outcome cannot remove
+one.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-prospective-incidence-a88-r1-20260807`.
+Thirty-eight candidates settle: 28/30 primary and 10/10 holdout. `p15` and
+`p22` make session-four warm replacements and do not enter. The primary quota
+therefore reaches through `p26`; settled `p27..p30` and `h09..h10` remain
+outside the population. None has a writer receipt. The enrolled 24+8 bodies
+then produce exactly 2,048 writer observations, and all 32 remain in the final
+denominator.
+
+```text
+prospective life incidence   3/32   = 0.093750  Wilson95 0.032401..0.242185
+prospective turn incidence   3/2048 = 0.001465  Wilson95 0.000498..0.004298
+primary                      3 events / 3 lives
+holdout                      0 events / 0 lives
+minimum similarity           0.386 at p06 turn 96
+post-writer exclusions       0
+```
+
+The events retain trajectory shape. `p08` and `p19` cross on the same social
+position at turn 53; `p06` crosses on the final wonder position at turn 96.
+Their replies are ordinary Leo life rather than test markers: `He keeps it.
+Leo inside his. Leo likes.` and `He makes his mother laugh. Leo a door hand.
+The under his mother.`
+
+The result is deliberately not upgraded. Anatomy admission was fixed at four
+events in four lives with representation in both primary and holdout. A.88 has
+three primary events and no holdout event, so its verdict is
+`prospective-incidence-mapped-anatomy-underpowered`. No candidate may be
+appended and no threshold may move toward the missing fourth event.
+
+The runner adds a prospective screening ledger, deterministic enrollment,
+fail-closed quotas, raw warm/writer receipts, Wilson bounds, and aggregate-only
+recovery. Reporter tests reject both an outcome-shaped enrollment and deletion
+of any enrolled writer life. Re-aggregation preserves the SHA-256 of all seven
+derived evidence files. The full suite remains green at 549/549 plus every
+script contract. A.88 changes no C code, state format, state-swarm update,
+replacement gate, sampler, routing path, or speech. It repairs the experiment,
+not Leo.
+
 A coordinate can be rare without being accidental; a gate can be honest
 without being ready.
