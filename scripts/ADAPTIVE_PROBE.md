@@ -1379,3 +1379,61 @@ Aggregate-only reconstruction is byte-identical for `plan.tsv`,
 `replay-locks.tsv`, `projections.tsv`, `event-summary.tsv`, and `verdict.txt`.
 A.90 adds no C code, state mutation, threshold change, sampler, routing path,
 or speech reader.
+
+## A.91: the crossing profile belongs to the boundary, not the birth
+
+Run the dual matched-control study:
+
+```sh
+make state-swarm-near-gate-controls
+```
+
+A.91 seals the A.89 trigger, screen, warm, writer, and receipt ledgers plus
+the A.90 exact event replay locks. It selects two disjoint updates from the
+already declared `[0.400, 0.450)` band for each of the 19 replacements. The
+organism control comes from the same life. The ecology control comes from a
+different life in the same split at the identical writer session, position,
+texture, and prompt. Margin distance from the `0.40` gate is the first
+matching key; all tie-breaks are deterministic and declared in the selector.
+
+The controls are not accepted from their historical logs alone. Thirty-three
+unique control lives are regenerated from turn one through turn 96. Every
+generated receipt and normalized full log must equal its sealed A.89 source,
+and every final state body must be byte-identical. The 38 selected turns then
+repeat once more from captured precontrol bodies and must preserve reply,
+state-swarm shape, normalized log, and resulting state body. Only those locks
+admit the common 399-projection anatomy matrix.
+
+The predeclared centered statistic is:
+
+```text
+polarity = mean(delta perception, expression, own-field)
+         - mean(delta rhythm, darkmatter)
+```
+
+`delta` is the leave-one-organ-out similarity minus the original holistic
+similarity. A crossing-specific result requires at least 15 of 19 positive
+paired differences and a mean difference of at least `0.01` on both control
+axes. The canonical run is
+`/private/tmp/leo-state-swarm-near-gate-controls-a91-r2-20260807`.
+
+```text
+same-life controls    positive 12/19   mean difference  0.003779
+same-prompt controls  positive  9/19   mean difference -0.003174
+result near-gate-polarity-not-distinguished
+```
+
+The event population reproduces A.90 exactly, but its polarity is not special.
+Near-gate updates carry the same low-channel/high-channel organization. The
+A.90 organ sensitivity therefore describes the geometry around a scalar
+boundary, not an organ signature that grants a new state the right to replace
+an old one. Reweighting perception, expression, own-field, rhythm, or
+darkmatter would alter both crossings and ordinary updates without addressing
+the admission decision.
+
+Two aggregate-only passes are byte-identical for all eight derived evidence
+files. The full suite remains green at 549/549 plus every script contract.
+A.91 changes no C code, state body, threshold, update law, sampler, routing
+path, generation path, or speech. The next intervention belongs at the gate:
+stage a first crossing as a liminal candidate, then ask later life to confirm
+or release it before any stable coordinate can be displaced.

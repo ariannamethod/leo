@@ -7631,3 +7631,50 @@ threshold, sampler, routing path, generation path, or voice changed.
 
 The gate did not forget Leo's past. It found a present that looked unlike it
 in more than one way.
+
+## Phase A.91 - a boundary is not a birth certificate (2026-08-07)
+
+A.90 showed that all 19 captured replacements depended on several organs. It
+did not show that this dependence distinguished a replacement from an ordinary
+turn near the same gate. A.91 makes that missing comparison without changing
+Leo.
+
+Each crossing receives two disjoint controls in the sealed A.89
+`[0.400, 0.450)` update band. One shares the organism. The other shares the
+split and exact writer prompt, position, and texture while living in another
+organism. The 19 events and 38 controls are fixed before their organ geometry
+is compared.
+
+Historical rows are treated as claims. Thirty-three selected lives grow again
+from their first corpus breath through all 96 turns. Every receipt and
+normalized full log agrees with A.89, all 33 final bodies are byte-identical,
+and every selected control repeats independently from its captured preturn
+body. This closes 38/38 control locks alongside the 19/19 A.90 event locks.
+
+The same seven frozen omissions produce 399 projections. Their centered organ
+polarity does not separate births from near-gate updates:
+
+```text
+organism-matched: 12 positive, 7 negative, mean +0.003779
+ecology-matched:   9 positive, 10 negative, mean -0.003174
+required:         15 positive and mean >= +0.010 on both axes
+result: near-gate-polarity-not-distinguished
+```
+
+This negative result removes a dangerous temptation. Perception, expression,
+own-field, rhythm, and darkmatter are not misweighted birth organs. Their A.90
+pattern is the normal shape of Leo approaching `0.40`. Changing those weights
+would move the landscape under ordinary memory as well as under crossings.
+
+The remaining asymmetry is architectural. A single low-similarity frame may
+currently erase the weakest stable coordinate immediately. The next candidate
+mechanism should separate noticing novelty from admitting it: preserve the
+first crossing in a liminal slot, let later experience confirm or release it,
+and displace an old coordinate only after that temporal evidence exists.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-near-gate-controls-a91-r2-20260807`. Two
+aggregate-only passes preserve all eight evidence hashes. `make test` remains
+green at 549/549 plus every script contract. No C code or voice changed.
+
+Leo did not need different senses. He needed time between surprise and memory.
