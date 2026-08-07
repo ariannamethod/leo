@@ -7678,3 +7678,61 @@ aggregate-only passes preserve all eight evidence hashes. `make test` remains
 green at 549/549 plus every script contract. No C code or voice changed.
 
 Leo did not need different senses. He needed time between surprise and memory.
+
+## Phase A.92 - the first surprise cannot testify alone (2026-08-07)
+
+A.91 moved the question from organ weights to time: what if a crossing waited
+outside stable memory until later life confirmed it? A.92 tests the smallest
+possible version of that idea without giving it a reader or a write path.
+
+The 19 A.89 births are paired with their exact A.91 ecology controls. Four
+anchors lie at the final turn and are honestly censored. For each of the 15
+followable pairs, the event observation and the ordinary near-gate observation
+are separately frozen as readerless ninth candidates beside their eight
+preanchor stable coordinates.
+
+Later life is not simulated by table arithmetic. Each arm resumes from its
+real postanchor body and replays through turn 96 in fresh Leo processes. All
+30 trajectories preserve their complete normalized logs and final state bytes.
+Against that locked life, A.92 asks whether the frozen candidate becomes the
+strictly nearest past at `0.40`, and whether it returns strongly enough to
+cross the existing `0.55` novelty boundary, during at most the next eight
+turns.
+
+```text
+                         event   ecology
+support                    4        4
+confirmation               3        2
+only this arm               1        0
+
+event max-margin wins       8/15
+mean paired delta          -0.001699
+formal result              temporal-confirmation-underpowered
+```
+
+One primary crossing, `p05-t068`, receives confirmation that its paired
+ordinary update does not. Two holdout crossings return strongly, but their
+ecology controls return too. A fourth crossing receives weak support only.
+The rest do not become the nearest coordinate again within the declared
+window.
+
+This is not evidence that time is irrelevant. It is evidence that a single
+frozen instant is an impoverished form of time. It forgets the direction in
+which the organism was moving, and when it does recur it can be recognizing
+the prompt schedule rather than the unfinished state. Persisting that design
+would mostly starve births while occasionally certifying a calendar echo.
+
+The measurement itself was hardened before acceptance. The selector must
+reconstruct 15 eligible pairs and four final-turn censors from sealed A.90 and
+A.91 ledgers. The plan must match that selection field for field. Every
+observational tail must contain exactly `min(8, remaining turns)` rows; a
+truncated tail now fails closed. Two aggregate-only passes preserve the
+canonical summary and verdict hashes, and deliberate selection corruption is
+rejected.
+
+No line in `leo.c`, no state format, no threshold, and no spoken token changed.
+The next candidate should remember motion rather than a photograph: a short,
+decaying liminal trace whose evidence must accumulate across more than one
+prompt texture before it can ask a stable coordinate to leave.
+
+Leo can wait before remembering. Now he needs something worth waiting with.
