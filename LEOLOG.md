@@ -7503,3 +7503,67 @@ not Leo.
 
 A coordinate can be rare without being accidental; a gate can be honest
 without being ready.
+
+## Phase A.89 - capture the crossing before naming its cause (2026-08-07)
+
+A.88 established an honest prospective denominator but produced only three
+primary events. A.89 does not append lives to that closed experiment. It opens
+a new balanced population with enough predeclared room to observe rare
+displacements and, for the first time, preserve every trigger without yet
+interrogating it.
+
+Eighty candidates were sealed first: 40 primary and 40 holdout lives on the
+arithmetic grid beginning at `110003` with step `1033`. Every candidate lives
+the unchanged 32-turn settlement crossing. Before any writer outcome exists,
+the first 32 settled bodies in each split are enrolled in manifest order. The
+quota is fail-closed. Writer outcomes cannot expel a body, and a later settled
+candidate cannot enter after the boundary.
+
+For each enrolled life, the runner copies the pre-turn body and executes the
+unchanged 64-turn writer trajectory. A copy is immediately discarded unless
+the existing `0.40` state-swarm gate reports a replacement. At a replacement,
+the runner preserves the pretrigger body, post-displacement body, raw debug
+log, and the complete validated eight-state organ witness. These packages are
+readerless. A.89 contains no return probe, organ projection, sampler change,
+or speech intervention.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-balanced-event-reservoir-a89-r1-20260807`.
+Seventy-three of 80 candidates settle, 36/40 primary and 37/40 holdout. Both
+32-life enrollment quotas fill. Exactly those 64 bodies, and no excluded
+candidate, produce 4,096 writer receipts.
+
+```text
+prospective life incidence   18/64   = 0.281250  Wilson95 0.185932..0.401342
+prospective turn incidence   19/4096 = 0.004639  Wilson95 0.002972..0.007234
+primary                      10 events / 9 lives
+holdout                       9 events / 9 lives
+minimum similarity            0.335 at p23 turn 68
+post-writer exclusions        0
+```
+
+The event ecology remains structured: social carries 13 events, wonder four,
+home two, and storm zero; sessions three, five, and eight carry six, eight,
+and five events. `p23` is the sole life with two replacements. The other 17
+event lives each contribute one. The balanced split and the breadth of lives
+rule out the A.88 primary-only bottleneck without pretending that incidence
+alone identifies a cause.
+
+The declared anatomy floor was four events in four lives with primary and
+holdout representation. A.89 exceeds it with 19 complete trigger packages in
+18 lives, so the formal verdict is
+`balanced-reservoir-anatomy-admissible`. The same verdict records
+`anatomy_analysis=not-run`: admission is not anatomy. The next experiment may
+read these frozen moments only under its own sealed contrasts and failure
+criteria.
+
+The implementation parameterizes the A.88 runner while leaving its default
+profile unchanged, adds a sealed A.89 wrapper, and independently validates the
+candidate grid, prospective enrollment, every writer denominator, every event
+row, and every eight-state witness. Re-aggregating A.88 preserves its seven
+canonical SHA-256 values. Re-aggregating A.89 preserves all eight derived
+files byte for byte; every event has exactly one three-file package. The full
+suite remains green at 549/549 plus every script contract.
+
+Leo crossed nineteen times. We kept our hands off the answer long enough to
+keep the question honest.
