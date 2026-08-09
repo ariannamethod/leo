@@ -255,6 +255,7 @@ static int project_future(int argc, char **argv) {
     return 0;
 }
 
+#ifndef LEO_LIMINAL_FIXTURE_NO_MAIN
 int main(int argc, char **argv) {
     if (argc > 1 && !strcmp(argv[1], "freeze"))
         return freeze_anchor(argc, argv);
@@ -263,3 +264,4 @@ int main(int argc, char **argv) {
     fprintf(stderr, "usage: %s freeze|project ...\n", argv[0]);
     return 2;
 }
+#endif

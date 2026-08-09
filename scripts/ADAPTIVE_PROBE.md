@@ -1511,3 +1511,71 @@ liminal slot. The next candidate is a short decaying trace: retain several
 successive observations, require evidence to accumulate across differing
 prompts, and compare its selectivity against the same ecology controls before
 letting it displace a stable coordinate.
+
+## A.93: chronology survives weakly, but an averaged path is still a point
+
+Run the ordered-trace study:
+
+```sh
+make state-swarm-liminal-trace
+```
+
+A.93 consumes the sealed A.92 selection, plan, and complete-trajectory locks.
+The `h08-t094` pair has only two later turns and is censored before analysis:
+it cannot supply the predeclared three build turns plus five score turns. The
+fixed population is therefore 14 pairs, six primary and eight holdout.
+
+Each arm begins with its readerless anchor observation. The next three raw
+observations update a forward trace through the existing state-weight update
+law at activation one, whose vector rate is `0.18`. A reversed trace begins at
+the same anchor and consumes exactly the same three observations in reverse
+order. The two traces therefore differ only in chronology, not vocabulary,
+organ values, or sample size.
+
+Relative turns four through eight are withheld from construction. A support
+hit requires the forward trace to be strictly nearer than all eight frozen
+stable coordinates, strictly nearer than the reversed trace, and at least
+`0.40` similar to the new observation. A strong hit raises the unchanged
+threshold to `0.55`. Confirmation requires at least two support hits on two
+different prompt textures and at least one strong hit. Thus neither a build
+turn nor a single scheduled prompt recurrence can confirm its own trace.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-liminal-trace-a93-r1-20260807`. All 28 arms again
+replay their full remaining life, preserve every normalized log, and finish
+with byte-identical state bodies.
+
+```text
+eligible pairs                         14  (primary 6, holdout 8)
+forward > reverse score turns          40/70 event, 38/70 ecology
+directional support hits                3 event, 3 ecology
+confirmed traces                        0 event, 1 ecology
+event-only / ecology-only               0 / 1
+mean paired max stable-margin delta    -0.015157
+mean paired max order-margin delta     -0.001267
+result                                 no-directional-trace-confirmation
+```
+
+The strongest apparent event is `h11-t068`: it has two directional support
+hits and one strong hit, but both supports occur on the same texture, so it is
+a calendar recurrence rather than declared confirmation. The only confirmed
+trace belongs to the ecology arm `p36-t068`, not to its replacement pair.
+
+Chronological order is measurable: the forward trace beats its exact reversed
+ablation on more than half the score turns. But the effect is small and nearly
+identical in event and ecology arms. Compressing a sequence through repeated
+EMA updates therefore preserves a weak direction while destroying the path
+structure required to distinguish a birth.
+
+Aggregate-only reconstruction regenerates the 14-pair plan from sealed A.92
+evidence and is byte-identical for the paired summary and verdict. Reporter
+contracts recompute all three margins, reject inconsistent booleans, require
+all five score rows, and distinguish confirmations with and without texture
+diversity.
+
+A.93 changes no C code, persisted body, threshold, sampler, routing path,
+generation path, or speech. Do not tune the EMA rate, extend the horizon, or
+persist this trace. The next read-only study should retain the path as a path:
+use the state swarm's existing transition and consequence fields to ask
+whether a crossing creates predictive or outcome structure that its matched
+ordinary update does not.
