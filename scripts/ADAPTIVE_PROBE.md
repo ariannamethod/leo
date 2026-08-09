@@ -1784,3 +1784,70 @@ sampler, routing path, generation path, or speech. Do not sharpen the source
 readout. A.97 should remain anatomical: measure active row mass, row divergence
 from the destination prior, and each row's realized contribution before asking
 whether evidence-aware route authority is separable from anchor selection.
+
+## A.97: row geometry does not earn portable authority
+
+Run the sealed authority study:
+
+```sh
+make state-swarm-road-authority
+```
+
+A.97 reuses the complete A.96 matrices and probability vectors but none of its
+readout candidates. Six scalar authority signals are fixed before outcomes are
+read: source-weighted row coverage, active-row KL divergence from the
+destination prior, forecast KL, the fraction of active-row divergence surviving
+in the forecast, coverage times forecast KL, and forecast total variation.
+The target enters only afterward as `destination_ce - conditional_ce`.
+
+For each signal, the 12 discovery arms are sorted by authority. A signal may
+nominate the strict midpoint between ranks six and seven only if the upper six
+win at least four arms, gain at least `0.015` nat on average, and exceed the
+lower-six gain by `0.010` nat. Tied median scores cannot create a threshold.
+The qualifying signal with the largest upper/lower separation is frozen.
+
+Validation applies that exact numeric threshold to the 15 untouched organism
+controls. The accepted set must contain 4--11 arms, win at least two thirds,
+gain `0.015` nat, separate from rejected arms by `0.010` nat, contain both
+primary and holdout lives, and remain positive in each split.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-road-authority-a97-r1-20260810`:
+
+```text
+discovery features passing                    4/6
+selected feature                     active-row-kl
+frozen threshold                         0.037952
+discovery upper-six wins                      6/6
+upper / lower mean route gain       +0.017055 / +0.004340
+discovery separation                      +0.012715
+
+validation accepted / rejected                 7 / 8
+accepted wins                                  3/7
+accepted / rejected mean gain        +0.000816 / -0.001694
+validation separation                      +0.002510
+accepted primary / holdout gain      +0.001812 / -0.000512
+result                         row-authority-not-confirmed
+```
+
+Forecast KL, forecast TV, and coverage-times-forecast-KL also qualify on
+discovery. Their agreement is not independent confirmation: all describe the
+same small departure of the conditional forecast from its prior. On untouched
+lives that departure does not identify a reliable route. Static row mass and
+divergence can describe a road, but cannot tell Leo whether it has earned the
+right to guide him.
+
+The reporter reconstructs every matrix, probability vector, information
+measure, and proper score from the sealed witnesses before computing authority.
+Synthetic contracts prove a supported threshold and a clean refusal, while a
+forged witness score or duplicate discovery identity fails closed. Two
+aggregate-only passes preserve authority-score SHA-256
+`129e7ea32be1d5132fbe6d772813f01a0545e3cdbfa310813faaa42b32cac4fa`
+and verdict SHA-256
+`8d19e1aa96b67d01c889bd81f99c6a5ac8500d3f7006945191312a89703ca0bc`.
+
+A.97 changes no C code, state body, road, sampler, generation path, or speech.
+Do not gate a road by any of these six static signals. A future experiment may
+give each row a past-only prequential reliability ledger: authority at turn
+`t` must be earned by forecasts completed before `t`, then judged on later
+turns without replaying their outcomes into the past.
