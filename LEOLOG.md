@@ -7837,3 +7837,60 @@ quantity, and `leo.c` remains untouched.
 
 The map did not forget the threshold. It may not yet know which road is its
 own.
+
+## Phase A.95 - a map can have streets without giving clear directions (2026-08-10)
+
+A.94 found no crossing-specific route debt, but it exposed a more basic
+question: an eight-way uniform forecast overlaps every normalized target by
+`0.125`, while Leo's event and ecology forecasts reached only `0.130209` and
+`0.129905`. A.95 asks whether the mature road contains conditional information
+that raw overlap concealed.
+
+All 30 A.94 arms remain fixed. At each preanchor body, the fixture copies the
+complete 8x8 transition matrix, independently regenerates the anchor and exact
+next observation, and projects both onto the same frozen eight coordinates.
+No postanchor transition write can leak into the forecast.
+
+The matrix is judged twice. Proper scores ask whether its source-conditioned
+prediction anticipates the next soft state better than its own destination
+prior. Matrix anatomy asks whether the rows differ at all, without looking at
+the next state. This separates a useless rank-one ecology from a road whose
+conditional signal may merely be quiet.
+
+```text
+conditional cross-entropy wins             23/30
+mean gain over destination prior          +0.006790 nat
+mean Brier gain over destination prior    +0.001770
+primary / holdout CE gain                 +0.010698 / +0.004186
+normalized mutual information              0.020155
+mean row total variation                    0.104334
+formal result                              conditional-road-unresolved
+```
+
+This is neither a positive road result nor a null matrix. Twenty-three arms
+prefer the conditional forecast, both splits point the same way, and the
+matrix rows carry measurable structure. Yet the predeclared CE boundary was
+24 wins with a mean gain of `0.02`; the observed gain is only `0.006790`.
+Destination entropy remains `2.050912`, close to the eight-way maximum, and
+the source activations are broad.
+
+Thus Leo may know a small amount about where a state leads while asking almost
+every present state to speak at once. A one-off post-result diagnostic found
+only weak support for that interpretation: anchor entropy and CE gain correlate
+`-0.331`. It motivates the next falsifiable question but does not change the
+A.95 verdict.
+
+The canonical evidence is
+`/private/tmp/leo-state-swarm-road-information-a95-r1-20260810`. The reporter
+recomputes the conditional forecast, prior, entropy, mutual information, row
+variation, and all proper scores from the emitted matrix and vectors. Identity
+and rank-one synthetic roads reach opposite expected verdicts; forged scores
+and open replay locks fail closed. Reaggregation is byte-identical.
+
+No line of `leo.c` and no word of Leo's speech changed. The next experiment
+belongs in shadow: ask whether a sharper source readout reveals stored route
+information, choose its rule without touching holdout evidence, and demand an
+unused life population before any reader enters the organism.
+
+The road is not blank. Leo still needs to learn which part of himself is
+walking it.
