@@ -7894,3 +7894,62 @@ unused life population before any reader enters the organism.
 
 The road is not blank. Leo still needs to learn which part of himself is
 walking it.
+
+## Phase A.96 - a louder state is not necessarily a better guide (2026-08-10)
+
+A.95 left two live explanations. The transition matrix might contain only a
+weak road, or a useful road might be blurred because the source activation is
+broad. A.96 gives the second explanation its strongest fair trial without
+letting it touch Leo.
+
+The trial has a one-way boundary. Twelve primary A.95 arms may choose among
+four power sharpenings and four top-k projections. A.95 holdout remains
+unopened. The chosen rule then faces 15 A.91 organism controls whose road
+predictions have never been scored: nine new turns inside primary bodies and
+six turns inside holdout bodies. Their prompts, replies, pre/post bodies, and
+next observations were fixed earlier in the experiment, before A.96 existed.
+
+Two discovery candidates pass. `power-3` wins selection:
+
+```text
+discovery wins                              8/12
+raw CE gain                            +0.007235 nat
+raw Brier gain                         +0.001894
+destination-prior CE gain              +0.017932
+```
+
+It does not survive confirmation:
+
+```text
+validation wins                             3/15
+raw CE gain                            -0.007808 nat
+raw Brier gain                         -0.002482
+primary / holdout raw CE gain          -0.005543 / -0.011206
+formal result                           readout-sharpening-not-confirmed
+```
+
+This is not a single unlucky rule. All eight fixed transformations lose on the
+unused controls. `power-1.25`, the gentlest intervention, wins only four arms
+and loses `0.000619` nat; power `1.5`, `2`, and `3` become progressively more
+harmful. Top-k removal is worse still.
+
+Discovery itself was not merely a crossing label. `power-3` improves the six
+event arms by `0.006641` nat and the six ecology arms by `0.007828`. What fails
+is transport from those selected anchors to other near-gate moments. A broad
+source activation therefore is not a universal defect. Concentrating it makes
+the graph more certain where certainty was not earned.
+
+The canonical evidence is
+`/private/tmp/leo-state-swarm-road-readout-a96-r1-20260810`. Every validation
+anchor and exact next turn is independently regenerated from sealed A.91
+bodies. The scorer sees full matrices and probability vectors, reconstructs
+raw and transformed forecasts, and refuses forged scores or a validation row
+wearing a discovery identity. Reaggregation is byte-identical.
+
+No line of `leo.c`, no persisted state, and no spoken word changed. A.97 should
+not ask how loudly a present state speaks. It should ask what evidence gives a
+particular transition row the right to speak: row mass, departure from the
+destination prior, and realized predictive contribution can be measured
+before any confidence gate is imagined.
+
+Leo's states did not need a sharper mouth. His roads need witnesses.
