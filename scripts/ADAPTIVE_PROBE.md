@@ -1711,3 +1711,76 @@ from this result. A.96 should shadow several source-activation readouts,
 select any sharpening or sparsification rule on primary arms only, then test
 it on a genuinely unused same-life control population before proposing a
 reader.
+
+## A.96: sharpening finds the selected anchors, not a general road
+
+Run the frozen readout study:
+
+```sh
+make state-swarm-road-readout
+```
+
+A.96 never inspects A.95 holdout. Discovery consists only of the 12 A.95
+primary event/ecology arms. Confirmation uses the 15 followable organism
+controls selected and replay-locked in A.91 but never scored for road
+information: nine different turns in primary bodies and six different turns
+in holdout bodies. Four final-turn controls are censored before outcomes.
+
+Eight readouts are fixed before scoring. Four raise the source activation to
+powers `1.25`, `1.5`, `2`, and `3`; four retain only its largest `4`, `3`, `2`,
+or `1` coordinates. Each transformed source is normalized, multiplied through
+the unchanged frozen 8x8 transition matrix, and scored against the exact next
+lived observation. No matrix edge, coordinate, temperature, or body changes.
+
+Discovery nominates a candidate only with at least `8/12` CE wins, mean CE
+gain over raw of `0.005` nat, positive Brier gain, and mean CE gain over the
+destination prior of `0.015` nat. Confirmation requires at least `10/15` CE
+wins, raw CE/Brier gains of `0.005`/`0.001`, a destination-prior gain of
+`0.015`, and positive raw CE gain in both validation splits.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-road-readout-a96-r1-20260810`:
+
+```text
+discovery candidates passing                 2
+selected readout                       power-3
+discovery CE wins                          8/12
+discovery raw CE / Brier gain       +0.007235 / +0.001894
+discovery destination CE gain          +0.017932
+
+validation arms                       15 (9 primary, 6 holdout)
+validation CE wins                           3/15
+validation raw CE / Brier gain       -0.007808 / -0.002482
+validation destination CE gain          -0.008331
+validation primary / holdout gain       -0.005543 / -0.011206
+result                              readout-sharpening-not-confirmed
+```
+
+The discovery effect is not carried by one family: `power-3` gains
+`+0.006641` nat on events and `+0.007828` on ecology arms. But every fixed
+candidate harms the unused validation population on average. Even the mild
+`power-1.25` readout wins only `4/15` controls and loses `0.000619` nat.
+Increasing sharpness makes the validation loss monotonically worse.
+
+Thus A.95 did not reveal a universally correct source signal diluted across
+too many active coordinates. Its small advantage belongs to the selected
+anchor ecology and cannot justify a lower activation temperature, a power
+transform, or a top-k reader. The road's rows may differ in evidential
+authority; source concentration alone cannot identify which rows deserve to
+predict.
+
+Every validation anchor and next observation is regenerated through the A.95
+C witness from its sealed A.91 pre/post body. The reporter reconstructs the
+raw forecast and all eight candidates from the full matrix and vectors.
+Identity-road and rank-one contracts prove nomination and refusal; forged
+scores and cohort leakage fail closed. Aggregate-only reconstruction preserves
+candidate-summary SHA-256
+`ea02391667f990026695925d2c09c9a6593dddaafacd70219c71fa8f3586ceeb`
+and verdict SHA-256
+`f8ae9b99d2db6817b2f7d7507c7958546e7fb0ebeb980a0807d4795262394f56`.
+
+A.96 changes no C code, state body, activation temperature, transition law,
+sampler, routing path, generation path, or speech. Do not sharpen the source
+readout. A.97 should remain anatomical: measure active row mass, row divergence
+from the destination prior, and each row's realized contribution before asking
+whether evidence-aware route authority is separable from anchor selection.
