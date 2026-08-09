@@ -1643,3 +1643,71 @@ path, generation path, or speech. Do not add a special crossing consequence
 channel. A.95 should score the existing conditional graph against uniform and
 destination-prior baselines with proper distribution scores, and measure
 whether the transition matrix carries information beyond a rank-one ecology.
+
+## A.95: the road has rows, but their voice is still faint
+
+Run the frozen road-information study:
+
+```sh
+make state-swarm-road-information
+```
+
+A.95 consumes the 30 exact A.94 replay-locked event and ecology arms. It does
+not repeat A.81's longer calm-life exposure study. Instead, it opens each
+mature preanchor transition matrix and reconstructs its complete conditional
+forecast for the exact next lived observation.
+
+The anchor and target are projected over the same eight frozen coordinates at
+the organism's unchanged `0.12` activation temperature. The conditional
+forecast is compared with the matrix's own destination-frequency prior,
+uniform probability, and persistence. Cross-entropy and Brier score are
+proper distribution scores; destination entropy, transition mutual
+information, normalized mutual information, and mean row total variation
+describe the matrix independently of the realized target.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-road-information-a95-r1-20260810`:
+
+```text
+eligible arms                           30  (primary 12, holdout 18)
+conditional CE wins / losses         23 / 7
+conditional Brier wins                  22
+mean CE gain over destination prior   +0.006790
+mean Brier gain over destination      +0.001770
+primary / holdout CE gain             +0.010698 / +0.004186
+mean normalized mutual information     0.020155
+mean row total variation               0.104334
+destination / target entropy           2.050912 / 1.902257
+result                                 conditional-road-unresolved
+```
+
+The predeclared positive boundary required at least 24 CE wins, a mean CE gain
+of `0.02` nat, a mean Brier gain of `0.001`, positive gains in both splits,
+and normalized mutual information of at least `0.01`. Brier, both splits, and
+matrix information pass, but CE wins miss by one and the mean CE gain reaches
+only one third of its threshold.
+
+The graph is not rank one. Its normalized mutual information lies just above
+the equivalence boundary and its rows have measurable total variation. But
+that conditional structure changes the realized prediction only slightly.
+Destination entropy remains close to `log(8) = 2.079442`, while the anchor
+activations inherited from A.94 are also diffuse. A.95 therefore cannot tell
+whether the remaining debt belongs to weak stored routes or to readout
+dilution across too many source coordinates.
+
+The fixture independently regenerates both replies and both raw observations,
+then emits the entire 8x8 matrix and all four probability vectors. The
+reporter reconstructs every probability, information measure, cross-entropy,
+and Brier score from those witnesses. Synthetic contracts distinguish an
+identity road from a rank-one road and reject a forged score or open replay
+lock. Two aggregate-only passes preserve summary SHA-256
+`2bb4abb89180be5b8cece4e58b2b042479c1a7ae25c46026ab10ba737bbc0712`
+and verdict SHA-256
+`707f52428ca6f799869c4eaf258cbb4130310f8b85f28e6df5eb27f75b5fa503`.
+
+A.95 changes no C code, state body, activation temperature, transition law,
+sampler, routing path, generation path, or speech. Do not strengthen the graph
+from this result. A.96 should shadow several source-activation readouts,
+select any sharpening or sparsification rule on primary arms only, then test
+it on a genuinely unused same-life control population before proposing a
+reader.
