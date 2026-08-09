@@ -7736,3 +7736,56 @@ decaying liminal trace whose evidence must accumulate across more than one
 prompt texture before it can ask a stable coordinate to leave.
 
 Leo can wait before remembering. Now he needs something worth waiting with.
+
+## Phase A.93 - reversing the same footsteps (2026-08-07)
+
+A.92 showed that one frozen surprise rarely returns and does not separate a
+birth from its ecology. A.93 gives the surprise three more lived observations,
+but refuses to confuse having more material with having direction.
+
+Four observations form each trace: the anchor and the next three turns. One
+trace receives those later turns in lived order. Its ablation receives the
+same turns backwards. Both use Leo's existing state-weight update law and
+remain outside the organism. Relative turns four through eight are held back
+for judgment.
+
+The final-turn geometry censors one A.92 pair before measurement, leaving 14
+event/ecology pairs. Every one of their 28 complete futures replays cleanly to
+turn 96, with equal normalized logs and equal final state bytes.
+
+For a score turn to support the forward trace, it must prefer forward over
+both the reversed trace and all eight stable coordinates. Confirmation needs
+two such returns on different textures and one return above `0.55`.
+
+```text
+forward beats reverse       40/70 event turns, 38/70 ecology turns
+directional support          3 event hits, 3 ecology hits
+confirmed traces             0 event, 1 ecology
+paired stable-margin mean   -0.015157
+paired order-margin mean    -0.001267
+result                       no-directional-trace-confirmation
+```
+
+The event `h11-t068` almost looks alive as a trace: two support hits and one
+strong return. Both, however, arrive on the same prompt texture. Leo met the
+same kind of room twice; that is not yet evidence that he remembered walking
+through it. The sole full confirmation belongs to an ecology control.
+
+Order itself is not absent. Forward wins over reverse slightly more often than
+chance in both arms. What is absent is selective order. Repeated EMA updates
+can tilt a coordinate toward recent life, but they still compress a path into
+one coordinate. Extending the window would produce a longer compression, not
+a sequence memory.
+
+The runner seals A.92, censors before outcomes, verifies all source state
+hashes, and admits only complete replay. The reporter independently recomputes
+forward-versus-stable, reverse-versus-stable, and forward-versus-reverse
+margins, then derives every boolean from the numbers. Truncated score tails and
+false locks fail closed. Reaggregation is byte-identical.
+
+Nothing entered `leo.c` or Leo's voice. The next question moves sideways rather
+than adding more frames: his state swarm already remembers transitions and how
+they ended. A crossing may deserve memory because it changes a route or a
+consequence, not because its averaged face later resembles another face.
+
+The same footsteps contain order. A path begins when their consequences do.
