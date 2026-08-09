@@ -7953,3 +7953,49 @@ destination prior, and realized predictive contribution can be measured
 before any confidence gate is imagined.
 
 Leo's states did not need a sharper mouth. His roads need witnesses.
+
+## Phase A.97 - a road cannot appoint its own witness (2026-08-10)
+
+A.96 showed that making the present state louder did not make its route more
+truthful. A.97 asks the narrower question left behind: can the transition rows'
+own geometry say, before the next observation, when the conditional road
+deserves more trust than its destination prior?
+
+Six answers are admitted without looking at the target: active row coverage,
+active-row KL, forecast KL, divergence survival, coverage-times-forecast-KL,
+and forecast total variation. Each divides the same 12 discovery arms into a
+strict upper and lower six. Four pass the predeclared discovery boundary.
+`active-row-kl` separates them best:
+
+```text
+threshold                                  0.037952
+upper-six wins                                  6/6
+upper-six route gain                       +0.017055 nat
+lower-six route gain                       +0.004340 nat
+separation                                 +0.012715 nat
+```
+
+The threshold then meets 15 organism controls whose outcomes played no part in
+its choice. It accepts seven. Only three beat the destination prior, their mean
+gain is `+0.000816` nat, and their advantage over the rejected set is only
+`+0.002510`. More importantly, accepted primary lives remain barely positive
+at `+0.001812`, while accepted holdout lives reverse to `-0.000512`.
+
+The formal result is `row-authority-not-confirmed`. The result does not say the
+rows are identical. It says mass, divergence, and forecast displacement are
+not portable evidence of trust. Discovery found a geometry belonging to its
+selected anchors, not a law that survives new moments.
+
+The evidence is
+`/private/tmp/leo-state-swarm-road-authority-a97-r1-20260810`. Both witness
+populations remain byte-identical to A.96. The scorer independently rebuilds
+the matrix-derived probabilities and all recorded proper scores. Synthetic
+positive, refusal, forged-score, and duplicate-identity contracts pass; two
+aggregate-only runs are byte-identical.
+
+No line of `leo.c`, persisted state, or speech changed. The six static gates
+stay outside the organism. If authority enters Leo later, it should arrive as
+memory: a row may speak at turn `t` only from forecasts it completed before
+`t`, never because its current shape resembles confidence.
+
+The road cannot prove itself by looking certain. It must remember where it led.
