@@ -1579,3 +1579,67 @@ persist this trace. The next read-only study should retain the path as a path:
 use the state swarm's existing transition and consequence fields to ask
 whether a crossing creates predictive or outcome structure that its matched
 ordinary update does not.
+
+## A.94: the graph is diffuse, not selectively blind to crossings
+
+Run the frozen transition-and-consequence study:
+
+```sh
+make state-swarm-transition-consequence
+```
+
+A.94 restores the censored short-future pair and consumes all 15 replay-locked
+A.92 event/ecology pairs. At each preanchor body, the fixture freezes the eight
+stable coordinates plus the transition and four-channel consequence arrays.
+It reconstructs the raw anchor observation, projects it onto those eight
+coordinates with the organism's unchanged `0.12` activation temperature, and
+asks that frozen graph to predict the exact next lived observation.
+
+The transition prediction is normalized before overlap with the next soft
+activation. `transition_debt` is one minus that overlap. Consequence error is
+the mean absolute error across grounded wonder, distress relief, gap relief,
+and alignment delta. Their product is `joint_debt`, so an absent outgoing path
+does not become evidence merely by being absent: it must also miss a nonzero
+consequence.
+
+Every next turn is independently regenerated from the real postanchor body.
+All 30 replies, parsed geometries, and normalized complete debug logs match
+their sealed A.89 sources. The canonical run is
+`/private/tmp/leo-state-swarm-transition-consequence-a94-r1-20260809`:
+
+```text
+eligible pairs                              15  (primary 6, holdout 9)
+event/ecology positive joint-debt delta      8 / 7
+mean paired transition-debt delta       -0.000305
+mean paired consequence-MAE delta       -0.014089
+mean paired joint-debt delta             -0.011675
+primary / holdout joint-debt delta       -0.030114 / +0.000618
+mean event / ecology forward overlap      0.130209 / 0.129905
+mean anchor / next activation entropy     0.960337 / 0.914792
+result                                    transition-consequence-debt-not-distinguished
+```
+
+The predeclared crossing-specific criterion required 12 positive pairs, mean
+joint debt of at least `+0.01`, positive transition and consequence components,
+and positive means in both splits. No component reaches that result. Crossings
+do not expose a route or consequence failure that ordinary matched updates do
+not already carry.
+
+The negative contrast reveals a broader anatomical warning. With eight
+coordinates, a uniform prediction overlaps any normalized target by `0.125`.
+Both observed means sit only about `0.005` above that value, while the target
+activations themselves remain highly entropic. This comparison is diagnostic,
+not a predeclared A.94 verdict: raw overlap cannot yet tell whether the graph
+contains conditional route information or merely reproduces destination
+frequency under diffuse outer-product updates.
+
+Aggregate-only reconstruction regenerates the plan from sealed A.92 sources
+and is byte-identical for the paired summary and verdict. Reporter contracts
+recompute transition debt, arrow margin, consequence MAE, and joint debt;
+false locks, truncated score sets, and altered arithmetic fail closed.
+
+A.94 changes no C code, state body, threshold, update law, sampler, routing
+path, generation path, or speech. Do not add a special crossing consequence
+channel. A.95 should score the existing conditional graph against uniform and
+destination-prior baselines with proper distribution scores, and measure
+whether the transition matrix carries information beyond a rank-one ecology.

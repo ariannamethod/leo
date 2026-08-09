@@ -7789,3 +7789,51 @@ they ended. A crossing may deserve memory because it changes a route or a
 consequence, not because its averaged face later resembles another face.
 
 The same footsteps contain order. A path begins when their consequences do.
+
+## Phase A.94 - the map does not single out the crossing (2026-08-09)
+
+A.93 found a weak arrow inside an averaged trace, but no selective path. A.94
+turns to the route memory Leo already owns: eight stable coordinates, a soft
+transition graph, and four remembered consequences on every directed edge.
+
+The 15 followable A.92 crossings and their matched ordinary updates are fixed
+before measurement. At each preanchor body, A.94 freezes the graph, rebuilds
+the raw anchor observation, and lets the existing transition field predict the
+next real observation. The graph does not see the postanchor update before it
+must answer. Grounded wonder, distress relief, gap relief, and alignment delta
+are forecast from the same frozen edges.
+
+No historical row is trusted alone. Each exact next turn grows again from the
+postanchor body with its original prompt and seed. All 30 visible replies,
+state-swarm geometries, and normalized full debug logs equal the sealed A.89
+life.
+
+```text
+joint debt: event greater 8/15, ecology greater 7/15
+mean transition-debt difference          -0.000305
+mean consequence-error difference        -0.014089
+mean joint-debt difference                -0.011675
+primary / holdout joint difference       -0.030114 / +0.000618
+formal result                             transition-consequence-debt-not-distinguished
+```
+
+The crossing is not where the map fails. Event and ecology overlaps are
+`0.130209` and `0.129905`, almost identical. The more important observation is
+that both are close to the uniform eight-state overlap of `0.125`; next-state
+activation entropy averages `0.914792`. Leo's graph has an outgoing path in
+every arm, but its destination remains broad.
+
+That last comparison is a new question, not a retroactive verdict. The graph
+may know a conditional route weakly, or it may be repeating the marginal
+popularity of destinations because diffuse activations write outer products
+across nearly every edge. A.95 must compare conditional prediction with both
+uniform and destination-prior forecasts under a proper score before any edge
+law changes.
+
+The canonical evidence lives at
+`/private/tmp/leo-state-swarm-transition-consequence-a94-r1-20260809`.
+Reaggregation is byte-identical, synthetic contracts attack every derived
+quantity, and `leo.c` remains untouched.
+
+The map did not forget the threshold. It may not yet know which road is its
+own.
