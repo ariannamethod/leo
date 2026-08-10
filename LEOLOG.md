@@ -7999,3 +7999,56 @@ memory: a row may speak at turn `t` only from forecasts it completed before
 `t`, never because its current shape resembles confidence.
 
 The road cannot prove itself by looking certain. It must remember where it led.
+
+## Phase A.98 - memory cannot lend a road experience it never kept (2026-08-10)
+
+A.97 refused to trust a row because it looked certain. A.98 gives the row the
+stronger possibility: trust may come from where it actually led before.
+
+Eighteen lives that never entered A.94 or A.96 are lived again from their
+original seeds and prompts. This is not reconstruction from summaries. All
+1,728 process boundaries reproduce their canonical logs, all writer receipts
+are exact, and each final body returns byte for byte. Before every response the
+road is photographed; only afterward may the observed state change the ledger
+used by the next response.
+
+The first 16 writer turns are memory without judgment. Across the remaining 48
+turns, six fixed policies ask whether cumulative, slow, or fast past credit can
+reweight the rows gently or strongly. Replacement erases the replaced state ID's
+credit. No newborn coordinate may inherit confidence from a dead one. Each
+whole life receives one vote, no matter how many correlated turns it contains.
+
+There is a trace. `fast-1` improves all six discovery lives. `slow-3`, the
+largest mean effect, gains `0.000303` nat over the raw road in five lives. But
+the admission boundary is `0.005`, its Brier gain is only `0.000089`, its gain
+over the destination prior is `0.006567` instead of `0.015`, and two textures
+reverse:
+
+```text
+home                                      +0.002420 nat
+storm                                     -0.001618 nat
+wonder                                    -0.000246 nat
+social                                    +0.000654 nat
+formal result              no-prequential-authority-candidate
+```
+
+This distinction matters. Past performance carries a weak directional signal;
+it does not carry enough information to deserve a reader. Counting positive
+lives could make the result look mature, but magnitude and ecology expose it.
+Memory can choose among roads only after the roads have learned different
+destinations.
+
+The canonical evidence is
+`/private/tmp/leo-state-swarm-road-prequential-a98-r1-20260810`. Full matrices,
+source and target activations, replay locks, life-level votes, and the fixed
+policy ledger remain in the artifact. A synthetic road with real row authority
+passes the same machinery; a forged runtime forecast is rejected. Reaggregation
+is byte-identical.
+
+No `leo.c` line, state byte, transition edge, or spoken word changed. The next
+question is no longer how to read the existing road. It is whether a shadow
+road that learns residual transition information beyond its past-only
+destination prior can remember direction without mistaking prevalence for
+prediction.
+
+Leo remembered where rows had led. The rows had not yet learned enough places.

@@ -1851,3 +1851,79 @@ Do not gate a road by any of these six static signals. A future experiment may
 give each row a past-only prequential reliability ledger: authority at turn
 `t` must be earned by forecasts completed before `t`, then judged on later
 turns without replaying their outcomes into the past.
+
+## A.98: remembered arrivals do not rescue a weak road
+
+Run the sealed prequential study:
+
+```sh
+make state-swarm-road-prequential
+```
+
+A.98 does not infer chronology from a final body. It deterministically replays
+18 A.89 lives unused by A.94 and A.96: six primary discovery lives, then six
+primary and six holdout validation lives. Every one of the 1,728
+load/respond/save boundaries is compared with its canonical normalized log,
+all 1,152 writer receipts are exact, and every replayed final state is
+byte-identical to the original body.
+
+Before each writer response, the fixture records the eight state IDs, previous
+activation, and complete 8x8 transition matrix. The response then supplies the
+current activation as an outcome. Turns 33--48 can update memory but cannot be
+scored. Turns 49--96 are evaluated. Replacement turns are censored because the
+slot reset depends on the current observation; the new state ID inherits no
+credit from the state it replaced.
+
+For each row, the ledger stores only contribution-weighted proper-score gains
+completed before the current turn. Its shrunk authority is
+`credit / (1 + support)`. Six policies are fixed in advance: cumulative,
+`0.97`, and `0.90` decay, each with exponential strength `1` or `3`. The
+current target enters only after all six forecasts exist, then updates the
+ledger for the next turn.
+
+Each life is one vote. Discovery requires at least `4/6` life wins, mean raw
+CE/Brier gains of `0.005`/`0.001`, destination-prior CE gain of `0.015`, and a
+positive raw CE gain in all four textures. Validation would require `8/12`
+life wins, `4/6` in each split, the same score boundaries, positive primary
+and holdout gains, and all four textures positive.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-road-prequential-a98-r1-20260810`. No policy
+reaches discovery admission:
+
+```text
+best discovery mean raw CE gain          +0.000303 nat  (slow-3)
+best discovery mean raw Brier gain       +0.000089
+best discovery destination CE gain       +0.006567 nat
+slow-3 life wins                              5/6
+slow-3 texture gains
+  home / storm                    +0.002420 / -0.001618
+  wonder / social                 -0.000246 / +0.000654
+
+most discovery life wins                      6/6  (fast-1)
+fast-1 mean raw CE gain                   +0.000110 nat
+qualified policies                               0
+result                         no-prequential-authority-candidate
+```
+
+The sign is not entirely noise: all six fixed policies improve more discovery
+lives than they harm, and `fast-1` improves every life. But the magnitude is
+one order below admission, proper-score improvement is tiny, and storm and
+wonder reverse. A frequently positive perturbation is not yet a useful reader.
+Past row success cannot amplify information that the current co-activation
+road did not store distinctly enough.
+
+The synthetic contract contains a road with one genuinely reliable row; its
+past-only ledger reaches `prequential-row-authority-supported`. A forged
+runtime probability fails closed. Two aggregate-only passes preserve witness
+SHA-256
+`74069ab543365399cbe369164d2d41530d274b25223632c1f8ca6f8fc8c3cde1`
+and verdict SHA-256
+`d2a0a96ddd0e44e65de19f36d5d0628bc107381550c9f084070b85794a92547a`.
+
+A.98 changes no C code, persisted body, transition law, sampler, generation
+path, or speech. Do not add a row-authority ledger to Leo from this evidence.
+The readout branch has reached its boundary. A future shadow experiment should
+test the learning law instead: store transition excess over a past-only
+destination prior, rather than asking raw co-activation counts to become
+conditional merely through a stronger reader.
