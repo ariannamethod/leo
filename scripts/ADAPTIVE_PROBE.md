@@ -1927,3 +1927,84 @@ The readout branch has reached its boundary. A future shadow experiment should
 test the learning law instead: store transition excess over a past-only
 destination prior, rather than asking raw co-activation counts to become
 conditional merely through a stronger reader.
+
+## A.99: subtracting only the destination creates a drifting road
+
+Run the sealed residual-learning study:
+
+```sh
+make state-swarm-road-residual
+```
+
+A.99 consumes the exact A.98 plan, replay locks, and 1,152 turn witnesses; it
+does not replay or regenerate speech. Each life starts at writer turn 33 with
+the full existing road decomposed into a destination prior plus signed row
+excess. Turns 33--48 can change the shadow learner but cannot be scored. Turns
+49--96 are evaluated, and a replacement turn is censored and loses every
+statistic belonging to the displaced stable identity.
+
+The local update is fixed before outcomes are read:
+
+```text
+excess[i,j] += source[i] * (target[j] - past_destination[j])
+```
+
+Six learners use cumulative, `0.97`, or `0.90` decay and strength `1` or `3`.
+All use a unit destination pseudocount and unit row shrinkage. The forecast is
+the past-only destination prior plus the source-weighted signed excess. A
+matched control applies the same strength and shrinkage to a freshly centered
+view of the unchanged raw road at every turn. Thus a candidate must beat the
+live raw road, the destination prior, and the readout it would have received
+without its new write law.
+
+Discovery requires raw/control life wins of `4/6`, raw CE/Brier gains of
+`0.005`/`0.001`, control CE gain of `0.003`, destination CE gain of `0.015`,
+and positive raw gain in all four textures. Confirmation would require `8/12`
+raw and control wins, `4/6` in each validation split, the same score margins,
+positive split gains, and all four textures positive.
+
+The canonical run is
+`/private/tmp/leo-state-swarm-road-residual-a99-r2-20260810`. No candidate is
+close to nomination:
+
+```text
+best candidate                         excess-cumulative-1
+discovery raw / control life wins                  0/6 / 1/6
+discovery raw CE / Brier gain             -0.006142 / -0.002062
+discovery matched-control CE gain                    -0.004584
+discovery destination CE gain                         +0.000122
+discovery texture raw CE gain
+  home / storm                              +0.004591 / -0.022592
+  wonder / social                           -0.004449 / -0.002116
+
+diagnostic validation raw CE gain                     -0.006493
+diagnostic validation control CE gain                 -0.005004
+qualified candidates                                           0
+result                              no-residual-transition-candidate
+```
+
+The matched residual readout itself loses about `0.001558` nat to raw on
+discovery; the cumulative write law adds another `0.004584` nat loss. Faster
+forgetting increases rather than repairs the damage: strength-one raw CE loss
+grows from `0.006142` cumulative to `0.010844` at `0.97` and `0.023630` at
+`0.90`. This is not a calibration miss near an admission boundary.
+
+Target-only excess is referenced to the destination prior that existed when
+each observation arrived. As that prior moves, older signed rows no longer sum
+to excess around the current ecology. Exact recentering would reduce the
+representation to the matched row-normalized control, which also loses here.
+Therefore A.99 rejects this one-sided residual law. It does not reject local
+Hebbian learning or transition memory. A later shadow study must remove source
+occupancy as well, for example with temporal covariance
+`(source - past_source) * (target - past_destination)`, before any untouched
+life is spent on confirmation.
+
+The synthetic contract contains a learnable residual road and reaches the
+supported verdict; a forged runtime probability fails closed. Two aggregate
+passes preserve residual-score SHA-256
+`ba68caa18f88ca8a1614f762e93d8a18b21d9768714ce7c14932eefb60c8e951`
+and verdict SHA-256
+`38efff9d6707f0df4ea4f5b642e71c4065c39e54cb219f1ba41f3a8e76145614`.
+
+A.99 changes no C code, persisted body, sampler, generation path, routing, or
+speech. Do not install target-only transition excess in Leo.
