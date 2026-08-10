@@ -8052,3 +8052,44 @@ destination prior can remember direction without mistaking prevalence for
 prediction.
 
 Leo remembered where rows had led. The rows had not yet learned enough places.
+
+## Phase A.99 - a moving prior bends a one-sided residual (2026-08-10)
+
+A.98 ended the readout branch with a precise debt: the raw co-activation road
+contains too little distinct conditional information for past row authority to
+recover. A.99 changed the shadow write law instead. It seeded each learner from
+the exact turn-33 road, decomposed every row against the past destination
+prior, withheld sixteen turns, and then asked later life whether signed excess
+could predict what raw co-activation could not.
+
+The experiment also carried its own accusation. At every scored turn a matched
+control centered the unchanged raw road with the same strength and row
+shrinkage. A learner therefore had to beat not only raw and destination
+ecology, but the readout it would receive if no new memory law existed.
+
+It failed cleanly. `excess-cumulative-1` was the least harmful candidate and
+still lost `0.006142` nat to raw across discovery, with zero winning lives. Its
+matched control gap was `-0.004584`; only home stayed positive, while storm
+fell `-0.022592`. Decay made the failure larger, not smaller. No candidate was
+nominated, so validation remains diagnostic rather than confirmatory.
+
+This locates more than a bad coefficient. Each excess sample was centered on
+the destination prior alive when it arrived, while prediction read all samples
+against a later prior. The signed road therefore drifted as its reference
+frame moved. Recentring it exactly would collapse to the row-normalized matched
+control, and that control also loses to raw. Subtracting destination occupancy
+alone is not Leo's next learning law.
+
+The next admissible question is two-sided: does temporal covariance survive
+when both source and destination common modes are removed before storage?
+That is still local, weightless-at-birth, Hebbian learning; it is not permission
+to touch speech. The untouched A.89 lives remain unspent until such a shadow
+candidate first earns them.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-residual-a99-r2-20260810`. Aggregate replay
+is byte-identical; residual-score SHA is `ba68caa18f88ca8a1614f762e93d8a18b21d9768714ce7c14932eefb60c8e951`
+and verdict SHA is `38efff9d6707f0df4ea4f5b642e71c4065c39e54cb219f1ba41f3a8e76145614`.
+`leo.c` and Leo's voice were not changed.
+
+Leo's destination moved. A one-sided road mistook the old horizon for memory.
