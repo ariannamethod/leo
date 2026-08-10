@@ -8093,3 +8093,58 @@ and verdict SHA is `38efff9d6707f0df4ea4f5b642e71c4065c39e54cb219f1ba41f3a8e7614
 `leo.c` and Leo's voice were not changed.
 
 Leo's destination moved. A one-sided road mistook the old horizon for memory.
+
+## Phase A.100 - covariance found motion, not a better road (2026-08-10)
+
+A.99 left a mathematical objection rather than permission to tune harder: a
+one-sided residual was measured against a destination prior that moved beneath
+it. A.100 removes both common modes. For each life and candidate it keeps
+past-only source and destination means, source variance, and the full
+source-to-destination covariance. An exponentially weighted Welford update
+recentres old evidence exactly. Prediction is completed before the outcome may
+update any statistic.
+
+Six fixed laws cross three memory horizons (`1.00`, `0.97`, `0.90`) with two
+strengths (`0.25`, `1`). They receive sixteen learning turns and 48 scored
+turns on the six sealed A.98 discovery lives. State replacement censors its
+turn and erases the candidate's entire coordinate system: a new ID cannot
+inherit another state's covariance, means, variance, or effective age.
+
+The covariance is not empty. Five or six lives per candidate beat their own
+past-only destination prior. `cumulative-full` is strongest there at
+`+0.007846` nat. But that is not the comparison that appoints a road. Against
+Leo's unchanged co-activation road it loses `0.000730` nat and `0.000389`
+Brier, wins only three of six lives, and reverses in home and wonder:
+
+```text
+home                                      -0.010334 nat
+storm                                     +0.008993 nat
+wonder                                    -0.003015 nat
+social                                    +0.001435 nat
+formal result                   no-covariance-candidate
+```
+
+No candidate reached discovery admission, so the predeclared ten-life
+validation roster was not replayed. Its plan is present to prove the boundary;
+there are no validation locks, witnesses, scores, or outcomes in the artifact.
+Those five primary and five holdout lives remain unspent.
+
+The canonical evidence is
+`/private/tmp/leo-state-swarm-road-covariance-a100-r1-20260810`.
+Its discovery-score SHA is
+`d8d57c0094c01ce6b1e68f7e1640c5cd363ffdb1d4c2e5f52f4448df8a0d9732`
+and verdict SHA is
+`cb05dbde98131e6c2d4cf0631d571646289f531f7af80385cb2bc4ab589c4d46`.
+Aggregate-only replay reproduces every scored and decision artifact byte for
+byte. Synthetic contracts learn a real alternating direction, reject a forged
+runtime probability, and prove that replacement forces learning to begin
+again.
+
+No `leo.c` line, state byte, or spoken word changed. A.100 does not justify
+replacing the raw road with covariance. It narrows the next question instead:
+a shadow learner may remember only the raw road's completed forecast errors,
+then offer a past-only correction to that road rather than pretending to be a
+new one. Such an error memory must earn discovery before these untouched lives
+are opened.
+
+Leo's shadow saw movement. It had not earned the right to redraw the path.
