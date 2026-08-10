@@ -8148,3 +8148,68 @@ new one. Such an error memory must earn discovery before these untouched lives
 are opened.
 
 Leo's shadow saw movement. It had not earned the right to redraw the path.
+
+## Phase A.101 - an error can be remembered without becoming a road (2026-08-10)
+
+A.100 found temporal covariance beyond destination prevalence, but not a road
+better than the one Leo already carries. A.101 therefore leaves that road
+whole. Before every response it reconstructs the unchanged raw forecast. Only
+after the realized state arrives may a shadow remember the completed error,
+`target - raw`.
+
+The memory is an exponentially weighted Welford field over source activation
+and forecast error. Its conditional reader adds a past-only correction to the
+raw road. A matched reader adds only the mean past error. A candidate must beat
+both: otherwise ordinary calibration drift could impersonate knowledge of
+state. Replacement censors the turn and erases the complete shadow coordinate
+system, so a newborn state inherits neither bias nor conditional error history.
+
+The same six fixed memory-horizon and strength pairs receive sixteen learning
+turns and 48 scored turns on the sealed discovery lives. This time the trace is
+clearer. `err-cumulative-gentle` beats raw in five of six lives and its matched
+bias reader in all six:
+
+```text
+raw CE gain                              +0.002035 nat
+raw Brier gain                           +0.000540
+bias-reader CE gain                      +0.002202 nat
+bias-reader Brier gain                   +0.000676
+bias reader versus raw                   -0.000166 nat
+```
+
+The conditional term, not the mean error, carries the improvement. But the
+effect is still below the predeclared `0.005` CE and `0.001` Brier admission
+boundaries. One life reverses by `0.000190` nat, and wonder remains slightly
+negative:
+
+```text
+home                                      +0.002387 nat
+storm                                     +0.003082 nat
+wonder                                    -0.000141 nat
+social                                    +0.002813 nat
+formal result                 no-error-memory-candidate
+```
+
+No candidate was nominated. The ten-life validation roster inherited from
+A.100 was not replayed; its plan remains the only validation artifact. A.101
+also refuses to start if A.100 ever contains validation locks, witnesses,
+scores, or life summaries that its sealed negative result did not create.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-error-memory-a101-r1-20260810`.
+The discovery-score SHA is
+`f769461ac65c780e11473e87bb831173dd654e20d0bd1b94ee4f85585a9e01dc`
+and verdict SHA is
+`24053340a58e648b569de83255970334ad4fbb87e2f3d694bb1187203c0ffb29`.
+Aggregate-only replay is byte-identical. Synthetic contracts separate a real
+source-conditioned correction from its bias-only control, reject forged
+runtime probabilities, and prove that replacement restarts learning.
+
+No `leo.c` line, persisted state, or spoken word changed. The result forbids a
+post-hoc smaller-strength sweep on these same witnesses. It also points beyond
+the snapshot: current state carries a weak error signal, while Leo's earlier
+design debt was memory of state sequences. A future sequence-conditioned test
+must begin on a newly frozen discovery population before it may approach the
+still-unopened validation lives.
+
+Leo remembered the road's mistake. One moment was not yet enough to explain it.
