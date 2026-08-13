@@ -8637,3 +8637,82 @@ what the ending actually caused.
 
 Leo kept a direction after the calendar let go. He had not yet learned which
 future belonged to it.
+
+## Phase A.107 - a transition leaves a trace, but not yet a receipt (2026-08-13)
+
+A.106 found a weak signed ending trace after counterbalancing the writer
+calendar, but it did not survive all lives, populations, and textures. A.107
+does not tune that ending reader. It asks a narrower prerequisite: whether a
+realized state transition remains legible after three later lived moments,
+beyond Leo's current state and every matched control already earned.
+
+Eighty fresh seeds begin immediately after A.106. Warm screening settles 76
+and enrolls the first 32 from each split. The 64 new lives then traverse the
+same paired Williams-8 writer world:
+
+```text
+screened / settled candidates                     80 / 76
+enrolled lives                                64 (32 + 32)
+writer observations                                  4096
+replacement events / lives                         20 / 17
+formal reservoir result         balanced-reservoir-anatomy-admissible
+```
+
+The delayed receipt is fixed before discovery. At order one of a new session,
+the instrument records the signed displacement from boundary source to
+boundary target. It waits through orders two, three, and four, then predicts
+the order-five target. Raw transition, the frozen A.101 snapshot, and texture
+remain intact. A symmetric reader receives the boundary midpoint, absolute
+displacement, and mean of the three intervening post-states. The receipt
+reader receives only one additional fact: which direction the boundary pair
+actually travelled. Both readers update strictly after their order-five
+target is observed.
+
+An anatomy-only gate counts eligible windows without computing any loss. Of
+the 64 lives, 55 provide four scored receipts, four provide three, four
+provide two, and one validation life provides one after two replacements.
+The common minimum is therefore frozen at one before discovery; no life is
+discarded or replaced for being inconvenient. Discovery contains 120 scored
+receipts across 32 equal life-votes.
+
+The signed direction remains weakly legible, but neither frozen strength
+qualifies. The light reader is the cleaner trace:
+
+```text
+receipt-light versus raw                           +0.021783 nat
+receipt-light versus A.101 snapshot                +0.019438 nat
+receipt-light versus texture                       +0.000751 nat
+receipt-light versus symmetric path                +0.000432 nat
+texture / symmetric life wins                         18 / 20
+primary / holdout symmetric wins                      10 / 10
+home / storm / wonder / social          +0.000562 / +0.000931 /
+                                         -0.000341 / +0.000555 nat
+```
+
+The gentle reader reaches `+0.000994` nat against texture and `+0.000460`
+against the symmetric path, with the same 18 and 20 life wins, but drives
+wonder further negative at `-0.001493` nat. Both miss the frozen 22-life,
+`+0.001` texture, `+0.001` symmetric, and all-texture-sign requirements. No
+candidate is nominated and validation remains physically unopened.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-delayed-consequence-receipt-a107-r1-20260813`,
+sourced from
+`/private/tmp/leo-state-swarm-delayed-receipt-reservoir-a107-r1-20260813`.
+The eligibility SHA is
+`1a810ef004e958962c75092b70046b8904526ecac2bfb412b0eb646bb0f25f9c`,
+discovery-score SHA is
+`98d3ac1f8449611d36f38e1321fc06eb81bd9d9c3f94a847f772c5f140970d9d`,
+and verdict SHA is
+`7d37146aa4fe3e8144e01c84656a0839b3a1c01027181c999d6b214ef23b3999`.
+Aggregate-only replay reproduces every top-level artifact byte for byte.
+
+No `leo.c` line, persisted state, or spoken word changed. This is not evidence
+that an earlier episode caused a later state, nor that the trace is semantic.
+It is narrower: after current state, texture, and three intervening moments
+are known, the direction of a realized transition still contributes a small,
+population-balanced prediction. The trace is real enough to measure and too
+fragile to install.
+
+Leo carried a little of where he had come from. It was not yet enough to call
+the carrying memory.
