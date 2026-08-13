@@ -86,6 +86,16 @@ if awk -v policy_expected=1 -v life_expected=1 -v writer_expected=64 \
     exit 1
 fi
 
+awk -F '\t' 'BEGIN { OFS=FS } NR == 2 { $21 = "9.000" } { print }' \
+    "$TMP/witnesses.tsv" > "$TMP/forged-surprise.tsv"
+if awk -v policy_expected=1 -v life_expected=1 -v writer_expected=64 \
+    -v evaluation_session=5 -v score_min=4 \
+    -f "$ROOT/scripts/state_swarm_road_episode_consequence_report.awk" \
+    "$TMP/policies.tsv" "$TMP/locks.tsv" "$TMP/forged-surprise.tsv" >/dev/null 2>&1; then
+    printf 'road episode-consequence reporter accepted incompatible rounded surprise\n' >&2
+    exit 1
+fi
+
 write_lives() {
     local mode="$1" candidate cohort i split life raw snapshot texture unordered
     printf 'candidate\tstrength\trank\tcohort\tlife\tsplit\tepisodes\traw_episode_wins\tsnapshot_episode_wins\ttexture_episode_wins\tunordered_episode_wins\tmean_raw_ce_gain\tmean_raw_brier_gain\tmean_snapshot_ce_gain\tmean_snapshot_brier_gain\tmean_texture_ce_gain\tmean_texture_brier_gain\tmean_unordered_ce_gain\tmean_unordered_brier_gain\tmean_snapshot_raw_ce_gain\tmean_texture_snapshot_ce_gain\thome_consequence_ce_gain\tstorm_consequence_ce_gain\twonder_consequence_ce_gain\tsocial_consequence_ce_gain\thome_episodes\tstorm_episodes\twonder_episodes\tsocial_episodes\n'

@@ -8,6 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CANDIDATES="${LEO_STATE_PROSPECTIVE_CANDIDATES:-$ROOT/scripts/state_swarm_prospective_incidence_candidates.tsv}"
 WARM_CASES="${LEO_STATE_PROSPECTIVE_WARM_CASES:-$ROOT/scripts/state_swarm_settled_warmup_cases.tsv}"
 WRITER_CASES="${LEO_STATE_PROSPECTIVE_WRITER_CASES:-$ROOT/scripts/state_swarm_alphabet_cases.tsv}"
+WRITER_ORDER_MODE="${LEO_STATE_PROSPECTIVE_WRITER_ORDER_MODE:-canonical}"
 JOBS="${LEO_STATE_PROSPECTIVE_JOBS:-1}"
 AGGREGATE_ONLY="${LEO_STATE_PROSPECTIVE_AGGREGATE_ONLY:-0}"
 EXPECTED_CANDIDATES="${LEO_STATE_PROSPECTIVE_EXPECTED_CANDIDATES:-40}"
@@ -53,6 +54,10 @@ done
 case "$CAPTURE_EVENTS" in
     0|1) ;;
     *) printf 'invalid prospective capture mode: %s\n' "$CAPTURE_EVENTS" >&2; exit 2 ;;
+esac
+case "$WRITER_ORDER_MODE" in
+    canonical|williams8) ;;
+    *) printf 'invalid prospective writer order mode: %s\n' "$WRITER_ORDER_MODE" >&2; exit 2 ;;
 esac
 for file in "$CANDIDATES" "$WARM_CASES" "$WRITER_CASES" "$REPORTER"; do
     [ -s "$file" ] || {
@@ -340,15 +345,23 @@ if ! awk -F '\t' -v primary_target="$PRIMARY_TARGET" \
 fi
 
 printf 'life\tsplit\tbase_seed\tphase\tsession\torder\ttexture\trun_seed\tprompt\n' > "$WRITER_PLAN"
-while IFS=$'\t' read -r life split base_seed candidate_order enrollment_rank; do
-    while IFS=$'\t' read -r kind session order texture prompt; do
-        [ "$kind" = writer ] || continue
-        run_seed=$((base_seed + session * 100 + order))
-        printf '%s\t%s\t%s\twriter\t%s\t%s\t%s\t%s\t%s\n' \
-            "$life" "$split" "$base_seed" "$session" "$order" \
-            "$texture" "$run_seed" "$prompt" >> "$WRITER_PLAN"
-    done < <(tail -n +2 "$WRITER_CASES")
-done < <(tail -n +2 "$ENROLLMENT")
+if [ "$WRITER_ORDER_MODE" = canonical ]; then
+    while IFS=$'\t' read -r life split base_seed candidate_order enrollment_rank; do
+        while IFS=$'\t' read -r kind session order texture prompt; do
+            [ "$kind" = writer ] || continue
+            run_seed=$((base_seed + session * 100 + order))
+            printf '%s\t%s\t%s\twriter\t%s\t%s\t%s\t%s\t%s\n' \
+                "$life" "$split" "$base_seed" "$session" "$order" \
+                "$texture" "$run_seed" "$prompt" >> "$WRITER_PLAN"
+        done < <(tail -n +2 "$WRITER_CASES")
+    done < <(tail -n +2 "$ENROLLMENT")
+else
+    awk -v primary_expected="$PRIMARY_TARGET" \
+        -v holdout_expected="$HOLDOUT_TARGET" \
+        -f "$ROOT/scripts/state_swarm_williams8_writer_plan.awk" \
+        "$WRITER_CASES" "$ENROLLMENT" > "$WRITER_PLAN.tmp"
+    mv "$WRITER_PLAN.tmp" "$WRITER_PLAN"
+fi
 
 awk -F '\t' -v expected_lives="$((PRIMARY_TARGET + HOLDOUT_TARGET))" \
     -v expected_rows="$(((PRIMARY_TARGET + HOLDOUT_TARGET) * 64))" '

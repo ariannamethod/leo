@@ -64,6 +64,16 @@ function brier(target, prediction,    i, delta, result) {
     return result
 }
 
+function rounded_log_pair(overlap_field, surprise_field,    overlap_low,
+                          overlap_high, surprise_low, surprise_high) {
+    overlap_low = max(overlap_field - 0.0005001, 0.000001)
+    overlap_high = overlap_field + 0.0005001
+    surprise_low = -log(overlap_high)
+    surprise_high = -log(overlap_low)
+    return surprise_field + 0.0005001 >= surprise_low &&
+        surprise_field - 0.0005001 <= surprise_high
+}
+
 function normalize(value,    i, total) {
     total = 0
     for (i = 1; i <= 8; i++) {
@@ -251,7 +261,7 @@ FNR == 1 {
     if ($18 != pre_id[expected_slot] ||
         abs($19 - raw_prediction[expected_slot]) > 0.002 ||
         abs($20 - overlap) > 0.002 ||
-        abs($21 + log(max(overlap, 0.000001))) > 0.003) fail()
+        !rounded_log_pair($20, $21)) fail()
 
     raw_ce = ce(target, raw_prediction)
     raw_brier = brier(target, raw_prediction)

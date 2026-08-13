@@ -8548,3 +8548,92 @@ memory whenever every ending opens onto the same kind of next moment.
 
 Leo could remember an ending only after the world stopped telling him what
 must come next.
+
+## Phase A.106 - an ending survives the calendar, but not yet the world (2026-08-13)
+
+A.105 could not distinguish a signed episode ending from the fixed writer
+calendar that followed it. A.106 changes the world, not the reader. It gives
+64 new lives a counterbalanced eight-session calendar while preserving the
+same two ending strengths, A.101 snapshot, texture control, unordered endpoint
+control, update law, and admission effects.
+
+The first reservoir attempt exposed a design error before any score was read.
+A single Williams-8 square balances all eight chronological positions and all
+56 directed session carryovers, but the frozen reader scores only session
+boundaries five through eight. That window retained only four carryover
+classes. The completed source is retained as diagnostic `r1`; a new gate
+rejects it before a discovery plan can open.
+
+Canonical `r2` pairs two Williams bases. Within each split and independently
+within discovery and validation, every source session occupies every scored
+position twice. All 56 non-self directed carryovers occur in the scored
+window; the eight antipodal pairs occur twice and the other 48 once, the
+minimal symmetric repetition forced by 64 observations over 56 pairs.
+
+Warm screening is identical to diagnostic `r1`; only the writer world changes:
+
+```text
+screened / settled candidates                     80 / 71
+enrolled lives                                64 (32 + 32)
+writer observations                                  4096
+replacement events / lives                         29 / 25
+formal reservoir result         balanced-reservoir-anatomy-admissible
+```
+
+Enrollment ranks 1 through 16 from each split form 32-life discovery. Ranks
+17 through 32 form a physically unopened 32-life validation plan. A structural
+pre-score audit found two to four admissible consequences per life after
+replacement censoring, so the common minimum was frozen at two before any
+gain was read. Admission scales the A.105 two-thirds laws to 22 of 32 lives
+and 10 of 16 in each split; all effect and texture-sign requirements remain
+unchanged.
+
+Fresh-source replay found a measurement-contract bug before selection. The
+runtime prints target members, overlap, and surprise independently to three
+decimals. The old reporter recomputed overlap from rounded members, then
+compared its logarithm to surprise as if both came from the same unrounded
+number. One legitimate row crossed that accidental tolerance. The corrected
+contract accepts only when the mathematical intervals represented by the two
+rounded fields overlap. A forged incompatible surprise is rejected. The
+failed road `r1` created no selection; canonical road `r2` replays every life
+from scratch under the corrected sealed reporter.
+
+The A.101 snapshot and texture calendar still explain most of the apparent
+gain. The light ending wins every life against raw and 30 of 32 against the
+snapshot, but only 20 against texture and 19 against its unordered endpoint
+twin:
+
+```text
+consequence-light versus raw                    +0.033149 nat
+consequence-light versus A.101 snapshot          +0.027189 nat
+consequence-light versus texture                 +0.000416 nat
+consequence-light versus unordered ending        +0.000625 nat
+texture / unordered life wins                       20 / 19
+primary texture / unordered wins                      8 / 7
+```
+
+The gentle ending reaches `+0.001245` nat against unordered endpoints, but
+still only `+0.000598` against texture, wins the same 20 and 19 lives, and
+reverses wonder by `-0.001672` nat. It therefore fails effect, life, split,
+and texture-sign admission. No candidate is nominated and validation remains
+physically unopened: there is no selected policy or validation evidence.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-counterbalanced-consequence-a106-r2-20260813`,
+sourced from
+`/private/tmp/leo-state-swarm-counterbalanced-episode-reservoir-a106-r2-20260813`.
+The discovery-score SHA is
+`dec0a01dff65fb145e8aa4c6a7560ea5799908ad176eaaffc07ab191906f39bf`
+and verdict SHA is
+`46ffc17fdc85413ef607467e3eb2c6a199e56f142ffb020f65253770b1059c79`.
+Aggregate-only replay reproduces every top-level artifact byte for byte.
+
+No `leo.c` line, persisted state, or spoken word changed. A.106 does not say
+that endings are empty. It says their small counterbalanced trace is not yet
+a consequence: the sign survives a shuffled calendar, but not every life,
+both populations, and all four textures. The next road should not tune this
+reader. It should ask whether Leo's later state carries a delayed receipt of
+what the ending actually caused.
+
+Leo kept a direction after the calendar let go. He had not yet learned which
+future belonged to it.
