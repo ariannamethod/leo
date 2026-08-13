@@ -8289,3 +8289,93 @@ episodes or state-sequence memory need their own untouched discovery source.
 
 Leo could feel which way the road moved. He did not pretend that motion was a
 destination.
+
+## Phase A.103 - an episode is not the mean of its moments (2026-08-13)
+
+A.102 found that one-step motion carries a small signal, but not enough to
+appoint a reader. A.103 asks a structurally different question: can a bounded
+history of Leo's earlier source states explain the error left by the frozen
+A.101 snapshot?
+
+No unused A.89 lives remained after the preceding road phases. Before this
+question was scored, a second population was therefore sealed from 80 new
+base seeds, beginning at `192643`, exactly one `1033` step after A.89's final
+seed. Warm anatomy admitted 64 lives, evenly split primary/holdout. Their 4096
+writer turns contained 28 replacement events in 24 lives, with no post-writer
+exclusion:
+
+```text
+enrolled lives                              64 (32 + 32)
+writer observations                                4096
+replacement events / lives                       28 / 24
+formal reservoir result       balanced-reservoir-anatomy-admissible
+```
+
+Discovery and validation membership was fixed only by warm enrollment rank,
+before any writer outcome was read. Ranks 1 through 6 from each split formed
+the twelve-life discovery cohort; ranks 7 through 11 formed a sealed ten-life
+validation plan.
+
+The matched snapshot is the exact A.101 rank-one law: cumulative memory,
+strength `0.25`. Each episode reader receives a decayed mean of only the
+source states preceding the current target and learns the remaining residual,
+`target - snapshot`, through a past-only Welford covariance. Six fixed
+horizon/strength pairs cover previous-state, short-episode, and long-episode
+contexts. Replacement erases both coordinate systems.
+
+The new population exposed a real boundary absent from the earlier cohorts.
+Immediately after a replacement, the newborn state's outgoing transition row
+can still be empty. Runtime then truthfully emits `has_prediction=0`. The
+reporter now accepts that row only when its entire raw prediction mass and all
+forecast fields are zero. It censors the unavailable target, while retaining
+the observed source as the first moment of the new episode. A synthetic
+contract reproduces this cold start and proves that neither the replacement
+nor the unavailable target is scored.
+
+The frozen snapshot itself transported to the new lives:
+
+```text
+snapshot versus raw CE gain                  +0.002451 nat
+```
+
+The episode readers did not add a second usable signal. `episode-short-light`
+was the most stable against snapshot, winning eight of twelve lives, but its
+increment was only `+0.000026` nat. Storm reversed, and no policy reached the
+predeclared raw or snapshot effect boundaries:
+
+```text
+episode-short-light versus raw               +0.002477 nat
+episode-short-light versus snapshot          +0.000026 nat
+snapshot life wins                                  8 / 12
+home                                          +0.004883 nat
+storm                                         -0.001290 nat
+wonder                                        +0.002488 nat
+social                                        +0.004048 nat
+formal result                     no-episode-memory-candidate
+```
+
+No candidate was nominated, so validation remained unopened: its plan exists,
+but no selected policy, validation lock, witness, score, or outcome does. The
+failed `r1` attempt is also preserved: the reservoir completed, then macOS
+`awk` rejected a local variable named `split` before any score aggregation.
+The canonical `r2` replay changed only that portable spelling, matched all
+source logs and final bodies byte for byte, and removed its temporary geometry
+binary during recovery.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-episode-memory-a103-r2-20260813`, sourced
+from `/private/tmp/leo-state-swarm-renewal-event-reservoir-a103-r1-20260813`.
+The discovery-score SHA is
+`a4679740ad2477f759b09e9829af22cd741d8392c4bfa9865da7e79932d12446`
+and verdict SHA is
+`6e7e0b5dd7672006e6296831e5a0bc71c6e4e13351029c7732c3dc66c2b0b192`.
+Aggregate-only replay reproduces all seven scored and decision artifacts byte
+for byte.
+
+No `leo.c` line, persisted state, or spoken word changed. These witnesses may
+not be recycled for a smaller strength, a different decay, or a storm-specific
+repair. The result does not say that Leo lacks episodes. It says that an
+episode cannot be recovered by averaging its moments and calling the average
+history.
+
+Leo remembered the moments. Their order had not yet become an experience.
