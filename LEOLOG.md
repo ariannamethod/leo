@@ -8213,3 +8213,79 @@ must begin on a newly frozen discovery population before it may approach the
 still-unopened validation lives.
 
 Leo remembered the road's mistake. One moment was not yet enough to explain it.
+
+## Phase A.102 - motion is evidence, not permission (2026-08-13)
+
+A.101 ended with a narrow temporal question: perhaps the error left by a
+current-state snapshot is explained by how Leo arrived there. A.102 tests that
+question without revisiting A.101's discovery lives and without weakening its
+admission boundary.
+
+The original A.89 temporary root had lost its receipts during later artifact
+cleanup, so it was rebuilt deterministically before any new cohort was chosen.
+All five sealed source hashes match the original A.89 receipts exactly. After
+subtracting every life consumed by A.94, A.96, and A.98, and preserving the
+ten-life validation roster inherited by A.100/A.101, exactly six enrolled lives
+remained unused: holdouts `h25` through `h30`. They became the complete A.102
+discovery population.
+
+The matched snapshot is frozen byte-for-law at A.101's strongest observation:
+`err-cumulative-gentle`, decay `1`, strength `0.25`. A sequence shadow receives
+only the eight-dimensional velocity `source[t] - source[t-1]`. It predicts the
+residual `target - snapshot`, not the raw road error, through an online
+past-only Welford covariance. Thus ordinary snapshot calibration cannot
+masquerade as sequence memory. A replacement censors the event, erases both
+coordinate systems, and withholds the first post-replacement turn until a new
+velocity exists.
+
+Six predeclared horizon/strength pairs received 15 completed transitions and
+48 scored turns per life. Motion was not empty. The gentlest cumulative reader
+improved on raw in all six lives and on the frozen snapshot in four:
+
+```text
+seq-cumulative-gentle
+raw CE gain                              +0.002590 nat
+raw Brier gain                           +0.000877
+snapshot CE gain                         +0.000585 nat
+snapshot Brier gain                      +0.000269
+snapshot versus raw                      +0.002006 nat
+```
+
+But it crossed neither the `0.005` raw nor the `0.002` snapshot CE boundary,
+and its home texture reversed. The lighter cumulative reader kept all four
+texture means positive but carried still less incremental evidence:
+
+```text
+seq-cumulative-light
+snapshot CE gain                         +0.000443 nat
+snapshot Brier gain                      +0.000163
+home                                      +0.001369 nat
+storm                                     +0.005870 nat
+wonder                                    +0.000963 nat
+social                                    +0.001590 nat
+formal result                 no-sequence-error-candidate
+```
+
+No candidate was nominated. The predeclared validation plan remains the only
+validation artifact; no lock, witness, score, or outcome was created. This
+result forbids a post-hoc smaller-strength or texture-specific sweep on
+`h25...h30`. One-step velocity is real evidence about Leo's road, but not yet
+permission to enter speech or persisted state.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-sequence-error-a102-r1-20260813`.
+The discovery-score SHA is
+`ab5f9d26cb9240ede134d36364d47b35b3e2cc023160f3f172112cdb7bde1174`
+and verdict SHA is
+`f6e907010818a85f29d0b584708daedff829dff1c1130b2965db2a9fe646d0bf`.
+Aggregate-only replay reproduces the scored and decision artifacts byte for
+byte. Synthetic contracts recover a sequence-only signal, reject a forged
+runtime probability, and prove that replacement leaves no false temporal
+edge.
+
+No `leo.c` line, state byte, or spoken word changed. The next temporal claim,
+if pursued, must be structurally different from another one-step retune:
+episodes or state-sequence memory need their own untouched discovery source.
+
+Leo could feel which way the road moved. He did not pretend that motion was a
+destination.
