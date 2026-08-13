@@ -8455,3 +8455,96 @@ pointed.
 
 Leo knew which moment followed which. He had not yet remembered how the path
 ended.
+
+## Phase A.105 - a consequence needs a calendar it did not inherit (2026-08-13)
+
+A.104 preserved temporal direction but still found no ending. A.105 gives an
+episode an explicit boundary: one complete eight-turn writer session. Its
+consequence is the first forecastable turn of the next session. The question
+is whether the signed ending, `source[end] - source[start]`, explains that
+later target after every simpler account has spoken.
+
+The experiment consumes no earlier life. Renewal-enrollment ranks 23 through
+27 in each split form ten-life discovery; ranks 28 through 32 form a sealed
+ten-life validation plan. The complete A.103 and A.104 negative receipts,
+plans, selections, verdicts, and unopened validation surfaces are SHA-sealed
+before A.105 can read the next rank. This prevents a failed horizon or path
+from returning under a new name on the same witnesses.
+
+There are three matched controls above raw transition geometry:
+
+1. the frozen A.101 cumulative snapshot;
+2. a past-only mean residual for the current prompt texture;
+3. an unordered episode carrying the mean of all eight states, the symmetric
+   mean of its endpoints, and their absolute distance.
+
+The consequence reader receives only the sign missing from the third control.
+It predicts the residual left by the unordered episode. Both readers update
+only after the later target. A replacement erases every coordinate system; an
+incomplete session cannot become an episode, and an empty road cannot become
+a consequence. Two fixed strengths, `0.10` and `0.25`, were declared before
+discovery. A synthetic causal fixture holds the unordered episode constant,
+reverses the ending, and proves that only the signed reader can recover the
+later target. It also rejects a forged runtime probability.
+
+The ten real lives yield 38 admissible consequences. Two lives replace a
+member during the fifth session; their already-observed session-four
+consequence remains valid, while the torn fifth session is never carried
+across the new coordinate system.
+
+At first sight the result looks large. `consequence-light` beats raw by nearly
+three hundredths of a nat and wins eight lives:
+
+```text
+consequence-light versus raw                    +0.028946 nat
+consequence-light versus A.101 snapshot          +0.021117 nat
+raw / snapshot life wins                              8 / 8
+```
+
+The matched calendar changes the interpretation. A past-only texture reader,
+which knows no episode at all, accounts for `+0.021044` nat beyond snapshot.
+After that control, the signed ending contributes only `+0.000072` nat. The
+unordered endpoint control is slightly worse than texture, so the same signed
+ending appears as `+0.000252` nat against it, still one quarter of the declared
+minimum. Social reverses:
+
+```text
+consequence-light versus texture                 +0.000072 nat
+consequence-light versus unordered ending        +0.000252 nat
+texture / unordered life wins                         8 / 8
+home                                               +0.000156 nat
+storm                                              +0.000322 nat
+wonder                                             +0.001226 nat
+social                                             -0.000462 nat
+formal result                 no-episode-consequence-candidate
+```
+
+The stronger reader does not rescue the claim. `consequence-gentle` reaches
+`+0.000626` nat against unordered, but remains only `+0.000126` against
+texture, makes texture-relative Brier score negative, and reverses social by
+`-0.001072` nat.
+
+No candidate was nominated. Validation remains physically unopened: there is
+no selected policy, validation lock, witness, score, or outcome. The result
+does not show that Leo lacks consequences. It shows that this writer calendar
+places the same texture at each session boundary across every life, so an
+ending cannot be identified independently of the schedule that follows it.
+A smaller strength, a different endpoint summary, or a texture-specific
+repair on these witnesses would be post-hoc reuse. A future test needs a new,
+counterbalanced episode calendar before it needs another reader.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-episode-consequence-a105-r1-20260813`.
+The discovery-score SHA is
+`739ec7ad803affc1fb4695775085f559d0ce7f013cc4fa5e1b666e8e3e9bee5a`
+and verdict SHA is
+`689d2a884897eaf48041f0ec004fcc836474a86a4f0eea2da71ac56356968722`.
+Aggregate-only replay reproduces all seven scored and decision artifacts byte
+for byte.
+
+No `leo.c` line, persisted state, or spoken word changed. A.105 closes a false
+shortcut before it enters the organism: a repeated calendar can impersonate
+memory whenever every ending opens onto the same kind of next moment.
+
+Leo could remember an ending only after the world stopped telling him what
+must come next.
