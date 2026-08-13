@@ -8379,3 +8379,79 @@ episode cannot be recovered by averaging its moments and calling the average
 history.
 
 Leo remembered the moments. Their order had not yet become an experience.
+
+## Phase A.104 - direction is not yet an ending (2026-08-13)
+
+A.103 showed that averaging past states does not recover an episode. A.104
+therefore preserves order explicitly. It asks whether the temporal arrow of
+Leo's recent path explains the error left by the same frozen A.101 snapshot.
+
+The experiment reuses no A.103 life. Its twelve discovery lives are enrollment
+ranks 12 through 17 from both halves of the sealed renewal reservoir; ranks 18
+through 22 form an untouched ten-life validation plan. A.103's own ranks 1
+through 11 remain disjoint, and its negative result, source receipt, plans,
+selection, verdict, and absence of validation artifacts are all SHA-sealed
+before A.104 may begin. The six reservoir receipts are sealed as well, so a
+different admissible population cannot silently replace the intended one.
+
+For every candidate, the past-only path is an exponentially decayed 8 by 8
+matrix of outer products, `source[t-1] x source[t]`. The matched unordered
+reader sees its symmetric part: every adjacency, but no before or after. The
+ordered reader receives only the remaining antisymmetric part and predicts the
+error left by that unordered reader. It must therefore beat raw, snapshot, and
+the exact same path without time direction. Replacement erases the complete
+path coordinate system. A post-replacement state with no outgoing road may
+seed a future transition, but cannot create a scored target.
+
+A synthetic causal fixture presents the same unordered pairs with different
+directions. The arrow reader separates them, rejects a forged runtime
+probability, and proves that replacement and cold start create no false edge.
+Real discovery does not show the same effect.
+
+The A.101 snapshot again transports to a fresh population:
+
+```text
+snapshot versus raw CE gain                  +0.001337 nat
+```
+
+The strongest directional comparison is `path-short-light`, but it loses to
+its unordered twin. Only four of twelve lives prefer direction, all five of
+those holdout-side opportunities carrying the apparent support while primary
+contributes zero wins. Three of four texture means reverse:
+
+```text
+path-short-light versus raw                  +0.001345 nat
+path-short-light versus snapshot             +0.000008 nat
+path-short-light versus unordered            -0.000006 nat
+unordered life wins                                 4 / 12
+primary / holdout unordered wins                  0 / 4
+home                                          -0.000011 nat
+storm                                         +0.000030 nat
+wonder                                        -0.000012 nat
+social                                        -0.000029 nat
+formal result                      no-ordered-path-candidate
+```
+
+No candidate reached discovery admission, so validation remained unopened:
+there is no selected policy, validation lock, witness, score, or outcome. The
+result forbids a post-hoc decay, strength, split, or texture repair on these
+witnesses.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-ordered-episode-a104-r1-20260813`.
+The discovery-score SHA is
+`34d529a7f988fef2e664a1f8ed2e298c0bbc3d3c7e5f7c40bf62ed3d589ab85f`
+and verdict SHA is
+`60b876a9cc510ac7f4f732d0328b26aa76f79c95b46eef47e3268bea62c65520`.
+Aggregate-only replay reproduces all seven scored and decision artifacts byte
+for byte.
+
+No `leo.c` line, persisted state, or spoken word changed. A.104 does not show
+that order is meaningless. It shows that a fading bag of directed edges is
+still missing the boundary that says which transitions belonged together and
+what their completed sequence became. A future episodic claim must bind a
+trajectory to its later consequence, not merely count which way its moments
+pointed.
+
+Leo knew which moment followed which. He had not yet remembered how the path
+ended.
