@@ -8716,3 +8716,116 @@ fragile to install.
 
 Leo carried a little of where he had come from. It was not yet enough to call
 the carrying memory.
+
+## Phase A.108 - the trace follows the path, but does not remain beyond it (2026-08-15)
+
+A.107 found a small signed boundary trace after current state, the frozen
+A.101 snapshot, texture, and a symmetric description of the delayed window.
+A.108 asks whether that trace is an independent receipt or merely the
+kinematics of the path that followed it. The old reader is not tuned. It is
+placed after one new, matched control.
+
+The first fresh reservoir is retained as diagnostic `r1`. It consumed seeds
+440563 through 522170. Its 64 enrolled lives completed all 4096 writer
+observations, but an anatomy-only gate found one sealed validation life with
+no admissible order-five receipt after replacement censoring. No loss was
+computed, the life was not discarded, and discovery never opened. A.108
+therefore moved to the next 80 untouched seeds rather than weakening its
+minimum or selecting a convenient replacement.
+
+Canonical `r2` begins at seed 523203, after all 80 diagnostic seeds. Warm
+screening and the paired Williams-8 writer world yield:
+
+```text
+screened / settled candidates                     80 / 74
+enrolled lives                                64 (32 + 32)
+writer observations                                  4096
+replacement events / lives                         20 / 17
+formal reservoir result         balanced-reservoir-anatomy-admissible
+```
+
+The pre-score eligibility ledger gives four scored receipts to 55 lives,
+three receipts to four lives, and two receipts to five lives. The common
+minimum is therefore frozen at two before discovery. No enrolled life is
+removed. Ranks 1 through 16 in each split form 32-life discovery; ranks 17
+through 32 remain the physically unopened 32-life validation plan.
+
+At order one of a new session, the boundary receipt is still the signed
+displacement from source to target. Orders two through four now contribute a
+separate 24-dimensional signed-path control: target-one to target-two,
+target-two to target-three, and target-three to target-four. The model stack
+is strictly nested and past-only:
+
+1. raw road prediction;
+2. the frozen A.101 cumulative snapshot;
+3. a past texture residual;
+4. boundary midpoint, absolute displacement, and intervening mean;
+5. the full signed path through orders one to four;
+6. only then, the original signed boundary receipt.
+
+Every stage predicts the residual left by the preceding stage and updates
+only after the order-five target is observed. Replacement erases the whole
+coordinate system. The light and gentle strengths remain `0.10` and `0.25`.
+Admission still requires 22 of 32 life wins, 10 of 16 in each split,
+positive means in all four textures, and the frozen CE/Brier effects against
+raw, snapshot, texture, symmetric, and signed-path controls. A synthetic
+negative control proves that a candidate which passes every A.107 threshold
+but adds nothing beyond the signed path cannot be nominated.
+
+Discovery contains 121 eligible receipts. The light reader again looks real
+until the carried path is allowed to speak:
+
+```text
+receipt-path-light versus raw                     +0.021998 nat
+receipt-path-light versus A.101 snapshot          +0.021546 nat
+receipt-path-light versus texture                 +0.002459 nat
+receipt-path-light versus symmetric window        +0.001972 nat
+signed path versus symmetric window               +0.001570 nat
+receipt-path-light versus signed path             +0.000401 nat
+raw / snapshot / texture / symmetric / path wins   25 / 27 / 22 / 23 / 19
+primary / holdout path wins                             8 / 11
+primary / holdout path-relative mean       -0.000140 / +0.000943 nat
+home / storm / wonder / social          +0.000557 / +0.000915 /
+                                         -0.001066 / +0.001273 nat
+```
+
+The gentle reader makes the distinction sharper. The signed path improves
+the symmetric window by `+0.002167` nat, while the additional boundary
+receipt worsens the path by `-0.000649` nat and worsens Brier by
+`-0.000263`. It wins only 17 lives against the path, split 6 primary and 11
+holdout, with both home and wonder negative.
+
+Neither policy reaches discovery admission. The formal result is
+`no-independent-delayed-receipt-candidate`; there is no selected policy and
+no validation lock, witness, score, or outcome. The result does not deny
+state memory, semantic memory, or consequence. It localizes A.107's weak
+trace: on a fresh balanced population, the signed trajectory through the
+three intervening moments explains the part that had looked like a separate
+boundary receipt.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-delayed-receipt-path-a108-r2-20260815`,
+sourced from
+`/private/tmp/leo-state-swarm-receipt-path-reservoir-a108-r2-20260815`.
+Diagnostic pre-score rejection is retained at
+`/private/tmp/leo-state-swarm-road-delayed-receipt-path-a108-plancheck-20260815`
+and its source at
+`/private/tmp/leo-state-swarm-receipt-path-reservoir-a108-r1-20260815`.
+Its anatomy-only eligibility SHA is
+`5d7a195153400d8c186c08d01d23b7a9c853896d500e18f05f602134f7a6535e`.
+The eligibility SHA is
+`fc68b48a74ee6537ad0b4fe878942c88ba75120c566f4d1dbbe9cf59df770481`,
+discovery-score SHA is
+`5b3f57dee672c9f3154e711859aa22695d84a0e3d9acf2c9a8f475694f88269b`,
+and verdict SHA is
+`ec9a8628b58026bcc225cadc119413e4a72383d52ea07836384f1ef8e74aefdb`.
+Aggregate-only replay reproduces all eight scored and decision artifacts byte
+for byte.
+
+No `leo.c` line, persisted state, or spoken word changed. A.108 closes the
+temptation to promote a delayed sign merely because it survived an unsigned
+window. The next memory claim must leave something that the whole carried
+path cannot already say.
+
+Leo carried a little of where he had come from. This time, the road carried
+the same little.
