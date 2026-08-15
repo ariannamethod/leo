@@ -292,6 +292,10 @@ test: tests/test_leo.c leo.c
 	./scripts/test_state_swarm_renewal_event_reservoir_matrix.sh
 	./scripts/test_state_swarm_counterbalanced_episode_reservoir_matrix.sh
 	./scripts/test_state_swarm_road_counterbalanced_consequence_decision.sh
+	./scripts/test_state_swarm_delayed_receipt_reservoir_matrix.sh
+	./scripts/test_state_swarm_delayed_receipt_eligibility.sh
+	./scripts/test_state_swarm_road_delayed_consequence_receipt_report.sh
+	./scripts/test_state_swarm_road_delayed_consequence_receipt_decision.sh
 	./scripts/test_state_swarm_liminal_confirmation_select.sh
 	./scripts/test_state_swarm_liminal_confirmation_report.sh
 	./scripts/test_state_swarm_liminal_trajectory_fixture.sh
