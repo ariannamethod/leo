@@ -1589,7 +1589,9 @@ typedef struct {
  * Each weight compresses a configuration already present in Flow, the body,
  * and the reply's RRPRAM-like rhythm. The transition field remembers which
  * configurations followed which; consequence channels are learned one turn
- * later. This entire organ is shadow-only: no sampler or speech path reads it. */
+ * later. This entire organ is shadow-only: no sampler or speech path reads it.
+ * A.111 keeps one refused surprise-plasticity law behind an explicit laboratory
+ * opt-in; ordinary Leo retains the A.79 update exactly. */
 #define LEO_STATE_SWARM_MAX          8
 #define LEO_STATE_RHYTHM_DIST       32
 #define LEO_STATE_RHYTHM_CLASSES     4
@@ -1599,6 +1601,7 @@ typedef struct {
 #define LEO_STATE_NOVELTY_GATE    0.55f
 #define LEO_STATE_REPLACE_GATE    0.40f
 #define LEO_STATE_ACTIVE_GATE     0.15f
+#define LEO_STATE_SURPRISE_PLASTICITY 0.25f
 
 enum {
     LEO_STATE_RHYTHM_FUNCTION = 0,
@@ -2943,6 +2946,7 @@ static int g_leo_wonder_redirection_on = 1; /* an explicitly named waiting sibli
 static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one reply's meaning vector. --no-wonder-return is the strict ablation. */
 static int g_leo_flow_on = 1;           /* passive temporal proprioception. --no-flow stops snapshots; no generation path reads them. */
 static int g_leo_state_swarm_on = 1;     /* A.79: learned state/sequence weights; observation only, no generation reader. */
+static int g_leo_state_transition_plasticity_on = 0; /* A.111 laboratory refusal: bounded road-miss plasticity is reproducible only by explicit opt-in. */
 static int g_leo_shadow_on = 1;         /* counterfactual next-turn proposals. --no-shadow keeps Flow but writes no receipts. */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
@@ -10481,10 +10485,27 @@ static void leo_state_update_field(LeoStateWeight *state,
     }
 }
 
+/* A.111: prediction error changes only how much the already-observed state
+ * organ learns. It cannot choose membership, prevent a birth, rescue a
+ * replacement, or reach speech. A perfect road leaves the A.79 EMA intact;
+ * a complete miss can add at most one quarter of that same local step. */
+static float leo_state_transition_plasticity(float overlap,
+                                             int has_prediction) {
+    if (!g_leo_state_transition_plasticity_on || !has_prediction ||
+        !isfinite(overlap))
+        return 1.0f;
+    float miss = 1.0f - clampf(overlap, 0.0f, 1.0f);
+    return 1.0f + LEO_STATE_SURPRISE_PLASTICITY * miss;
+}
+
 static void leo_state_weight_update(LeoStateWeight *state,
                                     const LeoStateWeight *observation,
-                                    float activation, uint64_t turn) {
-    float rate = 0.18f * activation * activation;
+                                    float activation, float plasticity,
+                                    uint64_t turn) {
+    if (!isfinite(plasticity)) plasticity = 1.0f;
+    plasticity = clampf(plasticity, 1.0f,
+                        1.0f + LEO_STATE_SURPRISE_PLASTICITY);
+    float rate = 0.18f * activation * activation * plasticity;
     if (rate <= 1e-5f) return;
     leo_state_update_vector(state->perceived, observation->perceived,
                             GLYPH_COUNT, rate);
@@ -10565,6 +10586,7 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
     LeoStateWeight observation;
     float similarity[LEO_STATE_SWARM_MAX] = {0};
     float activation[LEO_STATE_SWARM_MAX] = {0};
+    float plasticity = 1.0f;
     static const float clock_decay[LEO_STATE_CLOCKS] =
         {0.50f, 0.85f, 0.95f, 0.99f};
     LeoStateOrganReceipt *organ_receipt =
@@ -10654,9 +10676,29 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
             for (uint32_t i = 0; i < swarm->n; i++) activation[i] /= total;
     }
 
+    int adjacent = swarm->has_previous &&
+        swarm->previous_turn != UINT64_MAX &&
+        snapshot->turn == swarm->previous_turn + 1;
+    if (slot < 0 && adjacent) {
+        float overlap_mass = 0.0f;
+        float prediction_total = 0.0f;
+        for (uint32_t i = 0; i < swarm->n; i++)
+            for (uint32_t j = 0; j < swarm->n; j++) {
+                float edge = swarm->previous_activation[i] *
+                    swarm->transition[i][j];
+                overlap_mass += edge * activation[j];
+                prediction_total += edge;
+            }
+        if (prediction_total > 0.0f)
+            plasticity = leo_state_transition_plasticity(
+                overlap_mass / prediction_total, 1);
+    }
+
     for (uint32_t i = 0; i < swarm->n; i++) {
         if (slot < 0) leo_state_weight_update(&swarm->weights[i], &observation,
-                                              activation[i], snapshot->turn);
+                                              activation[i],
+                                              plasticity,
+                                              snapshot->turn);
         for (int c = 0; c < LEO_STATE_CLOCKS; c++)
             swarm->weights[i].clocks[c] = clampf(
                 swarm->weights[i].clocks[c] +
@@ -10678,9 +10720,6 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
         receipt.member_activation[i] = activation[i];
     }
 
-    int adjacent = swarm->has_previous &&
-        swarm->previous_turn != UINT64_MAX &&
-        snapshot->turn == swarm->previous_turn + 1;
     receipt.adjacent = adjacent ? 1 : 0;
     if (adjacent) {
         for (uint32_t i = 0; i < swarm->n; i++)
@@ -14416,6 +14455,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-wonder-return")) g_leo_wonder_return_on = 0;
         else if (!strcmp(argv[i], "--no-flow")) g_leo_flow_on = 0;
         else if (!strcmp(argv[i], "--no-state-swarm")) g_leo_state_swarm_on = 0;
+        else if (!strcmp(argv[i], "--state-transition-plasticity")) g_leo_state_transition_plasticity_on = 1;
+        else if (!strcmp(argv[i], "--no-state-transition-plasticity")) g_leo_state_transition_plasticity_on = 0;
         else if (!strcmp(argv[i], "--no-shadow")) g_leo_shadow_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;

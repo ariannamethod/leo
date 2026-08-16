@@ -68,12 +68,12 @@ static void trace_build_ordered(LeoLiminalTrace *trace) {
     trace->forward = trace->anchor;
     trace->reverse = trace->anchor;
     for (int i = 0; i < LEO_LIMINAL_TRACE_BUILD; i++)
-        leo_state_weight_update(&trace->forward, &trace->build[i], 1.0f,
+        leo_state_weight_update(&trace->forward, &trace->build[i], 1.0f, 1.0f,
                                 trace->anchor_turn + (uint64_t)i + 1);
     for (int i = 0; i < LEO_LIMINAL_TRACE_BUILD; i++)
         leo_state_weight_update(
             &trace->reverse,
-            &trace->build[LEO_LIMINAL_TRACE_BUILD - 1 - i], 1.0f,
+            &trace->build[LEO_LIMINAL_TRACE_BUILD - 1 - i], 1.0f, 1.0f,
             trace->anchor_turn + (uint64_t)i + 1);
 }
 

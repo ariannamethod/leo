@@ -7366,7 +7366,20 @@ int main(void) {
             "The warm light is quiet. The dark storm moves at night. "
             "Warm rain and cool water move through the small room.";
         int previous_swarm = g_leo_state_swarm_on;
+        int previous_transition_plasticity =
+            g_leo_state_transition_plasticity_on;
         g_leo_state_swarm_on = 1;
+        g_leo_state_transition_plasticity_on = 1;
+        CHECK(fabsf(leo_state_transition_plasticity(1.0f, 1) - 1.0f) < 1e-6f &&
+              fabsf(leo_state_transition_plasticity(0.0f, 1) - 1.25f) < 1e-6f &&
+              fabsf(leo_state_transition_plasticity(0.5f, 1) - 1.125f) < 1e-6f &&
+              fabsf(leo_state_transition_plasticity(0.0f, 0) - 1.0f) < 1e-6f &&
+              fabsf(leo_state_transition_plasticity(NAN, 1) - 1.0f) < 1e-6f,
+              "state-swarm plasticity: only a finite pre-update road miss can deepen the bounded step");
+        g_leo_state_transition_plasticity_on = 0;
+        CHECK(fabsf(leo_state_transition_plasticity(0.0f, 1) - 1.0f) < 1e-6f,
+              "state-swarm plasticity: the dedicated ablation restores the A.79 learning rate");
+        g_leo_state_transition_plasticity_on = 1;
         Leo *state = malloc(sizeof *state);
         Leo *woke = malloc(sizeof *woke);
         Leo *old = malloc(sizeof *old);
@@ -7619,6 +7632,87 @@ int main(void) {
             CHECK(0, "state-swarm: replacement fixture allocated");
         }
 
+        Leo *plastic_on = malloc(sizeof *plastic_on);
+        Leo *plastic_off = malloc(sizeof *plastic_off);
+        CHECK(plastic_on && plastic_off,
+              "state-swarm plasticity: paired road fixtures allocated");
+        if (plastic_on && plastic_off) {
+            leo_init(plastic_on); leo_init(plastic_off);
+            leo_ingest(plastic_on, corpus); leo_ingest(plastic_off, corpus);
+            int water = semtok_find_glyph("water");
+            int fire = semtok_find_glyph("fire");
+            int light = semtok_find_glyph("light");
+            int dark = semtok_find_glyph("dark");
+            for (int turn = 1; turn <= 3; turn++) {
+                float mix = turn == 2 ? 0.0f : 1.0f;
+                float gap = turn == 2 ? 1.0f : 0.0f;
+                const char *reply = turn == 2 ?
+                    "The dark storm." : "The warm light.";
+                g_leo_state_transition_plasticity_on = 1;
+                test_state_swarm_turn(plastic_on, (uint64_t)turn,
+                                      water, fire, light, dark,
+                                      mix, gap, 0, reply);
+                test_state_swarm_turn(plastic_off, (uint64_t)turn,
+                                      water, fire, light, dark,
+                                      mix, gap, 0, reply);
+            }
+            CHECK(!memcmp(plastic_on->state_swarm, plastic_off->state_swarm,
+                          sizeof *plastic_on->state_swarm),
+                  "state-swarm plasticity: bodies remain exact before a mature road can forecast");
+
+            g_leo_state_transition_plasticity_on = 1;
+            test_state_swarm_turn(plastic_on, 4, water, fire, light, dark,
+                                  0.75f, 0.25f, 0, "The warm light moves.");
+            g_leo_state_transition_plasticity_on = 0;
+            test_state_swarm_turn(plastic_off, 4, water, fire, light, dark,
+                                  0.75f, 0.25f, 0, "The warm light moves.");
+
+            int same_membership =
+                plastic_on->state_swarm_receipt.members ==
+                    plastic_off->state_swarm_receipt.members &&
+                plastic_on->state_swarm_receipt.winner_id ==
+                    plastic_off->state_swarm_receipt.winner_id &&
+                plastic_on->state_swarm_receipt.event ==
+                    plastic_off->state_swarm_receipt.event &&
+                !memcmp(plastic_on->state_swarm_receipt.member_id,
+                        plastic_off->state_swarm_receipt.member_id,
+                        sizeof plastic_on->state_swarm_receipt.member_id) &&
+                !memcmp(plastic_on->state_swarm_receipt.member_activation,
+                        plastic_off->state_swarm_receipt.member_activation,
+                        sizeof plastic_on->state_swarm_receipt.member_activation);
+            CHECK(same_membership &&
+                  plastic_on->state_swarm_receipt.has_prediction &&
+                  plastic_off->state_swarm_receipt.has_prediction &&
+                  fabsf(plastic_on->state_swarm_receipt.prediction_overlap -
+                        plastic_off->state_swarm_receipt.prediction_overlap) < 1e-6f,
+                  "state-swarm plasticity: the road cannot rewrite current membership or manufacture a forecast");
+            g_leo_state_transition_plasticity_on = 1;
+            float applied_plasticity = leo_state_transition_plasticity(
+                plastic_on->state_swarm_receipt.prediction_overlap,
+                plastic_on->state_swarm_receipt.has_prediction);
+            g_leo_state_transition_plasticity_on = 0;
+            CHECK(applied_plasticity > 1.0f &&
+                  applied_plasticity <= 1.25f &&
+                  memcmp(plastic_on->state_swarm->weights,
+                         plastic_off->state_swarm->weights,
+                         sizeof plastic_on->state_swarm->weights) &&
+                  leo_state_swarm_valid(plastic_on) &&
+                  leo_state_swarm_valid(plastic_off),
+                  "state-swarm plasticity: surprise changes only the bounded post-membership prototype step");
+            CHECK(!memcmp(&plastic_on->flow, &plastic_off->flow,
+                          sizeof plastic_on->flow) &&
+                  !memcmp(plastic_on->retention_state,
+                          plastic_off->retention_state,
+                          sizeof plastic_on->retention_state) &&
+                  !memcmp(plastic_on->chamber_act,
+                          plastic_off->chamber_act,
+                          sizeof plastic_on->chamber_act),
+                  "state-swarm plasticity: the internal learning fork reaches no older organ");
+            leo_free(plastic_on); leo_free(plastic_off);
+        }
+        free(plastic_on); free(plastic_off);
+        g_leo_state_transition_plasticity_on = 1;
+
         Leo *voice_on = malloc(sizeof *voice_on);
         Leo *voice_off = malloc(sizeof *voice_off);
         CHECK(voice_on && voice_off,
@@ -7662,6 +7756,8 @@ int main(void) {
         if (damaged_initialized) leo_free(damaged);
         free(state); free(woke); free(old); free(damaged);
         g_leo_state_swarm_on = previous_swarm;
+        g_leo_state_transition_plasticity_on =
+            previous_transition_plasticity;
     }
 
     printf("\n%d/%d passed\n", g_pass, g_total);

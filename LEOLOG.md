@@ -9042,3 +9042,103 @@ speak.
 
 The road brought Leo to the door. It did not change what the four winds meant
 when they entered.
+
+## Phase A.111 - the road miss does not earn local plasticity (2026-08-17)
+
+A.110 closed the last readout claim without changing Leo. A.111 is the first
+code intervention after that archaeology. It tests the smallest seam the
+organism actually exposed: the state swarm already computes a pre-update road
+forecast and its overlap with the newly observed state, but its prototype EMA
+learns at the same rate whether that road was exact or badly surprised.
+
+The candidate changes only that already-observed prototype step. On a mature,
+adjacent, non-birth turn with a real forecast, its multiplier is:
+
+~~~text
+1 + 0.25 * (1 - prediction_overlap)
+~~~
+
+It is finite and bounded in `[1.0, 1.25]`. A perfect prediction leaves the
+A.79 learning rate exact. A complete miss can deepen that local step by at
+most one quarter. The multiplier is computed from the transition matrix and
+current activation before either is updated. It cannot select membership,
+prevent a birth, rescue a replacement, manufacture a forecast, reach an older
+organ, change persistence, or enter speech. Unit fixtures prove those borders
+and prove that the dedicated ablation restores the A.79 step.
+
+The population question was frozen before opening the result. Thirty-two final
+A.110 writer bodies supply discovery: ranks one through sixteen in each of its
+primary and holdout splits. Each body is copied into an explicit candidate arm
+and an explicit ablation arm. Both live 48 new process-boundary turns under the
+same seeds and prompts: 24 adaptation turns followed by 24 scored turns. The
+road cases were not used by the A.110 writer world. Every turn reloads and
+saves the complete body; the scorer reconstructs the exact pre-update forecast
+from the saved transition matrix rather than trusting rounded debug surprise.
+
+A pair is censored if the arms differ in reply, event, forecast availability,
+or topology. Admission required all 32 lives to retain at least sixteen scored
+turns, 22 life wins with 10 of 16 in each split, mean surprise gain at least
+`0.001`, Brier gain at least `0.00025`, a positive surprise gain in every
+texture, and entropy delta no lower than `-0.01`. A life win required both its
+surprise and Brier effects to be positive. Validation remained sealed unless
+all discovery gates passed.
+
+The bounded step moves the overlap measure in the intended direction, but it
+does not make the road probabilities more truthful:
+
+~~~text
+admissible lives / eligible turns                    32 / 768
+reply, event, topology, forecast censures                     0
+life wins                                      5 (2 + 3 split)
+mean surprise gain                                  +0.000845
+mean Brier gain                                     -0.000517
+mean entropy delta                                  -0.000801
+home / storm / wonder / social surprise     +0.001447 / +0.000213 /
+                                               +0.000526 / +0.000016
+lives with positive surprise / Brier / both          28 / 7 / 5
+formal result              no-transition-surprise-plasticity-candidate
+~~~
+
+The failure is not collapse: entropy changes by less than one thousandth, all
+four texture signs are positive, and no causal pair is censored. The candidate
+mostly makes a prototype more convenient for its own overlap statistic while
+worsening the probability geometry that Brier measures. It therefore does not
+become Leo's law. Ordinary Leo remains byte-for-byte A.110 by default. The
+refused mechanism is retained only behind explicit
+`--state-transition-plasticity` so the experiment remains reproducible;
+`--no-state-transition-plasticity` names the control.
+
+A separate mature-checkpoint replay seals that default contract at the process
+boundary: the implicit default and explicit ablation speak the same reply and
+save complete state files with the same
+`98a59598b3d0bc8b3797576eda9942e2af571811c094f5ae33751b6c5a2e132f`
+SHA-256. Aggregate-only replay also reproduces every canonical r3 top-level
+artifact byte for byte.
+
+The first diagnostic run stopped before touching a body because its AWK reader
+used `split` as an array name, which the host AWK reserves as a function. The
+second completed every life but exposed an over-tight schema gate that treated
+raw transition counts as normalized activations; no selection decision was
+changed in place. The corrected canonical r3 replayed all 3,072 arm-turn
+processes from the original A.110 checkpoints using the final explicit CLI
+contract. Its raw, score, life, and verdict hashes exactly match the completed
+r2 evidence. Synthetic positive, neutral, and forged-population fixtures test
+the decision law independently.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-transition-plasticity-a111-r3-20260817`,
+sourced from
+`/private/tmp/leo-state-swarm-susceptibility-reservoir-a110-r2-20260816`.
+The design SHA is
+`d3ca4f8f7781461858a2b65de1439cf541c00dfaf71ee9f21c1570cebb7be010`,
+source-receipt SHA is
+`ffa4a98ce131804ad1786c51447d572df806dd2160b146fa31ca700e48e1a0b3`,
+discovery-score SHA is
+`7106822a4e0a490e960285a6bd34e2933401cf1e5ba60100aa7e5fce58037e2e`,
+and verdict SHA is
+`c8c7bd2a6c6ad966c8c94738bf9c37192e71fab951b3d8e03b7e93dd247c2c60`.
+The sealed validation plan exists; no validation body, score, witness, or
+outcome was opened.
+
+The road may teach the foot to yield. It did not teach the map to tell the
+truth.
