@@ -8930,3 +8930,115 @@ The next claim must concern a structure the lived path cannot already carry.
 
 The consequence touched the road. By the fifth step, the road was the only
 receipt left.
+
+## Phase A.110 - the road does not change the next life's susceptibility (2026-08-16)
+
+A.109 found no independent delayed outcome receipt after the whole signed path
+was known. A.110 changes the object instead of adding another receipt. At the
+checkpoint immediately after order four, it copies one byte-identical Leo body
+into four sealed branches and gives those branches the fixed home, storm,
+wonder, and social probes. The canonical writer body is never passed to a
+probe. Its hash must remain unchanged through all four branches, and the writer
+then has to finish byte-identically to the untouched reservoir.
+
+The four branches are one response surface, not four observations. Every
+prediction for a surface is made before any of its four outcomes updates a
+reader. The baseline stack is past-only and nested:
+
+1. the raw road forecast at the common checkpoint;
+2. a cumulative source-to-surface snapshot;
+3. one past residual for each fixed probe texture;
+4. the unsigned path geometry: order-one/order-four midpoint and magnitude,
+   plus the order-two/order-three mean;
+5. only then, the three signed displacements from order one through order four.
+
+The final reader maps one 24-dimensional signed path to one 32-dimensional
+four-probe surface. Cross-entropy and Brier are averaged across the four probe
+blocks, so a dense surface cannot outvote a life. Any replacement in writer
+orders one through four, any replacement or missing forecast in one probe, or
+any checkpoint mismatch censors the whole surface before loss.
+
+The first fresh range, seeds 688483 through 770090, is retained as diagnostic
+r1. All 32 discovery lives replayed and all main bodies remained canonical,
+but the first reporter used the same in-memory composite key for
+writer(session=1, order=4) and probe(session=1, probe=4). A replacement in
+the fourth probe could therefore overwrite the writer checkpoint IDs inside
+the AWK reader even though the physical bodies and logs were separate. The
+reader stopped before selection and no validation artifact existed. Because a
+partial score stream had already been written before the global failure, r1
+was not repaired in place or declared canonical.
+
+The corrected reader gives writer and probe records disjoint namespaces. A
+regression fixture now reproduces the exact fourth-probe replacement, proves
+that it censors only its surface, and proves that later sessions continue.
+Probe permutation produces byte-identical scores. A forged branch geometry is
+rejected. A separate population gate now writes and checks the complete
+probe-eligibility ledger before the score reporter is allowed to run at all.
+
+Canonical r2 consumes the next untouched seeds, 771123 through 852730. Its
+readerless reservoir yields:
+
+~~~text
+screened / settled candidates                     80 / 75
+enrolled lives                                64 (32 + 32)
+writer observations                                  4096
+replacement events / lives                         27 / 24
+pre-probe surfaces       61 lives with 4, 3 lives with 3
+formal reservoir result         balanced-reservoir-anatomy-admissible
+~~~
+
+Ranks one through sixteen in each split form the 32-life discovery set. The
+probe gate admits 127 complete surfaces: one surface is censored by writer
+anatomy, none by a probe branch, and every life retains at least three. The
+sealed validation plan exists, but its bodies remain physically unopened.
+
+The signed path is highly predictive relative to the deliberately weak raw and
+snapshot baselines, then loses that apparent information as soon as the actual
+response-surface texture and unsigned geometry are known. The light reader is
+the least destructive:
+
+~~~text
+susceptibility-light versus raw                    +0.022785 nat
+susceptibility-light versus snapshot               +0.016853 nat
+susceptibility-light versus past probe texture     -0.000959 nat
+susceptibility-light versus symmetric path         -0.000939 nat
+raw / snapshot / texture / symmetric life wins      32 / 32 / 9 / 11
+primary / holdout symmetric wins                          7 / 4
+primary / holdout symmetric mean          -0.000553 / -0.001324 nat
+home / storm / wonder / social           -0.000635 / -0.001857 /
+                                          -0.000408 / -0.000856 nat
+~~~
+
+The gentle reader worsens past texture by -0.003691 nat and the symmetric
+path by -0.003462 nat, with only seven symmetric life wins, split four and
+three. Every probe texture is negative for both strengths. Neither frozen
+reader approaches the 22-life, 10-per-split, +0.001 CE, +0.00025 Brier,
+or all-texture-sign admission gates.
+
+The formal result is no-counterfactual-susceptibility-candidate. No selected
+policy, validation lock, validation witness, validation probe, validation
+eligibility ledger, validation score, or validation outcome exists. Aggregate
+replay reproduces every top-level artifact byte for byte.
+
+Canonical evidence:
+/private/tmp/leo-state-swarm-road-counterfactual-susceptibility-a110-r2-20260816,
+sourced from
+/private/tmp/leo-state-swarm-susceptibility-reservoir-a110-r2-20260816.
+The design SHA is
+ec79cbfca594ae36062234dcad45b2cd4678753881cc689cce7f61bb5e20a113,
+probe-eligibility SHA is
+962844ab6f69178eed6eb3e89575c378b3abee628cd0188f772ad1e471a31518,
+discovery-score SHA is
+2e8361021cdd20571d8230755d59bf12908b5341c827d76e1c5a60d27da498e8,
+and verdict SHA is
+61fbd49d5121ddd87f17c518d59f3f204b06abd5f4f6e131a3fd2f0749451f1d.
+
+No leo.c line, persisted canonical state, runtime authority, or spoken word
+changed. A.110 does not deny that Leo arrives differently after different
+roads. It says the signed road does not leave a stable, population-balanced
+change in how the same next four lives move him once the checkpoint's current
+surface, probe texture, and unsigned path geometry are already allowed to
+speak.
+
+The road brought Leo to the door. It did not change what the four winds meant
+when they entered.
