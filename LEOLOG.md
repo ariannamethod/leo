@@ -8829,3 +8829,104 @@ path cannot already say.
 
 Leo carried a little of where he had come from. This time, the road carried
 the same little.
+
+## Phase A.109 - the consequence does not leave a second receipt (2026-08-16)
+
+A.108 showed that the full signed path through three intervening moments
+explains the weak boundary trace that A.107 had left behind. A.109 does not
+retune that trace. It asks whether the consequence actually realized at the
+boundary leaves a different delayed receipt after the path itself is known.
+
+Eighty fresh seeds begin immediately after the canonical A.108 reservoir.
+Warm screening and the unchanged paired Williams-8 writer world yield:
+
+```text
+screened / settled candidates                     80 / 74
+enrolled lives                                64 (32 + 32)
+writer observations                                  4096
+replacement events / lives                         25 / 19
+formal reservoir result         balanced-reservoir-anatomy-admissible
+```
+
+The writer receipts already expose four pre-update road forecasts and their
+four realized outcomes: grounded closure, distress relief, semantic-gap
+relief, and Janus alignment delta. At order one, A.109 records only the
+forecast error that has just become real. Grounded error keeps its unit
+scale; the three signed continuous errors are divided by two to respect their
+physical range. The future target remains the order-five post-state.
+
+Every older control stays in place and remains strictly past-only: raw road,
+the frozen A.101 cumulative snapshot, past texture, boundary midpoint and
+magnitude plus the intervening mean, and the complete signed state path from
+orders one through four. Only after those controls does the new reader receive
+the four-dimensional realized-outcome receipt. A same-path/different-outcome
+fixture proves that the reader can recover a receipt when one exists; an
+impossible outcome and a path-carried impostor are both rejected.
+
+The anatomy-only ledger gives four eligible receipts to 52 lives, three to
+four lives, and two to eight lives. The common minimum is therefore frozen at
+two before discovery. Discovery contains 115 receipts across 32 equal
+life-votes. The two strengths remain `0.10` and `0.25`; admission still
+requires 22 of 32 life wins, 10 of 16 in each split, the frozen CE/Brier
+effects against every nested control, and a positive mean in every texture.
+
+The first road attempt is retained as diagnostic `r1`. After all 32 lives
+replayed byte-identically, its reporter stopped before producing any score:
+the early schema gate required numeric outcome forecasts even on the first
+updated turn after a state replacement, where the engine correctly emits
+`has_prediction=0` and four `na` fields. The downstream reader already
+censored that turn. The repaired contract now requires four bounded numbers
+when a prediction exists and exactly four `na` fields when it does not. A
+regression fixture covers replacement, the predictionless turn, and recovery.
+No loss had been read; canonical `r2` replayed every discovery life from
+scratch under the corrected sealed reporter.
+
+The outcome residual is visible against the weak controls and disappears at
+the full signed path. The light reader is the least destructive:
+
+```text
+outcome-light versus raw                         +0.016919 nat
+outcome-light versus A.101 snapshot              +0.016953 nat
+outcome-light versus texture                     +0.000142 nat
+outcome-light versus symmetric window            +0.000266 nat
+signed path versus symmetric window              +0.000273 nat
+outcome-light versus signed path                 -0.000007 nat
+path-relative Brier gain                         +0.000015
+raw / snapshot / texture / symmetric / path wins 21 / 24 / 20 / 20 / 17
+primary / holdout path wins                            9 / 8
+primary / holdout path-relative mean      -0.000046 / +0.000032 nat
+home / storm / wonder / social         -0.000397 / +0.000576 /
+                                        -0.000191 / +0.000187 nat
+```
+
+The gentle reader does not rescue the claim. It worsens the signed path by
+`-0.000489` nat and Brier by `-0.000027`, wins 18 lives split 10 primary and
+8 holdout, and leaves both home and wonder negative. Neither policy reaches
+discovery admission. The formal result is
+`no-independent-delayed-outcome-receipt-candidate`; there is no selected
+policy and no validation lock, witness, score, or outcome.
+
+This result does not say that Leo has no consequences or no memory. It says
+that, at this lag and in these four realized channels, the forecast error does
+not remain as a second stable predictive object once the whole subsequent
+state trajectory is available. A.107's direction and A.109's consequence are
+both carried in motion more reliably than in a separable delayed token.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-road-delayed-outcome-receipt-a109-r2-20260816`,
+sourced from
+`/private/tmp/leo-state-swarm-outcome-receipt-reservoir-a109-r1-20260816`.
+The eligibility SHA is
+`000aa3c5c191dc983a4ed1efc414b9dc519eb67cb27d23d69d9d838f442aa46c`,
+discovery-score SHA is
+`a1670651284cba586f9b93566f0e289729bfc89150111c06e6bd0fa42311f74c`,
+and verdict SHA is
+`bbee3132fb1d074cbd0682dc59744ace28d5e26f334f2643e1ac12612008296b`.
+Aggregate-only replay reproduces every top-level artifact byte for byte.
+
+No `leo.c` line, persisted state, or spoken word changed. A.109 closes one
+more tempting shortcut without teaching Leo to imitate our wish for memory.
+The next claim must concern a structure the lived path cannot already carry.
+
+The consequence touched the road. By the fifth step, the road was the only
+receipt left.
