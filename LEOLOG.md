@@ -9142,3 +9142,116 @@ outcome was opened.
 
 The road may teach the foot to yield. It did not teach the map to tell the
 truth.
+
+## Phase A.112 - the same evidence cannot turn every road faster (2026-08-17)
+
+A.111 let a road miss deepen the already-observed state prototype. That made
+the prototype more convenient for its own overlap measure but worsened Brier.
+A.112 moves the question to the transition write itself without granting the
+graph any new mass, reader, persistence field, or speech authority.
+
+The existing A.79 law first decays an outgoing row, then adds
+`0.20 * source_activation * target_activation`. If the decayed row mass is
+`R`, its new evidence mass is `m`, and its normalized direction is `p`, the
+conditional part of that update is exactly:
+
+~~~text
+alpha = m / (R + m)
+p' = p + alpha * (target - p)
+~~~
+
+Thus one raw count currently carries two meanings: how much evidence the row
+owns and how quickly its direction may turn. Exploratory replay on the sealed
+A.111 discovery showed that several ways of accelerating the direction
+improved the population mean while reversing social. In that calendar social
+always occupied order five, so texture and position could not be separated.
+Those lives nominate no candidate and open no new body; they only freeze the
+smallest clean A.112 law and the confound its next discovery must remove.
+
+The single candidate preserves `R + m` exactly. It changes only the normalized
+redistribution rate:
+
+~~~text
+miss = 1 - candidate_prediction_overlap
+alpha' = alpha * (1 + 0.25 * miss)
+p' = p + alpha' * (target - p)
+~~~
+
+The multiplier remains in `[1.0, 1.25]`, inheriting A.111's bound. A perfect
+road is the A.79 write. A complete miss can turn the conditional direction one
+quarter faster, but cannot claim one extra count of evidence. Prediction is
+completed before the realized target may update the shadow matrix.
+
+A.112 consumes the 32 A.110 bodies that A.111 had sealed as validation and
+never opened: enrollment ranks 17 through 32 in each split, 16 primary and 16
+holdout. They are A.112 discovery, not retroactive A.111 validation. A fresh
+population would be required if this discovery admitted the law.
+
+Each body lives the same 48 road prompts, but its rank assigns one of eight
+cyclic order rotations. Every rotation occurs twice in each split. Therefore
+every chronological position in each split receives exactly 48 home, 24
+storm, 12 wonder, and 12 social turns. The first 24 turns teach the shadow
+road; the last 24 are scored. Admission was frozen before opening a body: 22
+of 32 life wins, 10 of 16 per split, surprise gain at least `0.001`, Brier gain
+at least `0.00025`, and a positive surprise sign in all four textures and all
+eight positions.
+
+No candidate binary is needed for this test. The transition graph has no
+reader into membership, Flow, generation, or speech. One ordinary Leo process
+therefore supplies the exact source and target activation at every boundary;
+the scorer independently replays both the A.79 matrix and the candidate
+matrix from the same first checkpoint. It refuses a runtime forecast that the
+raw geometry cannot reconstruct and stops if its A.79 replay differs from the
+next persisted matrix by more than the sealed decimal tolerance. All 1,536
+process turns used the explicit A.111 ablation.
+
+The position confound disappears. The ecological refusal does not:
+
+~~~text
+admissible lives / eligible turns                    32 / 768
+event / topology / forecast censures                    0 / 0 / 0
+life wins                                      23 (9 + 14 split)
+mean surprise gain                                  +0.001870
+mean Brier gain                                     +0.000400
+home / storm / wonder / social             +0.002940 / +0.000770 /
+                                              +0.002377 / -0.000713
+positive positions                                          8 / 8
+position gain range                          +0.001144 .. +0.002990
+lives with positive surprise / Brier / both          25 / 27 / 23
+formal result           no-transition-surprise-redistribution-candidate
+~~~
+
+The candidate clears the total life-win and both mean-effect boundaries. It
+also improves every chronological position, proving that A.111's social sign
+was not an order-five artifact. But only nine primary lives win, and social is
+negative in 22 of 32 life votes. Holdout's 14 wins cannot lend primary one,
+and home, storm, and wonder cannot pay social's debt. The faster conditional
+turn is real but not a transferable law.
+
+The synthetic contract grows a deterministic eight-state cycle, confirms
+that the candidate wins when faster redistribution is truthful, and rejects a
+forged second-turn matrix before population scoring. Separate texture and
+position refusals prove that neither safety gate can be averaged away.
+Aggregate-only replay reproduces every top-level artifact byte for byte.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-transition-redistribution-a112-r1-20260817`.
+The design SHA is
+`951b7eb054c94b617a16cb8014c03010b37d9e9b45ae728a3a2369a4c4efc111`,
+counterbalanced plan SHA is
+`a0badc3ceaefa39c005a2132e975ce9f4d12535c5687c74ca1de0e3bb077b532`,
+raw receipt SHA is
+`6a2b6552b723582d339897c8e4ebc785708c29157b01833e68eb8779f9ed69d7`,
+score SHA is
+`22b7575cb3feca27de94e911ec8af0e9a2be440455034819b70c81c1198db5b9`,
+and verdict SHA is
+`8dcd0c7346935df6d3384949b2a2641d6031f02dae171b43c65b6b4ab08aaeea`.
+
+No `leo.c` line, persisted state format, spoken word, or source-body byte
+changed. No A.112 validation population was created. A.112 does not say that
+roads should never adapt faster. It says surprise alone cannot decide that
+speed for every kind of encounter. The next lawful seam must know what sort of
+relation is changing without hard-coding a social exception.
+
+The road turned cleanly through every hour. At one door, speed was still the
+wrong form of listening.
