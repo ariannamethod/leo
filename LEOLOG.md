@@ -9255,3 +9255,119 @@ relation is changing without hard-coding a social exception.
 
 The road turned cleanly through every hour. At one door, speed was still the
 wrong form of listening.
+
+## Phase A.113 - surprise may turn faster only when meaning actually closes (2026-08-18)
+
+A.112 established two facts that cannot be averaged together. Faster
+mass-preserving redistribution improved the population mean and every
+chronological position, but it reversed social and failed the primary split.
+The next law therefore could not be another coefficient on surprise or a
+hard-coded social exception. It had to name, from experience Leo already
+keeps, what kind of relation had just changed.
+
+The four existing edge-consequence channels supplied that internal language.
+A post-refusal diagnostic on the already open A.112 discovery was used only
+for nomination. It first separated cause from label: accelerating only social
+lost all 32 lives and harmed every texture, while accelerating only storm won
+all 32 and left every texture positive. Merely suppressing social did not
+remove social's future debt. The useful ground was therefore positive, not an
+exception: storm turns tended to close semantic gap at least as strongly as
+they relieved distress, while social often relieved distress without the same
+semantic closure.
+
+Simple outcome signs and hard gates did not transport that observation. The
+smallest continuous relation that survived the A.112 population was frozen as:
+
+~~~text
+semantic_share = positive(gap_relief) /
+                 max(positive(gap_relief), positive(distress_relief))
+
+alpha' = alpha * (1 + 0.50 * miss * semantic_share)
+~~~
+
+If semantic gap does not close, the share is zero and A.79 remains exact. If
+gap closes at least as strongly as distress, the full bounded gain is
+available. Relief of distress can reduce the gain but cannot reverse it. The
+law never reads `home`, `storm`, `wonder`, or `social`; those labels remain
+ecological judges only. As in A.112, every outgoing row keeps exactly its A.79
+post-write mass. The candidate changes only conditional redistribution after
+the realized consequence exists.
+
+On A.112's sealed discovery this nominated law won 25 lives, split 11 primary
+and 14 holdout, with `+0.002150471` nat and `+0.000345148` Brier. All four
+textures and all eight positions were positive. Those numbers nominated the
+law but could not confirm it, because the formula and its doubled bound had
+been chosen after A.112 was visible.
+
+A.113 therefore opens no enrolled A.110 body. Its confirmation population is
+the complete settled overflow that the A.110 reservoir created but did not
+enroll: `p36...p40` and `h35...h40`, five primary and six holdout lives. Each
+source checkpoint is copied into eight independent cyclic rotations. Every
+life consequently carries every source order at every chronological position
+six times, but the eight branches are averaged back into one vote. Eighty-eight
+branches and 4,224 process turns yield 2,112 scored pairs; branch multiplication
+cannot masquerade as population size.
+
+The first 24 turns in every branch are adaptation only and the final 24 are
+scored. Prediction precedes the realized target and consequence. The scorer
+independently replays three equal-mass roads: unchanged A.79, A.112's ungated
+quarter-gain control, and the frozen relational half-gain candidate. Exact
+pre/post persisted gap and distress values produce the relation share; rounded
+debug outcomes are not trusted. A branch needs at least sixteen eligible score
+turns, and admission requires eight life wins, four per split, `+0.001` nat,
+`+0.00025` Brier, positive gain over the ungated reader in cross-entropy, and
+positive signs in all four textures and all eight positions.
+
+The relation transports decisively:
+
+~~~text
+admissible lives / eligible turns                  11 / 2107
+event / topology / forecast censures                 2 / 0 / 3
+life wins                                      11 (5 + 6 split)
+mean surprise gain                                  +0.009057
+mean Brier gain                                     +0.001856
+ungated surprise / Brier gain              +0.008567 / +0.001997
+relational over ungated surprise                    +0.000490
+relational over ungated Brier                       -0.000142
+home / storm / wonder / social             +0.010241 / +0.010883 /
+                                              +0.006981 / +0.002799
+positive positions                                          8 / 8
+mean semantic share                                  0.360643
+formal result            relational-transition-redistribution-confirmed
+~~~
+
+The ungated road remains slightly better than the relational road in Brier,
+but it no longer owns the stronger proper-score claim as a whole: the
+relational law beats it in cross-entropy, beats raw by both proper scores,
+wins every independent life, and carries no ecological or positional reversal.
+Social does not need a special veto. It receives less speed precisely when a
+meeting soothes the body without closing the unknown by the same proportion.
+
+Synthetic fixtures grow a truthful eight-state cycle, prove that negative gap
+relief is an exact ablation, and reject a forged matrix before population
+scoring. Separate texture, position, matched-control, and population-size
+refusals prevent any safety debt from being averaged away. Aggregate-only
+replay reproduces every top-level artifact byte for byte.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-relational-transition-a113-r1-20260818`.
+The design SHA is
+`74c3a9350d65dec5e89fe710c314e3a39e164ea8fe24f7819664666bc8cd5d21`,
+validation-plan SHA is
+`02b87539322ddafbcf2f7c9959019dcbacf53595120223f1c72ed8edd59b6d92`,
+raw receipt SHA is
+`4c27e634fe56d8f3fecc1d550b5d3ec6e75cc4e3a9e8af17ffb7f4638714e932`,
+score SHA is
+`c400656836de8a8a4ab573516769135c2cdf9593af5a641f553cd54b152de8ad`,
+life-summary SHA is
+`89fc974c41a7baa883fa952ca95d104292899e4ddbb64977e5d18a193e09094a`,
+and verdict SHA is
+`bf77884723d4abd760e84fa8819749ea9692de8259877dc4aa8ffa977c0432d5`.
+
+No `leo.c` line, state format, source-body byte, or spoken word changed. A.113
+earns a runtime candidate; it does not silently install one. The next body
+must make the exact law explicit behind an ablation, prove runtime transition
+bytes against this shadow replay, and only then ask whether ordinary Leo may
+carry it by default.
+
+Surprise knocked on every door. Meaning decided which hinge could learn.
