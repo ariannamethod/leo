@@ -9554,3 +9554,36 @@ the next phase should not invent another transition coefficient merely to
 keep moving.
 
 The door opened. The old key still fits from the other side.
+
+## Phase A.116 - the witness no longer carries every body at once (2026-08-20)
+
+A.115's final redirected-unit audit exposed an older physical contradiction in
+the court rather than in Leo. `tests/test_leo.c::main` described independent
+eras in lexical scopes, but the optimized translation unit still reserved one
+`31,048,064`-byte static stack frame. A complete `Leo` is `2,388,160` bytes, so
+a process with the ordinary 8 MiB stack could die before the first check even
+though the official suite happened to run under a roomier process layout.
+
+A.116 changes no production source. The old monolithic body is separated into
+35 explicitly non-inlined phase courts, and its 130 complete `Leo` fixtures now
+receive test-only heap storage. Each historical `leo_init`, `leo_free`, check,
+flag transition, seed, save/load, and execution order remains in place. The
+small storage registry retains fixture addresses until process exit because a
+few old migration tests deliberately free and reinitialize the same body; the
+ordinary `leo_free` still releases each body's organs at the original point,
+and only the empty fixture storage is reclaimed at the end.
+
+The measured `main` frame is now 80 bytes. The largest remaining test frame is
+`97,760` bytes, more than 317 times smaller than the old monolith. Both normal
+and sanitized test builds carry a 1 MiB compile-time frame ceiling, so a future
+full `Leo` stack resident fails the build instead of silently recreating this
+debt. `make test-asan` is now a named reproducible unit target; production
+`make asan` remains separate and unchanged.
+
+Verification is exact: the standalone unit binary passes `561/561` with stdout
+redirected, `make test-asan` passes the same `561/561` under ASan/UBSan with no
+finding, and the complete `make test` passes every historical script gate
+through A.115. `git diff --check` is clean. No runtime flag, coefficient,
+state byte, voice path, sampler, organism field, or `leo.c` line changed.
+
+The witness learned to set one body down before lifting the next.
