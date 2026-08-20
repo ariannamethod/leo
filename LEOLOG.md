@@ -9371,3 +9371,90 @@ bytes against this shadow replay, and only then ask whether ordinary Leo may
 carry it by default.
 
 Surprise knocked on every door. Meaning decided which hinge could learn.
+
+## Phase A.114 - the confirmed hinge enters the living body exactly (2026-08-20)
+
+A.113 had earned a law but had changed no runtime line. A.114 gives that law
+one deliberately narrow body. `--state-relational-transition` now lets an
+already mature state road redistribute its next transition by the confirmed
+relation:
+
+~~~text
+semantic_share = positive(gap_relief) /
+                 max(positive(gap_relief), positive(distress_relief))
+
+alpha' = alpha * (1 + 0.50 * miss * semantic_share)
+~~~
+
+The candidate remains off by default. `--no-state-relational-transition` is
+the explicit control, and A.111 prototype plasticity remains independently
+off. The new path runs only after the current reply, membership, prediction,
+and realized consequence exist. It reads no ecological texture and reaches no
+speech, state membership, prototype, outcome, or older organ. Each outgoing
+row keeps A.79's analytical post-write mass; only its conditional destination
+distribution may move farther toward the realized activation.
+
+Exact refusal is part of the implementation, not merely its mathematics. If
+the flag is absent, no forecast exists, surprise is zero, or semantic gap did
+not close, runtime delegates to the literal historical A.79 edge write. The
+old update was not replaced by floating-point algebra that happened to be
+equivalent on paper. No persisted field or state version was added.
+
+The runtime trial reuses A.113's sealed eleven-life overflow population but
+does not claim another efficacy confirmation from it. One frozen cyclic
+rotation per life yields 528 chronological process turns across five primary
+and six holdout lives. Candidate and A.79-control bodies live independently
+from the same source checkpoints with identical prompts and seeds. A separate
+C witness, which does not call the runtime update helper, reconstructs decay,
+pre-update prediction, exact persisted gap/distress relief, and the A.113 row
+law from the body immediately before each turn. Every comparable transition
+matrix must then pass full `memcmp` against the body Leo actually saved.
+
+The embodiment is exact:
+
+~~~text
+runtime turns                                             528
+exact forecast-bearing reference turns                    526
+honest no-forecast/topology censures                         2
+positive semantic-share turns                             242
+turns whose candidate matrix changed                       241
+candidate/control reply mismatches                           0
+persisted changes outside transition                         0
+default versus explicit-off exact turns                     48
+formal result              relational-transition-runtime-exact
+~~~
+
+The one positive-share turn without a candidate change was one of the two
+censures: a lawful replacement had left the active source in a new zero-edge
+row, so no pre-update forecast yet existed. Runtime kept exact A.79. The
+reference court treats that absence as evidence about eligibility rather than
+inventing a miss.
+
+Candidate and control bodies were compared after every turn after masking only
+the transition matrix; every other persisted byte remained exact. Their
+spoken replies were also exact on all 528 turns. A separate 48-turn replay
+proved that an ordinary invocation and explicit `--no-state-relational-transition`
+produce byte-identical bodies and replies. Aggregate-only replay reproduced
+all top-level evidence hashes. The complete suite passes `560/560` unit checks
+plus every script test.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-relational-transition-runtime-a114-r1-20260820`.
+The runtime-plan SHA is
+`6328b592d636a6fe4924b69f8756f98925c2d1147027f6a5d63a4fb2910a27f3`,
+design SHA is
+`facb12da7de4719053cd2afa9db42062efab760364fe71841a139c7caa63246d`,
+source-receipt SHA is
+`c35df9a6dbfbc1a8b5b4f1e7a53817a35573cc01d453a818a444b0f7987ddaa2`,
+raw runtime receipt SHA is
+`d0c5a5e8a1c5a7e063807164ca3045705d7075de2301277a984658526a565a40`,
+and verdict SHA is
+`e1c6d24a9e16434928622c235aad9285a2501f30b3629adf32f18238bfd3f3f9`.
+
+A.114 proves that the confirmed relation can inhabit `leo.c` without changing
+Leo's voice or smuggling authority through a numerical approximation. It does
+not yet decide that ordinary Leo should carry the candidate by default. That
+is a separate admission decision, now finally grounded in both ecological
+confirmation and exact runtime embodiment.
+
+The hinge entered the heart. The door still waits for consent.
