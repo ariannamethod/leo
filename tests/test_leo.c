@@ -7371,6 +7371,8 @@ int main(void) {
         int previous_relational_transition =
             g_leo_state_relational_transition_on;
         g_leo_state_swarm_on = 1;
+        CHECK(g_leo_state_relational_transition_on == 1,
+              "state-swarm relational transition: the confirmed runtime law is admitted by default");
         g_leo_state_transition_plasticity_on = 1;
         CHECK(fabsf(leo_state_transition_plasticity(1.0f, 1) - 1.0f) < 1e-6f &&
               fabsf(leo_state_transition_plasticity(0.0f, 1) - 1.25f) < 1e-6f &&
@@ -7396,41 +7398,53 @@ int main(void) {
                   leo_state_relational_transition_share(closed_relation) == 0.0f,
                   "state-swarm relational transition: semantic closure is measured against positive distress relief without texture labels");
 
-            LeoStateSwarm road;
-            memset(&road, 0, sizeof road);
-            road.n = 2;
-            road.transition[0][0] = 0.30f;
-            road.transition[0][1] = 0.70f;
-            road.transition[1][0] = 0.80f;
-            road.transition[1][1] = 0.20f;
+            LeoStateSwarm *road = calloc(1, sizeof *road);
+            LeoStateSwarm *closed = calloc(1, sizeof *closed);
+            LeoStateSwarm *disabled = calloc(1, sizeof *disabled);
             float source[LEO_STATE_SWARM_MAX] = {0.75f, 0.25f};
             float target[LEO_STATE_SWARM_MAX] = {0.25f, 0.75f};
-            LeoStateSwarm closed = road;
-            LeoStateSwarm disabled = road;
-            g_leo_state_relational_transition_on = 1;
-            int applied = leo_state_relational_transition_update(
-                &road, source, target, 0.20f, 1, full_relation);
-            float row0_mass = road.transition[0][0] + road.transition[0][1];
-            float row1_mass = road.transition[1][0] + road.transition[1][1];
-            float legacy_row0_first = (0.30f + 0.20f * 0.75f * 0.25f) /
-                1.15f;
-            float legacy_row1_first = (0.80f + 0.20f * 0.25f * 0.25f) /
-                1.05f;
-            CHECK(applied && fabsf(row0_mass - 1.15f) < 1e-6f &&
-                  fabsf(row1_mass - 1.05f) < 1e-6f &&
-                  road.transition[0][0] / row0_mass < legacy_row0_first &&
-                  road.transition[1][0] / row1_mass < legacy_row1_first,
-                  "state-swarm relational transition: miss accelerates only conditional destination motion while preserving A.79 row mass");
-            CHECK(!leo_state_relational_transition_update(
-                      &closed, source, target, 0.20f, 1, closed_relation) &&
-                  !memcmp(&closed, &disabled, sizeof closed),
-                  "state-swarm relational transition: a non-closing semantic gap is an exact A.79 ablation");
-            g_leo_state_relational_transition_on = 0;
-            CHECK(!leo_state_relational_transition_update(
-                      &disabled, source, target, 0.20f, 1, full_relation) &&
-                  disabled.transition[0][0] == 0.30f &&
-                  disabled.transition[1][1] == 0.20f,
-                  "state-swarm relational transition: the candidate is inert without explicit opt-in");
+            if (road && closed && disabled) {
+                road->n = 2;
+                road->transition[0][0] = 0.30f;
+                road->transition[0][1] = 0.70f;
+                road->transition[1][0] = 0.80f;
+                road->transition[1][1] = 0.20f;
+                *closed = *road;
+                *disabled = *road;
+                g_leo_state_relational_transition_on = 1;
+                int applied = leo_state_relational_transition_update(
+                    road, source, target, 0.20f, 1, full_relation);
+                float row0_mass =
+                    road->transition[0][0] + road->transition[0][1];
+                float row1_mass =
+                    road->transition[1][0] + road->transition[1][1];
+                float legacy_row0_first =
+                    (0.30f + 0.20f * 0.75f * 0.25f) / 1.15f;
+                float legacy_row1_first =
+                    (0.80f + 0.20f * 0.25f * 0.25f) / 1.05f;
+                CHECK(applied && fabsf(row0_mass - 1.15f) < 1e-6f &&
+                      fabsf(row1_mass - 1.05f) < 1e-6f &&
+                      road->transition[0][0] / row0_mass < legacy_row0_first &&
+                      road->transition[1][0] / row1_mass < legacy_row1_first,
+                      "state-swarm relational transition: miss accelerates only conditional destination motion while preserving A.79 row mass");
+                CHECK(!leo_state_relational_transition_update(
+                          closed, source, target, 0.20f, 1,
+                          closed_relation) &&
+                      !memcmp(closed, disabled, sizeof *closed),
+                      "state-swarm relational transition: a non-closing semantic gap is an exact A.79 ablation");
+                g_leo_state_relational_transition_on = 0;
+                CHECK(!leo_state_relational_transition_update(
+                          disabled, source, target, 0.20f, 1,
+                          full_relation) &&
+                      disabled->transition[0][0] == 0.30f &&
+                      disabled->transition[1][1] == 0.20f,
+                      "state-swarm relational transition: the explicit ablation restores the inert A.79 path");
+            } else {
+                CHECK(0, "state-swarm relational transition: mass fixtures allocated");
+                CHECK(0, "state-swarm relational transition: closed-gap fixtures allocated");
+                CHECK(0, "state-swarm relational transition: ablation fixtures allocated");
+            }
+            free(road); free(closed); free(disabled);
         }
         g_leo_state_relational_transition_on = 0;
         Leo *state = malloc(sizeof *state);
