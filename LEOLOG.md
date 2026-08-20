@@ -9587,3 +9587,82 @@ through A.115. `git diff --check` is clean. No runtime flag, coefficient,
 state byte, voice path, sampler, organism field, or `leo.c` line changed.
 
 The witness learned to set one body down before lifting the next.
+
+## Phase A.117 - the better road still cannot speak for its destination (2026-08-20)
+
+A.113-A.115 changed the learning law of Leo's silent transition road. The
+relational learner beat historical A.79 in every sealed overflow life, entered
+the runtime exactly, and became the reversible default. None of those phases
+gave the road reader or speech authority. A.117 returns to the question that
+A.95-A.98 left open: after learning better, does a source-conditioned road now
+predict the next soft state better than its own destination prior?
+
+No new life is opened and no efficacy vote is repeated. The court rereads the
+complete sealed A.113 raw receipt: 88 cyclic branches from eleven settled,
+non-enrolled overflow lives, five primary and six holdout. It independently
+reconstructs A.79 and relational matrices turn by turn. The first 24 legacy
+score columns reproduce A.113 byte for byte before the new court computes
+soft-target cross-entropy and Brier against each road's own matrix-derived
+destination prior. A branch still needs sixteen eligible turns, and eight
+rotations collapse back into one equal vote per life.
+
+Reader re-entry is only a nomination boundary. It requires eight of eleven
+life wins, four wins in each split, positive population and split means under
+both proper scores, positive cross-entropy gain in all four textures and all
+eight chronological positions, and continued improvement over A.79. Passing
+would not itself install a reader.
+
+The relational road is better than the historical road, but not yet better
+than forgetting where it started:
+
+~~~text
+sealed lives / branches / eligible turns             11 / 88 / 2107
+event / topology / forecast censures                       2 / 0 / 3
+candidate over A.79 life wins                                  11 / 11
+candidate over A.79 CE / Brier                    +0.005691 / +0.001856
+
+candidate over own destination prior
+  CE / Brier life wins                                         2 / 2
+  joint reader wins                                      1 (0 + 1 split)
+  equal-life CE / Brier gain                    -0.001393 / -0.000360
+  primary CE / Brier gain                     -0.001952 / -0.000538
+  holdout CE / Brier gain                     -0.000927 / -0.000212
+
+A.79 over own destination prior
+  equal-life CE / Brier gain                    -0.001937 / -0.000513
+
+positive textures                                                1 / 4
+positive chronological positions                                 0 / 8
+formal result                 relational-road-reader-reentry-refused
+~~~
+
+The pooled 2,107-turn witness agrees: relational CE/Brier gain over its prior
+is `-0.001390852 / -0.000360059`, while its gain over A.79 is
+`+0.005688342 / +0.001854289`. Storm is the lone positive texture; home,
+wonder, and social reverse. Every position from one through eight remains
+negative. This is not a contradiction in A.113. The relational consequence
+law substantially narrows A.79's prior gap and is a better learning rule, but
+source-conditioned differences still do not carry enough destination
+information to appoint a reader.
+
+Synthetic courts contain a genuinely conditional road that reaches nomination
+and a prior-dominated road that is refused. A forged life mean and a duplicate
+turn fail closed. Aggregate-only replay reproduces every top-level artifact
+byte for byte. No process is rerun, no coefficient is tuned after seeing the
+result, and no `leo.c`, state byte, sampler, generation path, or spoken word
+changes.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-relational-transition-reader-a117-r1-20260820`.
+The design SHA is
+`6e0aaa2bec449f1cf8473ccb96eab99f720cd39b977a8ffbafcffb2c1497485b`,
+source-lock SHA is
+`9d9af978192181b51f90cc91861cd3f6a784ba6157aef1e0daf6c2a603d00f7d`,
+reader-score SHA is
+`c10f7efa4d33c703f222c7d856ba06eaeca60aeefac111b577c778701b5c99e0`,
+life-summary SHA is
+`5d98dc37fe7869f915a899db0146e6c9ae202bc6ae3dbc448907e3bd9cc110be`,
+and verdict SHA is
+`f517b3c902ab44bb1766fd6c3595ee4386297107dc5d3895136176c80ae74fad`.
+
+The road learned from consequence. It still did not pretend to know the way.
