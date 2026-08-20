@@ -1,6 +1,7 @@
 CC      ?= cc
 CFLAGS  ?= -O2 -lm -Wall -Wextra
 SANED    = -O1 -g -fsanitize=address,undefined -lm -Wall -Wextra
+TEST_STACK_FLAGS = -Wframe-larger-than=1048576 -Werror=frame-larger-than
 
 # AML velocity bridge — build & link the family language so an .aml script can
 # drive Leo's breath (--aml). The language is vendored as SOURCE in ariannamethod/
@@ -288,7 +289,7 @@ deferred-wonder-comma-scope-life: leo
 
 # unit tests — test_leo.c #includes leo.c with LEO_NO_MAIN
 test: tests/test_leo.c leo.c
-	$(CC) -DLEO_NO_MAIN tests/test_leo.c $(CFLAGS) -o tests/test_leo
+	$(CC) -DLEO_NO_MAIN tests/test_leo.c $(CFLAGS) $(TEST_STACK_FLAGS) -o tests/test_leo
 	./tests/test_leo
 	./scripts/test_shadow_dialogue_report.sh
 	./scripts/test_prewonder_dialogue_report.sh
@@ -414,9 +415,14 @@ asan: leo.c
 	$(CC) leo.c $(SANED) -o leo.asan -lpthread
 	./leo.asan
 
+.PHONY: test-asan
+test-asan: tests/test_leo.c leo.c
+	$(CC) -DLEO_NO_MAIN tests/test_leo.c $(SANED) $(TEST_STACK_FLAGS) -o tests/test_leo.asan
+	./tests/test_leo.asan
+
 # thread sanitizer — the Chunk-4 async worker under a live --chat --async session
 tsan: leo.c
 	$(CC) leo.c -O1 -g -fsanitize=thread -lm -lpthread -Wall -Wextra -o leo.tsan
 
 clean:
-	rm -f leo leo.asan leo.tsan tests/test_leo *.state
+	rm -f leo leo.asan leo.tsan tests/test_leo tests/test_leo.asan *.state

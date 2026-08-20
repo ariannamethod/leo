@@ -9,11 +9,45 @@
 #include <assert.h>
 
 static int g_pass = 0, g_total = 0;
+#if defined(__GNUC__) || defined(__clang__)
+#define TEST_NOINLINE __attribute__((noinline))
+#else
+#define TEST_NOINLINE
+#endif
 #define CHECK(cond, name) do {                                  \
         g_total++;                                              \
         if (cond) { g_pass++; printf("  ok   %s\n", name); }    \
         else      { printf("  FAIL %s\n", name); }              \
     } while (0)
+
+static Leo *g_test_leo_storage[256];
+static size_t g_test_leo_storage_n;
+
+static Leo *test_leo_alloc(void) {
+    if (g_test_leo_storage_n >=
+        sizeof g_test_leo_storage / sizeof g_test_leo_storage[0]) {
+        fputs("test_leo: fixture storage registry exhausted\n", stderr);
+        exit(2);
+    }
+    Leo *leo = malloc(sizeof *leo);
+    if (!leo) {
+        fputs("test_leo: cannot allocate a fixture body\n", stderr);
+        exit(2);
+    }
+    g_test_leo_storage[g_test_leo_storage_n++] = leo;
+    return leo;
+}
+
+static void test_leo_delete(Leo *leo) {
+    if (!leo) return;
+    leo_free(leo);
+}
+
+static void test_leo_release_storage(void) {
+    for (size_t i = 0; i < g_test_leo_storage_n; i++)
+        free(g_test_leo_storage[i]);
+    g_test_leo_storage_n = 0;
+}
 
 /* walk callback: count successors */
 static int succ_cb(int dst, float count, void *ud) {
@@ -2565,21 +2599,18 @@ static void test_wonder_comma_scope(void) {
     free(out);
 }
 
-int main(void) {
-    printf("test_leo (step 0)\n");
-
+static TEST_NOINLINE void test_foundation(void) {
     /* 1. init state */
-    Leo leo;
-    leo_init(&leo);
-    CHECK(leo.bpe.vocab_size == 256, "init: vocab_size == 256");
-    CHECK(leo.bpe.n_merges == 0,     "init: n_merges == 0");
-    CHECK(leo.cooc.total_tokens == 0, "init: total_tokens == 0");
+    Leo *leo = test_leo_alloc(); leo_init(leo);
+    CHECK(leo->bpe.vocab_size == 256, "init: vocab_size == 256");
+    CHECK(leo->bpe.n_merges == 0,     "init: n_merges == 0");
+    CHECK(leo->cooc.total_tokens == 0, "init: total_tokens == 0");
     CHECK(g_leo_arc_on == 0, "voice recovery: random-fingerprint reply arc is opt-in");
     {
         float arc[LEO_RET_DIM];
-        memcpy(arc, leo.w_embed + (size_t)'a' * LEO_RET_DIM, sizeof arc);
+        memcpy(arc, leo->w_embed + (size_t)'a' * LEO_RET_DIM, sizeof arc);
         CandCollector cc; memset(&cc, 0, sizeof cc);
-        cc.leo = &leo; cc.arc = arc;
+        cc.leo = leo; cc.arc = arc;
         float off = leo_arc_bias(&cc, 'a');
         g_leo_arc_on = 1;
         float on = leo_arc_bias(&cc, 'a');
@@ -2592,12 +2623,12 @@ int main(void) {
     {
         const char *s = "hi leo";
         int ids[16];
-        int n = bpe_encode(&leo.bpe, (const uint8_t *)s, (int)strlen(s), ids, 16);
+        int n = bpe_encode(&leo->bpe, (const uint8_t *)s, (int)strlen(s), ids, 16);
         char rebuilt[32] = {0};
         int p = 0;
         for (int i = 0; i < n; i++) {
             char b[LEO_MAX_TOKEN_LEN + 1];
-            int l = bpe_decode_token(&leo.bpe, ids[i], b, sizeof(b));
+            int l = bpe_decode_token(&leo->bpe, ids[i], b, sizeof(b));
             memcpy(rebuilt + p, b, (size_t)l); p += l;
         }
         rebuilt[p] = 0;
@@ -2607,25 +2638,25 @@ int main(void) {
 
     /* 3. online merge learning: repetition births merges */
     {
-        leo_ingest(&leo, "the the the the the the the the");
-        CHECK(leo.bpe.n_merges > 0,    "ingest: merges learned from repetition");
-        CHECK(leo.bpe.vocab_size > 256, "ingest: vocab grew past 256 bytes");
-        CHECK(leo.cooc.n_entries > 0,  "ingest: cooc populated");
-        CHECK(leo.bigrams.n_entries > 0, "ingest: bigrams populated");
-        CHECK(leo.trigrams.n_entries > 0, "ingest: trigrams populated");
-        CHECK(leo.step == 31,          "ingest: step counts heard tokens (31 bytes, pre-merge)");
+        leo_ingest(leo, "the the the the the the the the");
+        CHECK(leo->bpe.n_merges > 0,    "ingest: merges learned from repetition");
+        CHECK(leo->bpe.vocab_size > 256, "ingest: vocab grew past 256 bytes");
+        CHECK(leo->cooc.n_entries > 0,  "ingest: cooc populated");
+        CHECK(leo->bigrams.n_entries > 0, "ingest: bigrams populated");
+        CHECK(leo->trigrams.n_entries > 0, "ingest: trigrams populated");
+        CHECK(leo->step == 31,          "ingest: step counts heard tokens (31 bytes, pre-merge)");
     }
 
     /* 4. encode after merges still roundtrips */
     {
         const char *s = "the";
         int ids[16];
-        int n = bpe_encode(&leo.bpe, (const uint8_t *)s, (int)strlen(s), ids, 16);
+        int n = bpe_encode(&leo->bpe, (const uint8_t *)s, (int)strlen(s), ids, 16);
         char rebuilt[32] = {0};
         int p = 0;
         for (int i = 0; i < n; i++) {
             char b[LEO_MAX_TOKEN_LEN + 1];
-            int l = bpe_decode_token(&leo.bpe, ids[i], b, sizeof(b));
+            int l = bpe_decode_token(&leo->bpe, ids[i], b, sizeof(b));
             memcpy(rebuilt + p, b, (size_t)l); p += l;
         }
         rebuilt[p] = 0;
@@ -2638,7 +2669,7 @@ int main(void) {
      * the end of the batch), so byte 't' is a live bigram source. */
     {
         int succ = 0;
-        bigram_walk_src(&leo.bigrams, (int)'t', succ_cb, &succ);
+        bigram_walk_src(&leo->bigrams, (int)'t', succ_cb, &succ);
         CHECK(succ > 0, "bigram_walk_src finds successors of byte 't'");
     }
 
@@ -2651,38 +2682,41 @@ int main(void) {
 
     /* 7. single-pair merge primitive (one-shot) works */
     {
-        Leo l2; leo_init(&l2);
-        for (int i = 0; i < 5; i++) bpe_count_pair(&l2.bpe, 'a', 'b');
-        int before = l2.bpe.n_merges;
-        int got = bpe_learn_merge(&l2.bpe);
-        CHECK(got == 1 && l2.bpe.n_merges == before + 1, "bpe_learn_merge promotes a hot pair");
-        leo_free(&l2);
+        Leo *l2 = test_leo_alloc(); leo_init(l2);
+        for (int i = 0; i < 5; i++) bpe_count_pair(&l2->bpe, 'a', 'b');
+        int before = l2->bpe.n_merges;
+        int got = bpe_learn_merge(&l2->bpe);
+        CHECK(got == 1 && l2->bpe.n_merges == before + 1, "bpe_learn_merge promotes a hot pair");
+        test_leo_delete(l2);
     }
 
     /* 8. decay shrinks counts, does not crash */
     {
-        int before = leo.cooc.n_entries;
-        cooc_decay(&leo.cooc, 0.5f);
-        bigram_decay(&leo.bigrams, 0.5f);
-        trigram_decay(&leo.trigrams, 0.5f);
-        CHECK(leo.cooc.n_entries == before, "decay keeps entry count (counts shrink in place)");
+        int before = leo->cooc.n_entries;
+        cooc_decay(&leo->cooc, 0.5f);
+        bigram_decay(&leo->bigrams, 0.5f);
+        trigram_decay(&leo->trigrams, 0.5f);
+        CHECK(leo->cooc.n_entries == before, "decay keeps entry count (counts shrink in place)");
     }
 
-    leo_free(&leo);
+    test_leo_delete(leo);
 
+}
+
+static TEST_NOINLINE void test_voice_field_and_persistence(void) {
     /* 9. generation (step 1): coherent shape + reproducibility */
     {
-        Leo l3; leo_init(&l3);
+        Leo *l3 = test_leo_alloc(); leo_init(l3);
         const char *mini =
             "Leo sat by the window. The rain was soft on the glass. "
             "He thinks about the sound. Leo likes the quiet house. "
             "The morning is warm. He remembers his mother. "
             "Leo walks slowly. The little book is open on the floor. ";
-        for (int r = 0; r < 8; r++) leo_ingest(&l3, mini);  /* merges + trigrams */
+        for (int r = 0; r < 8; r++) leo_ingest(l3, mini);  /* merges + trigrams */
 
         char a[1024], b[1024];
-        srand(7); int na = leo_generate(&l3, a, sizeof(a));
-        srand(7); int nb = leo_generate(&l3, b, sizeof(b));
+        srand(7); int na = leo_generate(l3, a, sizeof(a));
+        srand(7); int nb = leo_generate(l3, b, sizeof(b));
         CHECK(na > 0 && a[0] != 0, "generate: non-empty output");
         int L = (int)strlen(a);
         char last = L > 0 ? a[L - 1] : 0;
@@ -2691,19 +2725,22 @@ int main(void) {
         CHECK(nb > 0 && strcmp(a, b) == 0, "generate: reproducible under same seed");
 
         char ch[2048];
-        srand(11); int nc = leo_chain(&l3, 3, ch, sizeof(ch));
+        srand(11); int nc = leo_chain(l3, 3, ch, sizeof(ch));
         CHECK(nc > 0 && ch[0] != 0, "chain: multi-sentence non-empty");
-        leo_free(&l3);
+        test_leo_delete(l3);
     }
 
+}
+
+static TEST_NOINLINE void test_heard_and_chambers(void) {
     /* 10. heard-word memory: whole surface-words counted, independent of BPE */
     {
-        Leo l4; leo_init(&l4);
-        leo_ingest(&l4, "the mother sang. the mother smiled. a window in the rain.");
-        CHECK(leo_heard_count(&l4.heard, "mother") == 2, "heard: 'mother' counted twice");
-        CHECK(leo_heard_count(&l4.heard, "window") == 1, "heard: 'window' counted once");
-        CHECK(leo_heard_count(&l4.heard, "zxqwj")  == 0, "heard: unheard word is 0");
-        leo_free(&l4);
+        Leo *l4 = test_leo_alloc(); leo_init(l4);
+        leo_ingest(l4, "the mother sang. the mother smiled. a window in the rain.");
+        CHECK(leo_heard_count(&l4->heard, "mother") == 2, "heard: 'mother' counted twice");
+        CHECK(leo_heard_count(&l4->heard, "window") == 1, "heard: 'window' counted once");
+        CHECK(leo_heard_count(&l4->heard, "zxqwj")  == 0, "heard: unheard word is 0");
+        test_leo_delete(l4);
     }
 
     /* 11. chamber discrimination: a short function word must NOT spurious-match
@@ -2711,57 +2748,60 @@ int main(void) {
      *     every prompt before the fix). Exact and >=4 morphological matches
      *     still fire. feel_text memsets chamber_ext, so each call is isolated. */
     {
-        Leo l5; leo_init(&l5);
-        leo_field_chambers_feel_text(&l5, "the");
-        CHECK(l5.chamber_ext[LEO_CH_LOVE] == 0.0f, "chambers: 'the' does NOT light LOVE (no substring into 'mother')");
+        Leo *l5 = test_leo_alloc(); leo_init(l5);
+        leo_field_chambers_feel_text(l5, "the");
+        CHECK(l5->chamber_ext[LEO_CH_LOVE] == 0.0f, "chambers: 'the' does NOT light LOVE (no substring into 'mother')");
         int any = 0;
-        for (int i = 0; i < LEO_N_CHAMBERS; i++) if (l5.chamber_ext[i] != 0.0f) any = 1;
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) if (l5->chamber_ext[i] != 0.0f) any = 1;
         CHECK(!any, "chambers: 'the' lights no chamber (function word, no exact/>=4 match)");
 
-        leo_field_chambers_feel_text(&l5, "mother");
-        CHECK(l5.chamber_ext[LEO_CH_LOVE] > 0.0f, "chambers: 'mother' lights LOVE (exact anchor)");
+        leo_field_chambers_feel_text(l5, "mother");
+        CHECK(l5->chamber_ext[LEO_CH_LOVE] > 0.0f, "chambers: 'mother' lights LOVE (exact anchor)");
 
-        leo_field_chambers_feel_text(&l5, "dark");
-        CHECK(l5.chamber_ext[LEO_CH_FEAR] > 0.0f, "chambers: 'dark' lights FEAR (exact anchor)");
+        leo_field_chambers_feel_text(l5, "dark");
+        CHECK(l5->chamber_ext[LEO_CH_FEAR] > 0.0f, "chambers: 'dark' lights FEAR (exact anchor)");
 
-        leo_field_chambers_feel_text(&l5, "mothers");
-        CHECK(l5.chamber_ext[LEO_CH_LOVE] > 0.0f, "chambers: 'mothers' still lights LOVE (>=4 morphological substring)");
-        leo_free(&l5);
+        leo_field_chambers_feel_text(l5, "mothers");
+        CHECK(l5->chamber_ext[LEO_CH_LOVE] > 0.0f, "chambers: 'mothers' still lights LOVE (>=4 morphological substring)");
+        test_leo_delete(l5);
     }
 
     /* 12. breath: per-reply lexical decay + prune (continuity bundle, step 1) */
     {
-        Leo l6; leo_init(&l6);
-        leo_ingest(&l6, "the warm light. the warm light. the warm light.");
+        Leo *l6 = test_leo_alloc(); leo_init(l6);
+        leo_ingest(l6, "the warm light. the warm light. the warm light.");
         int s0 = -1, d0 = -1; float before = 0.0f;
-        for (int i = 0; i < l6.cooc.capacity; i++)
-            if (l6.cooc.entries[i].count > 0.0f) {
-                s0 = l6.cooc.entries[i].src; d0 = l6.cooc.entries[i].dst;
-                before = l6.cooc.entries[i].count; break;
+        for (int i = 0; i < l6->cooc.capacity; i++)
+            if (l6->cooc.entries[i].count > 0.0f) {
+                s0 = l6->cooc.entries[i].src; d0 = l6->cooc.entries[i].dst;
+                before = l6->cooc.entries[i].count; break;
             }
         CHECK(before > 0.0f, "breath: field has a live cooc entry");
-        leo_breath(&l6);
-        float after = cooc_get(&l6.cooc, s0, d0);
+        leo_breath(l6);
+        float after = cooc_get(&l6->cooc, s0, d0);
         CHECK(fabsf(after - before * LEO_LEX_DECAY_RATE) < 1e-4f,
               "breath: cooc count decays by exactly LEO_LEX_DECAY_RATE");
         /* prune: a sub-threshold entry drops, a strong one survives */
-        cooc_update(&l6.cooc, 9001, 9002, 0.05f);
-        cooc_prune_rebuild(&l6.cooc, LEO_LEX_PRUNE_THRESHOLD);
-        CHECK(cooc_get(&l6.cooc, 9001, 9002) == 0.0f, "breath: prune drops a sub-threshold entry");
-        CHECK(cooc_get(&l6.cooc, s0, d0) > 0.0f, "breath: prune keeps a strong entry");
+        cooc_update(&l6->cooc, 9001, 9002, 0.05f);
+        cooc_prune_rebuild(&l6->cooc, LEO_LEX_PRUNE_THRESHOLD);
+        CHECK(cooc_get(&l6->cooc, 9001, 9002) == 0.0f, "breath: prune drops a sub-threshold entry");
+        CHECK(cooc_get(&l6->cooc, s0, d0) > 0.0f, "breath: prune keeps a strong entry");
         /* flag off -> leo_respond leaves the field undecayed (alien prompt:
          * its ingest touches only its own token pairs, not (s0,d0)) */
         g_leo_breath_on = 0;
-        float pre = cooc_get(&l6.cooc, s0, d0);
+        float pre = cooc_get(&l6->cooc, s0, d0);
         char r[1024];
-        srand(5); leo_respond(&l6, "zuzu kex", r, sizeof r);
-        float post = cooc_get(&l6.cooc, s0, d0);
+        srand(5); leo_respond(l6, "zuzu kex", r, sizeof r);
+        float post = cooc_get(&l6->cooc, s0, d0);
         g_leo_breath_on = 1;
         CHECK(post == pre, "breath: --no-breath leaves cooc undecayed through respond");
-        leo_free(&l6);
+        test_leo_delete(l6);
     }
 
 
+}
+
+static TEST_NOINLINE void test_state_persistence(void) {
     /* 13. state persistence: save -> load round-trips the field (continuity
      *     bundle step 2). Compact serialization: every count + value is
      *     preserved exactly (the memory Leo carries forward); the voice
@@ -2775,50 +2815,50 @@ int main(void) {
             "The rain comes at night. Leo hears the rain on the window. "
             "He loves the rain and the warm light and his mother. "
             "The window is quiet. The night is quiet. Leo is small and warm.";
-        Leo a; leo_init(&a);
-        for (int r = 0; r < 4; r++) leo_ingest(&a, corpus);
-        leo_build_chamber_tags(&a);
-        leo_supertok_scan(&a);
+        Leo *a = test_leo_alloc(); leo_init(a);
+        for (int r = 0; r < 4; r++) leo_ingest(a, corpus);
+        leo_build_chamber_tags(a);
+        leo_supertok_scan(a);
 
         const char *tmp = "/tmp/leo_state_roundtrip.bin";
-        CHECK(leo_save_state(&a, tmp) == 1, "state: save returns 1");
+        CHECK(leo_save_state(a, tmp) == 1, "state: save returns 1");
 
-        Leo b; leo_init(&b);
-        CHECK(leo_load_state(&b, tmp) == 1, "state: load returns 1");
-        CHECK(b.bpe.vocab_size    == a.bpe.vocab_size,    "state: vocab_size round-trips");
-        CHECK(b.bpe.n_merges      == a.bpe.n_merges,      "state: n_merges round-trips");
-        CHECK(b.cooc.total_tokens == a.cooc.total_tokens, "state: total_tokens round-trips");
-        CHECK(b.cooc.n_entries    == a.cooc.n_entries,    "state: cooc entry count round-trips");
-        CHECK(b.bigrams.n_entries == a.bigrams.n_entries, "state: bigram count round-trips");
-        CHECK(b.trigrams.n_entries== a.trigrams.n_entries,"state: trigram count round-trips");
+        Leo *b = test_leo_alloc(); leo_init(b);
+        CHECK(leo_load_state(b, tmp) == 1, "state: load returns 1");
+        CHECK(b->bpe.vocab_size    == a->bpe.vocab_size,    "state: vocab_size round-trips");
+        CHECK(b->bpe.n_merges      == a->bpe.n_merges,      "state: n_merges round-trips");
+        CHECK(b->cooc.total_tokens == a->cooc.total_tokens, "state: total_tokens round-trips");
+        CHECK(b->cooc.n_entries    == a->cooc.n_entries,    "state: cooc entry count round-trips");
+        CHECK(b->bigrams.n_entries == a->bigrams.n_entries, "state: bigram count round-trips");
+        CHECK(b->trigrams.n_entries== a->trigrams.n_entries,"state: trigram count round-trips");
         /* exact value fidelity: every live cooc/bigram count reads back exactly */
         int cprobe = 0, cok = 0;
-        for (int i = 0; i < a.cooc.capacity && cprobe < 4000; i++) {
-            CoocEntry *e = &a.cooc.entries[i];
+        for (int i = 0; i < a->cooc.capacity && cprobe < 4000; i++) {
+            CoocEntry *e = &a->cooc.entries[i];
             if (e->count <= 0) continue;
-            cprobe++; if (cooc_get(&b.cooc, e->src, e->dst) == e->count) cok++;
+            cprobe++; if (cooc_get(&b->cooc, e->src, e->dst) == e->count) cok++;
         }
         CHECK(cprobe > 0 && cok == cprobe, "state: every sampled cooc value is exact");
         int bprobe = 0, bok = 0;
-        for (int i = 0; i < a.bigrams.capacity && bprobe < 4000; i++) {
-            BigramEntry *e = &a.bigrams.entries[i];
+        for (int i = 0; i < a->bigrams.capacity && bprobe < 4000; i++) {
+            BigramEntry *e = &a->bigrams.entries[i];
             if (e->count <= 0) continue;
-            bprobe++; if (bigram_get(&b.bigrams, e->src, e->dst) == e->count) bok++;
+            bprobe++; if (bigram_get(&b->bigrams, e->src, e->dst) == e->count) bok++;
         }
         CHECK(bprobe > 0 && bok == bprobe, "state: every sampled bigram value is exact");
-        CHECK(leo_heard_count(&b.heard,"warm")   == leo_heard_count(&a.heard,"warm"),
+        CHECK(leo_heard_count(&b->heard,"warm")   == leo_heard_count(&a->heard,"warm"),
               "state: heard memory ('warm') round-trips");
-        CHECK(leo_heard_count(&b.heard,"mother") == leo_heard_count(&a.heard,"mother"),
+        CHECK(leo_heard_count(&b->heard,"mother") == leo_heard_count(&a->heard,"mother"),
               "state: heard memory ('mother') round-trips");
         /* the voice survives load: a loaded organism speaks (not "...") */
         char rb[2048];
-        srand(99); leo_respond(&b, "the warm light", rb, sizeof rb);
+        srand(99); leo_respond(b, "the warm light", rb, sizeof rb);
         CHECK(rb[0] && strcmp(rb, "...") != 0, "state: loaded organism speaks");
         /* missing file -> clean failure, usable fresh Leo */
-        Leo c; leo_init(&c);
-        CHECK(leo_load_state(&c, "/tmp/leo_state_does_not_exist_xyz.bin") == 0,
+        Leo *c = test_leo_alloc(); leo_init(c);
+        CHECK(leo_load_state(c, "/tmp/leo_state_does_not_exist_xyz.bin") == 0,
               "state: missing file -> load returns 0");
-        leo_free(&a); leo_free(&b); leo_free(&c);
+        test_leo_delete(a); test_leo_delete(b); test_leo_delete(c);
     }
 
     /* 13b. corrupt state -> load REJECTS (Fable F-1/F-5 hardening). A bad id or a
@@ -2830,11 +2870,11 @@ int main(void) {
         const char *corpus =
             "The warm light fell on his mother's hands. Leo loves the warm light. "
             "His mother holds him close. The rain comes at night on the window.";
-        Leo a; leo_init(&a);
-        for (int r = 0; r < 4; r++) leo_ingest(&a, corpus);
-        leo_build_chamber_tags(&a); leo_supertok_scan(&a);
+        Leo *a = test_leo_alloc(); leo_init(a);
+        for (int r = 0; r < 4; r++) leo_ingest(a, corpus);
+        leo_build_chamber_tags(a); leo_supertok_scan(a);
         const char *good = "/tmp/leo_state_good.bin";
-        CHECK(leo_save_state(&a, good) == 1 && a.bpe.n_merges >= 1,
+        CHECK(leo_save_state(a, good) == 1 && a->bpe.n_merges >= 1,
               "corrupt: baseline save ok, >=1 merge");
 
         long sz = 0; unsigned char *buf = NULL;
@@ -2846,10 +2886,10 @@ int main(void) {
             fclose(rf);
         }
 
-        Leo b; leo_init(&b);
-        CHECK(buf != NULL && leo_load_state(&b, good) == 1,
+        Leo *b = test_leo_alloc(); leo_init(b);
+        CHECK(buf != NULL && leo_load_state(b, good) == 1,
               "corrupt: clean file still loads (return 1)");
-        leo_free(&b);
+        test_leo_delete(b);
 
         /* F-1: OOB merge new_id at head offset 28 -> reject */
         if (buf && sz > 32) {
@@ -2860,22 +2900,22 @@ int main(void) {
                 const char *bp = "/tmp/leo_state_bad_id.bin";
                 FILE *wf = fopen(bp, "wb");
                 if (wf) { size_t wn = fwrite(bad, 1, (size_t)sz, wf); (void)wn; fclose(wf); }
-                Leo c; leo_init(&c);
-                CHECK(leo_load_state(&c, bp) == 0, "corrupt F-1: OOB merge new_id -> load rejects");
-                leo_free(&c); free(bad);
+                Leo *c = test_leo_alloc(); leo_init(c);
+                CHECK(leo_load_state(c, bp) == 0, "corrupt F-1: OOB merge new_id -> load rejects");
+                test_leo_delete(c); free(bad);
             }
         }
 
         /* F-5: NaN gamma_gap -> reject. Robust field-poke, no byte offsets — the
          * v10 consolidation tail now sits AFTER gamma_gap, so "last 4 bytes" would
          * hit the fail-soft shard tail instead of the hard-reject float block. */
-        { Leo sv; leo_init(&sv);
-          if (leo_load_state(&sv, good) == 1) {
-              sv.gamma_gap = (float)NAN; leo_save_state(&sv, "/tmp/leo_state_bad_nan.bin");
-              Leo c; leo_init(&c);
-              CHECK(leo_load_state(&c, "/tmp/leo_state_bad_nan.bin") == 0, "corrupt F-5: NaN gamma_gap -> load rejects");
-              leo_free(&c); }
-          leo_free(&sv); }
+        { Leo *sv = test_leo_alloc(); leo_init(sv);
+          if (leo_load_state(sv, good) == 1) {
+              sv->gamma_gap = (float)NAN; leo_save_state(sv, "/tmp/leo_state_bad_nan.bin");
+              Leo *c = test_leo_alloc(); leo_init(c);
+              CHECK(leo_load_state(c, "/tmp/leo_state_bad_nan.bin") == 0, "corrupt F-5: NaN gamma_gap -> load rejects");
+              test_leo_delete(c); }
+          test_leo_delete(sv); }
 
         /* Codex: inflate vocab_size (offset 20 + 12*n_merges) past 256+n_merges -> reject */
         if (buf && sz > 20) {
@@ -2890,47 +2930,47 @@ int main(void) {
                     const char *bp = "/tmp/leo_state_bad_vocab.bin";
                     FILE *wf = fopen(bp, "wb");
                     if (wf) { size_t wn = fwrite(bad, 1, (size_t)sz, wf); (void)wn; fclose(wf); }
-                    Leo c; leo_init(&c);
-                    CHECK(leo_load_state(&c, bp) == 0, "corrupt (Codex): inflated vocab_size -> load rejects");
-                    leo_free(&c); free(bad);
+                    Leo *c = test_leo_alloc(); leo_init(c);
+                    CHECK(leo_load_state(c, bp) == 0, "corrupt (Codex): inflated vocab_size -> load rejects");
+                    test_leo_delete(c); free(bad);
                 }
             }
         }
 
         /* F-5 (Codex): NaN poked into freq / a spore / RAE weight -> save -> load rejects.
          * Robust (no byte offsets): save writes the field, load must reject it. */
-        { Leo sv; leo_init(&sv);
-          if (leo_load_state(&sv, good) == 1) {
-              sv.cooc.freq[0] = (float)NAN; leo_save_state(&sv, "/tmp/leo_nan_freq.bin");
-              Leo c; leo_init(&c);
-              CHECK(leo_load_state(&c, "/tmp/leo_nan_freq.bin") == 0, "corrupt (Codex): NaN in freq -> load rejects");
-              leo_free(&c); }
-          leo_free(&sv); }
-        { Leo sv; leo_init(&sv);
-          if (leo_load_state(&sv, good) == 1) {
-              sv.n_spores = 1; sv.spores[0].strength = (float)NAN; leo_save_state(&sv, "/tmp/leo_nan_spore.bin");
-              Leo c; leo_init(&c);
-              CHECK(leo_load_state(&c, "/tmp/leo_nan_spore.bin") == 0, "corrupt (Codex): NaN in spore -> load rejects");
-              leo_free(&c); }
-          leo_free(&sv); }
-        { Leo sv; leo_init(&sv);
-          if (leo_load_state(&sv, good) == 1) {
-              sv.rae.b2 = (float)NAN; leo_save_state(&sv, "/tmp/leo_nan_rae.bin");
-              Leo c; leo_init(&c);
-              CHECK(leo_load_state(&c, "/tmp/leo_nan_rae.bin") == 0, "corrupt (Codex): NaN in RAE weight -> load rejects");
-              leo_free(&c); }
-          leo_free(&sv); }
+        { Leo *sv = test_leo_alloc(); leo_init(sv);
+          if (leo_load_state(sv, good) == 1) {
+              sv->cooc.freq[0] = (float)NAN; leo_save_state(sv, "/tmp/leo_nan_freq.bin");
+              Leo *c = test_leo_alloc(); leo_init(c);
+              CHECK(leo_load_state(c, "/tmp/leo_nan_freq.bin") == 0, "corrupt (Codex): NaN in freq -> load rejects");
+              test_leo_delete(c); }
+          test_leo_delete(sv); }
+        { Leo *sv = test_leo_alloc(); leo_init(sv);
+          if (leo_load_state(sv, good) == 1) {
+              sv->n_spores = 1; sv->spores[0].strength = (float)NAN; leo_save_state(sv, "/tmp/leo_nan_spore.bin");
+              Leo *c = test_leo_alloc(); leo_init(c);
+              CHECK(leo_load_state(c, "/tmp/leo_nan_spore.bin") == 0, "corrupt (Codex): NaN in spore -> load rejects");
+              test_leo_delete(c); }
+          test_leo_delete(sv); }
+        { Leo *sv = test_leo_alloc(); leo_init(sv);
+          if (leo_load_state(sv, good) == 1) {
+              sv->rae.b2 = (float)NAN; leo_save_state(sv, "/tmp/leo_nan_rae.bin");
+              Leo *c = test_leo_alloc(); leo_init(c);
+              CHECK(leo_load_state(c, "/tmp/leo_nan_rae.bin") == 0, "corrupt (Codex): NaN in RAE weight -> load rejects");
+              test_leo_delete(c); }
+          test_leo_delete(sv); }
 
         /* #1 (Codex): a FAILED load must leave a FRESH leo, not a half-overwritten one.
          * leo_state_bad_nan.bin rejects LATE (valid until the final gamma_gap), so without
          * the wrapper the organism would keep the bad file's bpe/cooc prefix. */
-        { Leo sv; leo_init(&sv);
-          for (int r = 0; r < 4; r++) leo_ingest(&sv, corpus);   /* make it non-fresh (vocab > 256) */
-          int rej = (leo_load_state(&sv, "/tmp/leo_state_bad_nan.bin") == 0);
-          CHECK(rej && sv.bpe.vocab_size == 256 && sv.bpe.n_merges == 0 && sv.cooc.n_entries == 0,
+        { Leo *sv = test_leo_alloc(); leo_init(sv);
+          for (int r = 0; r < 4; r++) leo_ingest(sv, corpus);   /* make it non-fresh (vocab > 256) */
+          int rej = (leo_load_state(sv, "/tmp/leo_state_bad_nan.bin") == 0);
+          CHECK(rej && sv->bpe.vocab_size == 256 && sv->bpe.n_merges == 0 && sv->cooc.n_entries == 0,
                 "corrupt (Codex): failed load leaves a FRESH leo");
-          leo_free(&sv); }
-        free(buf); leo_free(&a);
+          test_leo_delete(sv); }
+        free(buf); test_leo_delete(a);
     }
 
     /* 13c. Fable F-2/F-5 hardening units: out-of-range candidate is gated; clampf
@@ -2939,10 +2979,10 @@ int main(void) {
         CHECK(clampf((float)NAN, 0.0f, 1.0f) == 0.0f, "F-5: clampf(NaN) -> lo");
         CHECK(clampf(5.0f, 0.0f, 1.0f) == 1.0f && clampf(-5.0f, 0.0f, 1.0f) == 0.0f &&
               clampf(0.5f, 0.0f, 1.0f) == 0.5f, "F-5: clampf finite unchanged");
-        Leo lg; leo_init(&lg);
-        for (int r = 0; r < 2; r++) leo_ingest(&lg, "the warm light and his mother");
-        CandCollector cc; memset(&cc, 0, sizeof cc); cc.bpe = &lg.bpe;
-        CHECK(cand_gate_reject(&cc, lg.bpe.vocab_size + 5) == 1 &&
+        Leo *lg = test_leo_alloc(); leo_init(lg);
+        for (int r = 0; r < 2; r++) leo_ingest(lg, "the warm light and his mother");
+        CandCollector cc; memset(&cc, 0, sizeof cc); cc.bpe = &lg->bpe;
+        CHECK(cand_gate_reject(&cc, lg->bpe.vocab_size + 5) == 1 &&
               cand_gate_reject(&cc, -1) == 1, "F-2: out-of-range candidate is gated");
         /* F-6: unnormalized powf overflows; cand_temper stays finite, max -> 1, order kept. */
         CHECK(!isfinite(powf(400.0f, 20.0f)), "F-6: raw powf(400,20) overflows to inf (the bug)");
@@ -2950,102 +2990,114 @@ int main(void) {
         cand_temper(tsc, 3, 20.0f);
         CHECK(isfinite(tsc[0]) && isfinite(tsc[1]) && isfinite(tsc[2]) && tsc[0] == 1.0f &&
               tsc[1] < tsc[0] && tsc[2] < tsc[1], "F-6: cand_temper finite, normalized (max->1, order kept)");
-        leo_free(&lg);
+        test_leo_delete(lg);
     }
 
     /* 13d. Damasio conatus: the not-knowing (gamma_gap) becomes a homeostatic debt —
      *      it accumulates across breaths, a taught word relieves it, and --no-conatus
      *      (g_leo_conatus_on=0) leaves debt inert (the byte-identical pre-conatus path). */
     {
-        Leo cv; leo_init(&cv);
-        for (int r = 0; r < 3; r++) leo_ingest(&cv, "the warm light and his mother and the rain");
+        Leo *cv = test_leo_alloc(); leo_init(cv);
+        for (int r = 0; r < 3; r++) leo_ingest(cv, "the warm light and his mother and the rain");
 
         /* conatus ON: a carried gap accumulates into debt across breaths */
         g_leo_conatus_on = 1;
-        cv.debt = 0.0f; cv.gamma_gap = 0.5f;   /* a real, standing not-knowing */
-        for (int t = 0; t < 5; t++) leo_conatus_debt(&cv);
-        CHECK(cv.debt > 0.0f, "conatus: a standing gamma_gap accumulates into debt");
+        cv->debt = 0.0f; cv->gamma_gap = 0.5f;   /* a real, standing not-knowing */
+        for (int t = 0; t < 5; t++) leo_conatus_debt(cv);
+        CHECK(cv->debt > 0.0f, "conatus: a standing gamma_gap accumulates into debt");
 
         /* a taught word relieves it — the first good-for-him event */
-        float before = cv.debt;
-        leo_school_learn(&cv, "serendipity", 5);
-        CHECK(cv.debt < before, "conatus: a taught word relieves the debt");
+        float before = cv->debt;
+        leo_school_learn(cv, "serendipity", 5);
+        CHECK(cv->debt < before, "conatus: a taught word relieves the debt");
 
         /* --no-conatus: debt only decays, never accumulates from the gap (inert) */
         g_leo_conatus_on = 0;
-        cv.debt = 0.0f; cv.gamma_gap = 0.5f;
-        for (int t = 0; t < 5; t++) leo_conatus_debt(&cv);
-        CHECK(cv.debt == 0.0f, "conatus: --no-conatus leaves debt inert (byte-identical path)");
+        cv->debt = 0.0f; cv->gamma_gap = 0.5f;
+        for (int t = 0; t < 5; t++) leo_conatus_debt(cv);
+        CHECK(cv->debt == 0.0f, "conatus: --no-conatus leaves debt inert (byte-identical path)");
         g_leo_conatus_on = 1;   /* restore default */
-        leo_free(&cv);
+        test_leo_delete(cv);
     }
 
+}
+
+static TEST_NOINLINE void test_spore_resurrection(void) {
     /* L-1 (Fable): the sea is a refuge — resurrect removes exactly one (swap-with-last), and a
      *      push afterwards lands in the visible window [0,n_sea). The old shift + stale sea_ptr
      *      wrote it OUTSIDE the resurrect scan, losing sleeping memory. */
     {
-        Leo sv; leo_init(&sv);
-        for (int i = 0; i < LEO_N_CHAMBERS; i++) sv.chamber_act[i]     = 0.5f;
-        for (int i = 0; i < LEO_RET_DIM; i++)    sv.retention_state[i] = 0.3f;
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) sv->chamber_act[i]     = 0.5f;
+        for (int i = 0; i < LEO_RET_DIM; i++)    sv->retention_state[i] = 0.3f;
         LeoSpore target; memset(&target, 0, sizeof target);
         for (int i = 0; i < LEO_N_CHAMBERS; i++) target.chamber_snap[i]   = 0.5f;   /* resonance 0.55+0.45 = 1.0 > 0.85 */
         for (int i = 0; i < LEO_RET_DIM; i++)    target.retention_slice[i] = 0.3f;
         target.strength = 1.0f; target.step = 1;
         LeoSpore inert; memset(&inert, 0, sizeof inert); inert.strength = 1.0f; inert.step = 2; /* zero snapshot -> resonance 0 */
-        sv.n_sea = 0; sv.sea_ptr = 0; sv.n_spores = 0;
-        leo_sea_push(&sv, &target);   /* sea[0] = the resonant one (NON-tail) */
-        leo_sea_push(&sv, &inert);
-        leo_sea_push(&sv, &inert);
-        leo_sea_push(&sv, &inert);    /* n_sea = 4 */
-        int r = leo_sea_try_resurrect(&sv);
-        CHECK(r == 1 && sv.n_sea == 3 && sv.n_spores == 1, "L-1: resurrect removes exactly one non-tail sea spore");
+        sv->n_sea = 0; sv->sea_ptr = 0; sv->n_spores = 0;
+        leo_sea_push(sv, &target);   /* sea[0] = the resonant one (NON-tail) */
+        leo_sea_push(sv, &inert);
+        leo_sea_push(sv, &inert);
+        leo_sea_push(sv, &inert);    /* n_sea = 4 */
+        int r = leo_sea_try_resurrect(sv);
+        CHECK(r == 1 && sv->n_sea == 3 && sv->n_spores == 1, "L-1: resurrect removes exactly one non-tail sea spore");
         LeoSpore fresh; memset(&fresh, 0, sizeof fresh);
         for (int i = 0; i < LEO_N_CHAMBERS; i++) fresh.chamber_snap[i]   = 0.5f;
         for (int i = 0; i < LEO_RET_DIM; i++)    fresh.retention_slice[i] = 0.3f;
         fresh.strength = 1.0f; fresh.step = 99;
-        int before = sv.n_sea;
-        leo_sea_push(&sv, &fresh);
-        CHECK(sv.n_sea == before + 1 && sv.sea[before].step == 99,
+        int before = sv->n_sea;
+        leo_sea_push(sv, &fresh);
+        CHECK(sv->n_sea == before + 1 && sv->sea[before].step == 99,
               "L-1: a push after resurrect lands in the visible window (no lost memory)");
-        leo_free(&sv);
+        test_leo_delete(sv);
     }
 
+}
+
+static TEST_NOINLINE void test_atomic_state(void) {
     /* L-2 (Fable): save is atomic (tmp + rename) — round-trips and leaves no .tmp behind; a failed
      *      save can never truncate the prior state (rename replaces only after a clean close). */
     {
-        Leo sv; leo_init(&sv);
-        for (int r = 0; r < 2; r++) leo_ingest(&sv, "the warm light and his mother");
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        for (int r = 0; r < 2; r++) leo_ingest(sv, "the warm light and his mother");
         const char *p = "/tmp/leo_l2_save.bin";
-        CHECK(leo_save_state(&sv, p) == 1, "L-2: atomic save returns 1");
-        Leo ld; leo_init(&ld);
-        CHECK(leo_load_state(&ld, p) == 1, "L-2: the atomically-saved state loads back");
+        CHECK(leo_save_state(sv, p) == 1, "L-2: atomic save returns 1");
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        CHECK(leo_load_state(ld, p) == 1, "L-2: the atomically-saved state loads back");
         FILE *tf = fopen("/tmp/leo_l2_save.bin.tmp", "rb");
         CHECK(tf == NULL, "L-2: no .tmp file left after a successful save");
         if (tf) fclose(tf);
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
     }
 
+}
+
+static TEST_NOINLINE void test_breath_retag(void) {
     /* L-3 (Fable): leo_breath re-tags emotion words after the vocab grows, so a word learned in
      *      --chat becomes felt — not frozen at startup. Simulate a stale tag + a grown vocab and
      *      confirm the breath restores the body's feel of that word. */
     {
-        Leo sv; leo_init(&sv);
-        for (int r = 0; r < 8; r++) leo_ingest(&sv, "i am afraid in the dark and alone afraid dark alone the dark is afraid and i hide alone");
-        leo_build_chamber_tags(&sv);
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        for (int r = 0; r < 8; r++) leo_ingest(sv, "i am afraid in the dark and alone afraid dark alone the dark is afraid and i hide alone");
+        leo_build_chamber_tags(sv);
         int emo = -1;
-        for (int id = 0; id < sv.bpe.vocab_size; id++)
-            if (sv.chamber_tag[id] != 0xFF) { emo = id; break; }
+        for (int id = 0; id < sv->bpe.vocab_size; id++)
+            if (sv->chamber_tag[id] != 0xFF) { emo = id; break; }
         CHECK(emo >= 0, "L-3: build tagged at least one emotion word");
-        uint8_t real = sv.chamber_tag[emo];
-        sv.chamber_tag[emo] = 0xFF;                 /* pretend it is a freshly-learned, untagged token */
-        sv.tagged_vocab = sv.bpe.vocab_size - 1;    /* pretend the vocab just grew past the last rebuild */
-        sv.retag_tick = LEO_RETAG_INTERVAL - 1;     /* the next breath crosses the throttle */
-        leo_breath(&sv);
-        CHECK(sv.chamber_tag[emo] == real && sv.tagged_vocab == sv.bpe.vocab_size,
+        uint8_t real = sv->chamber_tag[emo];
+        sv->chamber_tag[emo] = 0xFF;                 /* pretend it is a freshly-learned, untagged token */
+        sv->tagged_vocab = sv->bpe.vocab_size - 1;    /* pretend the vocab just grew past the last rebuild */
+        sv->retag_tick = LEO_RETAG_INTERVAL - 1;     /* the next breath crosses the throttle */
+        leo_breath(sv);
+        CHECK(sv->chamber_tag[emo] == real && sv->tagged_vocab == sv->bpe.vocab_size,
               "L-3: a breath re-tags the body after the vocab grows (a --chat-learned word is felt)");
-        leo_free(&sv);
+        test_leo_delete(sv);
     }
 
+}
+
+static TEST_NOINLINE void test_multiturn_presence(void) {
     /* 14. multi-turn continuity (the --chat engine path): the field LIVES across
      *     turns. Repeating a word makes Leo HOLD it (heard-count climbs past the
      *     trace threshold), and step advances each turn — the dedication's
@@ -3055,27 +3107,27 @@ int main(void) {
             "The warm light. His mother holds him. The rain at night. "
             "Leo loves the warm light and his mother and the rain. "
             "The window is quiet. Leo is small and warm and close.";
-        Leo l; leo_init(&l);
-        for (int r = 0; r < 3; r++) leo_ingest(&l, corpus);
-        leo_build_chamber_tags(&l);
-        leo_supertok_scan(&l);
+        Leo *l = test_leo_alloc(); leo_init(l);
+        for (int r = 0; r < 3; r++) leo_ingest(l, corpus);
+        leo_build_chamber_tags(l);
+        leo_supertok_scan(l);
         /* "dragon" is NOT in the corpus — Leo has never held it */
-        CHECK(leo_heard_count(&l.heard, "dragon") == 0, "multiturn: 'dragon' unheld before chat");
+        CHECK(leo_heard_count(&l->heard, "dragon") == 0, "multiturn: 'dragon' unheld before chat");
         char reply[2048];
-        long step0 = l.step;
+        long step0 = l->step;
         srand(7);
-        leo_respond(&l, "tell me about the dragon", reply, sizeof reply);
-        int h1 = leo_heard_count(&l.heard, "dragon");
-        long step1 = l.step;
-        leo_respond(&l, "the dragon is big", reply, sizeof reply);
-        int h2 = leo_heard_count(&l.heard, "dragon");
-        leo_respond(&l, "do you fear the dragon", reply, sizeof reply);
-        int h3 = leo_heard_count(&l.heard, "dragon");
-        long step3 = l.step;
+        leo_respond(l, "tell me about the dragon", reply, sizeof reply);
+        int h1 = leo_heard_count(&l->heard, "dragon");
+        long step1 = l->step;
+        leo_respond(l, "the dragon is big", reply, sizeof reply);
+        int h2 = leo_heard_count(&l->heard, "dragon");
+        leo_respond(l, "do you fear the dragon", reply, sizeof reply);
+        int h3 = leo_heard_count(&l->heard, "dragon");
+        long step3 = l->step;
         CHECK(h1 == 1 && h2 == 2 && h3 == 3, "multiturn: 'dragon' heard-count climbs 1->2->3");
         CHECK(h3 >= LEO_HEARD_MIN_TRACE, "multiturn: 'dragon' becomes HELD (>= trace threshold)");
         CHECK(step1 > step0 && step3 > step1, "multiturn: step advances each turn (field lives on)");
-        leo_free(&l);
+        test_leo_delete(l);
     }
 
     /* 15. П-2: gravity-first admission lets a continuation OPEN on a theme seed
@@ -3092,34 +3144,34 @@ int main(void) {
             fseek(cf, 0, SEEK_END); long cn = ftell(cf); fseek(cf, 0, SEEK_SET);
             char *cbuf = malloc((size_t)cn + 1);
             size_t cgot = fread(cbuf, 1, (size_t)cn, cf); cbuf[cgot] = 0; fclose(cf);
-            Leo l; leo_init(&l);
-            leo_ingest(&l, cbuf); free(cbuf);
+            Leo *l = test_leo_alloc(); leo_init(l);
+            leo_ingest(l, cbuf); free(cbuf);
             int theme = -1;
-            for (int id = 256; id < l.bpe.vocab_size; id++) {
-                if (!is_clean_seed_token(&l.bpe, id)) continue;
-                float f = l.cooc.freq[id];
+            for (int id = 256; id < l->bpe.vocab_size; id++) {
+                if (!is_clean_seed_token(&l->bpe, id)) continue;
+                float f = l->cooc.freq[id];
                 if (f < 2.0f || f > 5.0f) continue;
                 int rank = 1;
-                for (int i = 0; i < l.bpe.vocab_size; i++)
-                    if (is_clean_seed_token(&l.bpe, i) && l.cooc.freq[i] > f) rank++;
+                for (int i = 0; i < l->bpe.vocab_size; i++)
+                    if (is_clean_seed_token(&l->bpe, i) && l->cooc.freq[i] > f) rank++;
                 if (rank > LEO_SEED_CANDS) { theme = id; break; }
             }
             CHECK(theme >= 0, "П-2: found a clean seed ranked past the 64-slot pool");
-            float *g = calloc((size_t)l.cooc.freq_size, sizeof(float));
-            l.gravity = g;
+            float *g = calloc((size_t)l->cooc.freq_size, sizeof(float));
+            l->gravity = g;
             g[theme] = 100.0f;   /* high enough that admission shows in sampling */
             g_leo_cont_theme_on = 1;
             int seen_on = 0;
             LeoRng trng = {0,1};   /* F-3: wraps rand() (byte-id) — srand(s) still drives the stream */
-            for (int s = 0; s < 400 && !seen_on; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0, &trng) == theme) seen_on = 1; }
+            for (int s = 0; s < 400 && !seen_on; s++) { srand(s); if (leo_choose_continuation(l, NULL, 0, &trng) == theme) seen_on = 1; }
             CHECK(seen_on == 1, "П-2: gravity-first ON -> excluded-rank theme seed is ADMITTED");
             g_leo_cont_theme_on = 0;
             int seen_off = 0;
-            for (int s = 0; s < 400; s++) { srand(s); if (leo_choose_continuation(&l, NULL, 0, &trng) == theme) seen_off = 1; }
+            for (int s = 0; s < 400; s++) { srand(s); if (leo_choose_continuation(l, NULL, 0, &trng) == theme) seen_off = 1; }
             CHECK(seen_off == 0, "П-2: --no-cont-theme -> freq-only pool EXCLUDES it (flag gates the fix)");
             g_leo_cont_theme_on = 1;
-            l.gravity = NULL; free(g);
-            leo_free(&l);
+            l->gravity = NULL; free(g);
+            test_leo_delete(l);
         }
     }
 
@@ -3131,18 +3183,18 @@ int main(void) {
         CHECK(leo_anchor_morph("fearful", "fear")   == 1, "П-5: 'fearful' matches 'fear'");
         CHECK(leo_anchor_morph("ream",    "scream") == 0, "П-5: 'ream' does NOT match 'scream' (fragment FP killed)");
         CHECK(leo_anchor_morph("lover",   "over")   == 0, "П-5: 'lover' does NOT match 'over' (infix FP killed)");
-        Leo l; leo_init(&l);
+        Leo *l = test_leo_alloc(); leo_init(l);
         g_leo_anchor_prefix_on = 1;
-        leo_field_chambers_feel_text(&l, "mothers");
-        CHECK(l.chamber_ext[LEO_CH_LOVE] > 0.0f, "П-5: 'mothers' still lights LOVE under prefix");
-        leo_field_chambers_feel_text(&l, "daydream");   /* suffix-only superstring of 'dream' */
-        int any_on = 0; for (int i = 0; i < LEO_N_CHAMBERS; i++) if (l.chamber_ext[i] != 0.0f) any_on = 1;
+        leo_field_chambers_feel_text(l, "mothers");
+        CHECK(l->chamber_ext[LEO_CH_LOVE] > 0.0f, "П-5: 'mothers' still lights LOVE under prefix");
+        leo_field_chambers_feel_text(l, "daydream");   /* suffix-only superstring of 'dream' */
+        int any_on = 0; for (int i = 0; i < LEO_N_CHAMBERS; i++) if (l->chamber_ext[i] != 0.0f) any_on = 1;
         CHECK(any_on == 0, "П-5: 'daydream' lights nothing under prefix (suffix substring rejected)");
         g_leo_anchor_prefix_on = 0;
-        leo_field_chambers_feel_text(&l, "daydream");
-        CHECK(l.chamber_ext[LEO_CH_COMPLEX] > 0.0f, "П-5: --no-anchor-prefix restores substring ('daydream'->CMPLX)");
+        leo_field_chambers_feel_text(l, "daydream");
+        CHECK(l->chamber_ext[LEO_CH_COMPLEX] > 0.0f, "П-5: --no-anchor-prefix restores substring ('daydream'->CMPLX)");
         g_leo_anchor_prefix_on = 1;
-        leo_free(&l);
+        test_leo_delete(l);
     }
 
     /* 17. П-4: SPA protects the sentence carrying the surfaced heard word. Find a
@@ -3157,9 +3209,9 @@ int main(void) {
             fseek(cf, 0, SEEK_END); long cn = ftell(cf); fseek(cf, 0, SEEK_SET);
             char *cbuf = malloc((size_t)cn + 1);
             size_t cgot = fread(cbuf, 1, (size_t)cn, cf); cbuf[cgot] = 0; fclose(cf);
-            Leo l; leo_init(&l);
-            leo_ingest(&l, cbuf); free(cbuf);
-            leo_build_chamber_tags(&l); leo_supertok_scan(&l);
+            Leo *l = test_leo_alloc(); leo_init(l);
+            leo_ingest(l, cbuf); free(cbuf);
+            leo_build_chamber_tags(l); leo_supertok_scan(l);
 
             int found = 0, protected_ok = 0;
             for (int seed = 1; seed <= 80 && !found; seed++) {
@@ -3168,7 +3220,7 @@ int main(void) {
                 srand((unsigned)seed);
                 for (int s = 0; s < 4; s++) {
                     int ids[LEO_GEN_MAX], cap = LEO_GEN_MAX;
-                    leo_generate_best(&l, LEO_BEST_OF_K, st0[s], sizeof st0[s], -1, NULL, 0, ids, &cap);
+                    leo_generate_best(l, LEO_BEST_OF_K, st0[s], sizeof st0[s], -1, NULL, 0, ids, &cap);
                     int c = cap > LEO_GEN_MAX ? LEO_GEN_MAX : cap;
                     for (int i = 0; i < c; i++) stk0[s][i] = ids[i];
                     stn0[s] = c;
@@ -3178,7 +3230,7 @@ int main(void) {
                 int  stkA[LEO_CHAIN_MAX][LEO_GEN_MAX], stnA[LEO_CHAIN_MAX];
                 memcpy(stA, st0, sizeof st0); memcpy(stkA, stk0, sizeof stk0); memcpy(stnA, stn0, sizeof stn0);
                 srand((unsigned)(seed * 1000 + 7));
-                leo_spa_pass(&l, stA, stkA, stnA, 4, -1);
+                leo_spa_pass(l, stA, stkA, stnA, 4, -1);
                 int k = -1;
                 for (int s = 1; s < 4 && k < 0; s++)
                     if (stnA[s] != stn0[s] || memcmp(stkA[s], stk0[s], (size_t)stn0[s] * sizeof(int)) != 0) k = s;
@@ -3189,14 +3241,14 @@ int main(void) {
                 int  stkB[LEO_CHAIN_MAX][LEO_GEN_MAX], stnB[LEO_CHAIN_MAX];
                 memcpy(stB, st0, sizeof st0); memcpy(stkB, stk0, sizeof stk0); memcpy(stnB, stn0, sizeof stn0);
                 srand((unsigned)(seed * 1000 + 7));
-                leo_spa_pass(&l, stB, stkB, stnB, 4, k);
+                leo_spa_pass(l, stB, stkB, stnB, 4, k);
                 int kept = (stnB[k] == stn0[k] &&
                             memcmp(stkB[k], stk0[k], (size_t)stn0[k] * sizeof(int)) == 0);
                 protected_ok = kept;
             }
             CHECK(found == 1, "П-4: found a chain where SPA reseeds a sentence");
             CHECK(protected_ok == 1, "П-4: protect_idx preserves the carrying sentence through SPA");
-            leo_free(&l);
+            test_leo_delete(l);
         }
     }
 
@@ -3211,148 +3263,150 @@ int main(void) {
             "Leo loves the warm light and his mother and the rain. "
             "The window is quiet. Leo is small and warm and close. "
             "A bird. A cloud. The river. The stone. The path home.";
-        Leo l; leo_init(&l);
-        for (int r = 0; r < 4; r++) leo_ingest(&l, corpus);
-        leo_build_chamber_tags(&l); leo_supertok_scan(&l);
+        Leo *l = test_leo_alloc(); leo_init(l);
+        for (int r = 0; r < 4; r++) leo_ingest(l, corpus);
+        leo_build_chamber_tags(l); leo_supertok_scan(l);
         char buf[1024]; int ids[LEO_GEN_MAX];
 
         /* (a) field-honest ON: generate_best alone must NOT evolve the field */
         g_leo_field_honest_on = 1;
-        for (int i = 0; i < LEO_N_CHAMBERS; i++) l.chamber_act[i] = 0.5f;
-        float before[LEO_N_CHAMBERS]; memcpy(before, l.chamber_act, sizeof before);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) l->chamber_act[i] = 0.5f;
+        float before[LEO_N_CHAMBERS]; memcpy(before, l->chamber_act, sizeof before);
         int cap = LEO_GEN_MAX; srand(3);
-        leo_generate_best(&l, LEO_BEST_OF_K, buf, sizeof buf, -1, NULL, 0, ids, &cap);
-        CHECK(memcmp(before, l.chamber_act, sizeof before) == 0,
+        leo_generate_best(l, LEO_BEST_OF_K, buf, sizeof buf, -1, NULL, 0, ids, &cap);
+        CHECK(memcmp(before, l->chamber_act, sizeof before) == 0,
               "П-3: --field-honest -> generate_best does NOT evolve the field");
 
         /* (b) default OFF: generate_best DOES evolve the field (the leak path) */
         g_leo_field_honest_on = 0;
-        for (int i = 0; i < LEO_N_CHAMBERS; i++) l.chamber_act[i] = 0.5f;
-        memcpy(before, l.chamber_act, sizeof before);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) l->chamber_act[i] = 0.5f;
+        memcpy(before, l->chamber_act, sizeof before);
         cap = LEO_GEN_MAX; srand(3);
-        leo_generate_best(&l, LEO_BEST_OF_K, buf, sizeof buf, -1, NULL, 0, ids, &cap);
-        CHECK(memcmp(before, l.chamber_act, sizeof before) != 0,
+        leo_generate_best(l, LEO_BEST_OF_K, buf, sizeof buf, -1, NULL, 0, ids, &cap);
+        CHECK(memcmp(before, l->chamber_act, sizeof before) != 0,
               "П-3: default -> generate_best evolves the field (gated off by --field-honest)");
 
         /* (c) field-honest ON: a full chain STILL evolves the field via the end
          *     replay (generate_best proven inert in (a), so the change is the
          *     end-of-chain replay over the spoken sentences). */
         g_leo_field_honest_on = 1;
-        for (int i = 0; i < LEO_N_CHAMBERS; i++) l.chamber_act[i] = 0.5f;
-        memcpy(before, l.chamber_act, sizeof before);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) l->chamber_act[i] = 0.5f;
+        memcpy(before, l->chamber_act, sizeof before);
         char ch[2048]; srand(5);
-        leo_chain(&l, 3, ch, sizeof ch);
-        CHECK(memcmp(before, l.chamber_act, sizeof before) != 0,
+        leo_chain(l, 3, ch, sizeof ch);
+        CHECK(memcmp(before, l->chamber_act, sizeof before) != 0,
               "П-3: --field-honest -> the chain evolves the field via the end-of-chain replay");
         g_leo_field_honest_on = 0;
-        leo_free(&l);
+        test_leo_delete(l);
     }
 
     /* santaclaus B1: spores are born per reply, accumulate, and decay
      * (calm faster than trauma) — passive memory of presence-moments. */
     {
-        Leo sl;
-        leo_init(&sl);
-        leo_ingest(&sl, "the rain falls soft. leo hears the sound. his mother is warm. "
+        Leo *sl = test_leo_alloc(); leo_init(sl);
+        leo_ingest(sl, "the rain falls soft. leo hears the sound. his mother is warm. "
                         "the candle gives a small light. leo loves the quiet morning.");
         char buf[512];
-        CHECK(sl.n_spores == 0, "spore: fresh Leo has 0 spores");
-        srand(11); leo_chain(&sl, LEO_CHAIN_MIN, buf, sizeof buf);
-        CHECK(sl.n_spores == 1, "spore: one reply births one spore");
-        srand(12); leo_chain(&sl, LEO_CHAIN_MIN, buf, sizeof buf);
-        srand(13); leo_chain(&sl, LEO_CHAIN_MIN, buf, sizeof buf);
-        CHECK(sl.n_spores == 3, "spore: three replies -> three spores accumulate");
-        float s0 = sl.spores[0].strength;
-        sl.spores[0].is_trauma = 0;
-        for (int i = 0; i < 100; i++) leo_spore_decay(&sl);
-        CHECK(sl.spores[0].strength < s0, "spore: decay lowers a spore's strength");
+        CHECK(sl->n_spores == 0, "spore: fresh Leo has 0 spores");
+        srand(11); leo_chain(sl, LEO_CHAIN_MIN, buf, sizeof buf);
+        CHECK(sl->n_spores == 1, "spore: one reply births one spore");
+        srand(12); leo_chain(sl, LEO_CHAIN_MIN, buf, sizeof buf);
+        srand(13); leo_chain(sl, LEO_CHAIN_MIN, buf, sizeof buf);
+        CHECK(sl->n_spores == 3, "spore: three replies -> three spores accumulate");
+        float s0 = sl->spores[0].strength;
+        sl->spores[0].is_trauma = 0;
+        for (int i = 0; i < 100; i++) leo_spore_decay(sl);
+        CHECK(sl->spores[0].strength < s0, "spore: decay lowers a spore's strength");
         /* trauma spore decays slower than a calm one over the same step */
-        memset(&sl.spores[0], 0, sizeof(LeoSpore));
-        memset(&sl.spores[1], 0, sizeof(LeoSpore));
-        sl.spores[0].strength = 1.0f; sl.spores[0].is_trauma = 0;
-        sl.spores[1].strength = 1.0f; sl.spores[1].is_trauma = 1;
-        sl.n_spores = 2;
-        leo_spore_decay(&sl);
-        CHECK(sl.n_spores == 2 && sl.spores[1].strength > sl.spores[0].strength,
+        memset(&sl->spores[0], 0, sizeof(LeoSpore));
+        memset(&sl->spores[1], 0, sizeof(LeoSpore));
+        sl->spores[0].strength = 1.0f; sl->spores[0].is_trauma = 0;
+        sl->spores[1].strength = 1.0f; sl->spores[1].is_trauma = 1;
+        sl->n_spores = 2;
+        leo_spore_decay(sl);
+        CHECK(sl->n_spores == 2 && sl->spores[1].strength > sl->spores[0].strength,
               "spore: trauma spore decays slower than calm");
-        leo_free(&sl);
+        test_leo_delete(sl);
     }
 
     /* santaclaus B2: a resonant spore bleeds — its emit_context token gets a
      * bias pull, others get none (the recall is selective + ablatable). */
     {
-        Leo sl; leo_init(&sl);
-        leo_ingest(&sl, "the rain falls. leo hears the sound. his mother is warm.");
+        Leo *sl = test_leo_alloc(); leo_init(sl);
+        leo_ingest(sl, "the rain falls. leo hears the sound. his mother is warm.");
         const int T = 300;
-        memset(&sl.spores[0], 0, sizeof(LeoSpore));
-        for (int i = 0; i < LEO_N_CHAMBERS; i++) { sl.chamber_act[i] = 0.5f; sl.spores[0].chamber_snap[i] = 0.5f; }
-        for (int d = 0; d < LEO_RET_DIM; d++)    { sl.retention_state[d] = 0.1f; sl.spores[0].retention_slice[d] = 0.1f; }
-        sl.spores[0].strength = 1.0f;
-        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) sl.spores[0].emit_context[k] = -1;
-        sl.spores[0].emit_context[0] = T;
-        sl.n_spores = 1;
+        memset(&sl->spores[0], 0, sizeof(LeoSpore));
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) { sl->chamber_act[i] = 0.5f; sl->spores[0].chamber_snap[i] = 0.5f; }
+        for (int d = 0; d < LEO_RET_DIM; d++)    { sl->retention_state[d] = 0.1f; sl->spores[0].retention_slice[d] = 0.1f; }
+        sl->spores[0].strength = 1.0f;
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) sl->spores[0].emit_context[k] = -1;
+        sl->spores[0].emit_context[0] = T;
+        sl->n_spores = 1;
         LeoSantaScratch sc; sc.n_active = 0;
-        leo_santaclaus_compute_active(&sl, &sc);
+        leo_santaclaus_compute_active(sl, &sc);
         CHECK(sc.n_active == 1 && sc.spore_idx[0] == 0, "santaclaus: a resonant spore becomes active");
-        float bias_T   = leo_santaclaus_candidate_bias(&sc, &sl, T);
-        float bias_oth = leo_santaclaus_candidate_bias(&sc, &sl, T + 1);
+        float bias_T   = leo_santaclaus_candidate_bias(&sc, sl, T);
+        float bias_oth = leo_santaclaus_candidate_bias(&sc, sl, T + 1);
         CHECK(bias_T > 0.0f && bias_oth == 0.0f, "santaclaus: bleed pulls the spore's ctx token, not others");
-        leo_free(&sl);
+        test_leo_delete(sl);
     }
 
     /* santaclaus B3: a resonant SEA spore resurrects into the ring; mark_bleed counts. */
     {
-        Leo sl; leo_init(&sl);
-        leo_ingest(&sl, "the rain falls. leo hears the sound.");
-        for (int i = 0; i < LEO_N_CHAMBERS; i++) sl.chamber_act[i] = 0.5f;
-        for (int d = 0; d < LEO_RET_DIM; d++)    sl.retention_state[d] = 0.1f;
-        memset(&sl.sea[0], 0, sizeof(LeoSpore));
-        for (int i = 0; i < LEO_N_CHAMBERS; i++) sl.sea[0].chamber_snap[i] = 0.5f;
-        for (int d = 0; d < LEO_RET_DIM; d++)    sl.sea[0].retention_slice[d] = 0.1f;
-        sl.sea[0].strength = 0.5f;
-        sl.n_sea = 1; sl.n_spores = 0;
-        int got = leo_sea_try_resurrect(&sl);
-        CHECK(got == 1 && sl.n_spores == 1 && sl.n_sea == 0 && sl.spores[0].strength == 0.4f,
+        Leo *sl = test_leo_alloc(); leo_init(sl);
+        leo_ingest(sl, "the rain falls. leo hears the sound.");
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) sl->chamber_act[i] = 0.5f;
+        for (int d = 0; d < LEO_RET_DIM; d++)    sl->retention_state[d] = 0.1f;
+        memset(&sl->sea[0], 0, sizeof(LeoSpore));
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) sl->sea[0].chamber_snap[i] = 0.5f;
+        for (int d = 0; d < LEO_RET_DIM; d++)    sl->sea[0].retention_slice[d] = 0.1f;
+        sl->sea[0].strength = 0.5f;
+        sl->n_sea = 1; sl->n_spores = 0;
+        int got = leo_sea_try_resurrect(sl);
+        CHECK(got == 1 && sl->n_spores == 1 && sl->n_sea == 0 && sl->spores[0].strength == 0.4f,
               "santaclaus: a resonant sea spore resurrects into the ring at 0.4");
-        memset(&sl.spores[0], 0, sizeof(LeoSpore));
-        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) sl.spores[0].emit_context[k] = -1;
-        sl.spores[0].emit_context[0] = 777; sl.spores[0].strength = 1.0f; sl.n_spores = 1;
+        memset(&sl->spores[0], 0, sizeof(LeoSpore));
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) sl->spores[0].emit_context[k] = -1;
+        sl->spores[0].emit_context[0] = 777; sl->spores[0].strength = 1.0f; sl->n_spores = 1;
         LeoSantaScratch sc; sc.n_active = 1; sc.spore_idx[0] = 0; sc.weight[0] = 1.0f;
         for (int j = 1; j < LEO_SPORE_TOPK_BLEED; j++) { sc.spore_idx[j] = -1; sc.weight[j] = 0.0f; }
-        leo_santaclaus_mark_bleed(&sl, &sc, 777, 100);
-        CHECK(sl.spores[0].bleed_count == 1 && sl.spores[0].last_bleed_step == 100,
+        leo_santaclaus_mark_bleed(sl, &sc, 777, 100);
+        CHECK(sl->spores[0].bleed_count == 1 && sl->spores[0].last_bleed_step == 100,
               "santaclaus: mark_bleed counts a recalled token");
-        leo_free(&sl);
+        test_leo_delete(sl);
     }
 
     /* santaclaus B4: spores persist across save/load — Leo recalls past CONVERSATIONS. */
     {
-        Leo sl; leo_init(&sl);
-        leo_ingest(&sl, "the rain falls. leo hears the sound. his mother is warm.");
-        sl.n_spores = 2;
+        Leo *sl = test_leo_alloc(); leo_init(sl);
+        leo_ingest(sl, "the rain falls. leo hears the sound. his mother is warm.");
+        sl->n_spores = 2;
         for (int s = 0; s < 2; s++) {
-            memset(&sl.spores[s], 0, sizeof(LeoSpore));
-            sl.spores[s].strength = 0.7f + 0.1f * s;
-            sl.spores[s].emit_context[0] = 400 + s;
-            sl.spores[s].step = 50 + s;
+            memset(&sl->spores[s], 0, sizeof(LeoSpore));
+            sl->spores[s].strength = 0.7f + 0.1f * s;
+            sl->spores[s].emit_context[0] = 400 + s;
+            sl->spores[s].step = 50 + s;
         }
-        sl.n_sea = 1; sl.sea_ptr = 1;
-        memset(&sl.sea[0], 0, sizeof(LeoSpore));
-        sl.sea[0].strength = 0.3f; sl.sea[0].emit_context[0] = 999;
+        sl->n_sea = 1; sl->sea_ptr = 1;
+        memset(&sl->sea[0], 0, sizeof(LeoSpore));
+        sl->sea[0].strength = 0.3f; sl->sea[0].emit_context[0] = 999;
         const char *path = "/tmp/leo_b4_spore.state";
-        int saved = leo_save_state(&sl, path);
-        Leo ld; leo_init(&ld);
-        int loaded = leo_load_state(&ld, path);
+        int saved = leo_save_state(sl, path);
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = leo_load_state(ld, path);
         CHECK(saved && loaded, "spore-persist: save + load succeed");
-        CHECK(ld.n_spores == 2 && ld.n_sea == 1 && ld.sea_ptr == 1,
+        CHECK(ld->n_spores == 2 && ld->n_sea == 1 && ld->sea_ptr == 1,
               "spore-persist: ring + sea counts round-trip");
-        CHECK(ld.spores[1].emit_context[0] == 401 && ld.spores[1].step == 51 &&
-              ld.sea[0].emit_context[0] == 999,
+        CHECK(ld->spores[1].emit_context[0] == 401 && ld->spores[1].step == 51 &&
+              ld->sea[0].emit_context[0] == 999,
               "spore-persist: spore fields round-trip (Leo recalls past conversations)");
-        leo_free(&sl); leo_free(&ld);
+        test_leo_delete(sl); test_leo_delete(ld);
         remove(path);
     }
 
+}
+
+static TEST_NOINLINE void test_rae_and_school(void) {
     /* A.4 RAE: the micrograd MLP learns — loss drops on a toy target. */
     {
         LeoRae r; leo_rae_init(&r);
@@ -3365,166 +3419,178 @@ int main(void) {
         CHECK(r.observations == 201, "rae: observations increments per train step");
     }
 
+}
+
+static TEST_NOINLINE void test_rae_runtime(void) {
     /* A.4 RAE R1b: feature extraction returns sane values in [0,1]. */
     {
-        Leo fl; leo_init(&fl);
-        leo_ingest(&fl, "the rain falls soft. leo hears the sound. his mother is warm.");
+        Leo *fl = test_leo_alloc(); leo_init(fl);
+        leo_ingest(fl, "the rain falls soft. leo hears the sound. his mother is warm.");
         int ids[16];
-        int n = bpe_encode(&fl.bpe, (const uint8_t *)" the rain falls soft", 20, ids, 16);
+        int n = bpe_encode(&fl->bpe, (const uint8_t *)" the rain falls soft", 20, ids, 16);
         float feat[LEO_RAE_IN];
-        leo_rae_features(&fl, ids, n, feat);
+        leo_rae_features(fl, ids, n, feat);
         int in_range = 1;
         for (int i = 0; i < LEO_RAE_IN; i++) if (feat[i] < 0.0f || feat[i] > 1.0f) in_range = 0;
         CHECK(in_range, "rae: the 5 features extract into [0,1]");
         int dids[4] = {300, 301, 302, 303};
-        leo_rae_features(&fl, dids, 4, feat);
+        leo_rae_features(fl, dids, 4, feat);
         CHECK(feat[4] == 1.0f, "rae: diversity feature = 1.0 for all-distinct tokens");
-        leo_free(&fl);
+        test_leo_delete(fl);
     }
 
     /* A.4 RAE R3a: self-resonance target — 0 with no memory, positive when the field
      * matches a held spore (the signal the selector learns toward). */
     {
-        Leo rl; leo_init(&rl);
-        CHECK(leo_rae_self_resonance(&rl) == 0.0f, "rae: self-resonance = 0 with no spores");
-        rl.chamber_act[0] = 1.0f;             /* present felt-state */
-        rl.n_spores = 1;
-        rl.spores[0].chamber_snap[0] = 1.0f;  /* a remembered moment that felt the same */
-        rl.spores[0].strength = 1.0f;
-        float sr = leo_rae_self_resonance(&rl);   /* 0.55·cos(ch)=0.55 (retention zero) */
+        Leo *rl = test_leo_alloc(); leo_init(rl);
+        CHECK(leo_rae_self_resonance(rl) == 0.0f, "rae: self-resonance = 0 with no spores");
+        rl->chamber_act[0] = 1.0f;             /* present felt-state */
+        rl->n_spores = 1;
+        rl->spores[0].chamber_snap[0] = 1.0f;  /* a remembered moment that felt the same */
+        rl->spores[0].strength = 1.0f;
+        float sr = leo_rae_self_resonance(rl);   /* 0.55·cos(ch)=0.55 (retention zero) */
         CHECK(sr > 0.5f && sr <= 1.0f, "rae: self-resonance positive when field matches a spore");
-        leo_free(&rl);
+        test_leo_delete(rl);
     }
 
     /* A.4 RAE R3b: online learning fires once per reply when RAE selects, and the
      * trained weights stay finite (within clamp, no explosion / NaN). */
     {
-        Leo tl; leo_init(&tl);
-        leo_ingest(&tl, "the rain falls soft. leo hears the sound. his mother is warm. "
+        Leo *tl = test_leo_alloc(); leo_init(tl);
+        leo_ingest(tl, "the rain falls soft. leo hears the sound. his mother is warm. "
                         "he keeps the light. she thanked him. the room is quiet.");
-        long obs0 = tl.rae.observations;
+        long obs0 = tl->rae.observations;
         int prev = g_leo_rae_on; g_leo_rae_on = 1;
         char buf[2048];
-        leo_chain(&tl, 2, buf, sizeof buf);
-        leo_chain(&tl, 2, buf, sizeof buf);
+        leo_chain(tl, 2, buf, sizeof buf);
+        leo_chain(tl, 2, buf, sizeof buf);
         g_leo_rae_on = prev;
         int finite = 1;
         for (int j = 0; j < LEO_RAE_HID; j++) {
-            if (!(tl.rae.w2[j] >= -LEO_RAE_CLAMP && tl.rae.w2[j] <= LEO_RAE_CLAMP)) finite = 0;
+            if (!(tl->rae.w2[j] >= -LEO_RAE_CLAMP && tl->rae.w2[j] <= LEO_RAE_CLAMP)) finite = 0;
             for (int i = 0; i < LEO_RAE_IN; i++)
-                if (!(tl.rae.w1[j][i] >= -LEO_RAE_CLAMP && tl.rae.w1[j][i] <= LEO_RAE_CLAMP)) finite = 0;
+                if (!(tl->rae.w1[j][i] >= -LEO_RAE_CLAMP && tl->rae.w1[j][i] <= LEO_RAE_CLAMP)) finite = 0;
         }
-        CHECK(tl.rae.observations >= obs0 + 2, "rae: online training fires per reply (observations grow)");
+        CHECK(tl->rae.observations >= obs0 + 2, "rae: online training fires per reply (observations grow)");
         CHECK(finite, "rae: trained weights stay within clamp (finite, no explosion)");
-        leo_free(&tl);
+        test_leo_delete(tl);
     }
 
+}
+
+static TEST_NOINLINE void test_rae_persistence(void) {
     /* A.4 RAE R4: a trained selector survives save/load (the learned δ-channel
      * persists across the process, like the spores). */
     {
-        Leo sv; leo_init(&sv);
-        leo_ingest(&sv, "the rain falls soft. leo hears the sound. his mother is warm.");
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        leo_ingest(sv, "the rain falls soft. leo hears the sound. his mother is warm.");
         float x[LEO_RAE_IN] = {0.7f, 0.3f, 0.5f, 0.4f, 0.6f};
-        for (int it = 0; it < 50; it++) leo_rae_train(&sv.rae, x, 0.9f);   /* a distinctive trained state */
-        float ref = leo_rae_forward(&sv.rae, x, NULL);
-        long  ref_obs = sv.rae.observations;
+        for (int it = 0; it < 50; it++) leo_rae_train(&sv->rae, x, 0.9f);   /* a distinctive trained state */
+        float ref = leo_rae_forward(&sv->rae, x, NULL);
+        long  ref_obs = sv->rae.observations;
         const char *path = "/tmp/leo_r4_state.bin";
-        int saved = leo_save_state(&sv, path);
-        Leo ld; leo_init(&ld);
-        int loaded = leo_load_state(&ld, path);
-        float got = leo_rae_forward(&ld.rae, x, NULL);
+        int saved = leo_save_state(sv, path);
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = leo_load_state(ld, path);
+        float got = leo_rae_forward(&ld->rae, x, NULL);
         CHECK(saved && loaded, "rae-persist: save + load succeed");
-        CHECK(ld.rae.observations == ref_obs, "rae-persist: observations round-trip");
+        CHECK(ld->rae.observations == ref_obs, "rae-persist: observations round-trip");
         CHECK(fabsf(got - ref) < 1e-6f, "rae-persist: trained weights round-trip (forward matches)");
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
         remove(path);
     }
 
-    /* A.5 School: an unknown content word makes Leo ASK; the answer is learned;
+}
+
+static TEST_NOINLINE void test_school_learning(void) {
+    /* A.5 School: an unknown content word makes Leo *ASK = test_leo_alloc(); the answer is learned;
      * a learned word no longer triggers; --no-school suppresses the question. */
     {
-        Leo sc; leo_init(&sc);
-        leo_ingest(&sc, "the rain falls. leo hears the sound. his mother is warm.");
+        Leo *sc = test_leo_alloc(); leo_init(sc);
+        leo_ingest(sc, "the rain falls. leo hears the sound. his mother is warm.");
         char buf[1024];
         int prev = g_leo_school_on; g_leo_school_on = 1;
-        leo_respond(&sc, "tell me about the zorble", buf, sizeof buf);
-        CHECK(strcmp(sc.school.pending, "zorble") == 0 &&
+        leo_respond(sc, "tell me about the zorble", buf, sizeof buf);
+        CHECK(strcmp(sc->school.pending, "zorble") == 0 &&
               buf[0] == 'Z' && buf[strlen(buf) - 1] == '?',
               "school: an unknown word makes Leo echo it back as a question ('Zorble?')");
-        CHECK(sc.curiosity.outcome == LEO_CURIOSITY_ASKED &&
-              !strcmp(sc.curiosity.candidate, "zorble") &&
-              sc.curiosity.distress < sc.curiosity.gate,
+        CHECK(sc->curiosity.outcome == LEO_CURIOSITY_ASKED &&
+              !strcmp(sc->curiosity.candidate, "zorble") &&
+              sc->curiosity.distress < sc->curiosity.gate,
               "curiosity: an asked word records its candidate and open gate");
-        leo_respond(&sc, "a zorble is a small round stone", buf, sizeof buf);
-        CHECK(sc.school.pending[0] == 0 && leo_school_is_learned(&sc, "zorble"),
+        leo_respond(sc, "a zorble is a small round stone", buf, sizeof buf);
+        CHECK(sc->school.pending[0] == 0 && leo_school_is_learned(sc, "zorble"),
               "school: the answer is learned and the question closes");
-        CHECK(sc.curiosity.outcome == LEO_CURIOSITY_RESOLVED,
+        CHECK(sc->curiosity.outcome == LEO_CURIOSITY_RESOLVED,
               "curiosity: a grounded answer records resolution, not another candidate");
-        leo_respond(&sc, "tell me about the zorble again", buf, sizeof buf);
-        CHECK(sc.school.pending[0] == 0,
+        leo_respond(sc, "tell me about the zorble again", buf, sizeof buf);
+        CHECK(sc->school.pending[0] == 0,
               "school: a learned word no longer triggers a question");
-        CHECK(sc.curiosity.outcome == LEO_CURIOSITY_NO_CANDIDATE &&
-              !sc.curiosity.candidate[0],
+        CHECK(sc->curiosity.outcome == LEO_CURIOSITY_NO_CANDIDATE &&
+              !sc->curiosity.candidate[0],
               "curiosity: familiar meaning records an honest absence of candidate");
 
-        Leo direct; leo_init(&direct);
-        leo_ingest(&direct, "the rain falls. leo hears the sound. his mother is warm.");
-        leo_respond(&direct, "a flom is warm fire", buf, sizeof buf);
-        CHECK(leo_semtok_word(&direct, "flom") == semtok_word("fire") &&
-              !direct.school.pending[0] &&
-              direct.curiosity.outcome == LEO_CURIOSITY_RESOLVED &&
-              !strcmp(direct.curiosity.candidate, "flom") &&
+        Leo *direct = test_leo_alloc(); leo_init(direct);
+        leo_ingest(direct, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(direct, "a flom is warm fire", buf, sizeof buf);
+        CHECK(leo_semtok_word(direct, "flom") == semtok_word("fire") &&
+              !direct->school.pending[0] &&
+              direct->curiosity.outcome == LEO_CURIOSITY_RESOLVED &&
+              !strcmp(direct->curiosity.candidate, "flom") &&
               !strstr(buf, "Flom?"),
               "school: a copular definition teaches an unknown on first mention");
 
-        Leo composite; leo_init(&composite);
-        leo_ingest(&composite, "the rain falls. leo hears the sound. his mother is warm.");
-        leo_respond(&composite,
+        Leo *composite = test_leo_alloc(); leo_init(composite);
+        leo_ingest(composite, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(composite,
                     "Flom is the gentle comfort of warm light or cool rain",
                     buf, sizeof buf);
-        CHECK(leo_school_is_learned(&composite, "flom") &&
-              !composite.school.pending[0] &&
-              composite.curiosity.outcome == LEO_CURIOSITY_RESOLVED,
+        CHECK(leo_school_is_learned(composite, "flom") &&
+              !composite->school.pending[0] &&
+              composite->curiosity.outcome == LEO_CURIOSITY_RESOLVED,
               "school: a rich first-turn definition is admitted instead of re-asked");
 
-        Leo incidental; leo_init(&incidental);
-        leo_ingest(&incidental, "the rain falls. leo hears the sound. his mother is warm.");
-        leo_respond(&incidental, "I saw a nareth beside water", buf, sizeof buf);
-        CHECK(!leo_school_is_learned(&incidental, "nareth"),
+        Leo *incidental = test_leo_alloc(); leo_init(incidental);
+        leo_ingest(incidental, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(incidental, "I saw a nareth beside water", buf, sizeof buf);
+        CHECK(!leo_school_is_learned(incidental, "nareth"),
               "school: co-presence cannot counterfeit a first-turn definition");
 
-        Leo negative; leo_init(&negative);
-        leo_ingest(&negative, "the rain falls. leo hears the sound. his mother is warm.");
-        leo_respond(&negative, "a suvin is not water", buf, sizeof buf);
-        CHECK(!leo_school_is_learned(&negative, "suvin"),
+        Leo *negative = test_leo_alloc(); leo_init(negative);
+        leo_ingest(negative, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(negative, "a suvin is not water", buf, sizeof buf);
+        CHECK(!leo_school_is_learned(negative, "suvin"),
               "school: rejection alone cannot assign a first-turn meaning");
 
-        Leo unknown_rhs; leo_init(&unknown_rhs);
-        leo_ingest(&unknown_rhs, "the rain falls. leo hears the sound. his mother is warm.");
-        leo_respond(&unknown_rhs, "a tral is glorp", buf, sizeof buf);
-        CHECK(!leo_school_is_learned(&unknown_rhs, "tral"),
+        Leo *unknown_rhs = test_leo_alloc(); leo_init(unknown_rhs);
+        leo_ingest(unknown_rhs, "the rain falls. leo hears the sound. his mother is warm.");
+        leo_respond(unknown_rhs, "a tral is glorp", buf, sizeof buf);
+        CHECK(!leo_school_is_learned(unknown_rhs, "tral"),
               "school: an unknown right-hand side cannot counterfeit grounding");
 
-        Leo deferred; leo_init(&deferred);
-        leo_ingest(&deferred, "suvin suvin suvin");
+        Leo *deferred = test_leo_alloc(); leo_init(deferred);
+        leo_ingest(deferred, "suvin suvin suvin");
         char selected[LEO_HEARD_WORDLEN], delayed[LEO_HEARD_WORDLEN];
         int delayed_heard = 0;
-        CHECK(!leo_school_scan_unknown(&deferred, "tell me about suvin", selected,
+        CHECK(!leo_school_scan_unknown(deferred, "tell me about suvin", selected,
                                        delayed, &delayed_heard, NULL) &&
               !strcmp(delayed, "suvin") &&
               delayed_heard > LEO_SCHOOL_NOVEL_MAX,
               "curiosity: an unknown word beyond novelty remains visible as deferred");
         g_leo_school_on = 0;
-        leo_respond(&sc, "tell me about the wobble", buf, sizeof buf);
-        CHECK(sc.school.pending[0] == 0 &&
-              sc.curiosity.outcome == LEO_CURIOSITY_DISABLED,
+        leo_respond(sc, "tell me about the wobble", buf, sizeof buf);
+        CHECK(sc->school.pending[0] == 0 &&
+              sc->curiosity.outcome == LEO_CURIOSITY_DISABLED,
               "school: --no-school suppresses the question and says why");
         g_leo_school_on = prev;
-        leo_free(&sc); leo_free(&direct); leo_free(&composite);
-        leo_free(&incidental); leo_free(&negative); leo_free(&unknown_rhs);
-        leo_free(&deferred);
+        test_leo_delete(sc); test_leo_delete(direct); test_leo_delete(composite);
+        test_leo_delete(incidental); test_leo_delete(negative); test_leo_delete(unknown_rhs);
+        test_leo_delete(deferred);
     }
 
+}
+
+static TEST_NOINLINE void test_prewonder_recovery(void) {
     /* A.37: Pre-Wonder remembers a question the body could not safely ask.
      * It is neither a prompt-independent compulsion nor a second open Wonder:
      * the same word must return under the ordinary gate. */
@@ -3538,48 +3604,48 @@ int main(void) {
         g_leo_wonder_on = 1;
         g_leo_deferred_wonder_on = 1;
 
-        Leo pre; leo_init(&pre);
+        Leo *pre = test_leo_alloc(); leo_init(pre);
         char out[1024];
         const char *danger =
             "Does suvin feel like bright sun or cold winter?";
-        leo_respond(&pre, danger, out, sizeof out);
-        int first = leo_deferred_wonder_find(&pre, "suvin");
-        CHECK(first >= 0 && !pre.school.pending[0] &&
-              pre.school.n_wonders == 0 &&
-              pre.curiosity.outcome ==
+        leo_respond(pre, danger, out, sizeof out);
+        int first = leo_deferred_wonder_find(pre, "suvin");
+        CHECK(first >= 0 && !pre->school.pending[0] &&
+              pre->school.n_wonders == 0 &&
+              pre->curiosity.outcome ==
                   LEO_CURIOSITY_BLOCKED_DISTRESS &&
-              pre.school.deferred[first].blocks == 1,
+              pre->school.deferred[first].blocks == 1,
               "pre-wonder: a real distress-blocked candidate is remembered without being asked");
         int born_glyph = first >= 0 ?
-            pre.school.deferred[first].offered_glyph : -1;
+            pre->school.deferred[first].offered_glyph : -1;
         int born_alt = first >= 0 ?
-            pre.school.deferred[first].offered_alt_glyph : -1;
+            pre->school.deferred[first].offered_alt_glyph : -1;
 
-        leo_respond(&pre, danger, out, sizeof out);
-        first = leo_deferred_wonder_find(&pre, "suvin");
-        CHECK(first >= 0 && !pre.school.pending[0] &&
-              pre.curiosity.outcome ==
+        leo_respond(pre, danger, out, sizeof out);
+        first = leo_deferred_wonder_find(pre, "suvin");
+        CHECK(first >= 0 && !pre->school.pending[0] &&
+              pre->curiosity.outcome ==
                   LEO_CURIOSITY_BLOCKED_DEFERRED &&
-              pre.school.deferred[first].blocks == 2,
+              pre->school.deferred[first].blocks == 2,
               "pre-wonder: returning while unsafe strengthens memory but cannot force a question");
 
-        leo_respond(&pre, "the rain is warm", out, sizeof out);
-        CHECK(leo_deferred_wonder_find(&pre, "suvin") >= 0 &&
-              !pre.school.pending[0] && !strstr(out, "Suvin?"),
+        leo_respond(pre, "the rain is warm", out, sizeof out);
+        CHECK(leo_deferred_wonder_find(pre, "suvin") >= 0 &&
+              !pre->school.pending[0] && !strstr(out, "Suvin?"),
               "pre-wonder: an unrelated safe turn cannot release a withheld question");
 
         const char *state = "/tmp/leo_deferred_v19.state";
         const char *legacy = "/tmp/leo_deferred_v17.state";
         const char *legacy18 = "/tmp/leo_deferred_v18_legacy.state";
         const char *cut = "/tmp/leo_deferred_v19_cut.state";
-        int saved = leo_save_state(&pre, state);
-        Leo woke; leo_init(&woke);
-        int loaded = saved && leo_load_state(&woke, state);
-        int slept = leo_deferred_wonder_find(&woke, "suvin");
+        int saved = leo_save_state(pre, state);
+        Leo *woke = test_leo_alloc(); leo_init(woke);
+        int loaded = saved && leo_load_state(woke, state);
+        int slept = leo_deferred_wonder_find(woke, "suvin");
         CHECK(loaded && slept >= 0 &&
-              woke.school.deferred[slept].blocks == 2 &&
-              woke.school.deferred[slept].offered_glyph == born_glyph &&
-              woke.school.deferred[slept].offered_alt_glyph == born_alt,
+              woke->school.deferred[slept].blocks == 2 &&
+              woke->school.deferred[slept].offered_glyph == born_glyph &&
+              woke->school.deferred[slept].offered_alt_glyph == born_alt,
               "pre-wonder: the withheld moment and its original hypotheses survive sleep");
 
         int built_legacy = 0, built_v18 = 0, built_cut = 0;
@@ -3592,11 +3658,11 @@ int main(void) {
             if (bytes && sz > 1 &&
                 (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                 long appetite_tail =
-                    test_appetite_and_later_tail_size(&pre);
+                    test_appetite_and_later_tail_size(pre);
                 long origin_tail = (long)sizeof(int32_t);
                 long tail = appetite_tail + origin_tail +
                             (long)(sizeof(int32_t) +
-                                   pre.school.n_deferred *
+                                   pre->school.n_deferred *
                                        (int)sizeof(LeoDeferredWonder));
                 uint32_t seventeen = 17;
                 memcpy(bytes + sizeof(uint32_t), &seventeen,
@@ -3618,12 +3684,12 @@ int main(void) {
                         sz - tail;
                     if (built_v18)
                         built_v18 =
-                            fwrite(&pre.school.n_deferred,
+                            fwrite(&pre->school.n_deferred,
                                    sizeof(int32_t), 1, fo) == 1;
                     for (int i = 0; built_v18 &&
-                         i < pre.school.n_deferred; i++) {
+                         i < pre->school.n_deferred; i++) {
                         const LeoDeferredWonder *entry =
-                            &pre.school.deferred[i];
+                            &pre->school.deferred[i];
                         LeoDeferredWonderV18 old_entry = {0};
                         memcpy(old_entry.word, entry->word,
                                sizeof old_entry.word);
@@ -3655,74 +3721,74 @@ int main(void) {
             free(bytes);
             fclose(fi);
         }
-        Leo old; leo_init(&old);
-        Leo old18; leo_init(&old18);
-        Leo damaged; leo_init(&damaged);
-        CHECK(built_legacy && leo_load_state(&old, legacy) &&
-              old.school.n_deferred == 0,
+        Leo *old = test_leo_alloc(); leo_init(old);
+        Leo *old18 = test_leo_alloc(); leo_init(old18);
+        Leo *damaged = test_leo_alloc(); leo_init(damaged);
+        CHECK(built_legacy && leo_load_state(old, legacy) &&
+              old->school.n_deferred == 0,
               "pre-wonder: a v17 body migrates without invented withheld questions");
         int migrated18 = built_v18 &&
-            leo_load_state(&old18, legacy18);
+            leo_load_state(old18, legacy18);
         int old18_idx = migrated18 ?
-            leo_deferred_wonder_find(&old18, "suvin") : -1;
+            leo_deferred_wonder_find(old18, "suvin") : -1;
         CHECK(migrated18 && old18_idx >= 0 &&
-              old18.school.deferred[old18_idx].field_token[0] == -1,
+              old18->school.deferred[old18_idx].field_token[0] == -1,
               "pre-wonder: a v18 question migrates without invented field coordinates");
-        CHECK(built_cut && leo_load_state(&damaged, cut) &&
-              damaged.school.n_deferred == 0 &&
-              damaged.school.turn_clock == pre.school.turn_clock,
+        CHECK(built_cut && leo_load_state(damaged, cut) &&
+              damaged->school.n_deferred == 0 &&
+              damaged->school.turn_clock == pre->school.turn_clock,
               "pre-wonder: a corrupt v19 tail loses only unspoken questions");
 
         /* Make the saved body explicitly safe. This isolates the activation
          * contract from scar/capsule carryover without bypassing the gate. */
-        memset(woke.chamber_act, 0, sizeof woke.chamber_act);
-        memset(woke.chamber_ext, 0, sizeof woke.chamber_ext);
-        memset(woke.scar, 0, sizeof woke.scar);
-        memset(woke.gamma, 0, sizeof woke.gamma);
-        woke.gamma_primed = 0;
+        memset(woke->chamber_act, 0, sizeof woke->chamber_act);
+        memset(woke->chamber_ext, 0, sizeof woke->chamber_ext);
+        memset(woke->scar, 0, sizeof woke->scar);
+        memset(woke->gamma, 0, sizeof woke->gamma);
+        woke->gamma_primed = 0;
         g_leo_klaus_on = 0;
         g_leo_capsule_on = 0;
         char expected[256];
         leo_school_format_question(expected, sizeof expected, "suvin",
                                    born_glyph, born_alt);
-        leo_respond(&woke, "suvin", out, sizeof out);
+        leo_respond(woke, "suvin", out, sizeof out);
         CHECK(!strcmp(out, expected) &&
-              woke.curiosity.outcome ==
+              woke->curiosity.outcome ==
                   LEO_CURIOSITY_ASKED_DEFERRED &&
-              !strcmp(woke.school.pending, "suvin") &&
-              woke.school.n_deferred == 0 &&
-              woke.school.n_wonders == 1,
+              !strcmp(woke->school.pending, "suvin") &&
+              woke->school.n_deferred == 0 &&
+              woke->school.n_wonders == 1,
               "pre-wonder: the same word returning to a safe body opens exactly one real Wonder");
 
-        Leo ab; leo_init(&ab);
-        leo_ingest(&ab, "suvin suvin suvin");
-        ab.school.turn_clock = 1;
-        leo_deferred_wonder_remember(&ab, "suvin",
+        Leo *ab = test_leo_alloc(); leo_init(ab);
+        leo_ingest(ab, "suvin suvin suvin");
+        ab->school.turn_clock = 1;
+        leo_deferred_wonder_remember(ab, "suvin",
                                      born_glyph, born_alt, 3, NULL, NULL);
         g_leo_deferred_wonder_on = 0;
-        leo_respond(&ab, "suvin", out, sizeof out);
-        CHECK(!ab.school.pending[0] && ab.school.n_deferred == 1 &&
-              ab.curiosity.outcome == LEO_CURIOSITY_NO_CANDIDATE,
+        leo_respond(ab, "suvin", out, sizeof out);
+        CHECK(!ab->school.pending[0] && ab->school.n_deferred == 1 &&
+              ab->curiosity.outcome == LEO_CURIOSITY_NO_CANDIDATE,
               "pre-wonder: --no-deferred-wonder restores the novelty amputation exactly");
 
-        Leo bounded; leo_init(&bounded);
+        Leo *bounded = test_leo_alloc(); leo_init(bounded);
         const char *words[LEO_DEFERRED_WONDER_MAX + 1] = {
             "alpha", "bravo", "cider", "delta", "ember",
             "fable", "glimmer", "harbor", "island"
         };
         for (int i = 0; i < LEO_DEFERRED_WONDER_MAX + 1; i++) {
-            bounded.school.turn_clock = i + 1;
-            leo_deferred_wonder_remember(&bounded, words[i],
+            bounded->school.turn_clock = i + 1;
+            leo_deferred_wonder_remember(bounded, words[i],
                                          born_glyph, born_alt, 1, NULL, NULL);
         }
-        CHECK(bounded.school.n_deferred == LEO_DEFERRED_WONDER_MAX &&
-              leo_deferred_wonder_find(&bounded, "alpha") < 0 &&
-              leo_deferred_wonder_find(&bounded, "island") >= 0,
+        CHECK(bounded->school.n_deferred == LEO_DEFERRED_WONDER_MAX &&
+              leo_deferred_wonder_find(bounded, "alpha") < 0 &&
+              leo_deferred_wonder_find(bounded, "island") >= 0,
               "pre-wonder: the bounded body evicts the least recently encountered question");
 
-        leo_free(&pre); leo_free(&woke); leo_free(&old);
-        leo_free(&old18);
-        leo_free(&damaged); leo_free(&ab); leo_free(&bounded);
+        test_leo_delete(pre); test_leo_delete(woke); test_leo_delete(old);
+        test_leo_delete(old18);
+        test_leo_delete(damaged); test_leo_delete(ab); test_leo_delete(bounded);
         remove(state); remove(legacy); remove(legacy18); remove(cut);
         g_leo_school_on = prev_school;
         g_leo_wonder_on = prev_wonder;
@@ -3731,6 +3797,9 @@ int main(void) {
         g_leo_capsule_on = prev_capsule;
     }
 
+}
+
+static TEST_NOINLINE void test_prewonder_constellation(void) {
     /* A.40: multiple withheld questions coexist without becoming multiple
      * open Wonders. Opening one consumes only its own pre-Wonder identity;
      * another exact return waits while pending is occupied, then opens with
@@ -3755,97 +3824,97 @@ int main(void) {
         int animal = semtok_find_glyph("animal");
         int water = semtok_find_glyph("water");
         int fire = semtok_find_glyph("fire");
-        Leo constellation; leo_init(&constellation);
-        constellation.school.turn_clock = 1;
-        leo_deferred_wonder_remember(&constellation, "suvin",
+        Leo *constellation = test_leo_alloc(); leo_init(constellation);
+        constellation->school.turn_clock = 1;
+        leo_deferred_wonder_remember(constellation, "suvin",
                                      light, cold, 1, NULL, NULL);
-        constellation.school.turn_clock = 2;
-        leo_deferred_wonder_remember(&constellation, "nareth",
+        constellation->school.turn_clock = 2;
+        leo_deferred_wonder_remember(constellation, "nareth",
                                      dark, animal, 1, NULL, NULL);
-        constellation.school.turn_clock = 3;
-        leo_deferred_wonder_remember(&constellation, "flom",
+        constellation->school.turn_clock = 3;
+        leo_deferred_wonder_remember(constellation, "flom",
                                      water, fire, 1, NULL, NULL);
-        CHECK(constellation.school.n_deferred == 3 &&
-              leo_deferred_wonder_find(&constellation, "suvin") >= 0 &&
-              leo_deferred_wonder_find(&constellation, "nareth") >= 0 &&
-              leo_deferred_wonder_find(&constellation, "flom") >= 0,
+        CHECK(constellation->school.n_deferred == 3 &&
+              leo_deferred_wonder_find(constellation, "suvin") >= 0 &&
+              leo_deferred_wonder_find(constellation, "nareth") >= 0 &&
+              leo_deferred_wonder_find(constellation, "flom") >= 0,
               "pre-wonder constellation: three withheld questions coexist without opening");
 
-        memset(constellation.chamber_act, 0,
-               sizeof constellation.chamber_act);
-        memset(constellation.chamber_ext, 0,
-               sizeof constellation.chamber_ext);
-        memset(constellation.scar, 0, sizeof constellation.scar);
+        memset(constellation->chamber_act, 0,
+               sizeof constellation->chamber_act);
+        memset(constellation->chamber_ext, 0,
+               sizeof constellation->chamber_ext);
+        memset(constellation->scar, 0, sizeof constellation->scar);
         char out[1024];
-        leo_respond(&constellation, "nareth", out, sizeof out);
-        CHECK(constellation.curiosity.outcome ==
+        leo_respond(constellation, "nareth", out, sizeof out);
+        CHECK(constellation->curiosity.outcome ==
                   LEO_CURIOSITY_ASKED_DEFERRED &&
-              !strcmp(constellation.school.pending, "nareth") &&
-              constellation.school.pending_glyph == dark &&
-              constellation.school.pending_alt_glyph == animal &&
-              constellation.school.n_deferred == 2 &&
-              leo_deferred_wonder_find(&constellation, "nareth") < 0 &&
-              leo_deferred_wonder_find(&constellation, "suvin") >= 0 &&
-              leo_deferred_wonder_find(&constellation, "flom") >= 0,
+              !strcmp(constellation->school.pending, "nareth") &&
+              constellation->school.pending_glyph == dark &&
+              constellation->school.pending_alt_glyph == animal &&
+              constellation->school.n_deferred == 2 &&
+              leo_deferred_wonder_find(constellation, "nareth") < 0 &&
+              leo_deferred_wonder_find(constellation, "suvin") >= 0 &&
+              leo_deferred_wonder_find(constellation, "flom") >= 0,
               "pre-wonder constellation: opening one consumes only its own identity and hypotheses");
 
-        int flom = leo_deferred_wonder_find(&constellation, "flom");
+        int flom = leo_deferred_wonder_find(constellation, "flom");
         LeoDeferredWonder flom_before =
-            flom >= 0 ? constellation.school.deferred[flom] :
+            flom >= 0 ? constellation->school.deferred[flom] :
                         (LeoDeferredWonder){0};
-        leo_respond(&constellation, "flom", out, sizeof out);
-        flom = leo_deferred_wonder_find(&constellation, "flom");
-        CHECK(constellation.curiosity.outcome ==
+        leo_respond(constellation, "flom", out, sizeof out);
+        flom = leo_deferred_wonder_find(constellation, "flom");
+        CHECK(constellation->curiosity.outcome ==
                   LEO_CURIOSITY_ADDRESS_GUARDED &&
-              !strcmp(constellation.school.pending, "nareth") &&
+              !strcmp(constellation->school.pending, "nareth") &&
               flom >= 0 &&
-              constellation.school.deferred[flom].offered_glyph ==
+              constellation->school.deferred[flom].offered_glyph ==
                   flom_before.offered_glyph &&
-              constellation.school.deferred[flom].offered_alt_glyph ==
+              constellation->school.deferred[flom].offered_alt_glyph ==
                   flom_before.offered_alt_glyph &&
-              constellation.school.n_deferred == 2,
+              constellation->school.n_deferred == 2,
               "pre-wonder constellation: an occupied Wonder guards another exact return without changing it");
 
-        leo_respond(&constellation, "A nareth is dark night.",
+        leo_respond(constellation, "A nareth is dark night.",
                     out, sizeof out);
-        CHECK(constellation.curiosity.outcome ==
+        CHECK(constellation->curiosity.outcome ==
                   LEO_CURIOSITY_RESOLVED &&
-              !constellation.school.pending[0] &&
-              constellation.school.n_deferred == 2 &&
-              leo_school_is_learned(&constellation, "nareth"),
+              !constellation->school.pending[0] &&
+              constellation->school.n_deferred == 2 &&
+              leo_school_is_learned(constellation, "nareth"),
               "pre-wonder constellation: grounding the open question preserves its waiting siblings");
 
-        memset(constellation.chamber_act, 0,
-               sizeof constellation.chamber_act);
-        memset(constellation.chamber_ext, 0,
-               sizeof constellation.chamber_ext);
-        leo_respond(&constellation, "flom", out, sizeof out);
-        CHECK(constellation.curiosity.outcome ==
+        memset(constellation->chamber_act, 0,
+               sizeof constellation->chamber_act);
+        memset(constellation->chamber_ext, 0,
+               sizeof constellation->chamber_ext);
+        leo_respond(constellation, "flom", out, sizeof out);
+        CHECK(constellation->curiosity.outcome ==
                   LEO_CURIOSITY_ASKED_DEFERRED &&
-              !strcmp(constellation.school.pending, "flom") &&
-              constellation.school.pending_glyph == water &&
-              constellation.school.pending_alt_glyph == fire &&
-              constellation.school.n_deferred == 1 &&
-              leo_deferred_wonder_find(&constellation, "suvin") >= 0,
+              !strcmp(constellation->school.pending, "flom") &&
+              constellation->school.pending_glyph == water &&
+              constellation->school.pending_alt_glyph == fire &&
+              constellation->school.n_deferred == 1 &&
+              leo_deferred_wonder_find(constellation, "suvin") >= 0,
               "pre-wonder constellation: the next question opens later with its own hypotheses");
 
-        leo_respond(&constellation, "A flom is water.",
+        leo_respond(constellation, "A flom is water.",
                     out, sizeof out);
-        memset(constellation.chamber_act, 0,
-               sizeof constellation.chamber_act);
-        memset(constellation.chamber_ext, 0,
-               sizeof constellation.chamber_ext);
-        leo_respond(&constellation, "suvin", out, sizeof out);
-        CHECK(constellation.curiosity.outcome ==
+        memset(constellation->chamber_act, 0,
+               sizeof constellation->chamber_act);
+        memset(constellation->chamber_ext, 0,
+               sizeof constellation->chamber_ext);
+        leo_respond(constellation, "suvin", out, sizeof out);
+        CHECK(constellation->curiosity.outcome ==
                   LEO_CURIOSITY_ASKED_DEFERRED &&
-              !strcmp(constellation.school.pending, "suvin") &&
-              constellation.school.pending_glyph == light &&
-              constellation.school.pending_alt_glyph == cold &&
-              constellation.school.n_deferred == 0 &&
-              constellation.school.n_wonders == 3,
+              !strcmp(constellation->school.pending, "suvin") &&
+              constellation->school.pending_glyph == light &&
+              constellation->school.pending_alt_glyph == cold &&
+              constellation->school.n_deferred == 0 &&
+              constellation->school.n_wonders == 3,
               "pre-wonder constellation: every sibling can become one real Wonder exactly once");
 
-        leo_free(&constellation);
+        test_leo_delete(constellation);
         g_leo_school_on = prev_school;
         g_leo_wonder_on = prev_wonder;
         g_leo_deferred_wonder_on = prev_deferred;
@@ -3854,6 +3923,9 @@ int main(void) {
         g_leo_capsule_on = prev_capsule;
     }
 
+}
+
+static TEST_NOINLINE void test_prewonder_occupied_queue(void) {
     /* A.57: one open question owns the mouth, not perception. A new askable
      * word encountered while that mouth is occupied joins the same bounded
      * waiting constellation without replacing or resolving the active Wonder. */
@@ -3874,112 +3946,112 @@ int main(void) {
         g_leo_klaus_on = 0;
         g_leo_capsule_on = 0;
 
-        Leo occupied; leo_init(&occupied);
-        occupied.school.turn_clock = 1;
-        strncpy(occupied.school.pending, "suvin",
-                sizeof occupied.school.pending - 1);
-        occupied.school.pending_glyph =
+        Leo *occupied = test_leo_alloc(); leo_init(occupied);
+        occupied->school.turn_clock = 1;
+        strncpy(occupied->school.pending, "suvin",
+                sizeof occupied->school.pending - 1);
+        occupied->school.pending_glyph =
             semtok_find_glyph("light");
-        occupied.school.pending_alt_glyph =
+        occupied->school.pending_alt_glyph =
             semtok_find_glyph("cold");
         leo_pending_wonder_origin_begin(
-            &occupied, occupied.school.pending,
-            occupied.school.pending_glyph,
-            occupied.school.pending_alt_glyph, 1, NULL, NULL);
+            occupied, occupied->school.pending,
+            occupied->school.pending_glyph,
+            occupied->school.pending_alt_glyph, 1, NULL, NULL);
         leo_wonder_open(
-            &occupied, occupied.school.pending,
-            occupied.school.pending_glyph,
-            occupied.school.pending_alt_glyph);
+            occupied, occupied->school.pending,
+            occupied->school.pending_glyph,
+            occupied->school.pending_alt_glyph);
 
         char out[1024];
         srand(5701);
         leo_respond(
-            &occupied,
+            occupied,
             "Does nareth feel like dark night or wild animal?",
             out, sizeof out);
         int nareth =
-            leo_deferred_wonder_find(&occupied, "nareth");
-        CHECK(occupied.curiosity.outcome ==
+            leo_deferred_wonder_find(occupied, "nareth");
+        CHECK(occupied->curiosity.outcome ==
                   LEO_CURIOSITY_QUEUED_OCCUPIED &&
-              !strcmp(occupied.curiosity.candidate, "nareth") &&
-              !strcmp(occupied.school.pending, "suvin") &&
+              !strcmp(occupied->curiosity.candidate, "nareth") &&
+              !strcmp(occupied->school.pending, "suvin") &&
               nareth >= 0 &&
-              occupied.school.deferred[nareth].blocks == 1 &&
-              !leo_school_is_learned(&occupied, "suvin") &&
-              !leo_school_is_learned(&occupied, "nareth"),
+              occupied->school.deferred[nareth].blocks == 1 &&
+              !leo_school_is_learned(occupied, "suvin") &&
+              !leo_school_is_learned(occupied, "nareth"),
               "pre-wonder constellation: an occupied mouth still notices and queues a new question");
 
         LeoDeferredWonder nareth_birth =
-            occupied.school.deferred[nareth];
+            occupied->school.deferred[nareth];
         srand(5702);
-        leo_respond(&occupied, "Rough stone. Soft feather.",
+        leo_respond(occupied, "Rough stone. Soft feather.",
                     out, sizeof out);
-        nareth = leo_deferred_wonder_find(&occupied, "nareth");
+        nareth = leo_deferred_wonder_find(occupied, "nareth");
         CHECK(leo_deferred_wonder_find(
-                  &occupied, "rough") < 0 &&
-              !strcmp(occupied.school.pending, "suvin") &&
+                  occupied, "rough") < 0 &&
+              !strcmp(occupied->school.pending, "suvin") &&
               nareth >= 0 &&
-              !memcmp(&occupied.school.deferred[nareth],
+              !memcmp(&occupied->school.deferred[nareth],
                       &nareth_birth, sizeof nareth_birth),
               "pre-wonder constellation: an unfamiliar description remains sensation, not a counterfeit question");
 
         srand(5702);
-        leo_respond(&occupied, "nareth", out, sizeof out);
-        nareth = leo_deferred_wonder_find(&occupied, "nareth");
-        CHECK(occupied.curiosity.outcome ==
+        leo_respond(occupied, "nareth", out, sizeof out);
+        nareth = leo_deferred_wonder_find(occupied, "nareth");
+        CHECK(occupied->curiosity.outcome ==
                   LEO_CURIOSITY_ADDRESS_GUARDED &&
-              !strcmp(occupied.school.pending, "suvin") &&
+              !strcmp(occupied->school.pending, "suvin") &&
               nareth >= 0 &&
-              !memcmp(&occupied.school.deferred[nareth],
+              !memcmp(&occupied->school.deferred[nareth],
                       &nareth_birth, sizeof nareth_birth),
               "pre-wonder constellation: a newly queued sibling inherits A.40's unchanged guarded wait");
 
         srand(5703);
-        leo_respond(&occupied, "A suvin is bright light.",
+        leo_respond(occupied, "A suvin is bright light.",
                     out, sizeof out);
-        memset(occupied.chamber_act, 0,
-               sizeof occupied.chamber_act);
-        memset(occupied.chamber_ext, 0,
-               sizeof occupied.chamber_ext);
+        memset(occupied->chamber_act, 0,
+               sizeof occupied->chamber_act);
+        memset(occupied->chamber_ext, 0,
+               sizeof occupied->chamber_ext);
         srand(5704);
-        leo_respond(&occupied, "nareth", out, sizeof out);
-        CHECK(occupied.curiosity.outcome ==
+        leo_respond(occupied, "nareth", out, sizeof out);
+        CHECK(occupied->curiosity.outcome ==
                   LEO_CURIOSITY_ASKED_DEFERRED &&
-              !strcmp(occupied.school.pending, "nareth") &&
-              occupied.school.pending_glyph ==
+              !strcmp(occupied->school.pending, "nareth") &&
+              occupied->school.pending_glyph ==
                   nareth_birth.offered_glyph &&
-              occupied.school.pending_alt_glyph ==
+              occupied->school.pending_alt_glyph ==
                   nareth_birth.offered_alt_glyph &&
               leo_deferred_wonder_find(
-                  &occupied, "nareth") < 0,
+                  occupied, "nareth") < 0,
               "pre-wonder constellation: the queued question later receives the one available mouth");
 
-        Leo ablated; leo_init(&ablated);
-        ablated.school.turn_clock = 1;
-        strncpy(ablated.school.pending, "suvin",
-                sizeof ablated.school.pending - 1);
-        ablated.school.pending_glyph =
+        Leo *ablated = test_leo_alloc(); leo_init(ablated);
+        ablated->school.turn_clock = 1;
+        strncpy(ablated->school.pending, "suvin",
+                sizeof ablated->school.pending - 1);
+        ablated->school.pending_glyph =
             semtok_find_glyph("light");
-        ablated.school.pending_alt_glyph =
+        ablated->school.pending_alt_glyph =
             semtok_find_glyph("cold");
         leo_wonder_open(
-            &ablated, ablated.school.pending,
-            ablated.school.pending_glyph,
-            ablated.school.pending_alt_glyph);
+            ablated, ablated->school.pending,
+            ablated->school.pending_glyph,
+            ablated->school.pending_alt_glyph);
         g_leo_occupied_wonder_queue_on = 0;
         srand(5701);
         leo_respond(
-            &ablated,
+            ablated,
             "Does nareth feel like dark night or wild animal?",
             out, sizeof out);
-        CHECK(!strcmp(ablated.school.pending, "suvin") &&
-              ablated.school.n_deferred == 0 &&
-              ablated.curiosity.outcome ==
+        CHECK(!strcmp(ablated->school.pending, "suvin") &&
+              ablated->school.n_deferred == 0 &&
+              ablated->curiosity.outcome ==
                   LEO_CURIOSITY_CONTINUED,
               "pre-wonder constellation: the occupied-queue ablation restores occupied blindness");
 
-        leo_free(&occupied);
-        leo_free(&ablated);
+        test_leo_delete(occupied);
+        test_leo_delete(ablated);
         g_leo_school_on = prev_school;
         g_leo_wonder_on = prev_wonder;
         g_leo_deferred_wonder_on = prev_deferred;
@@ -3990,6 +4062,9 @@ int main(void) {
         g_leo_capsule_on = prev_capsule;
     }
 
+}
+
+static TEST_NOINLINE void test_prewonder_semantic_shadow(void) {
     /* A.41: semantic shadow can recognize which withheld question the present
      * meaning resembles, but cannot open it. Glyph grounding is load-bearing;
      * the own-field birth anchor supplies identity/tie shape, never authority. */
@@ -4001,7 +4076,7 @@ int main(void) {
         g_leo_wonder_on = 1;
         g_leo_deferred_wonder_on = 1;
 
-        Leo semantic; leo_init(&semantic);
+        Leo *semantic = test_leo_alloc(); leo_init(semantic);
         int32_t suvin_field[LEO_PREWONDER_FIELD];
         int32_t nareth_field[LEO_PREWONDER_FIELD];
         int32_t flom_field[LEO_PREWONDER_FIELD];
@@ -4015,98 +4090,101 @@ int main(void) {
         nareth_field[0] = 'n';
         flom_field[0] = 'f';
         unit_field[0] = 1.0f;
-        semantic.school.turn_clock = 1;
+        semantic->school.turn_clock = 1;
         leo_deferred_wonder_remember(
-            &semantic, "suvin", semtok_find_glyph("light"),
+            semantic, "suvin", semtok_find_glyph("light"),
             semtok_find_glyph("cold"), 1, suvin_field, unit_field);
-        semantic.school.turn_clock = 2;
+        semantic->school.turn_clock = 2;
         leo_deferred_wonder_remember(
-            &semantic, "nareth", semtok_find_glyph("dark"),
+            semantic, "nareth", semtok_find_glyph("dark"),
             semtok_find_glyph("animal"), 1, nareth_field, unit_field);
-        semantic.school.turn_clock = 3;
+        semantic->school.turn_clock = 3;
         leo_deferred_wonder_remember(
-            &semantic, "flom", semtok_find_glyph("fire"),
+            semantic, "flom", semtok_find_glyph("fire"),
             semtok_find_glyph("anger"), 1, flom_field, unit_field);
 
-        LeoSchool school_before = semantic.school;
+        LeoSchool school_before = semantic->school;
         leo_prewonder_shadow_observe(
-            &semantic, "bright sun meets cold winter",
+            semantic, "bright sun meets cold winter",
             suvin_field, unit_field);
         const LeoPreWonderShadowReceipt *receipt =
-            &semantic.prewonder_shadow;
+            &semantic->prewonder_shadow;
         CHECK(receipt->status == LEO_PREWONDER_SHADOW_CONFIDENT &&
               receipt->winner >= 0 &&
               !strcmp(receipt->candidates[receipt->winner].word, "suvin") &&
               receipt->n_candidates == 3 &&
-              !memcmp(&school_before, &semantic.school,
-                      sizeof semantic.school),
+              !memcmp(&school_before, &semantic->school,
+                      sizeof semantic->school),
               "pre-wonder shadow: grounded meaning identifies one sibling without touching School");
 
         leo_prewonder_shadow_observe(
-            &semantic, "bright sun crosses dark night",
+            semantic, "bright sun crosses dark night",
             suvin_field, unit_field);
-        CHECK(semantic.prewonder_shadow.status ==
+        CHECK(semantic->prewonder_shadow.status ==
                   LEO_PREWONDER_SHADOW_AMBIGUOUS &&
-              semantic.prewonder_shadow.winner < 0,
+              semantic->prewonder_shadow.winner < 0,
               "pre-wonder shadow: mixed semantic evidence remains unnamed");
 
         leo_prewonder_shadow_observe(
-            &semantic, "moss", suvin_field, unit_field);
-        CHECK(semantic.prewonder_shadow.status ==
+            semantic, "moss", suvin_field, unit_field);
+        CHECK(semantic->prewonder_shadow.status ==
                   LEO_PREWONDER_SHADOW_AMBIGUOUS &&
-              semantic.prewonder_shadow.winner < 0 &&
-              semantic.prewonder_shadow.candidates[0].glyph == 0.0f &&
-              semantic.prewonder_shadow.candidates[0].field == 1.0f,
+              semantic->prewonder_shadow.winner < 0 &&
+              semantic->prewonder_shadow.candidates[0].glyph == 0.0f &&
+              semantic->prewonder_shadow.candidates[0].field == 1.0f,
               "pre-wonder shadow: field identity alone cannot counterfeit grounded meaning");
 
         int32_t quiet_id[LEO_PREWONDER_FIELD];
         float quiet_weight[LEO_PREWONDER_FIELD] = {0};
         for (int i = 0; i < LEO_PREWONDER_FIELD; i++) quiet_id[i] = -1;
         leo_prewonder_shadow_observe(
-            &semantic, "the table holds a quiet cup",
+            semantic, "the table holds a quiet cup",
             quiet_id, quiet_weight);
-        CHECK(semantic.prewonder_shadow.status ==
+        CHECK(semantic->prewonder_shadow.status ==
                   LEO_PREWONDER_SHADOW_QUIET &&
-              semantic.prewonder_shadow.winner < 0,
+              semantic->prewonder_shadow.winner < 0,
               "pre-wonder shadow: unrelated life stays quiet");
 
         leo_prewonder_shadow_observe(
-            &semantic, "suvin", quiet_id, quiet_weight);
-        CHECK(semantic.prewonder_shadow.status ==
+            semantic, "suvin", quiet_id, quiet_weight);
+        CHECK(semantic->prewonder_shadow.status ==
                   LEO_PREWONDER_SHADOW_LITERAL &&
-              semantic.prewonder_shadow.winner < 0 &&
-              semantic.prewonder_shadow.candidates[0].literal,
+              semantic->prewonder_shadow.winner < 0 &&
+              semantic->prewonder_shadow.candidates[0].literal,
               "pre-wonder shadow: a literal return belongs to School, not semantic inference");
 
-        strncpy(semantic.school.pending, "nareth",
-                sizeof semantic.school.pending - 1);
-        school_before = semantic.school;
+        strncpy(semantic->school.pending, "nareth",
+                sizeof semantic->school.pending - 1);
+        school_before = semantic->school;
         leo_prewonder_shadow_observe(
-            &semantic, "angry fire waits empty and alone",
+            semantic, "angry fire waits empty and alone",
             flom_field, unit_field);
-        receipt = &semantic.prewonder_shadow;
+        receipt = &semantic->prewonder_shadow;
         CHECK(receipt->status == LEO_PREWONDER_SHADOW_CONFIDENT &&
               receipt->winner >= 0 &&
               !strcmp(receipt->candidates[receipt->winner].word, "flom") &&
-              !memcmp(&school_before, &semantic.school,
-                      sizeof semantic.school),
+              !memcmp(&school_before, &semantic->school,
+                      sizeof semantic->school),
               "pre-wonder shadow: an occupied Wonder does not blind or activate a waiting sibling");
 
         g_leo_prewonder_shadow_on = 0;
         leo_prewonder_shadow_observe(
-            &semantic, "bright sun meets cold winter",
+            semantic, "bright sun meets cold winter",
             suvin_field, unit_field);
-        CHECK(semantic.prewonder_shadow.status ==
+        CHECK(semantic->prewonder_shadow.status ==
                   LEO_PREWONDER_SHADOW_EMPTY &&
-              semantic.prewonder_shadow.n_candidates == 0,
+              semantic->prewonder_shadow.n_candidates == 0,
               "pre-wonder shadow: ablation removes only the transient receipt");
 
-        leo_free(&semantic);
+        test_leo_delete(semantic);
         g_leo_prewonder_shadow_on = prev_shadow;
         g_leo_wonder_on = prev_wonder;
         g_leo_deferred_wonder_on = prev_deferred;
     }
 
+}
+
+static TEST_NOINLINE void test_wonder_address(void) {
     /* A.42: semantic address is checked before an adjacent answer can close
      * the active Wonder. A sibling conflict may preserve uncertainty, never
      * claim the answer; explicit active naming keeps correction possible. */
@@ -4120,110 +4198,110 @@ int main(void) {
         g_leo_school_on = 1;
         g_leo_wonder_on = 1;
 
-        Leo address;
-        seed_wonder_address_body(&address);
-        LeoSchool school_before = address.school;
+        Leo *address = test_leo_alloc();
+        seed_wonder_address_body(address);
+        LeoSchool school_before = address->school;
         int veto = leo_wonder_address_observe(
-            &address, "Cat bird. Dark night.");
-        const LeoWonderAddressReceipt *receipt = &address.wonder_address;
+            address, "Cat bird. Dark night.");
+        const LeoWonderAddressReceipt *receipt = &address->wonder_address;
         CHECK(veto &&
               receipt->status ==
                   LEO_WONDER_ADDRESS_SIBLING_CONFLICT &&
               receipt->winner > 0 &&
               !strcmp(receipt->candidates[receipt->winner].word,
                       "nareth") &&
-              !memcmp(&school_before, &address.school,
-                      sizeof address.school),
+              !memcmp(&school_before, &address->school,
+                      sizeof address->school),
               "wonder-address: a confident sibling conflict is visible before grounding without mutating School");
 
         veto = leo_wonder_address_observe(
-            &address, "Bright sun. Cold winter.");
+            address, "Bright sun. Cold winter.");
         CHECK(!veto &&
-              address.wonder_address.status ==
+              address->wonder_address.status ==
                   LEO_WONDER_ADDRESS_ACTIVE_SEMANTIC &&
-              address.wonder_address.winner == 0,
+              address->wonder_address.winner == 0,
               "wonder-address: grounded active meaning keeps the adjacent answer");
 
         veto = leo_wonder_address_observe(
-            &address, "Bright sun and dark night.");
+            address, "Bright sun and dark night.");
         CHECK(!veto &&
-              address.wonder_address.status ==
+              address->wonder_address.status ==
                   LEO_WONDER_ADDRESS_AMBIGUOUS &&
-              address.wonder_address.winner < 0,
+              address->wonder_address.winner < 0,
               "wonder-address: mixed meaning cannot choose an owner");
 
         veto = leo_wonder_address_observe(
-            &address, "Suvin is a dark animal.");
+            address, "Suvin is a dark animal.");
         CHECK(!veto &&
-              address.wonder_address.status ==
+              address->wonder_address.status ==
                   LEO_WONDER_ADDRESS_ACTIVE_EXPLICIT &&
-              address.wonder_address.winner == 0,
+              address->wonder_address.winner == 0,
               "wonder-address: naming the active Wonder permits correction of Leo's hypotheses");
 
         veto = leo_wonder_address_observe(
-            &address, "Nareth is a dark animal.");
+            address, "Nareth is a dark animal.");
         CHECK(veto &&
-              address.wonder_address.status ==
+              address->wonder_address.status ==
                   LEO_WONDER_ADDRESS_SIBLING_EXPLICIT &&
-              address.wonder_address.winner > 0,
+              address->wonder_address.winner > 0,
               "wonder-address: naming a waiting sibling cannot close the active Wonder");
-        leo_free(&address);
+        test_leo_delete(address);
 
-        Leo guarded;
-        seed_wonder_address_body(&guarded);
+        Leo *guarded = test_leo_alloc();
+        seed_wonder_address_body(guarded);
         char out[512];
         srand(4201);
-        leo_respond(&guarded, "Cat bird. Dark night.", out, sizeof out);
-        int open = leo_wonder_find_open(&guarded, "suvin");
-        CHECK(!strcmp(guarded.school.pending, "suvin") &&
-              open >= 0 && !guarded.school.wonders[open].resolved &&
-              !leo_school_is_learned(&guarded, "suvin") &&
-              guarded.curiosity.outcome ==
+        leo_respond(guarded, "Cat bird. Dark night.", out, sizeof out);
+        int open = leo_wonder_find_open(guarded, "suvin");
+        CHECK(!strcmp(guarded->school.pending, "suvin") &&
+              open >= 0 && !guarded->school.wonders[open].resolved &&
+              !leo_school_is_learned(guarded, "suvin") &&
+              guarded->curiosity.outcome ==
                   LEO_CURIOSITY_ADDRESS_GUARDED &&
-              guarded.wonder_address.guarded,
+              guarded->wonder_address.guarded,
               "wonder-address: the live guard preserves the active question and teaches neither identity");
-        leo_free(&guarded);
+        test_leo_delete(guarded);
 
-        Leo legacy;
-        seed_wonder_address_body(&legacy);
+        Leo *legacy = test_leo_alloc();
+        seed_wonder_address_body(legacy);
         g_leo_wonder_attribution_on = 0;
         srand(4201);
-        leo_respond(&legacy, "Cat bird. Dark night.", out, sizeof out);
-        CHECK(!strcmp(legacy.school.pending, "suvin") &&
-              !leo_school_is_learned(&legacy, "suvin") &&
-              legacy.curiosity.outcome == LEO_CURIOSITY_CONTINUED &&
-              legacy.wonder_address.status ==
+        leo_respond(legacy, "Cat bird. Dark night.", out, sizeof out);
+        CHECK(!strcmp(legacy->school.pending, "suvin") &&
+              !leo_school_is_learned(legacy, "suvin") &&
+              legacy->curiosity.outcome == LEO_CURIOSITY_CONTINUED &&
+              legacy->wonder_address.status ==
                   LEO_WONDER_ADDRESS_EMPTY,
               "wonder-address: attribution ablation cannot reopen the closed adjacency bug");
-        leo_free(&legacy);
+        test_leo_delete(legacy);
 
-        Leo correction;
-        seed_wonder_address_body(&correction);
+        Leo *correction = test_leo_alloc();
+        seed_wonder_address_body(correction);
         g_leo_wonder_attribution_on = 1;
         srand(4202);
-        leo_respond(&correction, "Suvin is a dark animal.",
+        leo_respond(correction, "Suvin is a dark animal.",
                     out, sizeof out);
-        CHECK(!correction.school.pending[0] &&
-              leo_school_is_learned(&correction, "suvin") &&
-              correction.curiosity.outcome ==
+        CHECK(!correction->school.pending[0] &&
+              leo_school_is_learned(correction, "suvin") &&
+              correction->curiosity.outcome ==
                   LEO_CURIOSITY_RESOLVED &&
-              correction.wonder_address.status ==
+              correction->wonder_address.status ==
                   LEO_WONDER_ADDRESS_ACTIVE_EXPLICIT &&
-              !correction.wonder_address.guarded,
+              !correction->wonder_address.guarded,
               "wonder-address: an explicit human correction still resolves the active question");
-        leo_free(&correction);
+        test_leo_delete(correction);
 
-        Leo ablated;
-        seed_wonder_address_body(&ablated);
+        Leo *ablated = test_leo_alloc();
+        seed_wonder_address_body(ablated);
         g_leo_wonder_attribution_on = 0;
         veto = leo_wonder_address_observe(
-            &ablated, "Cat bird. Dark night.");
+            ablated, "Cat bird. Dark night.");
         CHECK(!veto &&
-              ablated.wonder_address.status ==
+              ablated->wonder_address.status ==
                   LEO_WONDER_ADDRESS_EMPTY &&
-              ablated.wonder_address.n_candidates == 0,
+              ablated->wonder_address.n_candidates == 0,
               "wonder-address: ablation removes the transient address witness");
-        leo_free(&ablated);
+        test_leo_delete(ablated);
 
         g_leo_wonder_attribution_on = prev_attr;
         g_leo_wonder_redirection_on = prev_redirection;
@@ -4231,6 +4309,9 @@ int main(void) {
         g_leo_wonder_on = prev_wonder;
     }
 
+}
+
+static TEST_NOINLINE void test_wonder_redirection(void) {
     /* A.43: a literal waiting name may redirect the one available mouth. The
      * displaced active Wonder returns to the bounded queue with its exact birth
      * provenance; semantic resemblance still has no routing authority. */
@@ -4249,217 +4330,217 @@ int main(void) {
         g_leo_capsule_on = 0;
 
         char out[512], expected[128];
-        Leo redirected;
-        seed_wonder_redirection_body(&redirected);
+        Leo *redirected = test_leo_alloc();
+        seed_wonder_redirection_body(redirected);
         LeoDeferredWonder suvin_origin =
-            redirected.school.pending_origin;
-        int suvin_episode = leo_wonder_find_open(&redirected, "suvin");
+            redirected->school.pending_origin;
+        int suvin_episode = leo_wonder_find_open(redirected, "suvin");
         long suvin_opened = suvin_episode >= 0 ?
-            redirected.school.wonders[suvin_episode].opened_step : -1;
+            redirected->school.wonders[suvin_episode].opened_step : -1;
         srand(4301);
-        leo_respond(&redirected, "Nareth is a dark animal.",
+        leo_respond(redirected, "Nareth is a dark animal.",
                     out, sizeof out);
-        int parked = leo_deferred_wonder_find(&redirected, "suvin");
-        int nareth_episode = leo_wonder_find_open(&redirected, "nareth");
-        CHECK(redirected.wonder_address.redirected &&
-              !redirected.wonder_address.guarded &&
-              redirected.curiosity.outcome == LEO_CURIOSITY_RESOLVED &&
-              !redirected.school.pending[0] &&
-              !redirected.school.has_pending_origin &&
-              leo_school_is_learned(&redirected, "nareth") &&
-              !leo_school_is_learned(&redirected, "suvin") &&
+        int parked = leo_deferred_wonder_find(redirected, "suvin");
+        int nareth_episode = leo_wonder_find_open(redirected, "nareth");
+        CHECK(redirected->wonder_address.redirected &&
+              !redirected->wonder_address.guarded &&
+              redirected->curiosity.outcome == LEO_CURIOSITY_RESOLVED &&
+              !redirected->school.pending[0] &&
+              !redirected->school.has_pending_origin &&
+              leo_school_is_learned(redirected, "nareth") &&
+              !leo_school_is_learned(redirected, "suvin") &&
               parked >= 0 && nareth_episode < 0,
               "wonder-redirection: an explicitly addressed sibling receives its own grounded answer");
         CHECK(parked >= 0 &&
-              redirected.school.deferred[parked].offered_glyph ==
+              redirected->school.deferred[parked].offered_glyph ==
                   suvin_origin.offered_glyph &&
-              redirected.school.deferred[parked].offered_alt_glyph ==
+              redirected->school.deferred[parked].offered_alt_glyph ==
                   suvin_origin.offered_alt_glyph &&
-              redirected.school.deferred[parked].born_turn ==
+              redirected->school.deferred[parked].born_turn ==
                   suvin_origin.born_turn &&
-              !memcmp(redirected.school.deferred[parked].field_token,
+              !memcmp(redirected->school.deferred[parked].field_token,
                       suvin_origin.field_token,
                       sizeof suvin_origin.field_token) &&
-              !memcmp(redirected.school.deferred[parked].field_weight,
+              !memcmp(redirected->school.deferred[parked].field_weight,
                       suvin_origin.field_weight,
                       sizeof suvin_origin.field_weight) &&
-              redirected.school.deferred[parked].blocks ==
+              redirected->school.deferred[parked].blocks ==
                   suvin_origin.blocks + 1,
               "wonder-redirection: the displaced question keeps hypotheses, birth, and own-field provenance");
-        suvin_episode = leo_wonder_find_open(&redirected, "suvin");
+        suvin_episode = leo_wonder_find_open(redirected, "suvin");
         CHECK(suvin_episode >= 0 &&
-              redirected.school.wonders[suvin_episode].opened_step ==
+              redirected->school.wonders[suvin_episode].opened_step ==
                   suvin_opened &&
-              !redirected.school.wonders[suvin_episode].resolved,
+              !redirected->school.wonders[suvin_episode].resolved,
               "wonder-redirection: parking preserves the first Wonder episode instead of rebirthing it");
 
-        memset(redirected.chamber_act, 0,
-               sizeof redirected.chamber_act);
-        memset(redirected.chamber_ext, 0,
-               sizeof redirected.chamber_ext);
+        memset(redirected->chamber_act, 0,
+               sizeof redirected->chamber_act);
+        memset(redirected->chamber_ext, 0,
+               sizeof redirected->chamber_ext);
         leo_school_format_question(expected, sizeof expected, "suvin",
                                    suvin_origin.offered_glyph,
                                    suvin_origin.offered_alt_glyph);
-        leo_respond(&redirected, "suvin", out, sizeof out);
-        suvin_episode = leo_wonder_find_open(&redirected, "suvin");
+        leo_respond(redirected, "suvin", out, sizeof out);
+        suvin_episode = leo_wonder_find_open(redirected, "suvin");
         CHECK(!strcmp(out, expected) &&
-              redirected.curiosity.outcome ==
+              redirected->curiosity.outcome ==
                   LEO_CURIOSITY_ASKED_DEFERRED &&
-              !strcmp(redirected.school.pending, "suvin") &&
-              redirected.school.has_pending_origin &&
-              redirected.school.pending_origin.offered_glyph ==
+              !strcmp(redirected->school.pending, "suvin") &&
+              redirected->school.has_pending_origin &&
+              redirected->school.pending_origin.offered_glyph ==
                   suvin_origin.offered_glyph &&
-              redirected.school.pending_origin.offered_alt_glyph ==
+              redirected->school.pending_origin.offered_alt_glyph ==
                   suvin_origin.offered_alt_glyph &&
-              redirected.school.pending_origin.born_turn ==
+              redirected->school.pending_origin.born_turn ==
                   suvin_origin.born_turn &&
-              !memcmp(redirected.school.pending_origin.field_token,
+              !memcmp(redirected->school.pending_origin.field_token,
                       suvin_origin.field_token,
                       sizeof suvin_origin.field_token) &&
-              !memcmp(redirected.school.pending_origin.field_weight,
+              !memcmp(redirected->school.pending_origin.field_weight,
                       suvin_origin.field_weight,
                       sizeof suvin_origin.field_weight) &&
               suvin_episode >= 0 &&
-              redirected.school.wonders[suvin_episode].opened_step ==
+              redirected->school.wonders[suvin_episode].opened_step ==
                   suvin_opened,
               "wonder-redirection: the first question later returns with its original voice and episode");
-        leo_free(&redirected);
+        test_leo_delete(redirected);
 
-        Leo bare;
-        seed_wonder_redirection_body(&bare);
-        int bare_suvin_episode = leo_wonder_find_open(&bare, "suvin");
+        Leo *bare = test_leo_alloc();
+        seed_wonder_redirection_body(bare);
+        int bare_suvin_episode = leo_wonder_find_open(bare, "suvin");
         uint64_t bare_suvin_id = bare_suvin_episode >= 0 ?
             leo_wonder_episode_id(
-                &bare.school.wonders[bare_suvin_episode]) : 0;
-        leo_flow_observe(&bare, "suvin", "Suvin?", NULL, NULL, NULL,
+                &bare->school.wonders[bare_suvin_episode]) : 0;
+        leo_flow_observe(bare, "suvin", "Suvin?", NULL, NULL, NULL,
                          LEO_FLOW_WONDER_BORN, bare_suvin_id);
         LeoDeferredWonder nareth_origin =
-            bare.school.deferred[leo_deferred_wonder_find(&bare, "nareth")];
+            bare->school.deferred[leo_deferred_wonder_find(bare, "nareth")];
         leo_school_format_question(expected, sizeof expected, "nareth",
                                    nareth_origin.offered_glyph,
                                    nareth_origin.offered_alt_glyph);
         srand(4302);
-        leo_respond(&bare, "Nareth.", out, sizeof out);
-        parked = leo_deferred_wonder_find(&bare, "suvin");
+        leo_respond(bare, "Nareth.", out, sizeof out);
+        parked = leo_deferred_wonder_find(bare, "suvin");
         CHECK(!strcmp(out, expected) &&
-              bare.curiosity.outcome == LEO_CURIOSITY_REDIRECTED &&
-              bare.wonder_address.redirected &&
-              !strcmp(bare.school.pending, "nareth") &&
-              bare.school.has_pending_origin &&
-              !memcmp(&bare.school.pending_origin, &nareth_origin,
+              bare->curiosity.outcome == LEO_CURIOSITY_REDIRECTED &&
+              bare->wonder_address.redirected &&
+              !strcmp(bare->school.pending, "nareth") &&
+              bare->school.has_pending_origin &&
+              !memcmp(&bare->school.pending_origin, &nareth_origin,
                       sizeof nareth_origin) &&
-              parked >= 0 && bare.school.n_wonders == 2 &&
-              !leo_school_is_learned(&bare, "nareth"),
+              parked >= 0 && bare->school.n_wonders == 2 &&
+              !leo_school_is_learned(bare, "nareth"),
               "wonder-redirection: a bare sibling address switches questions without inventing an answer");
-        int bare_nareth_episode = leo_wonder_find_open(&bare, "nareth");
+        int bare_nareth_episode = leo_wonder_find_open(bare, "nareth");
         uint64_t bare_nareth_id = bare_nareth_episode >= 0 ?
             leo_wonder_episode_id(
-                &bare.school.wonders[bare_nareth_episode]) : 0;
+                &bare->school.wonders[bare_nareth_episode]) : 0;
         const char *multi_current =
             "/tmp/leo_wonder_redirect_currents_v20.state";
-        Leo bare_woke; leo_init(&bare_woke);
-        CHECK(bare.flow.n_currents == 2 &&
-              leo_save_state(&bare, multi_current) &&
-              leo_load_state(&bare_woke, multi_current) &&
-              bare_woke.flow.n_currents == 2 &&
+        Leo *bare_woke = test_leo_alloc(); leo_init(bare_woke);
+        CHECK(bare->flow.n_currents == 2 &&
+              leo_save_state(bare, multi_current) &&
+              leo_load_state(bare_woke, multi_current) &&
+              bare_woke->flow.n_currents == 2 &&
               leo_flow_current_find_const(
-                  &bare_woke.flow, bare_suvin_id) &&
+                  &bare_woke->flow, bare_suvin_id) &&
               !leo_flow_current_find_const(
-                  &bare_woke.flow, bare_suvin_id)->resolved &&
+                  &bare_woke->flow, bare_suvin_id)->resolved &&
               leo_flow_current_find_const(
-                  &bare_woke.flow, bare_nareth_id) &&
+                  &bare_woke->flow, bare_nareth_id) &&
               !leo_flow_current_find_const(
-                  &bare_woke.flow, bare_nareth_id)->resolved,
+                  &bare_woke->flow, bare_nareth_id)->resolved,
               "wonder-redirection: suspended and active Flow currents survive the same sleep");
-        leo_free(&bare_woke);
+        test_leo_delete(bare_woke);
         remove(multi_current);
-        leo_free(&bare);
+        test_leo_delete(bare);
 
-        Leo semantic;
-        seed_wonder_redirection_body(&semantic);
+        Leo *semantic = test_leo_alloc();
+        seed_wonder_redirection_body(semantic);
         srand(4303);
-        leo_respond(&semantic, "Cat bird. Dark night.",
+        leo_respond(semantic, "Cat bird. Dark night.",
                     out, sizeof out);
-        CHECK(!semantic.wonder_address.redirected &&
-              semantic.wonder_address.guarded &&
-              semantic.curiosity.outcome ==
+        CHECK(!semantic->wonder_address.redirected &&
+              semantic->wonder_address.guarded &&
+              semantic->curiosity.outcome ==
                   LEO_CURIOSITY_ADDRESS_GUARDED &&
-              !strcmp(semantic.school.pending, "suvin") &&
-              leo_deferred_wonder_find(&semantic, "nareth") >= 0,
+              !strcmp(semantic->school.pending, "suvin") &&
+              leo_deferred_wonder_find(semantic, "nareth") >= 0,
               "wonder-redirection: semantic sibling evidence can guard but cannot switch address");
-        leo_free(&semantic);
+        test_leo_delete(semantic);
 
-        Leo active;
-        seed_wonder_redirection_body(&active);
+        Leo *active = test_leo_alloc();
+        seed_wonder_redirection_body(active);
         srand(4304);
-        leo_respond(&active,
+        leo_respond(active,
                     "Suvin and Nareth are a dark animal.",
                     out, sizeof out);
-        CHECK(!active.wonder_address.redirected &&
-              active.wonder_address.status ==
+        CHECK(!active->wonder_address.redirected &&
+              active->wonder_address.status ==
                   LEO_WONDER_ADDRESS_ACTIVE_EXPLICIT &&
-              leo_school_is_learned(&active, "suvin") &&
-              !leo_school_is_learned(&active, "nareth") &&
-              leo_deferred_wonder_find(&active, "nareth") >= 0,
+              leo_school_is_learned(active, "suvin") &&
+              !leo_school_is_learned(active, "nareth") &&
+              leo_deferred_wonder_find(active, "nareth") >= 0,
               "wonder-redirection: explicitly naming the active question wins over a sibling name");
-        leo_free(&active);
+        test_leo_delete(active);
 
-        Leo ablated;
-        seed_wonder_redirection_body(&ablated);
+        Leo *ablated = test_leo_alloc();
+        seed_wonder_redirection_body(ablated);
         g_leo_wonder_redirection_on = 0;
         srand(4305);
-        leo_respond(&ablated, "Nareth is a dark animal.",
+        leo_respond(ablated, "Nareth is a dark animal.",
                     out, sizeof out);
-        CHECK(!ablated.wonder_address.redirected &&
-              ablated.wonder_address.guarded &&
-              !strcmp(ablated.school.pending, "suvin") &&
-              !leo_school_is_learned(&ablated, "nareth"),
+        CHECK(!ablated->wonder_address.redirected &&
+              ablated->wonder_address.guarded &&
+              !strcmp(ablated->school.pending, "suvin") &&
+              !leo_school_is_learned(ablated, "nareth"),
               "wonder-redirection: ablation restores A.42's explicit-sibling guard");
-        leo_free(&ablated);
+        test_leo_delete(ablated);
         g_leo_wonder_redirection_on = 1;
 
-        Leo legacy;
-        seed_wonder_address_body(&legacy);
+        Leo *legacy = test_leo_alloc();
+        seed_wonder_address_body(legacy);
         srand(4306);
-        leo_respond(&legacy, "Nareth is a dark animal.",
+        leo_respond(legacy, "Nareth is a dark animal.",
                     out, sizeof out);
-        CHECK(!legacy.wonder_address.redirected &&
-              legacy.wonder_address.guarded &&
-              !strcmp(legacy.school.pending, "suvin"),
+        CHECK(!legacy->wonder_address.redirected &&
+              legacy->wonder_address.guarded &&
+              !strcmp(legacy->school.pending, "suvin"),
               "wonder-redirection: an originless active question fails closed instead of fabricating provenance");
-        leo_free(&legacy);
+        test_leo_delete(legacy);
 
-        Leo full;
-        seed_wonder_redirection_body(&full);
+        Leo *full = test_leo_alloc();
+        seed_wonder_redirection_body(full);
         const char *extra[] =
             {"cinder", "dovel", "ember", "frost", "glint", "harbor"};
         for (int i = 0; i < 6; i++) {
-            full.school.turn_clock++;
+            full->school.turn_clock++;
             leo_deferred_wonder_remember(
-                &full, extra[i], semtok_find_glyph("water"),
+                full, extra[i], semtok_find_glyph("water"),
                 semtok_find_glyph("fire"), 1, NULL, NULL);
         }
-        CHECK(full.school.n_deferred == LEO_DEFERRED_WONDER_MAX,
+        CHECK(full->school.n_deferred == LEO_DEFERRED_WONDER_MAX,
               "wonder-redirection: capacity fixture fills all waiting slots");
         srand(4307);
-        leo_respond(&full, "Nareth.", out, sizeof out);
-        CHECK(full.school.n_deferred == LEO_DEFERRED_WONDER_MAX &&
-              leo_deferred_wonder_find(&full, "suvin") >= 0 &&
-              leo_deferred_wonder_find(&full, "nareth") < 0,
+        leo_respond(full, "Nareth.", out, sizeof out);
+        CHECK(full->school.n_deferred == LEO_DEFERRED_WONDER_MAX &&
+              leo_deferred_wonder_find(full, "suvin") >= 0 &&
+              leo_deferred_wonder_find(full, "nareth") < 0,
               "wonder-redirection: a full queue swaps in place without evicting another question");
-        leo_free(&full);
+        test_leo_delete(full);
 
-        Leo sleep;
-        seed_wonder_redirection_body(&sleep);
-        LeoDeferredWonder sleep_origin = sleep.school.pending_origin;
+        Leo *sleep = test_leo_alloc();
+        seed_wonder_redirection_body(sleep);
+        LeoDeferredWonder sleep_origin = sleep->school.pending_origin;
         const char *state = "/tmp/leo_wonder_origin_v20.state";
         const char *legacy19 = "/tmp/leo_wonder_origin_v19.state";
         const char *cut = "/tmp/leo_wonder_origin_v20_cut.state";
-        int saved = leo_save_state(&sleep, state);
-        Leo woke; leo_init(&woke);
-        CHECK(saved && leo_load_state(&woke, state) &&
-              woke.school.has_pending_origin &&
-              !memcmp(&woke.school.pending_origin, &sleep_origin,
+        int saved = leo_save_state(sleep, state);
+        Leo *woke = test_leo_alloc(); leo_init(woke);
+        CHECK(saved && leo_load_state(woke, state) &&
+              woke->school.has_pending_origin &&
+              !memcmp(&woke->school.pending_origin, &sleep_origin,
                       sizeof sleep_origin),
               "wonder-redirection: active provenance survives v20 sleep exactly");
 
@@ -4473,7 +4554,7 @@ int main(void) {
             if (bytes && sz > (long)sizeof(LeoDeferredWonder) + 5 &&
                 (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                 long appetite_tail =
-                    test_appetite_and_later_tail_size(&sleep);
+                    test_appetite_and_later_tail_size(sleep);
                 long origin_tail =
                     (long)(sizeof(int32_t) + sizeof(LeoDeferredWonder));
                 uint32_t nineteen = 19;
@@ -4504,23 +4585,23 @@ int main(void) {
             free(bytes);
             fclose(fi);
         }
-        Leo old; leo_init(&old);
-        CHECK(built_legacy && leo_load_state(&old, legacy19) &&
-              !strcmp(old.school.pending, "suvin") &&
-              !old.school.has_pending_origin &&
-              old.school.n_deferred == sleep.school.n_deferred,
+        Leo *old = test_leo_alloc(); leo_init(old);
+        CHECK(built_legacy && leo_load_state(old, legacy19) &&
+              !strcmp(old->school.pending, "suvin") &&
+              !old->school.has_pending_origin &&
+              old->school.n_deferred == sleep->school.n_deferred,
               "wonder-redirection: v19 preserves the question but invents no active provenance");
-        Leo damaged; leo_init(&damaged);
-        CHECK(built_cut && leo_load_state(&damaged, cut) &&
-              !strcmp(damaged.school.pending, "suvin") &&
-              !damaged.school.has_pending_origin &&
-              damaged.school.n_deferred == sleep.school.n_deferred,
+        Leo *damaged = test_leo_alloc(); leo_init(damaged);
+        CHECK(built_cut && leo_load_state(damaged, cut) &&
+              !strcmp(damaged->school.pending, "suvin") &&
+              !damaged->school.has_pending_origin &&
+              damaged->school.n_deferred == sleep->school.n_deferred,
               "wonder-redirection: corrupt v20 provenance loses only redirect authority");
 
-        leo_free(&sleep);
-        leo_free(&woke);
-        leo_free(&old);
-        leo_free(&damaged);
+        test_leo_delete(sleep);
+        test_leo_delete(woke);
+        test_leo_delete(old);
+        test_leo_delete(damaged);
         remove(state);
         remove(legacy19);
         remove(cut);
@@ -4532,7 +4613,10 @@ int main(void) {
         g_leo_capsule_on = prev_capsule;
     }
 
-    /* A.44: waiting questions may acquire a transient return appetite. Meaning
+}
+
+static TEST_NOINLINE void test_wonder_appetite(void) {
+    /* A.44: waiting questions may acquire a transient return appetite-> Meaning
      * must carry the nomination; silence, unfinished depth, and Flow residual
      * can strengthen it but never schedule, persist, or speak. */
     {
@@ -4549,15 +4633,15 @@ int main(void) {
         g_leo_wonder_attribution_on = 1;
         g_leo_wonder_redirection_on = 1;
 
-        Leo appetite;
-        seed_wonder_redirection_body(&appetite);
-        appetite.school.turn_clock = 11;
-        LeoSchool school_before = appetite.school;
-        LeoFlow flow_before = appetite.flow;
+        Leo *appetite = test_leo_alloc();
+        seed_wonder_redirection_body(appetite);
+        appetite->school.turn_clock = 11;
+        LeoSchool school_before = appetite->school;
+        LeoFlow flow_before = appetite->flow;
         leo_wonder_appetite_observe(
-            &appetite, "Cat bird. Dark night.", NULL, NULL);
+            appetite, "Cat bird. Dark night.", NULL, NULL);
         const LeoWonderAppetiteReceipt *receipt =
-            &appetite.wonder_appetite;
+            &appetite->wonder_appetite;
         CHECK(receipt->status == LEO_WONDER_APPETITE_SALIENT &&
               receipt->winner >= 0 &&
               !strcmp(receipt->candidates[receipt->winner].word,
@@ -4566,51 +4650,51 @@ int main(void) {
                   LEO_WONDER_APPETITE_RESONANCE_MIN &&
               receipt->n_candidates == 2,
               "wonder-appetite: a strong returning meaning makes one waiting question salient");
-        CHECK(!memcmp(&school_before, &appetite.school,
-                      sizeof appetite.school) &&
-              !memcmp(&flow_before, &appetite.flow,
-                      sizeof appetite.flow),
+        CHECK(!memcmp(&school_before, &appetite->school,
+                      sizeof appetite->school) &&
+              !memcmp(&flow_before, &appetite->flow,
+                      sizeof appetite->flow),
               "wonder-appetite: observation cannot mutate School or Flow");
 
         leo_wonder_appetite_observe(
-            &appetite, "Dark night and angry fire.", NULL, NULL);
-        CHECK(appetite.wonder_appetite.status ==
+            appetite, "Dark night and angry fire.", NULL, NULL);
+        CHECK(appetite->wonder_appetite.status ==
                   LEO_WONDER_APPETITE_DIFFUSE &&
-              appetite.wonder_appetite.winner < 0,
+              appetite->wonder_appetite.winner < 0,
               "wonder-appetite: mixed recurrence stays diffuse instead of choosing an owner");
 
-        appetite.school.turn_clock = 100;
+        appetite->school.turn_clock = 100;
         leo_wonder_appetite_observe(
-            &appetite, "I do not know.", NULL, NULL);
-        CHECK(appetite.wonder_appetite.status ==
+            appetite, "I do not know.", NULL, NULL);
+        CHECK(appetite->wonder_appetite.status ==
                   LEO_WONDER_APPETITE_QUIET &&
-              appetite.wonder_appetite.winner < 0 &&
-              appetite.wonder_appetite.candidates[0].silence == 1.0f,
+              appetite->wonder_appetite.winner < 0 &&
+              appetite->wonder_appetite.candidates[0].silence == 1.0f,
               "wonder-appetite: age alone cannot nominate a forgotten question");
 
         leo_wonder_appetite_observe(
-            &appetite, "Nareth.", NULL, NULL);
-        CHECK(appetite.wonder_appetite.status ==
+            appetite, "Nareth.", NULL, NULL);
+        CHECK(appetite->wonder_appetite.status ==
                   LEO_WONDER_APPETITE_LITERAL &&
-              appetite.wonder_appetite.winner < 0,
+              appetite->wonder_appetite.winner < 0,
               "wonder-appetite: a literal name remains an external invitation, not autonomous appetite");
-        leo_free(&appetite);
+        test_leo_delete(appetite);
 
-        Leo parked;
-        seed_wonder_redirection_body(&parked);
-        int suvin_episode = leo_wonder_find_open(&parked, "suvin");
+        Leo *parked = test_leo_alloc();
+        seed_wonder_redirection_body(parked);
+        int suvin_episode = leo_wonder_find_open(parked, "suvin");
         uint64_t suvin_id = suvin_episode >= 0 ?
             leo_wonder_episode_id(
-                &parked.school.wonders[suvin_episode]) : 0;
+                &parked->school.wonders[suvin_episode]) : 0;
         leo_flow_observe(
-            &parked, "suvin", "Suvin? Light or Cold?",
+            parked, "suvin", "Suvin? Light or Cold?",
             NULL, NULL, NULL, LEO_FLOW_WONDER_BORN, suvin_id);
-        parked.school.turn_clock++;
-        int veto = leo_wonder_address_observe(&parked, "Nareth.");
-        int switched = leo_wonder_address_redirect(&parked);
+        parked->school.turn_clock++;
+        int veto = leo_wonder_address_observe(parked, "Nareth.");
+        int switched = leo_wonder_address_redirect(parked);
         leo_wonder_appetite_observe(
-            &parked, "Bright sun. Cold winter.", NULL, NULL);
-        receipt = &parked.wonder_appetite;
+            parked, "Bright sun. Cold winter.", NULL, NULL);
+        receipt = &parked->wonder_appetite;
         CHECK(veto && switched &&
               receipt->status == LEO_WONDER_APPETITE_SALIENT &&
               receipt->winner >= 0 &&
@@ -4623,24 +4707,24 @@ int main(void) {
 
         const char *state =
             "/tmp/leo_wonder_appetite_transient_v20.state";
-        int saved = leo_save_state(&parked, state);
-        Leo woke; leo_init(&woke);
-        CHECK(saved && leo_load_state(&woke, state) &&
-              woke.wonder_appetite.n_candidates == 0 &&
-              woke.wonder_appetite.status ==
+        int saved = leo_save_state(parked, state);
+        Leo *woke = test_leo_alloc(); leo_init(woke);
+        CHECK(saved && leo_load_state(woke, state) &&
+              woke->wonder_appetite.n_candidates == 0 &&
+              woke->wonder_appetite.status ==
                   LEO_WONDER_APPETITE_EMPTY,
               "wonder-appetite: the receipt does not masquerade as persistent self");
-        leo_free(&woke);
+        test_leo_delete(woke);
         remove(state);
 
         g_leo_wonder_appetite_on = 0;
         leo_wonder_appetite_observe(
-            &parked, "Bright sun. Cold winter.", NULL, NULL);
-        CHECK(parked.wonder_appetite.n_candidates == 0 &&
-              parked.wonder_appetite.status ==
+            parked, "Bright sun. Cold winter.", NULL, NULL);
+        CHECK(parked->wonder_appetite.n_candidates == 0 &&
+              parked->wonder_appetite.status ==
                   LEO_WONDER_APPETITE_EMPTY,
               "wonder-appetite: ablation removes only the transient receipt");
-        leo_free(&parked);
+        test_leo_delete(parked);
 
         g_leo_wonder_appetite_on = prev_appetite;
         g_leo_flow_on = prev_flow;
@@ -4650,6 +4734,9 @@ int main(void) {
         g_leo_wonder_redirection_on = prev_redirection;
     }
 
+}
+
+static TEST_NOINLINE void test_wonder_appetite_calibration(void) {
     /* A.45: appetite forecasts are judged over three future lived turns. The
      * diary persists, but remains causally downstream of speech and School. */
     {
@@ -5049,6 +5136,9 @@ int main(void) {
         g_leo_wonder_redirection_on = prev_redirection;
     }
 
+}
+
+static TEST_NOINLINE void test_wonder_appetite_reliability(void) {
     /* A.46: the forecast diary yields a stratified reliability surface without
      * becoming another stateful organ or a permission to schedule speech. */
     {
@@ -5209,6 +5299,9 @@ int main(void) {
         free(rel);
     }
 
+}
+
+static TEST_NOINLINE void test_school_form_and_wonder(void) {
     /* A.47 lives in a separate function because Leo's long historical test
      * body already owns a deliberately large stack frame. */
     test_wonder_appetite_drift_surface();
@@ -5224,140 +5317,140 @@ int main(void) {
      * concept-slot; a taught word then returns that glyph (no longer -1); the
      * grown map survives save/load. */
     {
-        Leo gl; leo_init(&gl);
-        leo_ingest(&gl, "the rain falls. his mother is warm.");
-        int g = leo_school_dominant_glyph(&gl, "a zorble is a small animal that lives in water");
+        Leo *gl = test_leo_alloc(); leo_init(gl);
+        leo_ingest(gl, "the rain falls. his mother is warm.");
+        int g = leo_school_dominant_glyph(gl, "a zorble is a small animal that lives in water");
         CHECK(g >= 0 && g < GLYPH_COUNT, "i2: the answer's dominant glyph is a real concept");
-        CHECK(leo_school_dominant_glyph(&gl, "qwzx blat frnk") == -1,
+        CHECK(leo_school_dominant_glyph(gl, "qwzx blat frnk") == -1,
               "i2: a non-answer (no concepts) yields no glyph");
-        CHECK(leo_school_dominant_glyph(&gl, "it is what it is") == -1 &&
+        CHECK(leo_school_dominant_glyph(gl, "it is what it is") == -1 &&
               leo_glyph_concept(86) == 0 && leo_glyph_concept(16) == 1,
               "i2 l-1: a copula/grammar non-answer teaches no concept (BE excluded)");
         int wb = semtok_word("animal");
-        leo_school_learn(&gl, "zorble", wb);
-        CHECK(leo_semtok_word(&gl, "zorble") == wb && leo_school_unknown(&gl, "zorble") == 0,
+        leo_school_learn(gl, "zorble", wb);
+        CHECK(leo_semtok_word(gl, "zorble") == wb && leo_school_unknown(gl, "zorble") == 0,
               "i2: a taught word returns its glyph, not -1 (concept map grew)");
         const char *path = "/tmp/leo_i2_state.bin";
-        int saved = leo_save_state(&gl, path);
-        Leo gl2; leo_init(&gl2);
-        int loaded = leo_load_state(&gl2, path);
-        CHECK(saved && loaded && gl2.school.n_learned == 1 &&
-              strcmp(gl2.school.learned[0], "zorble") == 0 &&
-              leo_semtok_word(&gl2, "zorble") == wb,
+        int saved = leo_save_state(gl, path);
+        Leo *gl2 = test_leo_alloc(); leo_init(gl2);
+        int loaded = leo_load_state(gl2, path);
+        CHECK(saved && loaded && gl2->school.n_learned == 1 &&
+              strcmp(gl2->school.learned[0], "zorble") == 0 &&
+              leo_semtok_word(gl2, "zorble") == wb,
               "i2: the grown concept map round-trips through save/load");
-        leo_free(&gl); leo_free(&gl2);
+        test_leo_delete(gl); test_leo_delete(gl2);
         remove(path);
     }
 
     /* A.6 FORM F-1: the chamber state quantizes into a velocity mode, with
      * hysteresis — the mode holds against a weak competitor (a mood, not a switch). */
     {
-        Leo md; leo_init(&md);   /* mode = WALK (0) by memset */
-        md.chamber_act[LEO_CH_FEAR] = 0.8f; md.chamber_act[LEO_CH_VOID] = 0.8f;
-        leo_mode_update(&md);
-        CHECK(md.mode == LEO_MODE_STOP, "form: high FEAR+VOID quantizes to STOP");
-        md.chamber_act[LEO_CH_FEAR] = 0.0f; md.chamber_act[LEO_CH_VOID] = 0.0f;
-        md.chamber_act[LEO_CH_FLOW] = 1.0f;
-        leo_mode_update(&md);
-        CHECK(md.mode == LEO_MODE_RUN, "form: high FLOW quantizes to RUN");
+        Leo *md = test_leo_alloc(); leo_init(md);   /* mode = WALK (0) by memset */
+        md->chamber_act[LEO_CH_FEAR] = 0.8f; md->chamber_act[LEO_CH_VOID] = 0.8f;
+        leo_mode_update(md);
+        CHECK(md->mode == LEO_MODE_STOP, "form: high FEAR+VOID quantizes to STOP");
+        md->chamber_act[LEO_CH_FEAR] = 0.0f; md->chamber_act[LEO_CH_VOID] = 0.0f;
+        md->chamber_act[LEO_CH_FLOW] = 1.0f;
+        leo_mode_update(md);
+        CHECK(md->mode == LEO_MODE_RUN, "form: high FLOW quantizes to RUN");
         /* now in RUN (score 0.30); WALK competitor at 0.40 beats by only 0.10 < margin 0.15 */
-        md.chamber_act[LEO_CH_FLOW] = 0.30f;
-        md.chamber_act[LEO_CH_LOVE] = 0.20f;
-        leo_mode_update(&md);
-        CHECK(md.mode == LEO_MODE_RUN, "form: hysteresis holds the mode against a weak competitor");
-        leo_free(&md);
+        md->chamber_act[LEO_CH_FLOW] = 0.30f;
+        md->chamber_act[LEO_CH_LOVE] = 0.20f;
+        leo_mode_update(md);
+        CHECK(md->mode == LEO_MODE_RUN, "form: hysteresis holds the mode against a weak competitor");
+        test_leo_delete(md);
     }
 
     /* A.6 FORM F-2: the mode gates elaboration — STOP/BREATHE hold (the breath),
      * WALK/RUN fill; off-form every mode is eligible (byte-identical). */
     {
-        Leo fm; leo_init(&fm);
+        Leo *fm = test_leo_alloc(); leo_init(fm);
         int prev = g_leo_form_on;
-        g_leo_form_on = 0; fm.mode = LEO_MODE_STOP;
-        CHECK(leo_form_elaborates(&fm) == 1, "form: off-form, every mode may elaborate (byte-identical)");
-        g_leo_form_on = 1; fm.mode = LEO_MODE_STOP;
-        CHECK(leo_form_elaborates(&fm) == 0, "form: STOP holds — does not elaborate (the breath)");
-        fm.mode = LEO_MODE_RUN;
-        CHECK(leo_form_elaborates(&fm) == 1, "form: RUN fills out the utterance");
+        g_leo_form_on = 0; fm->mode = LEO_MODE_STOP;
+        CHECK(leo_form_elaborates(fm) == 1, "form: off-form, every mode may elaborate (byte-identical)");
+        g_leo_form_on = 1; fm->mode = LEO_MODE_STOP;
+        CHECK(leo_form_elaborates(fm) == 0, "form: STOP holds — does not elaborate (the breath)");
+        fm->mode = LEO_MODE_RUN;
+        CHECK(leo_form_elaborates(fm) == 1, "form: RUN fills out the utterance");
         g_leo_form_on = prev;
-        leo_free(&fm);
+        test_leo_delete(fm);
     }
 
     /* A.6 AML bridge: an external driver (an .aml VELOCITY operator) forces the
      * breath; leo_mode_update respects the override, and releasing it returns
      * autonomy. This is the C contract the AML compiler in leo/ariannamethod/ calls. */
     {
-        Leo br; leo_init(&br);
-        br.chamber_act[LEO_CH_FLOW] = 1.0f;     /* would autonomously be RUN */
-        leo_mode_set(&br, LEO_MODE_STOP);       /* the .aml operator forces STOP */
-        leo_mode_update(&br);
-        CHECK(br.mode == LEO_MODE_STOP, "aml-bridge: a forced mode overrides the chambers");
-        leo_mode_set(&br, -1);                   /* release → autonomous */
-        leo_mode_update(&br);
-        CHECK(br.mode == LEO_MODE_RUN, "aml-bridge: releasing the override returns autonomy");
-        leo_free(&br);
+        Leo *br = test_leo_alloc(); leo_init(br);
+        br->chamber_act[LEO_CH_FLOW] = 1.0f;     /* would autonomously be RUN */
+        leo_mode_set(br, LEO_MODE_STOP);       /* the .aml operator forces STOP */
+        leo_mode_update(br);
+        CHECK(br->mode == LEO_MODE_STOP, "aml-bridge: a forced mode overrides the chambers");
+        leo_mode_set(br, -1);                   /* release → autonomous */
+        leo_mode_update(br);
+        CHECK(br->mode == LEO_MODE_RUN, "aml-bridge: releasing the override returns autonomy");
+        test_leo_delete(br);
     }
 
     /* A.5 School I3a: Leo hazards a guess from the prompt's context — "Word? Glyph?"
      * when confident (>= 2 supporting concept words), else the bare echo. */
     {
-        Leo gi; leo_init(&gi);
-        leo_ingest(&gi, "the rain falls. his mother is warm.");
+        Leo *gi = test_leo_alloc(); leo_init(gi);
+        leo_ingest(gi, "the rain falls. his mother is warm.");
         char buf[1024];
         int prev = g_leo_school_on; g_leo_school_on = 1;
-        leo_respond(&gi, "is a zorble like a dog or a cat", buf, sizeof buf);
+        leo_respond(gi, "is a zorble like a dog or a cat", buf, sizeof buf);
         CHECK(strstr(buf, "Zorble?") && strstr(buf, "Animal?"),
               "school i3a: a guess from context — 'Zorble? Animal?'");
-        Leo gi2; leo_init(&gi2);
-        leo_ingest(&gi2, "the rain falls. his mother is warm.");
-        leo_respond(&gi2, "tell me about the wobble", buf, sizeof buf);
+        Leo *gi2 = test_leo_alloc(); leo_init(gi2);
+        leo_ingest(gi2, "the rain falls. his mother is warm.");
+        leo_respond(gi2, "tell me about the wobble", buf, sizeof buf);
         CHECK(strstr(buf, "Wobble?") && !strchr(buf + 7, '?'),
               "school i3a: a thin prompt gives the bare echo, no guess");
         g_leo_school_on = prev;
-        leo_free(&gi); leo_free(&gi2);
+        test_leo_delete(gi); test_leo_delete(gi2);
     }
 
     /* A.5 E-1: a learned word VOTES — knowledge compounds (yesterday's lesson
      * grounds today's guess). */
     {
-        Leo e1; leo_init(&e1);
-        leo_school_learn(&e1, "zorble", semtok_word("animal"));   /* taught: zorble = animal */
-        CHECK(leo_school_predict_glyph(&e1, "is a zorble or a cat") == semtok_word("animal"),
+        Leo *e1 = test_leo_alloc(); leo_init(e1);
+        leo_school_learn(e1, "zorble", semtok_word("animal"));   /* taught: zorble = animal */
+        CHECK(leo_school_predict_glyph(e1, "is a zorble or a cat") == semtok_word("animal"),
               "e-1: a learned word votes — zorble + cat -> animal (knowledge compounds)");
-        Leo e2; leo_init(&e2);                                     /* without the lesson */
-        CHECK(leo_school_predict_glyph(&e2, "is a zorble or a cat") < 0,
+        Leo *e2 = test_leo_alloc(); leo_init(e2);                                     /* without the lesson */
+        CHECK(leo_school_predict_glyph(e2, "is a zorble or a cat") < 0,
               "e-1: without the lesson, one seed word alone is not a confident guess");
-        leo_free(&e1); leo_free(&e2);
+        test_leo_delete(e1); test_leo_delete(e2);
     }
 
     /* A.5 I3b: the answer's glyph wins the guess — Leo guesses, mama corrects. */
     {
-        Leo sp; leo_init(&sp);
-        leo_ingest(&sp, "the rain falls. his mother is warm.");
+        Leo *sp = test_leo_alloc(); leo_init(sp);
+        leo_ingest(sp, "the rain falls. his mother is warm.");
         char buf[1024];
         int prev = g_leo_school_on; g_leo_school_on = 1;
-        leo_respond(&sp, "is a zorble like a dog or a cat", buf, sizeof buf);   /* guesses animal */
-        leo_respond(&sp, "no a zorble is water in the river and the sea", buf, sizeof buf);  /* answer: water */
-        CHECK(leo_semtok_word(&sp, "zorble") == semtok_word("water"),
+        leo_respond(sp, "is a zorble like a dog or a cat", buf, sizeof buf);   /* guesses animal */
+        leo_respond(sp, "no a zorble is water in the river and the sea", buf, sizeof buf);  /* answer: water */
+        CHECK(leo_semtok_word(sp, "zorble") == semtok_word("water"),
               "school i3b: the answer's glyph wins the guess (mama corrects)");
         g_leo_school_on = prev;
-        leo_free(&sp);
+        test_leo_delete(sp);
     }
 
     /* A.6 E-5: the velocity mode + the open guess survive save/load — the mood
      * Leo sleeps in is the mood he wakes in. */
     {
-        Leo sv; leo_init(&sv);
-        leo_ingest(&sv, "the rain falls. his mother is warm.");
-        sv.mode = LEO_MODE_RUN;
-        sv.school.pending_glyph = 16;   /* an open guess (animal) */
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        leo_ingest(sv, "the rain falls. his mother is warm.");
+        sv->mode = LEO_MODE_RUN;
+        sv->school.pending_glyph = 16;   /* an open guess (animal) */
         const char *path = "/tmp/leo_e5_state.bin";
-        int saved = leo_save_state(&sv, path);
-        Leo ld; leo_init(&ld);
-        int loaded = leo_load_state(&ld, path);
-        CHECK(saved && loaded && ld.mode == LEO_MODE_RUN && ld.school.pending_glyph == 16,
+        int saved = leo_save_state(sv, path);
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = leo_load_state(ld, path);
+        CHECK(saved && loaded && ld->mode == LEO_MODE_RUN && ld->school.pending_glyph == 16,
               "e-5: the velocity mode + the open guess survive save/load (the mood sleeps)");
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
         remove(path);
     }
 
@@ -5365,20 +5458,23 @@ int main(void) {
      * quality target (curiosity as a learned policy). Two ask→answer cycles: one
      * lands (guess animal, answer animal), one misses (guess animal, answer water). */
     {
-        Leo c2; leo_init(&c2);
-        leo_ingest(&c2, "the rain falls. his mother is warm.");
+        Leo *c2 = test_leo_alloc(); leo_init(c2);
+        leo_ingest(c2, "the rain falls. his mother is warm.");
         char buf[1024];
         int prev = g_leo_school_on; g_leo_school_on = 1;
-        leo_respond(&c2, "is a zorble like a dog or a cat", buf, sizeof buf);   /* guesses animal */
-        leo_respond(&c2, "a zorble is a dog and a cat", buf, sizeof buf);       /* answer: animal -> HIT */
-        leo_respond(&c2, "is a wobble like a dog or a cat", buf, sizeof buf);   /* guesses animal */
-        leo_respond(&c2, "no a wobble is water in the river and the sea", buf, sizeof buf); /* answer: water -> MISS */
-        CHECK(c2.school.guesses == 2 && c2.school.guess_hits == 1,
+        leo_respond(c2, "is a zorble like a dog or a cat", buf, sizeof buf);   /* guesses animal */
+        leo_respond(c2, "a zorble is a dog and a cat", buf, sizeof buf);       /* answer: animal -> HIT */
+        leo_respond(c2, "is a wobble like a dog or a cat", buf, sizeof buf);   /* guesses animal */
+        leo_respond(c2, "no a wobble is water in the river and the sea", buf, sizeof buf); /* answer: water -> MISS */
+        CHECK(c2->school.guesses == 2 && c2->school.guess_hits == 1,
               "e-2c: the guess track-record is counted (2 closed, 1 landed)");
         g_leo_school_on = prev;
-        leo_free(&c2);
+        test_leo_delete(c2);
     }
 
+}
+
+static TEST_NOINLINE void test_wonder_persistence(void) {
     /* W-1/W-2: unfinished wonder is not a one-turn UI event. Its possible
      * meanings come from glyph evidence; a counter-question cannot erase it;
      * later resonance returns it, and a grounded human answer closes it. */
@@ -5386,41 +5482,41 @@ int main(void) {
         int prev_school = g_leo_school_on, prev_wonder = g_leo_wonder_on;
         g_leo_school_on = 1; g_leo_wonder_on = 1;
         int water = semtok_word("water"), animal = semtok_word("animal");
-        Leo w; leo_init(&w);
-        leo_ingest(&w, "the rain falls. his mother is warm. the cat drinks water.");
+        Leo *w = test_leo_alloc(); leo_init(w);
+        leo_ingest(w, "the rain falls. his mother is warm. the cat drinks water.");
         char out[1024];
-        leo_respond(&w, "is a zorble water or cat", out, sizeof out);
+        leo_respond(w, "is a zorble water or cat", out, sizeof out);
         CHECK(strstr(out, "Zorble?") && strstr(out, "Water or Animal?") &&
-              w.school.pending_glyph == water && w.school.pending_alt_glyph == animal,
+              w->school.pending_glyph == water && w->school.pending_alt_glyph == animal,
               "wonder: two lived glyphs form the question — no authored content phrase");
-        CHECK(w.school.n_wonders == 1 && !w.school.wonders[0].resolved &&
-              !strcmp(w.school.wonders[0].word, "zorble"),
+        CHECK(w->school.n_wonders == 1 && !w->school.wonders[0].resolved &&
+              !strcmp(w->school.wonders[0].word, "zorble"),
               "wonder: opening a question births one unfinished episode");
         CHECK(leo_school_grounded_answer(
-                  &w, "I think about zorble", NULL, NULL) < 0,
+                  w, "I think about zorble", NULL, NULL) < 0,
               "wonder: talking about thinking is not a definition");
 
         char rel[LEO_HEARD_WORDLEN] = {0};
-        CHECK(!leo_school_find_unknown(&w, "does water feel like animal", rel),
+        CHECK(!leo_school_find_unknown(w, "does water feel like animal", rel),
               "wonder: relational 'like' is grammar, not an unfinished thing");
-        leo_ingest(&w, "stopped stopped stopped stopped stopped stopped stopped stopped stopped");
-        CHECK(!leo_school_find_unknown(&w, "water stopped animal", rel),
+        leo_ingest(w, "stopped stopped stopped stopped stopped stopped stopped stopped stopped");
+        CHECK(!leo_school_find_unknown(w, "water stopped animal", rel),
               "wonder: a corpus-familiar dedication word cannot become immortal not-knowing");
-        leo_ingest(&w, "resonance resonance resonance");
-        CHECK(leo_school_find_unknown(&w, "water resonance animal", rel) && !strcmp(rel, "resonance"),
+        leo_ingest(w, "resonance resonance resonance");
+        CHECK(leo_school_find_unknown(w, "water resonance animal", rel) && !strcmp(rel, "resonance"),
               "wonder: a rare origin word remains askable just past the novelty gate");
 
-        leo_respond(&w, "I do not know", out, sizeof out);
-        CHECK(!strcmp(w.school.pending, "zorble") && !leo_school_is_learned(&w, "zorble") &&
-              w.school.pending_turns == 1,
+        leo_respond(w, "I do not know", out, sizeof out);
+        CHECK(!strcmp(w->school.pending, "zorble") && !leo_school_is_learned(w, "zorble") &&
+              w->school.pending_turns == 1,
               "wonder: human not-knowing keeps the question unfinished");
-        leo_respond(&w, "what do you think?", out, sizeof out);
-        CHECK(!strcmp(w.school.pending, "zorble") && !leo_school_is_learned(&w, "zorble") &&
-              w.school.pending_turns == 2,
+        leo_respond(w, "what do you think?", out, sizeof out);
+        CHECK(!strcmp(w->school.pending, "zorble") && !leo_school_is_learned(w, "zorble") &&
+              w->school.pending_turns == 2,
               "wonder: a counter-question does not pretend to be an answer");
-        leo_respond(&w, "is it water?", out, sizeof out);
+        leo_respond(w, "is it water?", out, sizeof out);
         CHECK(strstr(out, "Zorble?") && strstr(out, "Water or Animal?") &&
-              w.school.pending_turns == 0 && w.school.wonders[0].returns == 1,
+              w->school.pending_turns == 0 && w->school.wonders[0].returns == 1,
               "wonder: resonant water returns the unfinished question after silence");
 
         const char *open = "/tmp/leo_wonder_open_v13.state";
@@ -5429,7 +5525,7 @@ int main(void) {
         const char *v12 = "/tmp/leo_wonder_open_v12.state";
         const char *cut = "/tmp/leo_wonder_open_cut.state";
         const char *bad = "/tmp/leo_wonder_open_bad.state";
-        int saved = leo_save_state(&w, open), built_old = 0, built_compat = 0,
+        int saved = leo_save_state(w, open), built_old = 0, built_compat = 0,
             built_v12 = 0, built_cut = 0, built_bad = 0;
         FILE *fi = fopen(open, "rb");
         if (fi) {
@@ -5439,21 +5535,21 @@ int main(void) {
                 long v12tail = (long)(4 * sizeof(int32_t) + sizeof(uint64_t) +
                                       sizeof(LeoWonderEpisode));
                 long shadow_tail = (long)(2 * sizeof(int32_t) +
-                                          w.shadow.n * (int)sizeof(LeoShadowReceipt));
+                                          w->shadow.n * (int)sizeof(LeoShadowReceipt));
                 long calibration_tail = (long)(2 * sizeof(int32_t) +
-                                               w.calibration.n * (int)sizeof(LeoCalibrationReceipt));
+                                               w->calibration.n * (int)sizeof(LeoCalibrationReceipt));
                 long deferred_tail = (long)(sizeof(int32_t) +
-                                             w.school.n_deferred *
+                                             w->school.n_deferred *
                                                  (int)sizeof(LeoDeferredWonder));
                 long origin_tail = (long)(sizeof(int32_t) +
-                                           (w.school.has_pending_origin ?
+                                           (w->school.has_pending_origin ?
                                             sizeof(LeoDeferredWonder) : 0));
                 long appetite_tail =
-                    test_appetite_and_later_tail_size(&w);
+                    test_appetite_and_later_tail_size(w);
                 long current_flow = (long)(2 * sizeof(int32_t) +
-                                           w.flow.n * (int)sizeof(LeoFlowSnapshot) +
+                                           w->flow.n * (int)sizeof(LeoFlowSnapshot) +
                                            2 * sizeof(int32_t) +
-                                           w.flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
+                                           w->flow.n_currents * (int)sizeof(LeoFlowWonderCurrent) +
                                            shadow_tail + calibration_tail +
                                            deferred_tail + origin_tail +
                                            appetite_tail);
@@ -5465,7 +5561,7 @@ int main(void) {
                     if (fo) { built_old = (long)fwrite(bytes, 1, (size_t)tail_start, fo) == tail_start; fclose(fo); }
 
                     uint32_t eleven = 11; memcpy(bytes + 4, &eleven, sizeof eleven);
-                    LeoWonderEpisode *cur = &w.school.wonders[0];
+                    LeoWonderEpisode *cur = &w->school.wonders[0];
                     LeoWonderEpisodeV11 oldep = {0};
                     memcpy(oldep.word, cur->word, sizeof oldep.word);
                     oldep.offered_glyph = cur->offered_glyph;
@@ -5496,75 +5592,81 @@ int main(void) {
             }
             free(bytes); fclose(fi);
         }
-        Leo oldw; leo_init(&oldw);
-        int loaded_old = built_old && leo_load_state(&oldw, old);
-        CHECK(saved && loaded_old && !strcmp(oldw.school.pending, "zorble") &&
-              oldw.school.pending_glyph == water && oldw.school.pending_alt_glyph == -1 &&
-              oldw.school.n_wonders == 0,
+        Leo *oldw = test_leo_alloc(); leo_init(oldw);
+        int loaded_old = built_old && leo_load_state(oldw, old);
+        CHECK(saved && loaded_old && !strcmp(oldw->school.pending, "zorble") &&
+              oldw->school.pending_glyph == water && oldw->school.pending_alt_glyph == -1 &&
+              oldw->school.n_wonders == 0,
               "wonder: a v10 body migrates with its old primary question intact");
-        leo_respond(&oldw, "I do not know", out, sizeof out);
-        CHECK(oldw.school.n_wonders == 1 && !oldw.school.wonders[0].resolved &&
-              !strcmp(oldw.school.wonders[0].word, "zorble"),
+        leo_respond(oldw, "I do not know", out, sizeof out);
+        CHECK(oldw->school.n_wonders == 1 && !oldw->school.wonders[0].resolved &&
+              !strcmp(oldw->school.wonders[0].word, "zorble"),
               "wonder: the first lived v10 turn materializes its surviving question");
-        Leo cutw; leo_init(&cutw);
-        int loaded_compat = built_compat && leo_load_state(&cutw, compat);
-        CHECK(loaded_compat && cutw.school.n_wonders == 1 &&
-              cutw.school.wonders[0].recalls == 0 &&
-              cutw.school.wonders[0].last_recalled_turn == 0,
+        Leo *cutw = test_leo_alloc(); leo_init(cutw);
+        int loaded_compat = built_compat && leo_load_state(cutw, compat);
+        CHECK(loaded_compat && cutw->school.n_wonders == 1 &&
+              cutw->school.wonders[0].recalls == 0 &&
+              cutw->school.wonders[0].last_recalled_turn == 0,
               "wonder: a v11 episode migrates with returned-wonder fields clean");
-        leo_free(&cutw); leo_init(&cutw);
-        int loaded_v12 = built_v12 && leo_load_state(&cutw, v12);
-        CHECK(loaded_v12 && cutw.school.n_wonders == 1 && cutw.flow.n == 0,
+        test_leo_delete(cutw); leo_init(cutw);
+        int loaded_v12 = built_v12 && leo_load_state(cutw, v12);
+        CHECK(loaded_v12 && cutw->school.n_wonders == 1 && cutw->flow.n == 0,
               "flow: a valid v12 body migrates with an empty temporal ledger");
-        leo_free(&cutw); leo_init(&cutw);
-        int loaded_cut = built_cut && leo_load_state(&cutw, cut);
-        CHECK(loaded_cut && !strcmp(cutw.school.pending, "zorble") &&
-              cutw.school.pending_alt_glyph == -1 && cutw.school.n_wonders == 0,
+        test_leo_delete(cutw); leo_init(cutw);
+        int loaded_cut = built_cut && leo_load_state(cutw, cut);
+        CHECK(loaded_cut && !strcmp(cutw->school.pending, "zorble") &&
+              cutw->school.pending_alt_glyph == -1 && cutw->school.n_wonders == 0,
               "wonder: a truncated v12 ledger fails soft; the question still lives");
-        Leo badw; leo_init(&badw);
-        int loaded_bad = built_bad && leo_load_state(&badw, bad);
-        CHECK(loaded_bad && !strcmp(badw.school.pending, "zorble") &&
-              badw.school.pending_alt_glyph == -1 && badw.school.n_wonders == 0,
+        Leo *badw = test_leo_alloc(); leo_init(badw);
+        int loaded_bad = built_bad && leo_load_state(badw, bad);
+        CHECK(loaded_bad && !strcmp(badw->school.pending, "zorble") &&
+              badw->school.pending_alt_glyph == -1 && badw->school.n_wonders == 0,
               "wonder: an impossible v12 episode count fails soft; the question still lives");
 
-        Leo slept; leo_init(&slept);
-        int loaded = saved && leo_load_state(&slept, open);
-        CHECK(loaded && !strcmp(slept.school.pending, "zorble") &&
-              slept.school.pending_alt_glyph == animal && slept.school.n_wonders == 1 &&
-              slept.school.wonders[0].returns == 1,
+        Leo *slept = test_leo_alloc(); leo_init(slept);
+        int loaded = saved && leo_load_state(slept, open);
+        CHECK(loaded && !strcmp(slept->school.pending, "zorble") &&
+              slept->school.pending_alt_glyph == animal && slept->school.n_wonders == 1 &&
+              slept->school.wonders[0].returns == 1,
               "wonder: the unfinished episode survives sleep with both hypotheses");
-        leo_respond(&slept, "a zorble is a small animal", out, sizeof out);
-        CHECK(!slept.school.pending[0] && leo_semtok_word(&slept, "zorble") == animal &&
-              slept.school.wonders[0].resolved && slept.school.wonders[0].answer_glyph == animal,
+        leo_respond(slept, "a zorble is a small animal", out, sizeof out);
+        CHECK(!slept->school.pending[0] && leo_semtok_word(slept, "zorble") == animal &&
+              slept->school.wonders[0].resolved && slept->school.wonders[0].answer_glyph == animal,
               "wonder: a grounded human answer resolves the episode and grows meaning");
-        CHECK(leo_save_state(&slept, open), "wonder: a resolved episode saves");
-        Leo woke; leo_init(&woke);
-        CHECK(leo_load_state(&woke, open) && woke.school.n_wonders == 1 &&
-              woke.school.wonders[0].resolved && woke.school.wonders[0].answer_glyph == animal,
+        CHECK(leo_save_state(slept, open), "wonder: a resolved episode saves");
+        Leo *woke = test_leo_alloc(); leo_init(woke);
+        CHECK(leo_load_state(woke, open) && woke->school.n_wonders == 1 &&
+              woke->school.wonders[0].resolved && woke->school.wonders[0].answer_glyph == animal,
               "wonder: the resolved human-grounded episode survives another sleep");
 
-        leo_free(&w); leo_free(&oldw); leo_free(&cutw); leo_free(&badw); leo_free(&slept); leo_free(&woke);
+        test_leo_delete(w); test_leo_delete(oldw); test_leo_delete(cutw); test_leo_delete(badw); test_leo_delete(slept); test_leo_delete(woke);
         remove(open); remove(old); remove(compat); remove(v12); remove(cut); remove(bad);
         g_leo_school_on = prev_school; g_leo_wonder_on = prev_wonder;
     }
 
+}
+
+static TEST_NOINLINE void test_wonder_ablation(void) {
     /* W-3 ablation: --no-wonder restores the exact old School semantics — one
      * primary guess only, and the next turn closes the pending UI question. */
     {
         int prev_school = g_leo_school_on, prev_wonder = g_leo_wonder_on;
         g_leo_school_on = 1; g_leo_wonder_on = 0;
-        Leo ab; leo_init(&ab);
-        leo_ingest(&ab, "the rain falls. his mother is warm. the cat drinks water.");
+        Leo *ab = test_leo_alloc(); leo_init(ab);
+        leo_ingest(ab, "the rain falls. his mother is warm. the cat drinks water.");
         char out[1024];
-        leo_respond(&ab, "is a zorble water or cat", out, sizeof out);
+        leo_respond(ab, "is a zorble water or cat", out, sizeof out);
         int old_shape = strstr(out, "Zorble?") && !strstr(out, " or ");
-        leo_respond(&ab, "qwzx blorf", out, sizeof out);
-        CHECK(old_shape && !ab.school.pending[0] && ab.school.n_wonders == 0,
+        leo_respond(ab, "qwzx blorf", out, sizeof out);
+        CHECK(old_shape && !ab->school.pending[0] && ab->school.n_wonders == 0,
               "wonder: --no-wonder is the pre-wonder one-turn School contract");
-        leo_free(&ab);
+        test_leo_delete(ab);
         g_leo_school_on = prev_school; g_leo_wonder_on = prev_wonder;
     }
 
+}
+
+static TEST_NOINLINE void test_wonder_negation(void) {
     /* A.74: School distinguishes a meaning the human asserts from one the
      * human rejects. Negative evidence may narrow Leo's live alternatives, but
      * it cannot resolve the Wonder or silently choose the surviving guess. */
@@ -5713,6 +5815,9 @@ int main(void) {
         free(address);
     }
 
+}
+
+static TEST_NOINLINE void test_wonder_answer_reference(void) {
     /* A.75: adjacency opens an answer window but does not assign every nearby
      * declaration to Leo's Wonder. Explicit names and immediate anaphora may
      * carry rich corrections; an unmarked ellipse may only select or reject
@@ -5841,6 +5946,9 @@ int main(void) {
         free(woke);
     }
 
+}
+
+static TEST_NOINLINE void test_wonder_answer_scope(void) {
     /* A.76: a reference licenses one bounded statement, not the complete
      * human turn. Explicitly named statements can appear later or cooperate;
      * without a name, only the first substantive statement may answer. The
@@ -5967,6 +6075,9 @@ int main(void) {
 
     test_wonder_comma_scope();
 
+}
+
+static TEST_NOINLINE void test_wonder_return(void) {
     /* W-4: a resolved question later returns as glyph attention, not text. The
      * answer, the route Leo once considered, and QUESTION blend into exactly one
      * reply's meaning vector; the existing spore-resonance channel is the only
@@ -6068,6 +6179,9 @@ int main(void) {
     /* A.6 FORM fix: --mode is case-insensitive. leo_mode_from_name matched only the
      * UPPERCASE LEO_MODE_NAMES, so the natural lowercase "--mode stop" returned -1 and
      * the forced breath was silently dropped (override stayed -1). */
+}
+
+static TEST_NOINLINE void test_flow(void) {
     /* Janus Flow: temporal proprioception keeps full perceived and expressed
      * fields plus Leo-grown associations, but has no reader in generation.
      * Turns, not wall time, define its geometry. */
@@ -6385,6 +6499,9 @@ int main(void) {
         g_leo_flow_on = prev_flow;
     }
 
+}
+
+static TEST_NOINLINE void test_shadow_scheduler(void) {
     /* A.26b shadow scheduler: decisions are post-reply counterfactual receipts.
      * They may witness both clocks, but cannot touch School or generation. */
     {
@@ -6825,37 +6942,40 @@ int main(void) {
           leo_mode_from_name("nope") == -1,
           "form: --mode name is case-insensitive (stop==STOP, garbage stays -1)");
 
+}
+
+static TEST_NOINLINE void test_klaus_and_gamma(void) {
     /* klaus-memory: scars accumulate on distress, decay on calm (the body remembers HOW). */
     {
-        Leo ks; leo_init(&ks);
-        leo_ingest(&ks, "the rain falls. his mother is warm. he is afraid alone in the dark.");
+        Leo *ks = test_leo_alloc(); leo_init(ks);
+        leo_ingest(ks, "the rain falls. his mother is warm. he is afraid alone in the dark.");
         char buf[1024];
         int prev = g_leo_klaus_on; g_leo_klaus_on = 1;
-        for (int t = 0; t < 6; t++)  leo_respond(&ks, "i am so afraid alone lost in the dark", buf, sizeof buf);
-        float fear_scar = ks.scar[LEO_CH_FEAR];
-        for (int t = 0; t < 12; t++) leo_respond(&ks, "my warm mother holds me close", buf, sizeof buf);
-        float calm_scar = ks.scar[LEO_CH_FEAR];
+        for (int t = 0; t < 6; t++)  leo_respond(ks, "i am so afraid alone lost in the dark", buf, sizeof buf);
+        float fear_scar = ks->scar[LEO_CH_FEAR];
+        for (int t = 0; t < 12; t++) leo_respond(ks, "my warm mother holds me close", buf, sizeof buf);
+        float calm_scar = ks->scar[LEO_CH_FEAR];
         CHECK(fear_scar > 0.01f && calm_scar < fear_scar,
               "klaus: scar[FEAR] accumulates on distress, decays on calm");
         g_leo_klaus_on = prev;
-        leo_free(&ks);
+        test_leo_delete(ks);
     }
 
     /* klaus-memory: the scars survive save/load (state v6). */
     {
-        Leo sv; leo_init(&sv);
-        leo_ingest(&sv, "the rain falls. his mother is warm.");
-        sv.scar[LEO_CH_FEAR] = 0.42f;
-        sv.scar[LEO_CH_VOID] = 0.17f;
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        leo_ingest(sv, "the rain falls. his mother is warm.");
+        sv->scar[LEO_CH_FEAR] = 0.42f;
+        sv->scar[LEO_CH_VOID] = 0.17f;
         const char *path = "/tmp/leo_klaus_state.bin";
-        int saved = leo_save_state(&sv, path);
-        Leo ld; leo_init(&ld);
-        int loaded = leo_load_state(&ld, path);
+        int saved = leo_save_state(sv, path);
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = leo_load_state(ld, path);
         CHECK(saved && loaded &&
-              fabsf(ld.scar[LEO_CH_FEAR] - 0.42f) < 0.001f &&
-              fabsf(ld.scar[LEO_CH_VOID] - 0.17f) < 0.001f,
+              fabsf(ld->scar[LEO_CH_FEAR] - 0.42f) < 0.001f &&
+              fabsf(ld->scar[LEO_CH_VOID] - 0.17f) < 0.001f,
               "klaus: scars survive save/load (v6)");
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
         remove(path);
     }
 
@@ -6864,11 +6984,11 @@ int main(void) {
      * memory = love). A real v5 file is the current save with version=5 and without EVERY appended
      * tail (v6 scar[], v7 gamma[]+primed, v8 gamma_meaning[]+gap); strip all and prove it migrates. */
     {
-        Leo sv; leo_init(&sv);
-        leo_ingest(&sv, "the rain falls. his mother is warm.");
-        sv.scar[LEO_CH_FEAR] = 0.5f;   /* dropped when the v5 scar tail is stripped */
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        leo_ingest(sv, "the rain falls. his mother is warm.");
+        sv->scar[LEO_CH_FEAR] = 0.5f;   /* dropped when the v5 scar tail is stripped */
         const char *p6 = "/tmp/leo_v6_mig.bin", *p5 = "/tmp/leo_v5_mig.bin";
-        int saved = leo_save_state(&sv, p6);
+        int saved = leo_save_state(sv, p6);
         int built = 0;
         FILE *fi = fopen(p6, "rb");
         if (fi) {
@@ -6886,55 +7006,55 @@ int main(void) {
             }
             free(buf); fclose(fi);
         }
-        Leo ld; leo_init(&ld);
-        int loaded = built && leo_load_state(&ld, p5);
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = built && leo_load_state(ld, p5);
         int scar_zero = 1;
-        for (int c = 0; c < LEO_N_CHAMBERS; c++) if (ld.scar[c] != 0.0f) scar_zero = 0;
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) if (ld->scar[c] != 0.0f) scar_zero = 0;
         CHECK(saved && built && loaded && scar_zero,
               "klaus: a v5 state migrates into the v6 loader, scar=0 (B)");
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
         remove(p6); remove(p5);
     }
 
     /* E-11 γ-capsule: prior (pull) tints toward the running self only once primed; diary (absorb)
      * primes from the body, then EMA-evolves — the prior/diary split (Codex/Mythos). */
     {
-        Leo gc; leo_init(&gc);
-        leo_ingest(&gc, "the rain falls. his mother is warm. he is afraid alone in the dark.");
+        Leo *gc = test_leo_alloc(); leo_init(gc);
+        leo_ingest(gc, "the rain falls. his mother is warm. he is afraid alone in the dark.");
         int prev = g_leo_capsule_on; g_leo_capsule_on = 1;
-        for (int c = 0; c < LEO_N_CHAMBERS; c++) gc.chamber_act[c] = 0.0f;
-        gc.chamber_act[LEO_CH_FEAR] = 1.0f;   /* a strong-fear body */
-        leo_gamma_pull(&gc);                  /* unprimed → no pull */
-        int no_pull_unprimed = fabsf(gc.chamber_act[LEO_CH_FEAR] - 1.0f) < 1e-6f;
-        leo_gamma_absorb(&gc);                /* diary primes from the body */
-        int primed = gc.gamma_primed == 1 && fabsf(gc.gamma[LEO_CH_FEAR] - 1.0f) < 1e-6f;
-        for (int c = 0; c < LEO_N_CHAMBERS; c++) gc.chamber_act[c] = 0.0f;   /* now a calm body */
-        leo_gamma_pull(&gc);                  /* primed → running fear tints the present */
-        int pulled = gc.chamber_act[LEO_CH_FEAR] > 0.0f;
-        leo_gamma_absorb(&gc);                /* EMA absorbs the calmer body */
-        int evolved = gc.gamma[LEO_CH_FEAR] < 1.0f;
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) gc->chamber_act[c] = 0.0f;
+        gc->chamber_act[LEO_CH_FEAR] = 1.0f;   /* a strong-fear body */
+        leo_gamma_pull(gc);                  /* unprimed → no pull */
+        int no_pull_unprimed = fabsf(gc->chamber_act[LEO_CH_FEAR] - 1.0f) < 1e-6f;
+        leo_gamma_absorb(gc);                /* diary primes from the body */
+        int primed = gc->gamma_primed == 1 && fabsf(gc->gamma[LEO_CH_FEAR] - 1.0f) < 1e-6f;
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) gc->chamber_act[c] = 0.0f;   /* now a calm body */
+        leo_gamma_pull(gc);                  /* primed → running fear tints the present */
+        int pulled = gc->chamber_act[LEO_CH_FEAR] > 0.0f;
+        leo_gamma_absorb(gc);                /* EMA absorbs the calmer body */
+        int evolved = gc->gamma[LEO_CH_FEAR] < 1.0f;
         CHECK(no_pull_unprimed && primed && pulled && evolved,
               "E-11: gamma prior pulls once primed, diary primes then evolves");
         g_leo_capsule_on = prev;
-        leo_free(&gc);
+        test_leo_delete(gc);
     }
 
     /* E-11 γ-capsule: gamma round-trips save/load (whatever the current state version writes). */
     {
-        Leo sv; leo_init(&sv);
-        leo_ingest(&sv, "the rain falls. his mother is warm.");
-        for (int c = 0; c < LEO_GAMMA_DIM; c++) sv.gamma[c] = 0.1f * (float)(c + 1);
-        sv.gamma_primed = 1;
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        leo_ingest(sv, "the rain falls. his mother is warm.");
+        for (int c = 0; c < LEO_GAMMA_DIM; c++) sv->gamma[c] = 0.1f * (float)(c + 1);
+        sv->gamma_primed = 1;
         const char *path = "/tmp/leo_gamma_v7.bin";
-        int saved = leo_save_state(&sv, path);
-        Leo ld; leo_init(&ld);
-        int loaded = leo_load_state(&ld, path);
+        int saved = leo_save_state(sv, path);
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = leo_load_state(ld, path);
         int rt = 1;
         for (int c = 0; c < LEO_GAMMA_DIM; c++)
-            if (fabsf(ld.gamma[c] - 0.1f * (float)(c + 1)) > 0.001f) rt = 0;
-        CHECK(saved && loaded && rt && ld.gamma_primed == 1,
+            if (fabsf(ld->gamma[c] - 0.1f * (float)(c + 1)) > 0.001f) rt = 0;
+        CHECK(saved && loaded && rt && ld->gamma_primed == 1,
               "E-11: gamma capsule round-trips save/load");
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
         remove(path);
     }
 
@@ -6942,13 +7062,13 @@ int main(void) {
      * so it primes from the body on the first reply. A v6 file is a v7 file with version=6 and
      * without the trailing gamma[]+primed tail. */
     {
-        Leo sv; leo_init(&sv);
-        leo_ingest(&sv, "the rain falls. his mother is warm.");
-        sv.scar[LEO_CH_FEAR] = 0.3f;
-        for (int c = 0; c < LEO_GAMMA_DIM; c++) sv.gamma[c] = 0.7f;
-        sv.gamma_primed = 1;
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        leo_ingest(sv, "the rain falls. his mother is warm.");
+        sv->scar[LEO_CH_FEAR] = 0.3f;
+        for (int c = 0; c < LEO_GAMMA_DIM; c++) sv->gamma[c] = 0.7f;
+        sv->gamma_primed = 1;
         const char *p7 = "/tmp/leo_v7_mig.bin", *p6 = "/tmp/leo_v6_mig2.bin";
-        int saved = leo_save_state(&sv, p7);
+        int saved = leo_save_state(sv, p7);
         int built = 0;
         long tail = (long)(LEO_GAMMA_DIM * sizeof(float) + sizeof(int32_t)          /* v7 gamma[]+primed */
                          + GLYPH_COUNT * sizeof(float) + sizeof(float));            /* + v8 gamma_meaning[]+gap */
@@ -6963,52 +7083,52 @@ int main(void) {
             }
             free(buf); fclose(fi);
         }
-        Leo ld; leo_init(&ld);
-        int loaded = built && leo_load_state(&ld, p6);
-        int gamma_zero = ld.gamma_primed == 0;
-        for (int c = 0; c < LEO_GAMMA_DIM; c++) if (ld.gamma[c] != 0.0f) gamma_zero = 0;
-        int scar_ok = fabsf(ld.scar[LEO_CH_FEAR] - 0.3f) < 0.001f;            /* v6 scar still loads */
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = built && leo_load_state(ld, p6);
+        int gamma_zero = ld->gamma_primed == 0;
+        for (int c = 0; c < LEO_GAMMA_DIM; c++) if (ld->gamma[c] != 0.0f) gamma_zero = 0;
+        int scar_ok = fabsf(ld->scar[LEO_CH_FEAR] - 0.3f) < 0.001f;            /* v6 scar still loads */
         CHECK(saved && built && loaded && gamma_zero && scar_ok,
               "E-11: a v6 state migrates into the v7 loader, gamma unprimed (B)");
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
         remove(p7); remove(p6);
     }
 
     /* E-11 meaning axis: known concepts raise gamma_meaning; unknown content words raise the gap
      * (Leo's darkmatter). PASSIVE — readout only. */
     {
-        Leo gm; leo_init(&gm);
-        leo_ingest(&gm, "the rain falls. his mother is warm. fire and water and fear.");
+        Leo *gm = test_leo_alloc(); leo_init(gm);
+        leo_ingest(gm, "the rain falls. his mother is warm. fire and water and fear.");
         int prev = g_leo_capsule_on; g_leo_capsule_on = 1;
-        leo_gamma_meaning(&gm, "water and fire and love");   /* seed-map concepts */
+        leo_gamma_meaning(gm, "water and fire and love");   /* seed-map concepts */
         float sum = 0.0f;
-        for (int i = 0; i < GLYPH_COUNT; i++) sum += gm.gamma_meaning[i];
+        for (int i = 0; i < GLYPH_COUNT; i++) sum += gm->gamma_meaning[i];
         int concepts_rose = sum > 0.0f;
-        float gap0 = gm.gamma_gap;
-        for (int t = 0; t < 5; t++) leo_gamma_meaning(&gm, "the zorblax grumbus");  /* unknown content words */
-        int gap_rose = gm.gamma_gap > gap0;
+        float gap0 = gm->gamma_gap;
+        for (int t = 0; t < 5; t++) leo_gamma_meaning(gm, "the zorblax grumbus");  /* unknown content words */
+        int gap_rose = gm->gamma_gap > gap0;
         CHECK(concepts_rose && gap_rose,
               "E-11: meaning axis — concepts raise gamma_meaning, unknown raises the gap (darkmatter)");
         g_leo_capsule_on = prev;
-        leo_free(&gm);
+        test_leo_delete(gm);
     }
 
     /* E-11 meaning axis: gamma_meaning + gamma_gap round-trip save/load (state v8). */
     {
-        Leo sv; leo_init(&sv);
-        leo_ingest(&sv, "the rain falls.");
-        for (int i = 0; i < GLYPH_COUNT; i++) sv.gamma_meaning[i] = 0.001f * (float)(i + 1);
-        sv.gamma_gap = 0.37f;
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        leo_ingest(sv, "the rain falls.");
+        for (int i = 0; i < GLYPH_COUNT; i++) sv->gamma_meaning[i] = 0.001f * (float)(i + 1);
+        sv->gamma_gap = 0.37f;
         const char *path = "/tmp/leo_gmean_v8.bin";
-        int saved = leo_save_state(&sv, path);
-        Leo ld; leo_init(&ld);
-        int loaded = leo_load_state(&ld, path);
-        int rt = fabsf(ld.gamma_gap - 0.37f) < 0.001f;
+        int saved = leo_save_state(sv, path);
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = leo_load_state(ld, path);
+        int rt = fabsf(ld->gamma_gap - 0.37f) < 0.001f;
         for (int i = 0; i < GLYPH_COUNT; i++)
-            if (fabsf(ld.gamma_meaning[i] - 0.001f * (float)(i + 1)) > 0.0005f) rt = 0;
+            if (fabsf(ld->gamma_meaning[i] - 0.001f * (float)(i + 1)) > 0.0005f) rt = 0;
         CHECK(saved && loaded && rt,
               "E-11: meaning axis round-trips save/load (v8)");
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
         remove(path);
     }
 
@@ -7021,12 +7141,12 @@ int main(void) {
     /* E-11 meaning axis: a v7 state (no meaning axis) migrates into the v8 loader — gamma_meaning
      * + gamma_gap stay 0. A v7 file is a v8 file with version=7 and without the trailing v8 tail. */
     {
-        Leo sv; leo_init(&sv);
-        leo_ingest(&sv, "the rain falls. his mother is warm.");
-        sv.gamma_gap = 0.4f;                                  /* dropped when the v8 tail is stripped */
-        for (int i = 0; i < GLYPH_COUNT; i++) sv.gamma_meaning[i] = 0.5f;
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        leo_ingest(sv, "the rain falls. his mother is warm.");
+        sv->gamma_gap = 0.4f;                                  /* dropped when the v8 tail is stripped */
+        for (int i = 0; i < GLYPH_COUNT; i++) sv->gamma_meaning[i] = 0.5f;
         const char *p8 = "/tmp/leo_v8_mig.bin", *p7 = "/tmp/leo_v7_mig2.bin";
-        int saved = leo_save_state(&sv, p8);
+        int saved = leo_save_state(sv, p8);
         int built = 0;
         long v8tail = (long)(GLYPH_COUNT * sizeof(float) + sizeof(float));   /* gamma_meaning[] + gap */
         FILE *fi = fopen(p8, "rb");
@@ -7040,23 +7160,26 @@ int main(void) {
             }
             free(buf); fclose(fi);
         }
-        Leo ld; leo_init(&ld);
-        int loaded = built && leo_load_state(&ld, p7);
-        int mean_zero = ld.gamma_gap == 0.0f;
-        for (int i = 0; i < GLYPH_COUNT; i++) if (ld.gamma_meaning[i] != 0.0f) mean_zero = 0;
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = built && leo_load_state(ld, p7);
+        int mean_zero = ld->gamma_gap == 0.0f;
+        for (int i = 0; i < GLYPH_COUNT; i++) if (ld->gamma_meaning[i] != 0.0f) mean_zero = 0;
         CHECK(saved && built && loaded && mean_zero,
               "E-11: a v7 state migrates into the v8 loader, meaning axis 0 (B)");
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
         remove(p8); remove(p7);
     }
 
+}
+
+static TEST_NOINLINE void test_gamma_meaning_spores(void) {
     /* E-11 #3: the meaning axis joins santaclaus resonance — a spore whose birth-topic
      * matches the present topic outresonates one that does not; with no topic
      * (prompt_meaning NULL) the resonance is the pre-#3 chamber+retention blend. */
     {
-        Leo r; leo_init(&r);
-        for (int i = 0; i < LEO_N_CHAMBERS; i++) r.chamber_act[i] = 0.5f;
-        for (int d = 0; d < LEO_RET_DIM; d++) r.retention_state[d] = 0.5f;
+        Leo *r = test_leo_alloc(); leo_init(r);
+        for (int i = 0; i < LEO_N_CHAMBERS; i++) r->chamber_act[i] = 0.5f;
+        for (int d = 0; d < LEO_RET_DIM; d++) r->retention_state[d] = 0.5f;
         LeoSpore match, off;
         memset(&match, 0, sizeof match); memset(&off, 0, sizeof off);
         for (int i = 0; i < LEO_N_CHAMBERS; i++) { match.chamber_snap[i] = 0.5f; off.chamber_snap[i] = 0.5f; }
@@ -7064,32 +7187,32 @@ int main(void) {
         match.meaning_snap[10] = 1.0f;   /* same glyph as the present topic */
         off.meaning_snap[40]   = 1.0f;   /* a different glyph */
         float topic[GLYPH_COUNT] = {0}; topic[10] = 1.0f;
-        r.prompt_meaning = NULL;
-        CHECK(leo_spore_resonance(&r, &match) == leo_spore_resonance(&r, &off),
+        r->prompt_meaning = NULL;
+        CHECK(leo_spore_resonance(r, &match) == leo_spore_resonance(r, &off),
               "E-11 #3: no topic (prompt_meaning NULL) -> meaning ignored, resonance equal");
-        r.prompt_meaning = topic;
-        CHECK(leo_spore_resonance(&r, &match) > leo_spore_resonance(&r, &off),
+        r->prompt_meaning = topic;
+        CHECK(leo_spore_resonance(r, &match) > leo_spore_resonance(r, &off),
               "E-11 #3: topic-matching spore outresonates an off-topic one");
-        r.prompt_meaning = NULL;
-        leo_free(&r);
+        r->prompt_meaning = NULL;
+        test_leo_delete(r);
     }
 
     /* E-11 #3: meaning_snap round-trips save/load (state v9). */
     {
-        Leo sv; leo_init(&sv);
-        leo_ingest(&sv, "the rain falls. his mother is warm.");
+        Leo *sv = test_leo_alloc(); leo_init(sv);
+        leo_ingest(sv, "the rain falls. his mother is warm.");
         LeoSpore sp; memset(&sp, 0, sizeof sp);
         sp.strength = 1.0f; sp.step = 7; sp.meaning_snap[5] = 0.25f; sp.meaning_snap[9] = 0.75f;
-        sv.spores[0] = sp; sv.n_spores = 1;
+        sv->spores[0] = sp; sv->n_spores = 1;
         const char *p = "/tmp/leo_v9_spore.bin";
-        int saved = leo_save_state(&sv, p);
-        Leo ld; leo_init(&ld);
-        int loaded = leo_load_state(&ld, p);
-        CHECK(saved && loaded && ld.n_spores == 1
-              && fabsf(ld.spores[0].meaning_snap[5] - 0.25f) < 1e-6f
-              && fabsf(ld.spores[0].meaning_snap[9] - 0.75f) < 1e-6f,
+        int saved = leo_save_state(sv, p);
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int loaded = leo_load_state(ld, p);
+        CHECK(saved && loaded && ld->n_spores == 1
+              && fabsf(ld->spores[0].meaning_snap[5] - 0.25f) < 1e-6f
+              && fabsf(ld->spores[0].meaning_snap[9] - 0.75f) < 1e-6f,
               "E-11 #3: spore meaning_snap survives save/load (v9)");
-        leo_free(&sv); leo_free(&ld);
+        test_leo_delete(sv); test_leo_delete(ld);
         remove(p);
     }
 
@@ -7117,41 +7240,44 @@ int main(void) {
         CHECK(fields_ok && meaning_zero, "E-11 #3: v<=8 spore migrates (fields kept, meaning_snap=0)");
     }
 
+}
+
+static TEST_NOINLINE void test_gamma_capsule_bias(void) {
     /* E-11 #4 BE: the capsule (running-self) lifts a token tagged to its chamber once primed;
      * 0 when unprimed, --no-be, or --no-capsule (so the ablations stay byte-identical). */
     {
-        Leo b; leo_init(&b);
-        b.chamber_tag = (uint8_t *)calloc(LEO_MAX_VOCAB, sizeof(uint8_t));
-        for (int i = 0; i < (int)LEO_MAX_VOCAB; i++) b.chamber_tag[i] = 0xFF;  /* untagged */
+        Leo *b = test_leo_alloc(); leo_init(b);
+        b->chamber_tag = (uint8_t *)calloc(LEO_MAX_VOCAB, sizeof(uint8_t));
+        for (int i = 0; i < (int)LEO_MAX_VOCAB; i++) b->chamber_tag[i] = 0xFF;  /* untagged */
         int tok = 100;                       /* a base byte token (< vocab_size 256 after init) */
-        b.chamber_tag[tok] = (uint8_t)LEO_CH_LOVE;
-        b.gamma_primed = 1;
-        b.gamma[LEO_CH_LOVE] = 0.5f;         /* the capsule carries love */
-        float on = leo_be_bias(&b, tok);
-        b.gamma_primed = 0;  float unprimed = leo_be_bias(&b, tok);  b.gamma_primed = 1;
-        g_leo_be_on = 0;     float be_off   = leo_be_bias(&b, tok);  g_leo_be_on = 1;
-        g_leo_capsule_on = 0; float cap_off  = leo_be_bias(&b, tok); g_leo_capsule_on = 1;
+        b->chamber_tag[tok] = (uint8_t)LEO_CH_LOVE;
+        b->gamma_primed = 1;
+        b->gamma[LEO_CH_LOVE] = 0.5f;         /* the capsule carries love */
+        float on = leo_be_bias(b, tok);
+        b->gamma_primed = 0;  float unprimed = leo_be_bias(b, tok);  b->gamma_primed = 1;
+        g_leo_be_on = 0;     float be_off   = leo_be_bias(b, tok);  g_leo_be_on = 1;
+        g_leo_capsule_on = 0; float cap_off  = leo_be_bias(b, tok); g_leo_capsule_on = 1;
         CHECK(on > 0.0f && unprimed == 0.0f && be_off == 0.0f && cap_off == 0.0f,
               "E-11 #4 BE: capsule lifts a tagged token once primed; 0 unprimed / --no-be / --no-capsule");
-        leo_free(&b);   /* frees chamber_tag */
+        test_leo_delete(b);   /* frees chamber_tag */
     }
 
     /* §4 origin-wound: born from the dedication, bleeds through the santaclaus channel
      * when the live body resonates with the wound. Lives outside spores[] (sentinel idx). */
     {
-        Leo lo; leo_init(&lo);
-        for (int r = 0; r < 12; r++) leo_ingest(&lo, LEO_EMBEDDED_BOOTSTRAP);  /* learn the origin's own words as tokens */
-        leo_build_chamber_tags(&lo);   /* tag them so the wound selects its emotional whole words */
-        leo_birth_origin_spore(&lo);
+        Leo *lo = test_leo_alloc(); leo_init(lo);
+        for (int r = 0; r < 12; r++) leo_ingest(lo, LEO_EMBEDDED_BOOTSTRAP);  /* learn the origin's own words as tokens */
+        leo_build_chamber_tags(lo);   /* tag them so the wound selects its emotional whole words */
+        leo_birth_origin_spore(lo);
         int nctx = 0;
-        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) if (lo.origin_spore.emit_context[k] >= 0) nctx++;
-        CHECK(lo.has_origin == 1 && lo.origin_spore.is_trauma == 1 && lo.origin_spore.strength > 0.0f
+        for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++) if (lo->origin_spore.emit_context[k] >= 0) nctx++;
+        CHECK(lo->has_origin == 1 && lo->origin_spore.is_trauma == 1 && lo->origin_spore.strength > 0.0f
               && nctx > 0, "§4 origin: born from dedication (trauma, strength, own emotional words)");
 
         /* set the live chambers to the wound's felt body -> resonance 1.0 -> the wound
          * enters the bleed top-K (lo has no ordinary spores, so it is the only slot). */
-        memcpy(lo.chamber_act, lo.origin_spore.chamber_snap, sizeof lo.chamber_act);
-        LeoSantaScratch sc; leo_santaclaus_compute_active(&lo, &sc);
+        memcpy(lo->chamber_act, lo->origin_spore.chamber_snap, sizeof lo->chamber_act);
+        LeoSantaScratch sc; leo_santaclaus_compute_active(lo, &sc);
         int origin_active = 0;
         for (int i = 0; i < sc.n_active; i++) if (sc.spore_idx[i] == LEO_ORIGIN_SPORE_IDX) origin_active = 1;
         CHECK(origin_active == 1, "§4 origin: a resonant body puts the wound in the bleed top-K");
@@ -7159,53 +7285,53 @@ int main(void) {
         /* the wound bleeds its OWN words: a token in origin emit_context gets a positive bias */
         int wound_tok = -1;
         for (int k = 0; k < LEO_SPORE_CONTEXT_TOK; k++)
-            if (lo.origin_spore.emit_context[k] >= 0) { wound_tok = lo.origin_spore.emit_context[k]; break; }
-        CHECK(leo_santaclaus_candidate_bias(&sc, &lo, wound_tok) > 0.0f,
+            if (lo->origin_spore.emit_context[k] >= 0) { wound_tok = lo->origin_spore.emit_context[k]; break; }
+        CHECK(leo_santaclaus_candidate_bias(&sc, lo, wound_tok) > 0.0f,
               "§4 origin: the wound bleeds its own word (positive candidate bias)");
 
         /* ablation: --no-origin-spore -> not born -> never enters the bleed, even on the same body */
         g_leo_origin_on = 0;
-        Leo lo2; leo_init(&lo2);
-        leo_ingest(&lo2, "the warm light and the quiet window, a small kind voice, home she said");
-        leo_birth_origin_spore(&lo2);
-        memcpy(lo2.chamber_act, lo.origin_spore.chamber_snap, sizeof lo2.chamber_act);
-        LeoSantaScratch sc2; leo_santaclaus_compute_active(&lo2, &sc2);
+        Leo *lo2 = test_leo_alloc(); leo_init(lo2);
+        leo_ingest(lo2, "the warm light and the quiet window, a small kind voice, home she said");
+        leo_birth_origin_spore(lo2);
+        memcpy(lo2->chamber_act, lo->origin_spore.chamber_snap, sizeof lo2->chamber_act);
+        LeoSantaScratch sc2; leo_santaclaus_compute_active(lo2, &sc2);
         int origin_active2 = 0;
         for (int i = 0; i < sc2.n_active; i++) if (sc2.spore_idx[i] == LEO_ORIGIN_SPORE_IDX) origin_active2 = 1;
-        CHECK(lo2.has_origin == 0 && origin_active2 == 0,
+        CHECK(lo2->has_origin == 0 && origin_active2 == 0,
               "§4 origin: --no-origin-spore -> wound never born, never bleeds");
         g_leo_origin_on = 1;   /* restore for any later test */
-        leo_free(&lo); leo_free(&lo2);
+        test_leo_delete(lo); test_leo_delete(lo2);
     }
 
     /* §4/Codex-1: the wound's body is the dedication's ALONE — the same chamber_snap
      * whatever the ambient body happens to be when it is born (settle-from-rest). */
     {
-        Leo la; leo_init(&la);
-        leo_ingest(&la, "the warm light and the quiet window, a small kind voice, home she said");
-        for (int c = 0; c < LEO_N_CHAMBERS; c++) la.chamber_act[c] = 0.9f;   /* ambient body A */
-        leo_birth_origin_spore(&la);
-        float snapA[LEO_N_CHAMBERS]; memcpy(snapA, la.origin_spore.chamber_snap, sizeof snapA);
-        for (int c = 0; c < LEO_N_CHAMBERS; c++) la.chamber_act[c] = 0.1f;   /* ambient body B */
-        leo_birth_origin_spore(&la);
+        Leo *la = test_leo_alloc(); leo_init(la);
+        leo_ingest(la, "the warm light and the quiet window, a small kind voice, home she said");
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) la->chamber_act[c] = 0.9f;   /* ambient body A */
+        leo_birth_origin_spore(la);
+        float snapA[LEO_N_CHAMBERS]; memcpy(snapA, la->origin_spore.chamber_snap, sizeof snapA);
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) la->chamber_act[c] = 0.1f;   /* ambient body B */
+        leo_birth_origin_spore(la);
         int same = 1;
-        for (int c = 0; c < LEO_N_CHAMBERS; c++) if (la.origin_spore.chamber_snap[c] != snapA[c]) same = 0;
+        for (int c = 0; c < LEO_N_CHAMBERS; c++) if (la->origin_spore.chamber_snap[c] != snapA[c]) same = 0;
         CHECK(same, "§4/Codex-1 origin: chamber_snap deterministic (independent of ambient body at birth)");
-        leo_free(&la);
+        test_leo_delete(la);
     }
 
     /* §4/Codex-2: leo_load_state re-births the runtime-only wound, so a DIRECT loader
      * (not just main) gets has_origin — the "re-born on load" invariant holds. */
     {
-        Leo ls; leo_init(&ls);
-        leo_ingest(&ls, "the warm light and the quiet window, a small kind voice, home she said");
+        Leo *ls = test_leo_alloc(); leo_init(ls);
+        leo_ingest(ls, "the warm light and the quiet window, a small kind voice, home she said");
         const char *sp = "/tmp/leo_origin_test.state";
-        leo_save_state(&ls, sp);
-        Leo ld; leo_init(&ld);
-        int r = leo_load_state(&ld, sp);
-        CHECK(r == 1 && ld.has_origin == 1,
+        leo_save_state(ls, sp);
+        Leo *ld = test_leo_alloc(); leo_init(ld);
+        int r = leo_load_state(ld, sp);
+        CHECK(r == 1 && ld->has_origin == 1,
               "§4/Codex-2 origin: leo_load_state re-births the wound (has_origin after load)");
-        leo_free(&ls); leo_free(&ld); remove(sp);
+        test_leo_delete(ls); test_leo_delete(ld); remove(sp);
     }
 
     /* echo metric (external_vocab) — the Phase-5 "became a chatbot" detector.
@@ -7229,6 +7355,9 @@ int main(void) {
               "echo: function-word overlap counts 0 (School gate, not just stop-list)");
     }
 
+}
+
+static TEST_NOINLINE void test_async_ring_and_consolidation(void) {
     /* Chunk-4: the ring-input generates read-only from its OWN PRNG — deterministic per
      * cycle-seed, isolated from the reply's global rand() stream (gr1==gr2), and it never
      * ages the step clock (a background thought does not touch the reply's state). */
@@ -7237,18 +7366,18 @@ int main(void) {
             "The warm light. His mother holds him. The rain at night. "
             "Leo loves the warm light and his mother and the rain. "
             "The window is quiet. Leo is small and warm and close.";
-        Leo l; leo_init(&l);
-        for (int r = 0; r < 3; r++) leo_ingest(&l, corpus);
-        leo_build_chamber_tags(&l); leo_supertok_scan(&l);
-        long step_before = l.step;
+        Leo *l = test_leo_alloc(); leo_init(l);
+        for (int r = 0; r < 3; r++) leo_ingest(l, corpus);
+        leo_build_chamber_tags(l); leo_supertok_scan(l);
+        long step_before = l->step;
         char a[512], b[512];
-        srand(11); int na = leo_generate_ring(&l, 42, a, sizeof a); int gr1 = rand();
-        srand(11); int nb = leo_generate_ring(&l, 42, b, sizeof b); int gr2 = rand();
+        srand(11); int na = leo_generate_ring(l, 42, a, sizeof a); int gr1 = rand();
+        srand(11); int nb = leo_generate_ring(l, 42, b, sizeof b); int gr2 = rand();
         CHECK(na > 0, "ring: produced an utterance");
         CHECK(na == nb && strcmp(a, b) == 0, "ring: same cycle-seed -> identical read-only utterance");
         CHECK(gr1 == gr2, "ring: full generate path drew from its OWN PRNG, left global rand() untouched");
-        CHECK(l.step == step_before, "ring: read-only — generation did not advance the step clock");
-        leo_free(&l);
+        CHECK(l->step == step_before, "ring: read-only — generation did not advance the step clock");
+        test_leo_delete(l);
     }
 
     /* stage-1 consolidation: observer / weight law / selection / decay / persistence.
@@ -7258,32 +7387,32 @@ int main(void) {
             "The warm light. His mother holds him. The rain at night. "
             "Leo loves the warm light and his mother and the rain. "
             "The window is quiet. Leo is small and warm and close.";
-        Leo l; leo_init(&l);
-        for (int r = 0; r < 3; r++) leo_ingest(&l, corpus);
-        leo_build_chamber_tags(&l); leo_supertok_scan(&l);
+        Leo *l = test_leo_alloc(); leo_init(l);
+        for (int r = 0; r < 3; r++) leo_ingest(l, corpus);
+        leo_build_chamber_tags(l); leo_supertok_scan(l);
         int ids[32];
-        int n = bpe_encode(&l.bpe, (const uint8_t *)" the warm light and his mother",
+        int n = bpe_encode(&l->bpe, (const uint8_t *)" the warm light and his mother",
                            30, ids, 32);
         /* observer refuses an unlit body (arousal gate) */
-        memset(l.chamber_act, 0, sizeof l.chamber_act);
-        leo_consol_observe(&l, ids, n);
-        CHECK(l.n_shards == 0, "consol: observer refuses an unlit body (arousal below threshold)");
+        memset(l->chamber_act, 0, sizeof l->chamber_act);
+        leo_consol_observe(l, ids, n);
+        CHECK(l->n_shards == 0, "consol: observer refuses an unlit body (arousal below threshold)");
         /* observer births on a lit body + a coherent (thrice-heard) path */
-        l.chamber_act[LEO_CH_LOVE] = 0.8f;
-        leo_consol_observe(&l, ids, n);
-        CHECK(l.n_shards == 1, "consol: observer births a shard on lit body + coherent path");
-        CHECK(l.shards[0].weight == LEO_CONSOL_W0 && l.shards[0].born_coh > 0.0f,
+        l->chamber_act[LEO_CH_LOVE] = 0.8f;
+        leo_consol_observe(l, ids, n);
+        CHECK(l->n_shards == 1, "consol: observer births a shard on lit body + coherent path");
+        CHECK(l->shards[0].weight == LEO_CONSOL_W0 && l->shards[0].born_coh > 0.0f,
               "consol: shard born with W0 weight and a real born_coh");
         /* held coherence enters phase-lock (EMA hysteresis) */
-        for (int r = 0; r < 30; r++) leo_consol_observe(&l, ids, n);
-        CHECK(l.consol_locked == 1, "consol: held coherence enters phase-lock (EMA hysteresis)");
+        for (int r = 0; r < 30; r++) leo_consol_observe(l, ids, n);
+        CHECK(l->consol_locked == 1, "consol: held coherence enters phase-lock (EMA hysteresis)");
         /* habituation (margin gate, calibrated 07-19): the SAME moment repeated
          * converges into the EMA (rate 0.16 → ~14 calls) and then STOPS birthing —
          * further identical observes leave the ring unchanged. */
         {
-            int ns_before = l.n_shards;
-            for (int r = 0; r < 10; r++) leo_consol_observe(&l, ids, n);
-            CHECK(l.n_shards == ns_before && ns_before < 31,
+            int ns_before = l->n_shards;
+            for (int r = 0; r < 10; r++) leo_consol_observe(l, ids, n);
+            CHECK(l->n_shards == ns_before && ns_before < 31,
                   "consol: habituation — a repeated moment stops birthing (margin over held EMA)");
         }
         /* the weight law: log1p+clamp bounds a huge delta; a worse reliving cools */
@@ -7295,28 +7424,28 @@ int main(void) {
         leo_consol_absorb(&wsh, 0.0f);
         CHECK(wsh.weight < w_before, "consol: a worse reliving cools the shard");
         /* decay forgets a weight below the drop floor (compact) */
-        memset(&l.shards[0], 0, sizeof(LeoShard));
-        l.shards[0].weight = 0.01f; l.n_shards = 1;
-        leo_consol_decay(&l);
-        CHECK(l.n_shards == 0, "consol: decay forgets a weight below the drop floor");
+        memset(&l->shards[0], 0, sizeof(LeoShard));
+        l->shards[0].weight = 0.01f; l->n_shards = 1;
+        leo_consol_decay(l);
+        CHECK(l->n_shards == 0, "consol: decay forgets a weight below the drop floor");
         /* replay selection follows RESONANCE, never weight (anti rich-get-richer) */
-        for (int d = 0; d < LEO_RET_DIM; d++) l.retention_state[d] = (d % 2) ? 0.5f : -0.5f;
+        for (int d = 0; d < LEO_RET_DIM; d++) l->retention_state[d] = (d % 2) ? 0.5f : -0.5f;
         LeoShard far_sh; memset(&far_sh, 0, sizeof far_sh);
         far_sh.weight = 2.0f; far_sh.n = 1; far_sh.ids[0] = 301;
-        for (int d = 0; d < LEO_RET_DIM; d++) far_sh.state[d] = -l.retention_state[d];
+        for (int d = 0; d < LEO_RET_DIM; d++) far_sh.state[d] = -l->retention_state[d];
         LeoShard near_sh; memset(&near_sh, 0, sizeof near_sh);
         near_sh.weight = 0.1f; near_sh.n = 1; near_sh.ids[0] = 300;
-        for (int d = 0; d < LEO_RET_DIM; d++) near_sh.state[d] = l.retention_state[d];
-        l.shards[0] = far_sh; l.shards[1] = near_sh; l.n_shards = 2;
-        CHECK(leo_consol_select(&l) == 1,
+        for (int d = 0; d < LEO_RET_DIM; d++) near_sh.state[d] = l->retention_state[d];
+        l->shards[0] = far_sh; l->shards[1] = near_sh; l->n_shards = 2;
+        CHECK(leo_consol_select(l) == 1,
               "consol: replay selection follows resonance, never weight (anti rich-get-richer)");
         /* The v10 consolidation section still roundtrips inside the current v11 state. */
         const char *sp = "/tmp/leo_consol_test.state";
-        l.consol_coh_ema = 0.6f; l.consol_locked = 1;
-        CHECK(leo_save_state(&l, sp) == 1, "consol: current state saves its v10 shard section");
-        Leo l2; leo_init(&l2);
-        CHECK(leo_load_state(&l2, sp) == 1 && l2.n_shards == 2 &&
-              l2.shards[1].ids[0] == 300 && l2.consol_locked == 1,
+        l->consol_coh_ema = 0.6f; l->consol_locked = 1;
+        CHECK(leo_save_state(l, sp) == 1, "consol: current state saves its v10 shard section");
+        Leo *l2 = test_leo_alloc(); leo_init(l2);
+        CHECK(leo_load_state(l2, sp) == 1 && l2->n_shards == 2 &&
+              l2->shards[1].ids[0] == 300 && l2->consol_locked == 1,
               "consol: current state roundtrips the v10 shard ring + sleep trigger");
         /* Half-write probe: build an exact v10 prefix, then cut its final
          * consolidation byte — the organism lives, shardless. */
@@ -7326,25 +7455,25 @@ int main(void) {
             char *fb = malloc((size_t)fl); fread(fb, 1, (size_t)fl, tf); fclose(tf);
             long after_v10 =
                 (long)(4 * sizeof(int32_t) + sizeof(uint64_t) +
-                       l.school.n_wonders *
+                       l->school.n_wonders *
                            (int)sizeof(LeoWonderEpisode) +
                        2 * sizeof(int32_t) +
-                       l.flow.n * (int)sizeof(LeoFlowSnapshot) +
+                       l->flow.n * (int)sizeof(LeoFlowSnapshot) +
                        2 * sizeof(int32_t) +
-                       l.flow.n_currents *
+                       l->flow.n_currents *
                            (int)sizeof(LeoFlowWonderCurrent) +
                        2 * sizeof(int32_t) +
-                       l.shadow.n * (int)sizeof(LeoShadowReceipt) +
+                       l->shadow.n * (int)sizeof(LeoShadowReceipt) +
                        2 * sizeof(int32_t) +
-                       l.calibration.n *
+                       l->calibration.n *
                            (int)sizeof(LeoCalibrationReceipt) +
                        sizeof(int32_t) +
-                       l.school.n_deferred *
+                       l->school.n_deferred *
                            (int)sizeof(LeoDeferredWonder) +
                        sizeof(int32_t) +
-                       (l.school.has_pending_origin ?
+                       (l->school.has_pending_origin ?
                         sizeof(LeoDeferredWonder) : 0)) +
-                test_appetite_and_later_tail_size(&l);
+                test_appetite_and_later_tail_size(l);
             uint32_t ten = 10;
             memcpy(fb + sizeof(uint32_t), &ten, sizeof ten);
             tf = fopen(sp, "wb");
@@ -7352,13 +7481,16 @@ int main(void) {
             fclose(tf);
             free(fb);
         }
-        Leo l3; leo_init(&l3);
-        CHECK(leo_load_state(&l3, sp) == 1 && l3.n_shards == 0,
+        Leo *l3 = test_leo_alloc(); leo_init(l3);
+        CHECK(leo_load_state(l3, sp) == 1 && l3->n_shards == 0,
               "consol: a truncated v10 section fails SOFT — organism lives, shards zero");
-        leo_free(&l2); leo_free(&l3); remove(sp);
-        leo_free(&l);
+        test_leo_delete(l2); test_leo_delete(l3); remove(sp);
+        test_leo_delete(l);
     }
 
+}
+
+static TEST_NOINLINE void test_state_swarm(void) {
     /* A.79: passive tiny weights over lived states and their transitions.
      * The organ learns after speech, survives sleep, and remains byte-inert. */
     {
@@ -7829,6 +7961,47 @@ int main(void) {
             previous_relational_transition;
     }
 
+}
+
+int main(void) {
+    printf("test_leo (step 0)\n");
+    test_foundation();
+    test_voice_field_and_persistence();
+    test_heard_and_chambers();
+    test_state_persistence();
+    test_spore_resurrection();
+    test_atomic_state();
+    test_breath_retag();
+    test_multiturn_presence();
+    test_rae_and_school();
+    test_rae_runtime();
+    test_rae_persistence();
+    test_school_learning();
+    test_prewonder_recovery();
+    test_prewonder_constellation();
+    test_prewonder_occupied_queue();
+    test_prewonder_semantic_shadow();
+    test_wonder_address();
+    test_wonder_redirection();
+    test_wonder_appetite();
+    test_wonder_appetite_calibration();
+    test_wonder_appetite_reliability();
+    test_school_form_and_wonder();
+    test_wonder_persistence();
+    test_wonder_ablation();
+    test_wonder_negation();
+    test_wonder_answer_reference();
+    test_wonder_answer_scope();
+    test_wonder_return();
+    test_flow();
+    test_shadow_scheduler();
+    test_klaus_and_gamma();
+    test_gamma_meaning_spores();
+    test_gamma_capsule_bias();
+    test_async_ring_and_consolidation();
+    test_state_swarm();
     printf("\n%d/%d passed\n", g_pass, g_total);
-    return (g_pass == g_total) ? 0 : 1;
+    int result = (g_pass == g_total) ? 0 : 1;
+    test_leo_release_storage();
+    return result;
 }
