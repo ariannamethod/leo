@@ -85,7 +85,8 @@ static int same_topology(const LeoStateSwarm *before,
 }
 
 static int compare_reference(const char *before_path,
-                             const char *after_path) {
+                             const char *after_path,
+                             int relational_on) {
     Leo *before = load_leo(before_path);
     Leo *after = load_leo(after_path);
     if (!before || !after || !before->state_swarm || !after->state_swarm) {
@@ -137,7 +138,7 @@ static int compare_reference(const char *before_path,
                         -1.0f, 1.0f)
     };
     int changed = 0;
-    if (has_prediction)
+    if (relational_on && has_prediction)
         changed = reference_relational_write(
             expected, pre->previous_activation, post->previous_activation,
             pre->n, overlap, outcome);
@@ -153,9 +154,11 @@ static int compare_reference(const char *before_path,
         leo_free(after); free(after);
         return 1;
     }
-    changed = changed && memcmp(expected, control, sizeof expected) != 0;
+    changed = relational_on && changed &&
+        memcmp(expected, control, sizeof expected) != 0;
     printf("%s\t%.9f\t%.9f\t%d\n",
-           has_prediction ? "exact" : "censored", (double)overlap,
+           (!relational_on || has_prediction) ? "exact" : "censored",
+           (double)overlap,
            (double)reference_share(outcome), changed);
     leo_free(before); free(before);
     leo_free(after); free(after);
@@ -212,7 +215,9 @@ static int compare_transition_only(const char *left_path,
 int main(int argc, char **argv) {
     if (argc != 4) return 2;
     if (!strcmp(argv[1], "reference"))
-        return compare_reference(argv[2], argv[3]);
+        return compare_reference(argv[2], argv[3], 1);
+    if (!strcmp(argv[1], "legacy-reference"))
+        return compare_reference(argv[2], argv[3], 0);
     if (!strcmp(argv[1], "transition-only"))
         return compare_transition_only(argv[2], argv[3]);
     return 2;

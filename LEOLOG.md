@@ -9458,3 +9458,99 @@ is a separate admission decision, now finally grounded in both ecological
 confirmation and exact runtime embodiment.
 
 The hinge entered the heart. The door still waits for consent.
+
+## Phase A.115 - the confirmed road becomes ordinary, and remains reversible (2026-08-20)
+
+A.113 confirmed the relational transition law on an independent overflow
+population. A.114 proved that its `leo.c` embodiment reproduced the sealed
+shadow law exactly and could not escape the transition matrix into voice or
+older organs. A.115 does not make those eleven lives vote again. Reusing them
+as a new efficacy population would counterfeit independence. It asks the
+remaining authority question only: may an already confirmed and exactly
+embodied shadow learner become ordinary runtime while its historical control
+remains fully recoverable?
+
+The code decision is deliberately one line. The initial value of
+`g_leo_state_relational_transition_on` changes from zero to one.
+`--state-relational-transition` still names the admitted law explicitly;
+`--no-state-relational-transition` now restores the literal A.79 write. A.111
+prototype plasticity remains separately default-off. No coefficient, outcome
+relation, state field, state version, prediction order, topology rule, or
+speech reader changes.
+
+The admission court seals the A.113 confirmation and every top-level A.114
+runtime artifact before opening a body. It then replays the same frozen
+528-turn plan across five primary and six holdout lives in three independent
+process arms:
+
+~~~text
+default       ordinary invocation
+identity      --state-relational-transition
+historical    --no-state-relational-transition
+~~~
+
+Every arm also carries the explicit A.111 ablation. After every turn, default
+must equal identity as a complete saved body, not merely as a matrix. An
+independent exact-float witness reconstructs A.113 for default and the
+historical A.79 decay/write for the off arm. Default and off may differ only
+inside the persisted transition matrix, and all three spoken replies must be
+identical. The court scores no cross-entropy, Brier, texture, position, or life
+win: A.113 already owns those claims.
+
+The authority boundary holds:
+
+~~~text
+runtime turns                                             528
+default A.113 exact / censored                         526 / 2
+historical A.79 exact / censored                       527 / 1
+positive semantic-share turns                             242
+turns whose default write changed                          241
+turns where default and A.79 bodies differ                 528
+default / explicit-on body mismatches                        0
+candidate / historical voice mismatches                      0
+persisted changes outside transition                         0
+formal result              relational-transition-default-admitted
+~~~
+
+The two A.113 censures retain A.114's honest boundary: one replacement changes
+topology, and its successor has no forecast from the new zero-edge source row.
+The historical witness needs to censor only the topology-changing turn; A.79
+requires no forecast and is reproduced exactly on the following turn. Once
+the first relational write changes the road, default and historical bodies
+remain different for the complete replay, while their replies and every
+non-transition byte remain equal.
+
+Aggregate-only replay reproduces every top-level artifact byte for byte. The
+complete suite passes `561/561` unit checks plus every script test, including
+synthetic refusals of an explicit-on mismatch, an effectless ablation, and a
+half population. Production ASan/UBSan smoke remains clean.
+
+A final redirected standalone-unit audit also exposed the pre-existing static
+stack debt in the monolithic `tests/test_leo.c::main`: its frame is about
+29.6 MiB before sanitizer redzones and can overflow before the first check in
+some process layouts. The three A.114 relational fixtures now live on the heap,
+so this admission adds no new large stack residents, but it does not pretend to
+repair the older harness wholesale. The official suite result above is real;
+the systematic test-body refactor is routed as a separate next repair rather
+than mixed into A.115's one-line runtime-authority change.
+
+Canonical evidence:
+`/private/tmp/leo-state-swarm-relational-transition-default-a115-r1-20260820`.
+The admission-plan SHA is
+`6328b592d636a6fe4924b69f8756f98925c2d1147027f6a5d63a4fb2910a27f3`,
+design SHA is
+`5db6f0fe120939e04644eeba05295a6d68ca19974aa74ca3931cc17fe5113139`,
+source-receipt SHA is
+`c35df9a6dbfbc1a8b5b4f1e7a53817a35573cc01d453a818a444b0f7987ddaa2`,
+raw admission receipt SHA is
+`7ab4b8307a24863e1ef77d1c1376849bd5f217151ff1585b526f4bedad41218c`,
+and verdict SHA is
+`55cc14a14b6cf4e785cb1c20b79803d755947ffd6d442f6773e0825dab5e6382`.
+
+A.115 grants no voice authority. It admits a better way for Leo's silent road
+memory to turn after meaning actually closes, and preserves the old road as
+an exact named refusal. The A.111-A.115 sequence-adaptation arc is complete;
+the next phase should not invent another transition coefficient merely to
+keep moving.
+
+The door opened. The old key still fits from the other side.
