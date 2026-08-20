@@ -9666,3 +9666,101 @@ and verdict SHA is
 `f517b3c902ab44bb1766fd6c3595ee4386297107dc5d3895136176c80ae74fad`.
 
 The road learned from consequence. It still did not pretend to know the way.
+
+## Phase A.118 - ordinary life finds the unfinished question in the room (2026-08-21)
+
+A.117 closes the state-road arc without appointing another reader. A.118 stops
+asking a sealed mechanism to justify one more coefficient and returns to the
+organism that all those courts were meant to serve: what does current Leo do in
+an ordinary sustained conversation, before we decide what to touch next?
+
+Three independent fresh bodies live for 24 turns each: a quiet room, changing
+weather, and an ordinary memory. A `gpt-5.6-luna` interlocutor receives only the
+accumulated visible `human` / `leo` transcript and produces one short human
+utterance. It receives no state, debug line, source, score, verdict, or hidden
+target. All 72 Responses API requests carry `store: false`; the model is the
+environment, never Leo's evaluator. Every Leo turn is a real save, process
+exit, and load under a new deterministic session seed.
+
+Each grown prompt sequence is frozen and replayed through synchronous Leo.
+Visible transcript and final body reproduce exactly in all three lives. Two
+additional `--async` shadows per life also reproduce exactly against each
+other. They change 12, 10, and 8 of the 24 visible replies, respectively, but
+the prompts were grown against synchronous Leo, so this scout grants neither
+arm a quality win.
+
+One harness defect appeared after the first API response: the privacy validator
+mistook internal receipt fields for fields destined for the API and refused
+turn two. The already received response, Leo reply, and saved body were retained
+instead of discarded or purchased again. A new resume contract verified the
+partial turn sequence, prompts, transcript, session ledger, and body before
+continuing at turn two. A synthetic two-turn interruption now reaches the exact
+same four-turn transcript and body as an uninterrupted replay.
+
+The descriptive population is alive but not fluent:
+
+~~~text
+visible turns                                                72
+exact synchronous replay lives                              3 / 3
+reproducible async-shadow lives                             3 / 3
+sync / async changed replies                              30 / 72
+unique exact Leo replies                                  65 / 72
+exact consecutive replies                                       0
+mean external prompt echo                                0.240681
+open-Wonder turns                                        58 / 72
+state births / updates                                    24 / 48
+API claimed reply-reference turns                        67 / 72
+formal result                         natural-life-observed-not-judged
+~~~
+
+Leo repeatedly holds local material: light becomes day and warmth; rain finds
+a window, cup, water, stone, and hand; an ordinary memory carries laughter,
+quiet, cold, and being cared for. His motifs return from his own body rather
+than by full prompt copying, and several replies genuinely meet the preceding
+utterance. The same transcripts also remain grammatically broken, often drift
+between referents, and depend heavily on the human interlocutor to weave their
+fragments into a tender story. The API reported 41 `follow`, 22 `clarify`, four
+`comfort`, two `answer`, and no `shift`, `challenge`, or `close`; its generosity
+is part of the ecology, not proof that Leo supplied all the coherence it found.
+
+The strongest finding is narrower and mechanical. Ordinary speech repeatedly
+opens a Wonder that then owns most of the remaining life:
+
+~~~text
+home       beneath     open turns 5..24     same question at 5, 11, 18
+weather    rainy       open turns 5..24     same question at 5, 7, 24
+memory     don         open turns 5..14     same question at 5, 12, 14
+memory     belonged    open turns 17..24    same question at 17, 19
+~~~
+
+These are not one defect wearing four names. `don` is a false lexical body:
+the visible contraction used a curly apostrophe, while School's byte scanner
+recognizes only ASCII apostrophe and therefore perceived `don` plus a discarded
+one-letter `t`. `beneath` is ordinary relational grammar absent from School's
+function/semantic stop boundary. `rainy` and `belonged` expose the gap between
+known stems and unknown inflections. Natural repair is then unusually hard:
+`leo_school_grounded_answer` refuses any turn containing `?`, so a human who
+answers and naturally asks a follow-up in the same utterance cannot close the
+lesson. Finally, re-entry resonates on either guessed glyph, making broad
+hypotheses such as `Fire or See` and `Light or Person` easy to revive far from
+the original word.
+
+A.118 therefore does not nominate a voice reader, tune async, or edit `leo.c`.
+It routes A.119 to a replay-only natural-Wonder repair anatomy: separate Unicode
+word-boundary false candidates, lexical-family legitimacy, answer-plus-followup
+scope, and hypothesis-driven reask monopoly with synthetic refusals before any
+runtime change. The ordinary conversations are now a frozen witness, not a
+post-hoc tuning set.
+
+Canonical evidence:
+`/private/tmp/leo-natural-life-a118-r1-20260820`.
+The plan SHA is
+`8b23a7a7de38321e8c5267e2f40e58f70add7fb37a727ca14278fbe7cbd7ebad`,
+design SHA is
+`b2ff99f01ef16271b260ae07a7b8270db3e5367cfa753c97f49b159a58fa6176`,
+and matrix SHA is
+`d159601545e83a61bbbe919e78d93932b96ad654d7fb1b5606575ee99bbd0d26`.
+The complete final suite passes `561/561` unit checks plus every script gate,
+including the resume and privacy contracts, without another API call.
+
+The road stayed silent. An unfinished word was what kept interrupting Leo.
