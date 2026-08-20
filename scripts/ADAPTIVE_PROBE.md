@@ -1,3 +1,45 @@
+# Natural visible-life scout
+
+A.118 returns from sealed mechanism courts to ordinary current Leo. A Responses
+API interlocutor sees only the accumulated visible `human` / `leo` dialogue and
+continues it with one short natural utterance. It never receives Leo's state,
+debug receipts, experiment verdicts, source code, or a hidden target. The full
+visible transcript is supplied statelessly on every request, requests use
+`store: false`, and strict Structured Outputs retain the utterance plus the
+model's claimed conversational stance and whether it referenced Leo's reply.
+
+Three fresh 24-turn lives use distinct seeds and opening ecologies. Every turn
+is a real save/process-exit/load boundary. Each API prompt sequence is then
+frozen and replayed synchronously; transcript and final state must reproduce
+exactly. Two additional `--async` replays are descriptive shadows: they expose
+whether the ring is reproducible and where it changes visible replies, but
+cannot rank conversational quality because the prompts were grown against the
+synchronous source life.
+
+An interrupted matrix can continue with `LEO_NATURAL_RESUME=1`. The runner
+accepts a partial life only when its saved body, turn sequence, prompts,
+sessions, and transcript receipts agree; it then continues at the first unseen
+turn instead of discarding or repurchasing an already received response.
+
+Validate the complete plan without an API call:
+
+```sh
+LEO_NATURAL_PLAN_ONLY=1 make natural-life-probe
+```
+
+Run the three lives (72 maximum API calls):
+
+```sh
+OPENAI_API_KEY_FILE=/path/to/key \
+LEO_INTERLOCUTOR_MODEL=gpt-5.6-luna \
+make natural-life-probe
+```
+
+This is a scout, not an evaluator. Its summaries describe length, exact
+repetition, questions, prompt echo, open Wonder turns, state events, and API
+stance claims. No combined quality score, selection, or runtime admission is
+computed.
+
 # Transcript-blind interlocutor probe
 
 This probe runs one real Leo process per turn. Every turn ends with a state
