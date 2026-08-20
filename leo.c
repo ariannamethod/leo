@@ -1602,6 +1602,7 @@ typedef struct {
 #define LEO_STATE_REPLACE_GATE    0.40f
 #define LEO_STATE_ACTIVE_GATE     0.15f
 #define LEO_STATE_SURPRISE_PLASTICITY 0.25f
+#define LEO_STATE_RELATIONAL_TRANSITION_GAIN 0.50f
 
 enum {
     LEO_STATE_RHYTHM_FUNCTION = 0,
@@ -2947,6 +2948,7 @@ static int g_leo_wonder_return_on = 1;  /* resolved wonder may re-enter one repl
 static int g_leo_flow_on = 1;           /* passive temporal proprioception. --no-flow stops snapshots; no generation path reads them. */
 static int g_leo_state_swarm_on = 1;     /* A.79: learned state/sequence weights; observation only, no generation reader. */
 static int g_leo_state_transition_plasticity_on = 0; /* A.111 laboratory refusal: bounded road-miss plasticity is reproducible only by explicit opt-in. */
+static int g_leo_state_relational_transition_on = 0; /* A.114 candidate: consequence-gated conditional road redistribution; explicit opt-in, no speech reader. */
 static int g_leo_shadow_on = 1;         /* counterfactual next-turn proposals. --no-shadow keeps Flow but writes no receipts. */
 static int g_leo_form_on = 1;           /* A.6: the velocity mode shapes the utterance — DEFAULT (Oleg's ear: presence grows). --no-form reverts to the uncompressed voice. */
 static int g_leo_klaus_on = 1;          /* klaus-memory: scars accumulate/bias/persist. --no-klaus → 0 (ablation). */
@@ -10498,6 +10500,68 @@ static float leo_state_transition_plasticity(float overlap,
     return 1.0f + LEO_STATE_SURPRISE_PLASTICITY * miss;
 }
 
+/* A.114: a transition may turn faster only to the extent that the encounter
+ * closes semantic gap, relative to any simultaneous relief of distress. The
+ * relation is carried by Leo's already-persisted consequence channels; no
+ * ecological label or prompt class is consulted. */
+static float leo_state_relational_transition_share(
+        const float outcome[LEO_STATE_OUTCOMES]) {
+    if (!outcome ||
+        !isfinite(outcome[LEO_STATE_OUTCOME_GAP_RELIEF]) ||
+        !isfinite(outcome[LEO_STATE_OUTCOME_DISTRESS_RELIEF]))
+        return 0.0f;
+    float gap_relief = fmaxf(
+        outcome[LEO_STATE_OUTCOME_GAP_RELIEF], 0.0f);
+    float distress_relief = fmaxf(
+        outcome[LEO_STATE_OUTCOME_DISTRESS_RELIEF], 0.0f);
+    float denominator = fmaxf(gap_relief, distress_relief);
+    return denominator > 0.0f ?
+        clampf(gap_relief / denominator, 0.0f, 1.0f) : 0.0f;
+}
+
+/* The matrix has already received A.79's 0.997 decay and produced the
+ * pre-update prediction. Each outgoing row keeps the same A.79 analytical
+ * post-write mass; only its conditional destination distribution can move
+ * farther toward the realized activation. Returning zero delegates to the
+ * literal historical A.79 write, preserving exact default/closed-gap bytes. */
+static int leo_state_relational_transition_update(
+        LeoStateSwarm *swarm,
+        const float source[LEO_STATE_SWARM_MAX],
+        const float target[LEO_STATE_SWARM_MAX],
+        float prediction_overlap, int has_prediction,
+        const float outcome[LEO_STATE_OUTCOMES]) {
+    if (!g_leo_state_relational_transition_on || !swarm || !source ||
+        !target || !has_prediction || !isfinite(prediction_overlap))
+        return 0;
+    float miss = 1.0f - clampf(prediction_overlap, 0.0f, 1.0f);
+    float semantic_share = leo_state_relational_transition_share(outcome);
+    float extra = LEO_STATE_RELATIONAL_TRANSITION_GAIN *
+        miss * semantic_share;
+    if (!(extra > 0.0f) || !isfinite(extra)) return 0;
+
+    for (uint32_t i = 0; i < swarm->n; i++) {
+        float row_mass = 0.0f;
+        for (uint32_t j = 0; j < swarm->n; j++)
+            row_mass += swarm->transition[i][j];
+        float added_mass = 0.20f * source[i];
+        float new_mass = row_mass + added_mass;
+        if (!(new_mass > 0.0f) || !isfinite(new_mass)) continue;
+        if (!(row_mass > 0.0f)) {
+            for (uint32_t j = 0; j < swarm->n; j++)
+                swarm->transition[i][j] = added_mass * target[j];
+            continue;
+        }
+        float rate = (added_mass / new_mass) * (1.0f + extra);
+        rate = clampf(rate, 0.0f, 1.0f);
+        for (uint32_t j = 0; j < swarm->n; j++) {
+            float probability = swarm->transition[i][j] / row_mass;
+            probability += rate * (target[j] - probability);
+            swarm->transition[i][j] = new_mass * probability;
+        }
+    }
+    return 1;
+}
+
 static void leo_state_weight_update(LeoStateWeight *state,
                                     const LeoStateWeight *observation,
                                     float activation, float plasticity,
@@ -10767,13 +10831,18 @@ static void leo_state_swarm_observe(Leo *leo, const char *reply) {
         };
         memcpy(receipt.observed_outcome, outcome,
                sizeof receipt.observed_outcome);
+        int relational_transition =
+            leo_state_relational_transition_update(
+                swarm, swarm->previous_activation, activation,
+                receipt.prediction_overlap, receipt.has_prediction, outcome);
         for (uint32_t i = 0; i < swarm->n; i++)
             for (uint32_t j = 0; j < swarm->n; j++) {
                 float pair = swarm->previous_activation[i] * activation[j];
                 if (pair <= 1e-6f) continue;
-                swarm->transition[i][j] = clampf(
-                    swarm->transition[i][j] + 0.20f * pair,
-                    0.0f, 1000000.0f);
+                if (!relational_transition)
+                    swarm->transition[i][j] = clampf(
+                        swarm->transition[i][j] + 0.20f * pair,
+                        0.0f, 1000000.0f);
                 float rate = 0.12f * pair;
                 for (int o = 0; o < LEO_STATE_OUTCOMES; o++)
                     swarm->outcome[i][j][o] += rate *
@@ -14457,6 +14526,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-state-swarm")) g_leo_state_swarm_on = 0;
         else if (!strcmp(argv[i], "--state-transition-plasticity")) g_leo_state_transition_plasticity_on = 1;
         else if (!strcmp(argv[i], "--no-state-transition-plasticity")) g_leo_state_transition_plasticity_on = 0;
+        else if (!strcmp(argv[i], "--state-relational-transition")) g_leo_state_relational_transition_on = 1;
+        else if (!strcmp(argv[i], "--no-state-relational-transition")) g_leo_state_relational_transition_on = 0;
         else if (!strcmp(argv[i], "--no-shadow")) g_leo_shadow_on = 0;
         else if (!strcmp(argv[i], "--no-form")) g_leo_form_on = 0;
         else if (!strcmp(argv[i], "--no-klaus")) g_leo_klaus_on = 0;
