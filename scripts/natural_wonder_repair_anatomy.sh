@@ -10,10 +10,12 @@ OUT="${1:-${TMPDIR:-/tmp}/leo-natural-wonder-anatomy-$STAMP}"
 CASES="${LEO_NATURAL_WONDER_CASES:-$ROOT/scripts/natural_wonder_repair_cases.tsv}"
 PLAN_ONLY="${LEO_NATURAL_PLAN_ONLY:-0}"
 EXPECT_A118="${LEO_NATURAL_EXPECT_A118:-0}"
+LEXICAL_FAMILY="${LEO_NATURAL_LEXICAL_FAMILY:-0}"
 
 [ -s "$CASES" ] || { printf 'missing natural Wonder cases: %s\n' "$CASES" >&2; exit 2; }
 [ "$PLAN_ONLY" = 0 ] || [ "$PLAN_ONLY" = 1 ] || { printf 'LEO_NATURAL_PLAN_ONLY must be 0 or 1\n' >&2; exit 2; }
 [ "$EXPECT_A118" = 0 ] || [ "$EXPECT_A118" = 1 ] || { printf 'LEO_NATURAL_EXPECT_A118 must be 0 or 1\n' >&2; exit 2; }
+[ "$LEXICAL_FAMILY" = 0 ] || [ "$LEXICAL_FAMILY" = 1 ] || { printf 'LEO_NATURAL_LEXICAL_FAMILY must be 0 or 1\n' >&2; exit 2; }
 [ ! -e "$OUT" ] || { printf 'output path already exists: %s\n' "$OUT" >&2; exit 2; }
 mkdir -p "$OUT/lives"
 
@@ -62,6 +64,7 @@ while IFS=$'\t' read -r life seed fixture prompts_sha a118_transcript_sha a118_s
     destination="$OUT/lives/$life"
     LEO_NATURAL_REPLAY_FILE="$ROOT/$fixture" LEO_NATURAL_LIFE="$life" \
         LEO_NATURAL_ARM=replay LEO_NATURAL_SEED="$seed" LEO_NATURAL_TURNS=24 \
+        LEO_NATURAL_LEXICAL_FAMILY="$LEXICAL_FAMILY" \
         "$ROOT/scripts/natural_life_probe.sh" "$destination" > "$OUT/lives/$life.out"
     transcript_sha="$(shasum -a 256 "$destination/visible_transcript.txt" | awk '{print $1}')"
     state_sha="$(shasum -a 256 "$destination/state/leo.state" | awk '{print $1}')"

@@ -40,6 +40,7 @@ int main(void) {
     if (!leo || !answer) return 2;
     leo_init(leo);
     leo_init(answer);
+    g_leo_school_lexical_family_on = 0;
 
     print_unknown(leo, "ascii-contraction", "you don't have to remember");
     print_unknown(leo, "curly-contraction", "you don’t have to remember");

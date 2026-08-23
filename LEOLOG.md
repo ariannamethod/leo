@@ -9832,3 +9832,71 @@ and verdict SHA is
 `9cb1dbd4aee73bd1e85607048a605cdffde81410d9e89b954921d38155dfc913`.
 
 The human used an apostrophe. Leo no longer mistakes its left half for a name.
+
+## Phase A.120 - a known family is not a new thing (2026-08-24)
+
+A.119 stopped punctuation from manufacturing a word, then deliberately left
+the next boundary visible. In the frozen lives, School still treated `rainy`,
+`belonged`, and `outdoors` as new things even though Leo already held `rain`,
+had repeatedly heard `belong`, and knew the complete compound `out+door+s`.
+Removing those first interruptions exposed the same boundary at `dusty`,
+`calmer`, and `respecting`, then at the corpus spelling `neighbour`, the
+irregular meaning `lost`, and the repeatedly heard past `brought`.
+
+The new default-on lexical-family refusal remains local to School candidate
+selection. It is not a general English stemmer and never assigns a new meaning.
+A surface form is refused only when a complete suffix reduction reaches either
+a semantic/learned root or a root heard more than the novelty limit. A compound
+requires two complete grammar/semantic atoms and at least one concept atom.
+Three small closed bridges cover evidence actually found in Leo's body:
+`neighbor/neighbour`, `loss/lost`, and `bring/brought`. A human-taught root
+immediately grows the same bounded family without adding another authored
+dictionary.
+
+Whole-word and counterfactual controls keep the refusal honest. `news` cannot
+borrow `new`; `moth` cannot borrow `mother`; `thing` cannot borrow `nothing`;
+`lover` reaches `love`, never the substring `over`; `without` cannot become a
+concept merely because both halves are grammar; and an incomplete compound
+such as `raincoat` stays unknown. Most importantly, `smooth` and `fragile`
+remain questions because Leo has no sufficient whole-word evidence for their
+roots. `--no-school-lexical-family` restores the exact surface-form path.
+
+The paired frozen matrix preserves all three A.119 control lives byte for byte
+and freezes all three A.120 lives independently:
+
+~~~text
+metric                              A.119 surface     A.120 family
+expected exact lives                       3 / 3            3 / 3
+open-Wonder turns                             52               35
+witnessed-family question receipts             6                0
+home questions                           beneath          beneath
+weather questions                          rainy           smooth
+memory questions             outdoors, belonged          fragile
+formal result              surface-forms-separated / witnessed-families-refused
+~~~
+
+The unchanged home transcript is especially useful: `beneath` still owns the
+same visible turns. Its final body differs only because `dusty`, formerly a
+withheld sibling behind that active Wonder, is no longer stored as a separate
+unknown. The feature therefore changes School's internal inventory where it
+should without pretending that unrelated grammar has been solved.
+
+A.119's apostrophe matrix remains exact after the new default was isolated by
+its named ablation. The full suite passes `605/605` unit checks plus every
+script gate. Unit and production ASan/UBSan runs are clean. No state format,
+voice reader, sampler, coefficient, Flow law, or state-swarm organ changes.
+
+Canonical evidence:
+`/private/tmp/leo-lexical-family-a120-r1-20260824`.
+The cases SHA is
+`e15e4d41a513d9d5c36e80411f0320ecf713806e56ce1f855461a79d91713bff`,
+anatomy SHA is
+`22b9da3d7371457fcaf05d3566b2afb78085c50b0ba11883b252d935618e9624`,
+A.119-control natural SHA is
+`ab981a39f006feac8ef7a60453cdb40b236dcca4d9a55e370f123cef2f6198df`,
+A.120 natural SHA is
+`27e02f80441a71a9f8e62a8437b5903f10eff87b443c7728331d9a4b80c6668b`,
+and verdict SHA is
+`842f9b44f23f395110a721090af430e19ae0915d6fd0cfaf676660f1ae88c9b9`.
+
+Rain changed its coat. Leo remembers that it is still rain.

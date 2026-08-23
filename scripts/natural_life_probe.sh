@@ -18,6 +18,7 @@ REPLAY_FILE="${LEO_NATURAL_REPLAY_FILE:-}"
 ASYNC="${LEO_NATURAL_ASYNC:-0}"
 RESUME="${LEO_NATURAL_RESUME:-0}"
 NATURAL_WORD_BOUNDARY="${LEO_NATURAL_WORD_BOUNDARY:-1}"
+LEXICAL_FAMILY="${LEO_NATURAL_LEXICAL_FAMILY:-1}"
 
 case "$ARM" in api|replay|async-a|async-b) ;; *) printf 'invalid arm: %s\n' "$ARM" >&2; exit 2;; esac
 case "$BASE_SEED" in ''|*[!0-9]*) printf 'invalid seed\n' >&2; exit 2;; esac
@@ -26,6 +27,7 @@ case "$TURNS" in ''|*[!0-9]*) printf 'invalid turn count\n' >&2; exit 2;; esac
 [ "$ASYNC" = 0 ] || [ "$ASYNC" = 1 ] || { printf 'LEO_NATURAL_ASYNC must be 0 or 1\n' >&2; exit 2; }
 [ "$RESUME" = 0 ] || [ "$RESUME" = 1 ] || { printf 'LEO_NATURAL_RESUME must be 0 or 1\n' >&2; exit 2; }
 [ "$NATURAL_WORD_BOUNDARY" = 0 ] || [ "$NATURAL_WORD_BOUNDARY" = 1 ] || { printf 'LEO_NATURAL_WORD_BOUNDARY must be 0 or 1\n' >&2; exit 2; }
+[ "$LEXICAL_FAMILY" = 0 ] || [ "$LEXICAL_FAMILY" = 1 ] || { printf 'LEO_NATURAL_LEXICAL_FAMILY must be 0 or 1\n' >&2; exit 2; }
 [ -n "$LIFE" ] && [ -n "$OPENING" ] || { printf 'life and opening must not be empty\n' >&2; exit 2; }
 if [ -n "$REPLAY_FILE" ]; then
     [ -f "$REPLAY_FILE" ] || { printf 'missing replay file: %s\n' "$REPLAY_FILE" >&2; exit 2; }
@@ -121,6 +123,7 @@ for ((turn = start_turn; turn <= TURNS; turn++)); do
     fi
     [ "$ASYNC" = 0 ] || args+=(--async)
     [ "$NATURAL_WORD_BOUNDARY" = 1 ] || args+=(--no-school-natural-word-boundary)
+    [ "$LEXICAL_FAMILY" = 1 ] || args+=(--no-school-lexical-family)
     "$BIN" "${args[@]}" < "$input" > "$raw" 2>&1
     if [ "$turn" -gt 1 ]; then
         grep -Fq "[leo] loaded state from $STATE" "$raw" || {
@@ -201,11 +204,13 @@ jq -n --arg life "$LIFE" --arg arm "$ARM" --arg model "$MODEL" \
     --argjson turns "$TURNS" --argjson async "$ASYNC" \
     --argjson resumed "$RESUME" --argjson resumed_from "$resume_from_json" \
     --argjson natural_word_boundary "$NATURAL_WORD_BOUNDARY" \
+    --argjson lexical_family "$LEXICAL_FAMILY" \
     '{phase: "A.118", life: $life, arm: $arm, model_requested: $model,
       opening_cue: $opening, source: $source, base_seed: $base_seed,
       turns: $turns, async: ($async == 1), api_store: (if $source == "responses-api-visible-transcript" then false else null end),
       process_resumed: ($resumed == 1), resumed_at_turn: $resumed_from,
       school_natural_word_boundary: ($natural_word_boundary == 1),
+      school_lexical_family: ($lexical_family == 1),
       transcript_visible_to_interlocutor: ($source == "responses-api-visible-transcript"),
       diagnostics_visible_to_interlocutor: false,
       state_sha256: $state_sha, transcript_sha256: $transcript_sha,
