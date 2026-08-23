@@ -5646,6 +5646,45 @@ static TEST_NOINLINE void test_wonder_persistence(void) {
 
 }
 
+static TEST_NOINLINE void test_natural_school_word_boundary(void) {
+    /* A.119: natural typography cannot manufacture a teachable word. The
+     * repair is deliberately School-local; the historical byte boundary
+     * remains an exact named ablation. */
+    Leo *boundary = test_leo_alloc();
+    leo_init(boundary);
+    char unknown[LEO_HEARD_WORDLEN] = {0};
+    int previous = g_leo_school_natural_word_boundary_on;
+    g_leo_school_natural_word_boundary_on = 1;
+
+    CHECK(!leo_school_find_unknown(
+              boundary, "you don't have to remember", unknown),
+          "natural-word-boundary: ASCII contraction remains known");
+    CHECK(!leo_school_find_unknown(
+              boundary, "you don’t have to remember", unknown),
+          "natural-word-boundary: curly contraction cannot manufacture don");
+    CHECK(!leo_school_find_unknown(boundary, "what’s", unknown),
+          "natural-word-boundary: contracted function word remains grammar");
+    CHECK(!leo_school_find_unknown(boundary, "child’s", unknown),
+          "natural-word-boundary: known possessive remains its known stem");
+    CHECK(leo_school_find_unknown(boundary, "zorble’s", unknown) &&
+              !strcmp(unknown, "zorble"),
+          "natural-word-boundary: unknown possessive asks for its lexical body");
+    CHECK(!leo_school_find_unknown(boundary, "‘child’", unknown),
+          "natural-word-boundary: curly quotes preserve a known lexical body");
+    CHECK(leo_school_find_unknown(boundary, "‘zorble’", unknown) &&
+              !strcmp(unknown, "zorble"),
+          "natural-word-boundary: curly quotes preserve an unknown lexical body");
+
+    g_leo_school_natural_word_boundary_on = 0;
+    CHECK(leo_school_find_unknown(
+              boundary, "you don’t have to remember", unknown) &&
+              !strcmp(unknown, "don"),
+          "natural-word-boundary: explicit ablation restores the A.118 shard");
+
+    g_leo_school_natural_word_boundary_on = previous;
+    test_leo_delete(boundary);
+}
+
 static TEST_NOINLINE void test_wonder_ablation(void) {
     /* W-3 ablation: --no-wonder restores the exact old School semantics — one
      * primary guess only, and the next turn closes the pending UI question. */
@@ -7987,6 +8026,7 @@ int main(void) {
     test_wonder_appetite_calibration();
     test_wonder_appetite_reliability();
     test_school_form_and_wonder();
+    test_natural_school_word_boundary();
     test_wonder_persistence();
     test_wonder_ablation();
     test_wonder_negation();
