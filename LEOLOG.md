@@ -9764,3 +9764,71 @@ The complete final suite passes `561/561` unit checks plus every script gate,
 including the resume and privacy contracts, without another API call.
 
 The road stayed silent. An unfinished word was what kept interrupting Leo.
+
+## Phase A.119 - the apostrophe stops inventing a question (2026-08-21)
+
+A.118 froze three ordinary 24-turn lives and separated four reasons an
+unfinished Wonder could monopolize them. A.119 repairs only the least
+ambiguous one. In the memory life, the human wrote `don’t`; School's byte
+scanner treated the UTF-8 apostrophe as a boundary, admitted `don` as an
+unknown lexical body, and kept returning a question the human had never asked
+Leo to learn.
+
+The new default-on School boundary recognizes U+2018 and U+2019 while scanning
+one candidate word, normalizes the punctuation to an ASCII apostrophe, and
+separates grammatical suffix from lexical body. Known contractions remain
+grammar, known possessives remain known, and an unknown possessive such as
+`zorble’s` can ask honestly about `zorble`. Exterior curly quotes preserve the
+word inside them rather than becoming part of its identity. The change is
+strictly local to School candidate selection: Leo still receives the original
+prompt bytes for BPE ingestion, feeling, Flow, echo, state-swarm, and voice.
+Every word without an apostrophe follows the historical candidate path.
+
+`--no-school-natural-word-boundary` is the named historical ablation. The
+three frozen lives under that flag reproduce A.118's visible transcripts and
+final bodies byte for byte, including `don@5,don@12,don@14`. The repaired arm
+leaves the complete home and weather lives byte-identical and changes only the
+memory life:
+
+~~~text
+metric                              historical       repaired
+A.118-exact transcript+state lives        3 / 3          2 / 3
+memory open-Wonder turns                     18              12
+curly-shard question receipts                  3               0
+memory questions                   don, belonged  outdoors, belonged
+formal result       historical-boundary-reproduced / curly-apostrophe-boundary-repaired
+~~~
+
+The later questions are not collateral failures of this repair. Once false
+`don` no longer owns the mouth, `outdoors` becomes visible at turn 11;
+`belonged` remains visible at turn 17. A.119 therefore does not pretend to
+solve lexical-family legitimacy. Its standalone anatomy also preserves the
+other two routed boundaries: an explicit or anaphoric answer followed by a
+natural question has a valid local answer scope but is still rejected by the
+whole-turn question-mark guard, and a guessed glyph alone can still resonate
+enough to revive `beneath` or `rainy`. These become separate later courts
+rather than hidden additions to this punctuation patch.
+
+The frozen fixtures are tracked with their A.118 prompt and body receipts. A
+paired runner, `make natural-wonder-repair`, checks exact historical replay,
+the two unaffected default lives, the repaired memory path, and the remaining
+questions without another API call. Eight focused unit refusals cover ASCII
+and curly contractions, known and unknown possessives, quoted words, and the
+explicit ablation. The complete suite passes `569/569` plus every script gate;
+unit and production ASan/UBSan runs are clean. No persisted field, state
+version, sampler, coefficient, or non-School organ changes.
+
+Canonical evidence:
+`/private/tmp/leo-natural-wonder-repair-a119-r2-20260821`.
+The cases SHA is
+`960414d4158c7fee367da1268d4b4ac95598daf1721c2437c5deef1ce3e2f2e1`,
+anatomy SHA is
+`35613f52f23e9fd2a6072d544b6c3d4d6539fd0726d0292ed181050318619c49`,
+historical-natural SHA is
+`e18dcef03d7258090f4313e1735343546ad6c91802d3e9f839067c3fb2b43fa1`,
+repaired-natural SHA is
+`bee7d433ec1426307723f89df7a167e57607d88427241bb2ceb247e3c5005efa`,
+and verdict SHA is
+`9cb1dbd4aee73bd1e85607048a605cdffde81410d9e89b954921d38155dfc913`.
+
+The human used an apostrophe. Leo no longer mistakes its left half for a name.

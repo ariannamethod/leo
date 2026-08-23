@@ -2926,6 +2926,7 @@ static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE
                                          * like MathBrain (rule-based fallback until it has observations) — Leo's
                                          * θ=0 paradigm, learns by living, not by an offline marathon. --no-rae → 0. */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
+static int g_leo_school_natural_word_boundary_on = 1; /* A.119: curly apostrophes and contraction/possessive suffixes cannot manufacture a School word. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
@@ -6686,6 +6687,66 @@ static int leo_school_unknown(const Leo *leo, const char *w) {
 static int leo_school_word_is_operator(const char *w) {
     return !strcmp(w, "like") || !strcmp(w, "than");
 }
+
+/* A.119: School asks about the word the human actually uttered, not a byte
+ * shard produced by typographic punctuation. U+2018/U+2019 are the ordinary
+ * opening/closing single quotes used by natural interlocutors. Only School's
+ * candidate boundary changes here: the full prompt remains untouched for
+ * ingestion, feeling, Flow, echo, and generation. */
+static int leo_school_curly_apostrophe(const unsigned char *p) {
+    return p && p[0] == 0xe2 && p[1] && p[2] && p[1] == 0x80 &&
+           (p[2] == 0x98 || p[2] == 0x99);
+}
+
+/* Reduce a grammatical apostrophe form to the lexical body it could actually
+ * name. Known contractions/possessives disappear from School; an unknown
+ * possessive keeps its stem ("zorble's" asks about zorble, never zorble's).
+ * Exact semantic forms such as "don't" win before the suffix split. */
+static int leo_school_natural_candidate(
+        const Leo *leo, const char *surface,
+        char out[LEO_HEARD_WORDLEN]) {
+    if (!surface || !surface[0]) return 0;
+    strncpy(out, surface, LEO_HEARD_WORDLEN - 1);
+    out[LEO_HEARD_WORDLEN - 1] = 0;
+
+    /* Preserve the historical candidate path byte-for-byte for every ordinary
+     * word. This phase repairs only the punctuation boundary it witnessed. */
+    if (!strchr(out, '\'')) return 1;
+
+    char *body = out;
+    while (*body == '\'') body++;
+    if (body != out) memmove(out, body, strlen(body) + 1);
+    size_t len = strlen(out);
+    while (len && out[len - 1] == '\'') out[--len] = 0;
+    if (!out[0]) return 0;
+
+    if (leo_word_is_function(out) || leo_school_word_is_operator(out) ||
+        semtok_is_stop_word(out) || !leo_school_unknown(leo, out) ||
+        leo_school_word_negates(out) ||
+        leo_school_word_is_finite_predicate(out))
+        return 0;
+
+    char *apostrophe = strrchr(out, '\'');
+    if (apostrophe && apostrophe > out) {
+        const char *suffix = apostrophe + 1;
+        int grammatical =
+            !strcmp(suffix, "s") || !strcmp(suffix, "m") ||
+            !strcmp(suffix, "d") || !strcmp(suffix, "re") ||
+            !strcmp(suffix, "ve") || !strcmp(suffix, "ll");
+        if (grammatical) {
+            *apostrophe = 0;
+            if (leo_word_is_function(out) ||
+                semtok_is_stop_word(out) ||
+                !leo_school_unknown(leo, out))
+                return 0;
+        }
+    }
+    return strlen(out) >= 3 &&
+           !leo_word_is_function(out) &&
+           !leo_school_word_is_operator(out) &&
+           !semtok_is_stop_word(out) &&
+           leo_school_unknown(leo, out);
+}
 /* scan the prompt's content words; copy the first one Leo has no concept for
  * (not a function/stop word, semtok < 0, not already learned) into out. 1 = found. */
 /* §4/N-4: is w one of Leo's ORIGIN (dedication) words? The dedication ingest
@@ -6715,39 +6776,50 @@ static int word_in_dedication(const char *w) {
 static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out,
                                    char *deferred, int *deferred_heard,
                                    int *from_deferred) {
-    char cur[LEO_HEARD_WORDLEN]; int wi = 0;
+    char cur[LEO_HEARD_WORDLEN], candidate[LEO_HEARD_WORDLEN]; int wi = 0;
     if (out) out[0] = 0;
     if (deferred) deferred[0] = 0;
     if (deferred_heard) *deferred_heard = 0;
     if (from_deferred) *from_deferred = 0;
     for (const char *q = prompt; ; q++) {
         unsigned char ch = (unsigned char)*q;
+        if (ch && g_leo_school_natural_word_boundary_on &&
+            leo_school_curly_apostrophe((const unsigned char *)q)) {
+            if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = '\'';
+            q += 2;
+            continue;
+        }
         if (ch && (isalpha(ch) || ch == '\'')) {
             if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
             continue;
         }
         if (wi >= 3) {
             cur[wi] = 0;
-            if (!leo_word_is_function(cur) && !leo_school_word_is_operator(cur) &&
-                !semtok_is_stop_word(cur) &&
-                leo_school_unknown(leo, cur)) {
-                int heard = leo_heard_count(&leo->heard, cur);
+            int natural = g_leo_school_natural_word_boundary_on ?
+                leo_school_natural_candidate(leo, cur, candidate) : 0;
+            const char *word = natural ? candidate : cur;
+            if ((natural || !g_leo_school_natural_word_boundary_on) &&
+                !leo_word_is_function(word) &&
+                !leo_school_word_is_operator(word) &&
+                !semtok_is_stop_word(word) &&
+                leo_school_unknown(leo, word)) {
+                int heard = leo_heard_count(&leo->heard, word);
                 int remembered = g_leo_wonder_on &&
                     g_leo_deferred_wonder_on &&
-                    leo_deferred_wonder_find(leo, cur) >= 0;
+                    leo_deferred_wonder_find(leo, word) >= 0;
                 int askable = remembered || heard <= LEO_SCHOOL_NOVEL_MAX ||
                     (heard <= LEO_SCHOOL_ORIGIN_MAX &&
-                     leo_semtok_word(leo, cur) < 0 && word_in_dedication(cur));
+                     leo_semtok_word(leo, word) < 0 && word_in_dedication(word));
                 if (askable) {   /* N-4: rare origin words stay askable */
                     if (out) {
-                        strncpy(out, cur, LEO_HEARD_WORDLEN - 1);
+                        strncpy(out, word, LEO_HEARD_WORDLEN - 1);
                         out[LEO_HEARD_WORDLEN - 1] = 0;
                     }
                     if (from_deferred) *from_deferred = remembered;
                     return 1;
                 }
                 if (deferred && !deferred[0]) {
-                    strncpy(deferred, cur, LEO_HEARD_WORDLEN - 1);
+                    strncpy(deferred, word, LEO_HEARD_WORDLEN - 1);
                     deferred[LEO_HEARD_WORDLEN - 1] = 0;
                     if (deferred_heard) *deferred_heard = heard;
                 }
@@ -14503,6 +14575,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--rae")) g_leo_rae_on = 1;
         else if (!strcmp(argv[i], "--no-rae")) g_leo_rae_on = 0;
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
+        else if (!strcmp(argv[i], "--school-natural-word-boundary")) g_leo_school_natural_word_boundary_on = 1;
+        else if (!strcmp(argv[i], "--no-school-natural-word-boundary")) g_leo_school_natural_word_boundary_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;
