@@ -42,6 +42,7 @@ int main(void) {
     leo_init(answer);
     g_leo_school_lexical_family_on = 0;
     g_leo_school_lexical_role_on = 0;
+    g_leo_school_answer_followup_on = 0;
 
     print_unknown(leo, "ascii-contraction", "you don't have to remember");
     print_unknown(leo, "curly-contraction", "you don’t have to remember");

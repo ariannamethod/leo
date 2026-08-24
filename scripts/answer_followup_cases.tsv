@@ -1,0 +1,16 @@
+case	prompt	pending_turns	default_grounded	default_reference	default_water_asserted	default_water_rejected	default_animal_asserted	ablation_grounded	ablation_reference
+explicit-followup	a zorble is water. What do you hear?	0	water	explicit	1	0	0	none	unreferenced
+anaphoric-followup	it is water. What do you hear?	0	water	anaphoric	1	0	0	none	unreferenced
+elliptic-followup	water. What do you hear?	0	water	elliptic	1	0	0	none	unreferenced
+exclamation-followup	it is animal! What do you hear?	0	animal	anaphoric	0	0	1	none	unreferenced
+semicolon-followup	a zorble is animal; What do you hear?	0	animal	explicit	0	0	1	none	unreferenced
+question-shaped	it is water?	0	none	unreferenced	0	0	0	none	unreferenced
+counter-question	what do you think?	0	none	unreferenced	0	0	0	none	unreferenced
+question-first	what is a zorble? it is water.	0	none	unreferenced	0	0	0	none	unreferenced
+tail-names-target	the river has water. What is a zorble?	0	none	unreferenced	0	0	0	none	unreferenced
+comma-question	it is water, can you hear it?	0	none	unreferenced	0	0	0	none	unreferenced
+sensory-anaphora	that sounds like a gentle memory. What do you hear?	0	none	unreferenced	0	0	0	none	unreferenced
+delayed-anaphora	it is animal. What do you remember?	1	none	unreferenced	0	0	0	none	unreferenced
+delayed-explicit	a zorble is animal. What do you remember?	1	animal	explicit	0	0	1	none	unreferenced
+negative-followup	a zorble is not water. Is it animal?	0	none	explicit	0	1	0	none	unreferenced
+tail-evidence-isolated	a zorble is animal. Is it water?	0	animal	explicit	0	0	1	none	unreferenced
