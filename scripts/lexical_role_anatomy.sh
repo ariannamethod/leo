@@ -70,6 +70,7 @@ while IFS=$'\t' read -r life seed fixture prompts_sha a120_transcript a120_state
         LEO_NATURAL_ARM=replay LEO_NATURAL_SEED="$seed" LEO_NATURAL_TURNS=24 \
         LEO_NATURAL_LEXICAL_FAMILY=1 LEO_NATURAL_LEXICAL_ROLE="$ROLE" \
         LEO_NATURAL_ANSWER_FOLLOWUP="$ANSWER_FOLLOWUP" \
+        LEO_NATURAL_WONDER_REASK_REFERENCE=0 \
         "$ROOT/scripts/natural_life_probe.sh" "$destination" > "$OUT/lives/$life.out"
     transcript_sha="$(shasum -a 256 "$destination/visible_transcript.txt" | awk '{print $1}')"
     state_sha="$(shasum -a 256 "$destination/state/leo.state" | awk '{print $1}')"

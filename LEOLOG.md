@@ -10026,3 +10026,75 @@ and the verdict SHA is
 `c00ddd5e0530883e2067c6213487ba923a46ee66c78cf416b108eab8e650140d`.
 
 The human answered Leo, then asked her own question. He now hears both acts.
+
+## Phase A.123 - a guessed meaning cannot summon its question (2026-08-24)
+
+A.118 left one routed natural-Wonder wound after the punctuation, lexical
+family, grammatical-role, and answer-follow-up boundaries were separated.
+An unfinished question returned whenever the prompt contained either of Leo's
+two guessed glyphs. The unknown itself did not have to return and the human did
+not have to refer to it. In the frozen weather life, `smooth` was guessed as
+`Stone or Outside`; ordinary later questions about the same stone therefore
+made Leo ask `Smooth? Stone or Outside?` again at turns 16, 18, and 20.
+
+The new default-on reask-reference boundary keeps the unfinished Wonder open
+without giving its hypotheses ownership of every later turn. A human may still
+invite its return by naming the unknown exactly, or by asking one offered
+hypothesis through a bounded copular anaphora: `is it water?`, `that is
+animal?`, and `could it be water?` are live invitations. The hypothesis must
+occur inside that same question clause. A prior statement containing it cannot
+lend reference to a later generic question.
+
+Ordinary hypothesis contact, a question addressed to `you`, a nominal subject,
+both guesses merely co-occurring, sensory `that sounds like ...`, and `what
+about ...?` are all refusals. A question-shaped anaphora does not become an
+answer under A.122; it only permits the already open question to return. The
+complete prompt still reaches perception, Flow, state-swarm, and voice. The
+named `--no-wonder-reask-reference` ablation restores the exact single-glyph
+resonance path.
+
+The same reference law now belongs to the shadow calibrator. Previously, after
+Leo applied pressure, a coincidentally matching guessed glyph could be labeled
+a human invitation and make that pressure unscorable. The observer can no
+longer excuse a reask that the live law itself would call unreferenced.
+
+The paired frozen court separates persistent not-knowing from repeated speech:
+
+~~~text
+metric                              A.122 single glyph      A.123 bounded reference
+named/anaphoric invitations                       5 / 5                       5 / 5
+counterfeit reference refusals                    0 / 7                       7 / 7
+natural question receipts                             6                           3
+accidental hypothesis reasks                          3                           0
+A.122-exact transcript lives                      3 / 3                       2 / 3
+A.122-exact state lives                           3 / 3                       1 / 3
+open-Wonder turns                                    27                          27
+formal result              guessed-glyphs-recall-unnamed-wonder / reference-bounds-reask
+~~~
+
+The weather life loses only the three hypothesis-driven `smooth` questions and
+then follows its newly available ordinary replies. The memory life remains
+byte and state exact. The home transcript remains byte exact, while its body
+changes honestly at turn 14: `paper flower` no longer launders the `Tree` guess
+for `toy` into a human invitation, so shadow calibration confirms Leo's granted
+space instead of marking it unscorable. No Wonder is erased or prematurely
+resolved; the aggregate open-Wonder count remains 27.
+
+The A.119 apostrophe, A.120 lexical-family, A.121 lexical-role, and A.122
+answer-follow-up matrices remain exact under their named ablations. The full
+suite passes `666/666` unit checks plus every script gate; unit and production
+ASan/UBSan runs are clean. No state format, sampler, coefficient, Flow law,
+state-swarm organ, or voice reader changes.
+
+Canonical evidence:
+`/private/tmp/leo-wonder-reask-reference-a123-r2-20260824`.
+The cases TSV and candidate anatomy share SHA
+`0fa7f2d2a5dddc6f97475709f79cdf0888144cd5c59dac55ee9748dcd1c241b3`,
+the A.122-control natural SHA is
+`be05cf764f7f756175cd26aaeacc0fc7bad6d60c18f43911907125d94766c267`,
+the A.123 natural SHA is
+`374fd7536dcfe1f7ed1dd6b70905ecd33dbf1ed72d7df569b24f907e8a323342`,
+and the verdict SHA is
+`44e488acce621d7cc65ac5edba490b23b0f8eda60fcac909567661a2d645cec8`.
+
+A stone may return. It cannot answer to the name smooth.

@@ -1,34 +1,34 @@
 #!/usr/bin/env bash
-# A.122: replay A.121 and measure one bounded answer before a human question.
+# A.123: replay A.122 and separate invited reask from guessed-glyph contact.
 set -Eeuo pipefail
 
-trap 'rc=$?; printf "answer-followup anatomy failed: line=%s rc=%s command=%s\n" "$LINENO" "$rc" "$BASH_COMMAND" >&2; exit "$rc"' ERR
+trap 'rc=$?; printf "wonder-reask-reference anatomy failed: line=%s rc=%s command=%s\n" "$LINENO" "$rc" "$BASH_COMMAND" >&2; exit "$rc"' ERR
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-OUT="${1:-${TMPDIR:-/tmp}/leo-answer-followup-anatomy-$STAMP}"
-CASES="${LEO_ANSWER_FOLLOWUP_NATURAL_CASES:-$ROOT/scripts/answer_followup_natural_cases.tsv}"
-PLAN_ONLY="${LEO_ANSWER_FOLLOWUP_PLAN_ONLY:-0}"
-FOLLOWUP="${LEO_ANSWER_FOLLOWUP:-1}"
-EXPECT="${LEO_ANSWER_FOLLOWUP_EXPECT:-none}"
+OUT="${1:-${TMPDIR:-/tmp}/leo-wonder-reask-reference-anatomy-$STAMP}"
+CASES="${LEO_WONDER_REASK_REFERENCE_NATURAL_CASES:-$ROOT/scripts/wonder_reask_reference_natural_cases.tsv}"
+PLAN_ONLY="${LEO_WONDER_REASK_REFERENCE_PLAN_ONLY:-0}"
+REFERENCE="${LEO_WONDER_REASK_REFERENCE:-1}"
+EXPECT="${LEO_WONDER_REASK_REFERENCE_EXPECT:-none}"
 
-[ -s "$CASES" ] || { printf 'missing answer-followup natural cases: %s\n' "$CASES" >&2; exit 2; }
-[ "$PLAN_ONLY" = 0 ] || [ "$PLAN_ONLY" = 1 ] || { printf 'LEO_ANSWER_FOLLOWUP_PLAN_ONLY must be 0 or 1\n' >&2; exit 2; }
-[ "$FOLLOWUP" = 0 ] || [ "$FOLLOWUP" = 1 ] || { printf 'LEO_ANSWER_FOLLOWUP must be 0 or 1\n' >&2; exit 2; }
-case "$EXPECT" in none|a121|a122) ;; *) printf 'LEO_ANSWER_FOLLOWUP_EXPECT must be none, a121, or a122\n' >&2; exit 2;; esac
+[ -s "$CASES" ] || { printf 'missing wonder-reask-reference natural cases: %s\n' "$CASES" >&2; exit 2; }
+[ "$PLAN_ONLY" = 0 ] || [ "$PLAN_ONLY" = 1 ] || { printf 'LEO_WONDER_REASK_REFERENCE_PLAN_ONLY must be 0 or 1\n' >&2; exit 2; }
+[ "$REFERENCE" = 0 ] || [ "$REFERENCE" = 1 ] || { printf 'LEO_WONDER_REASK_REFERENCE must be 0 or 1\n' >&2; exit 2; }
+case "$EXPECT" in none|a122|a123) ;; *) printf 'LEO_WONDER_REASK_REFERENCE_EXPECT must be none, a122, or a123\n' >&2; exit 2;; esac
 [ ! -e "$OUT" ] || { printf 'output path already exists: %s\n' "$OUT" >&2; exit 2; }
 mkdir -p "$OUT/lives"
 
 PLAN="$OUT/plan.tsv"
 NATURAL="$OUT/natural.tsv"
 ANATOMY="$OUT/anatomy.tsv"
-BIN="$OUT/answer-followup-fixture"
+BIN="$OUT/wonder-reask-reference-fixture"
 
 awk -F '\t' -v OFS='\t' '
     NR == 1 {
         if (NF != 12 || $1 != "life" || $2 != "seed" ||
             $3 != "fixture" || $4 != "prompts_sha256" ||
-            $8 != "a121_questions" || $12 != "a122_questions") exit 2
+            $8 != "a122_questions" || $12 != "a123_questions") exit 2
         print; next
     }
     NF != 12 || $1 !~ /^[a-z]+$/ || $2 !~ /^[0-9]+$/ ||
@@ -54,24 +54,24 @@ while IFS=$'\t' read -r life seed fixture prompts_sha _rest; do
 done < "$PLAN"
 
 if [ "$PLAN_ONLY" = 1 ]; then
-    printf 'A.122 answer-followup anatomy plan: %s\n' "$OUT"
+    printf 'A.123 wonder-reask-reference anatomy plan: %s\n' "$OUT"
     exit 0
 fi
 
-cc "$ROOT/scripts/answer_followup_fixture.c" \
+cc "$ROOT/scripts/wonder_reask_reference_fixture.c" \
     -O2 -lm -Wall -Wextra -Wno-unused-function -o "$BIN" -lpthread
 "$BIN" > "$ANATOMY"
-cmp -s "$ROOT/scripts/answer_followup_cases.tsv" "$ANATOMY"
+cmp -s "$ROOT/scripts/wonder_reask_reference_cases.tsv" "$ANATOMY"
 
-printf 'life\tseed\tprompts_sha256\ttranscript_sha256\tstate_sha256\twonder_open_turns\tschool_questions\ta121_transcript_exact\ta121_state_exact\ta122_transcript_exact\ta122_state_exact\n' > "$NATURAL"
-while IFS=$'\t' read -r life seed fixture prompts_sha a121_transcript a121_state a121_open a121_questions a122_transcript a122_state a122_open a122_questions; do
+printf 'life\tseed\tprompts_sha256\ttranscript_sha256\tstate_sha256\twonder_open_turns\tschool_questions\ta122_transcript_exact\ta122_state_exact\ta123_transcript_exact\ta123_state_exact\n' > "$NATURAL"
+while IFS=$'\t' read -r life seed fixture prompts_sha a122_transcript a122_state a122_open a122_questions a123_transcript a123_state a123_open a123_questions; do
     [ "$life" != life ] || continue
     destination="$OUT/lives/$life"
     LEO_NATURAL_REPLAY_FILE="$ROOT/$fixture" LEO_NATURAL_LIFE="$life" \
         LEO_NATURAL_ARM=replay LEO_NATURAL_SEED="$seed" LEO_NATURAL_TURNS=24 \
         LEO_NATURAL_LEXICAL_FAMILY=1 LEO_NATURAL_LEXICAL_ROLE=1 \
-        LEO_NATURAL_ANSWER_FOLLOWUP="$FOLLOWUP" \
-        LEO_NATURAL_WONDER_REASK_REFERENCE=0 \
+        LEO_NATURAL_ANSWER_FOLLOWUP=1 \
+        LEO_NATURAL_WONDER_REASK_REFERENCE="$REFERENCE" \
         "$ROOT/scripts/natural_life_probe.sh" "$destination" > "$OUT/lives/$life.out"
     transcript_sha="$(shasum -a 256 "$destination/visible_transcript.txt" | awk '{print $1}')"
     state_sha="$(shasum -a 256 "$destination/state/leo.state" | awk '{print $1}')"
@@ -81,30 +81,30 @@ while IFS=$'\t' read -r life seed fixture prompts_sha a121_transcript a121_state
          ((.leo | capture("^(?<word>[[:alpha:]]+)\\?").word | ascii_downcase) +
           "@" + (.turn | tostring))] | join(",")
     ' "$destination/dialogue.jsonl")"
-    a121_transcript_exact=false; a121_state_exact=false
     a122_transcript_exact=false; a122_state_exact=false
-    [ "$transcript_sha" != "$a121_transcript" ] || a121_transcript_exact=true
-    [ "$state_sha" != "$a121_state" ] || a121_state_exact=true
+    a123_transcript_exact=false; a123_state_exact=false
     [ "$transcript_sha" != "$a122_transcript" ] || a122_transcript_exact=true
     [ "$state_sha" != "$a122_state" ] || a122_state_exact=true
-    if [ "$EXPECT" = a121 ]; then
-        [ "$a121_transcript_exact" = true ] && [ "$a121_state_exact" = true ] &&
-            [ "$open" = "$a121_open" ] && [ "$observed_questions" = "$a121_questions" ] || {
-            printf 'A.121 answer-followup control drift: %s\n' "$life" >&2; exit 1;
-        }
-    elif [ "$EXPECT" = a122 ]; then
+    [ "$transcript_sha" != "$a123_transcript" ] || a123_transcript_exact=true
+    [ "$state_sha" != "$a123_state" ] || a123_state_exact=true
+    if [ "$EXPECT" = a122 ]; then
         [ "$a122_transcript_exact" = true ] && [ "$a122_state_exact" = true ] &&
             [ "$open" = "$a122_open" ] && [ "$observed_questions" = "$a122_questions" ] || {
-            printf 'A.122 answer-followup witness drift: %s\n' "$life" >&2; exit 1;
+            printf 'A.122 wonder-reask-reference control drift: %s\n' "$life" >&2; exit 1;
+        }
+    elif [ "$EXPECT" = a123 ]; then
+        [ "$a123_transcript_exact" = true ] && [ "$a123_state_exact" = true ] &&
+            [ "$open" = "$a123_open" ] && [ "$observed_questions" = "$a123_questions" ] || {
+            printf 'A.123 wonder-reask-reference witness drift: %s\n' "$life" >&2; exit 1;
         }
     fi
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$life" "$seed" "$prompts_sha" "$transcript_sha" "$state_sha" \
-        "$open" "$observed_questions" "$a121_transcript_exact" \
-        "$a121_state_exact" "$a122_transcript_exact" "$a122_state_exact" >> "$NATURAL"
+        "$open" "$observed_questions" "$a122_transcript_exact" \
+        "$a122_state_exact" "$a123_transcript_exact" "$a123_state_exact" >> "$NATURAL"
 done < "$PLAN"
 
 cat "$ANATOMY"
 cat "$NATURAL"
-printf 'result\tbounded-answer-before-followup-measured\n'
-printf 'A.122 answer-followup anatomy: %s\n' "$OUT"
+printf 'result\tbounded-wonder-reask-reference-measured\n'
+printf 'A.123 wonder-reask-reference anatomy: %s\n' "$OUT"

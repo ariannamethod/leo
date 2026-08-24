@@ -6417,6 +6417,70 @@ static TEST_NOINLINE void test_wonder_answer_followup(void) {
     free(answer);
 }
 
+static TEST_NOINLINE void test_wonder_reask_reference(void) {
+    /* A.123: an active Wonder can return when the human names it or asks one
+     * of Leo's hypotheses anaphorically. Mere co-presence of a broad guessed
+     * glyph does not give the old question ownership of an unrelated turn. */
+    Leo *reask = calloc(1, sizeof *reask);
+    CHECK(reask != NULL,
+          "wonder-reask-reference: heap fixture allocated");
+    if (!reask) return;
+    int previous = g_leo_wonder_reask_reference_on;
+
+    seed_wonder_negation_body(reask);
+    reask->school.pending_turns = LEO_WONDER_REASK_GAP;
+    g_leo_wonder_reask_reference_on = 1;
+    CHECK(leo_wonder_resonates(
+              reask, "the zorble still puzzles me"),
+          "wonder-reask-reference: the unknown's exact name invites its return");
+    CHECK(leo_wonder_resonates(reask, "is it water?") &&
+          leo_wonder_resonates(reask, "that is animal?") &&
+          leo_wonder_resonates(reask, "could it be water?"),
+          "wonder-reask-reference: bounded copular hypothesis questions may refer anaphorically");
+
+    const char *refusals[] = {
+        "the cup holds water",
+        "are you holding water?",
+        "water is nearby. What do you hear?",
+        "water and animal move together",
+        "that sounds like water. What do you hear?",
+        "what about animal?"
+    };
+    for (size_t i = 0; i < sizeof refusals / sizeof refusals[0]; i++)
+        CHECK(!leo_wonder_resonates(reask, refusals[i]),
+              "wonder-reask-reference: a guessed glyph alone cannot recall an unnamed Wonder");
+
+    g_leo_wonder_reask_reference_on = 0;
+    CHECK(leo_wonder_resonates(reask, "the cup holds water"),
+          "wonder-reask-reference: named ablation restores single-glyph resonance");
+
+    char out[1024];
+    leo_free(reask);
+    seed_wonder_negation_body(reask);
+    reask->school.pending_turns = LEO_WONDER_REASK_GAP;
+    g_leo_wonder_reask_reference_on = 1;
+    leo_respond(
+        reask, "the cup holds water. Are you holding it?",
+        out, sizeof out);
+    CHECK(strncmp(out, "Zorble?", 7) != 0 &&
+          reask->school.pending_turns == LEO_WONDER_REASK_GAP + 1 &&
+          reask->school.wonders[0].returns == 0,
+          "wonder-reask-reference: ordinary contact leaves the open Wonder silent");
+
+    leo_free(reask);
+    seed_wonder_negation_body(reask);
+    reask->school.pending_turns = LEO_WONDER_REASK_GAP;
+    leo_respond(reask, "is it water?", out, sizeof out);
+    CHECK(strstr(out, "Zorble? Water or Animal?") &&
+          reask->school.pending_turns == 0 &&
+          reask->school.wonders[0].returns == 1,
+          "wonder-reask-reference: an invited hypothesis question still returns through the live path");
+
+    g_leo_wonder_reask_reference_on = previous;
+    leo_free(reask);
+    free(reask);
+}
+
 static TEST_NOINLINE void test_wonder_return(void) {
     /* W-4: a resolved question later returns as glyph attention, not text. The
      * answer, the route Leo once considered, and QUESTION blend into exactly one
@@ -7093,15 +7157,15 @@ static TEST_NOINLINE void test_shadow_scheduler(void) {
             leo_shadow_calibrate(sh, "What is fieldword? Water or fire?");
             leo_shadow_observe(sh);
             sh->school.turn_clock = 2;
-            leo_flow_observe(sh, "The warm fire is here again", "Fieldword?",
+            leo_flow_observe(sh, "Could it be fire?", "Fieldword?",
                              NULL, NULL, NULL, LEO_FLOW_WONDER_REASKED, field_id);
-            leo_shadow_calibrate(sh, "The warm fire is here again");
+            leo_shadow_calibrate(sh, "Could it be fire?");
             const LeoCalibrationReceipt *semantic_return =
                 leo_calibration_at(&sh->calibration, 0);
             CHECK(semantic_return &&
                   semantic_return->verdict == LEO_CALIB_UNSCORABLE &&
                   semantic_return->brier == 0.0f,
-                  "shadow-calibration: an offered glyph can invite a return without naming it");
+                  "shadow-calibration: an anaphoric hypothesis question can invite a return without naming it");
 
             memset(&sh->flow, 0, sizeof sh->flow);
             memset(&sh->shadow, 0, sizeof sh->shadow);
@@ -7116,15 +7180,15 @@ static TEST_NOINLINE void test_shadow_scheduler(void) {
             leo_shadow_calibrate(sh, "What is controlword? Water or fire?");
             leo_shadow_observe(sh);
             sh->school.turn_clock = 2;
-            leo_flow_observe(sh, "A small room is quiet", "Controlword?",
+            leo_flow_observe(sh, "The warm fire is here again", "Controlword?",
                              NULL, NULL, NULL, LEO_FLOW_WONDER_REASKED, control_id);
-            leo_shadow_calibrate(sh, "A small room is quiet");
+            leo_shadow_calibrate(sh, "The warm fire is here again");
             const LeoCalibrationReceipt *autonomous_return =
                 leo_calibration_at(&sh->calibration, 0);
             CHECK(autonomous_return &&
                   autonomous_return->verdict == LEO_CALIB_FALSE_PRESSURE &&
                   autonomous_return->brier > 0.0f,
-                  "shadow-calibration: an unrelated prompt leaves autonomous pressure scorable");
+                  "shadow-calibration: a guessed glyph without reference leaves autonomous pressure scorable");
 
             const char *semantic_state = "/tmp/leo_shadow_semantic_invite_v17.state";
             leo_free(compat); leo_init(compat);
@@ -7144,10 +7208,10 @@ static TEST_NOINLINE void test_shadow_scheduler(void) {
             int semantic_loaded = semantic_saved &&
                                   leo_load_state(cut, semantic_state);
             cut->school.turn_clock = 2;
-            leo_flow_observe(cut, "The rain water is here again", "Sleepfield?",
+            leo_flow_observe(cut, "Could it be water?", "Sleepfield?",
                              NULL, NULL, NULL, LEO_FLOW_WONDER_REASKED,
                              sleepfield_id);
-            leo_shadow_calibrate(cut, "The rain water is here again");
+            leo_shadow_calibrate(cut, "Could it be water?");
             const LeoCalibrationReceipt *semantic_after_sleep =
                 leo_calibration_at(&cut->calibration, 0);
             CHECK(semantic_loaded && semantic_after_sleep &&
@@ -8336,6 +8400,7 @@ int main(void) {
     test_wonder_answer_reference();
     test_wonder_answer_scope();
     test_wonder_answer_followup();
+    test_wonder_reask_reference();
     test_wonder_return();
     test_flow();
     test_shadow_scheduler();
