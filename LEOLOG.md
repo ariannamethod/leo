@@ -10098,3 +10098,94 @@ and the verdict SHA is
 `44e488acce621d7cc65ac5edba490b23b0f8eda60fcac909567661a2d645cec8`.
 
 A stone may return. It cannot answer to the name smooth.
+
+## Phase A.124 - the quiet question survives fresh ordinary life (2026-08-24)
+
+A.119--A.123 repaired five boundaries found in A.118's frozen conversations.
+A.124 does not tune those witnesses again. It preregisters three different
+24-turn lives -- making something by hand, sharing food, and walking outdoors
+-- and asks only what post-repair Leo actually emits in fresh ordinary
+conversation.
+
+The plan was committed before the first response. It separates 72 planned
+dialogue turns from HTTP attempts and disables automatic retry, making 72 the
+hard attempt ceiling. Exactly 72 request, completed response, and parsed-turn
+files exist. Every request names `gpt-5.6-luna`, uses strict structured output,
+and carries `store: false`; only prior visible `human` / `leo` text enters its
+conversation input. The first 24-turn life used the first user-provided
+credential. The matrix parent was then held until that life had a complete
+manifest; the remaining two lives used the second credential. No turn was
+interrupted, repeated, or purchased across that infrastructure boundary, and
+the model, request, prompt, seed, and Leo runtime stayed unchanged.
+
+Every grown prompt sequence was frozen. Synchronous replay reproduces the
+visible transcript and final body exactly in all three lives. Two local
+`--async` shadows per life reproduce each other exactly and differ from the
+synchronous replies on 19, 19, and 14 turns. That is a trajectory difference,
+not a quality vote.
+
+The direct descriptive receipts are:
+
+~~~text
+visible turns                                                72
+unique exact Leo replies                                  71 / 72
+exact consecutive replies                                       0
+mean human / Leo words                              14.694 / 16.153
+mean external prompt echo                                0.294722
+spoken Leo question turns                                  6 / 72
+open-Wonder turns                                         69 / 72
+state births / updates / replacements                   24 / 47 / 1
+API claimed reply-reference turns                         65 / 72
+exact synchronous replay lives                              3 / 3
+reproducible async-shadow lives                             3 / 3
+sync / async changed replies                              52 / 72
+formal result                         natural-life-observed-not-judged
+~~~
+
+These counts do not prove coherent expression. The exact transcripts remain
+grammatically fractured, shift referents, and rely heavily on the human
+interlocutor to supply continuity. The API's 65 reply-reference labels describe
+its own stance toward the dialogue; they are not evidence that Leo made those
+references. There are locally adjacent fragments -- after the human says that
+only a feeling may remain, Leo emits `He cannot remember. Small kind. It walked
+off.` -- but the same lives contain many sequences whose connective story is
+constructed by the interlocutor rather than spoken by Leo.
+
+The repaired reask boundary does survive the fresh population descriptively.
+`sturdier` opens at making turn 1 and remains open through turn 24, but Leo asks
+it only once. `vulnerable` likewise remains open from walk turn 3 through turn
+24 and is asked only once. In the meal life, `onions` is asked at turn 1,
+returns only when the human explicitly names it at turn 3, and resolves at turn
+4. Across all three lives there is no hypothesis-only accidental reask.
+Persistent not-knowing no longer automatically monopolizes the spoken reply.
+
+Fresh life also exposes the next narrower boundary. `Both, really—the body
+feels stronger, and there’s a quiet joy in making it hold.` does not ground
+`sturdier`; `Food—the soup gets carrots, garlic, lentils, and a little cumin.
+What foods feel like home to you?` does not ground `guides`. The first
+Wonder stays active for the whole making life. The second stays active until
+the explicitly named sibling `difficult` redirects the available question at
+meal turn 17. This is observation, not yet a repair claim: `both` answers, an
+offered hypothesis followed by an em-dash explanation, and genuinely
+non-grounding comparison must be separated in a replay-only A.125 anatomy
+before any runtime edit.
+
+A.124 changes no `leo.c`, state byte, sampler, coefficient, organ, or voice
+path. The only tracked additions after the preregistration are the exact 72
+human prompt lines, their cryptographic receipts, and a test that verifies the
+frozen fixtures. The full suite passes `666/666` unit checks plus every script
+gate.
+
+Canonical evidence:
+`/private/tmp/leo-natural-life-a124-r1-20260824`.
+The plan SHA is
+`c510e04ef443eedb380e8a67008641cb14dccbdc812a5e46d6a50312bf14645d`,
+the design SHA is
+`e7508012cd562859ab1d5c3a7ed7036224bb1cf559db93430ac91a8edf06b523`,
+and the matrix SHA is
+`9e3e37aad005b9c926b800861a051fb84994b319002bfbffbc3a06d45e5e095d`.
+The per-life prompt, transcript, body, and async receipts are frozen in
+`scripts/natural_life_second_generation_frozen.tsv`.
+
+The question stopped interrupting the room. The answer still did not always
+reach it.

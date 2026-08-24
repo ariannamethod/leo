@@ -76,4 +76,23 @@ grep -q $'^question\twhat-does-repaired-Leo-do-in-fresh-ordinary-life$' \
 grep -q $'^maximum_http_attempts\t12$' \
     "$TMP/second-generation-plan/design.tsv"
 
+frozen="$ROOT/scripts/natural_life_second_generation_frozen.tsv"
+awk -F '\t' '
+    NR == 1 {
+        if (NF != 9 || $1 != "life" || $3 != "fixture" ||
+            $4 != "prompts_sha256" || $9 != "sync_async_reply_mismatches") exit 2
+        next
+    }
+    NF != 9 || $1 !~ /^[a-z]+$/ || $2 !~ /^[0-9]+$/ ||
+        $4 !~ /^[0-9a-f]{64}$/ || $5 !~ /^[0-9a-f]{64}$/ ||
+        $6 !~ /^[0-9a-f]{64}$/ || $7 !~ /^[0-9a-f]{64}$/ ||
+        $8 !~ /^[0-9a-f]{64}$/ || $9 !~ /^[0-9]+$/ { exit 2 }
+    { rows++ }
+    END { if (rows != 3) exit 2 }
+' "$frozen"
+while IFS=$'\t' read -r life seed fixture prompts_sha rest; do
+    [ "$life" != life ] || continue
+    [ "$(shasum -a 256 "$ROOT/$fixture" | awk '{print $1}')" = "$prompts_sha" ]
+done < "$frozen"
+
 printf 'natural-life probe contracts: ok\n'
