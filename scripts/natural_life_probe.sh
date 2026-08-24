@@ -23,6 +23,8 @@ LEXICAL_FAMILY="${LEO_NATURAL_LEXICAL_FAMILY:-1}"
 LEXICAL_ROLE="${LEO_NATURAL_LEXICAL_ROLE:-1}"
 ANSWER_FOLLOWUP="${LEO_NATURAL_ANSWER_FOLLOWUP:-1}"
 WONDER_REASK_REFERENCE="${LEO_NATURAL_WONDER_REASK_REFERENCE:-1}"
+OFFERED_ANSWER_EXPANSION="${LEO_NATURAL_OFFERED_ANSWER_EXPANSION:-1}"
+FOLLOWUP_QUESTION_SCOPE="${LEO_NATURAL_FOLLOWUP_QUESTION_SCOPE:-1}"
 
 case "$ARM" in api|replay|async-a|async-b) ;; *) printf 'invalid arm: %s\n' "$ARM" >&2; exit 2;; esac
 case "$BASE_SEED" in ''|*[!0-9]*) printf 'invalid seed\n' >&2; exit 2;; esac
@@ -35,6 +37,8 @@ case "$TURNS" in ''|*[!0-9]*) printf 'invalid turn count\n' >&2; exit 2;; esac
 [ "$LEXICAL_ROLE" = 0 ] || [ "$LEXICAL_ROLE" = 1 ] || { printf 'LEO_NATURAL_LEXICAL_ROLE must be 0 or 1\n' >&2; exit 2; }
 [ "$ANSWER_FOLLOWUP" = 0 ] || [ "$ANSWER_FOLLOWUP" = 1 ] || { printf 'LEO_NATURAL_ANSWER_FOLLOWUP must be 0 or 1\n' >&2; exit 2; }
 [ "$WONDER_REASK_REFERENCE" = 0 ] || [ "$WONDER_REASK_REFERENCE" = 1 ] || { printf 'LEO_NATURAL_WONDER_REASK_REFERENCE must be 0 or 1\n' >&2; exit 2; }
+[ "$OFFERED_ANSWER_EXPANSION" = 0 ] || [ "$OFFERED_ANSWER_EXPANSION" = 1 ] || { printf 'LEO_NATURAL_OFFERED_ANSWER_EXPANSION must be 0 or 1\n' >&2; exit 2; }
+[ "$FOLLOWUP_QUESTION_SCOPE" = 0 ] || [ "$FOLLOWUP_QUESTION_SCOPE" = 1 ] || { printf 'LEO_NATURAL_FOLLOWUP_QUESTION_SCOPE must be 0 or 1\n' >&2; exit 2; }
 [ -n "$PHASE" ] && [ -n "$LIFE" ] && [ -n "$OPENING" ] || { printf 'phase, life, and opening must not be empty\n' >&2; exit 2; }
 if [ -n "$REPLAY_FILE" ]; then
     [ -f "$REPLAY_FILE" ] || { printf 'missing replay file: %s\n' "$REPLAY_FILE" >&2; exit 2; }
@@ -134,6 +138,8 @@ for ((turn = start_turn; turn <= TURNS; turn++)); do
     [ "$LEXICAL_ROLE" = 1 ] || args+=(--no-school-lexical-role)
     [ "$ANSWER_FOLLOWUP" = 1 ] || args+=(--no-school-answer-followup)
     [ "$WONDER_REASK_REFERENCE" = 1 ] || args+=(--no-wonder-reask-reference)
+    [ "$OFFERED_ANSWER_EXPANSION" = 1 ] || args+=(--no-school-offered-answer-expansion)
+    [ "$FOLLOWUP_QUESTION_SCOPE" = 1 ] || args+=(--no-school-followup-question-scope)
     "$BIN" "${args[@]}" < "$input" > "$raw" 2>&1
     if [ "$turn" -gt 1 ]; then
         grep -Fq "[leo] loaded state from $STATE" "$raw" || {
@@ -218,6 +224,8 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
     --argjson lexical_role "$LEXICAL_ROLE" \
     --argjson answer_followup "$ANSWER_FOLLOWUP" \
     --argjson wonder_reask_reference "$WONDER_REASK_REFERENCE" \
+    --argjson offered_answer_expansion "$OFFERED_ANSWER_EXPANSION" \
+    --argjson followup_question_scope "$FOLLOWUP_QUESTION_SCOPE" \
     '{phase: $phase, life: $life, arm: $arm, model_requested: $model,
       opening_cue: $opening, source: $source, base_seed: $base_seed,
       turns: $turns, async: ($async == 1), api_store: (if $source == "responses-api-visible-transcript" then false else null end),
@@ -227,6 +235,8 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
       school_lexical_role: ($lexical_role == 1),
       school_answer_followup: ($answer_followup == 1),
       wonder_reask_reference: ($wonder_reask_reference == 1),
+      school_offered_answer_expansion: ($offered_answer_expansion == 1),
+      school_followup_question_scope: ($followup_question_scope == 1),
       transcript_visible_to_interlocutor: ($source == "responses-api-visible-transcript"),
       diagnostics_visible_to_interlocutor: false,
       state_sha256: $state_sha, transcript_sha256: $transcript_sha,

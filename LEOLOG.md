@@ -10189,3 +10189,99 @@ The per-life prompt, transcript, body, and async receipts are frozen in
 
 The question stopped interrupting the room. The answer still did not always
 reach it.
+
+## Phase A.125 - an answer and the next question keep separate bodies (2026-08-24)
+
+A.124 left two unlike natural forms unfinished. `Both, really—the body feels
+stronger, and there’s a quiet joy in making it hold.` could refer to two
+offered meanings and therefore did not choose either one. `Food—the soup gets
+carrots, garlic, lentils, and a little cumin. What foods feel like home to
+you?` chose exactly one offered meaning, explained it, and then asked a
+separate question, but School still lost that answer. A.125 does not merge
+these forms.
+
+The anatomy found two independent boundaries. First, an adjacent answer may
+contain one exact U+2014 em dash after a strict one-option ellipsis. Only the
+material before that dash supplies answer evidence; the explanation must
+contain words but cannot add an option or glyph. Two offered meanings,
+`both`, an unoffered word, a proposition, a delayed answer, an ASCII hyphen,
+a second em dash, and an em-dash question are refused. A negative offered
+option contributes rejection evidence without inventing a positive meaning.
+The named `--no-school-offered-answer-expansion` ablation restores A.124's
+answer loss.
+
+Second, when an occupied Wonder hears a genuine follow-up question after the
+same hard A.122 statement boundary, only that question clause may nominate a
+new unknown for the waiting queue. The earlier whole-prompt scan had queued
+words that the human stated rather than asked: `unhurried` at making turn 11,
+`guide` at making turn 22, `carrots` at meal turn 6, `meaningful` at walk turn
+18, and `soothing` at walk turn 24. The named
+`--no-school-followup-question-scope` ablation restores that historical scan.
+Prompts without a genuine bounded follow-up retain the old full-prompt path.
+
+Neither change may borrow the other's effect. In the direct four-arm fixture,
+`food—the flibble. What do you hear?` produces exactly this interaction:
+
+~~~text
+offered-answer expansion    question scope    flom learned    flibble queued
+off                         off               no              yes
+on                          off               no              yes
+off                         on                no              no
+on                          on                food            no
+~~~
+
+The same preregistered 2x2 runs all three frozen A.124 prompt sequences for 24
+turns per arm, 288 local turns in total and no API request. Both the control
+and expansion-only arms reproduce all three A.124 visible transcripts and
+final bodies exactly. Expansion alone therefore changes no natural witness:
+the old whole-prompt queue still vetoes the meal answer. Question scope alone
+keeps two of three transcripts exact but changes all three final bodies; it
+removes the falsely queued statement words, and the meal life later follows a
+different path without resolving `guides`.
+
+With both laws on, the meal turn-6 prompt grounds `guides` as `food`. Leo's
+turn-6 bytes remain exactly `He comes in. Like. He learned it carefully.` On
+the frozen next human turn, `That sounds tender. For me, warm bread and
+vegetable soup feel like home.`, the now-available mouth asks a different
+question: `Vegetable? Food or Fire?` The meal transcript and body consequently
+diverge from A.124 from that point onward. Making and walk remain transcript
+exact but not state exact. `Both, really—...` still does not resolve
+`sturdier`, which remains open through making turn 24.
+
+The exact natural receipts are:
+
+~~~text
+arm                 A.124-exact transcripts    A.124-exact bodies    open-Wonder turns
+control                              3 / 3                  3 / 3                   69
+expansion only                       3 / 3                  3 / 3                   69
+question scope only                  2 / 3                  0 / 3                   69
+paired candidate                     2 / 3                  0 / 3                   68
+~~~
+
+The one fewer open-Wonder turn and the replacement of a later `difficult`
+question by `vegetable` are trajectory facts, not evidence of better dialogue.
+The visible replies remain grammatically fractured and no count, checksum,
+parser result, or internally consistent state proves coherent expression. The
+human interlocutor still supplies much of the continuity. A.125 establishes
+only the two bounded parsing/queue laws and their observed causal interaction.
+
+Historical A.119--A.123 matrices explicitly disable both later A.125 laws and
+reproduce their frozen contracts exactly. The full suite passes `682/682` unit
+checks plus every script gate; unit and production ASan/UBSan runs are clean.
+No state format, sampler, coefficient, Flow law, state-swarm organ, or voice
+reader changes.
+
+Canonical evidence:
+`/private/tmp/leo-natural-answer-form-a125-r3-20260824`.
+The factorial plan SHA is
+`e06b89c4725d9c832b2d89a2fcc921decf623988f507a19578b60e861713ea55`,
+the anatomy SHA is
+`d7cf5273b8b089ff217d3bda1b9bbf16cc8f14f6cb87411f37535a190d8a91c5`,
+the direct interaction SHA is
+`8e90d6910ff3f2c5750af50c9f50449d286ca499c0315bef4297693917b8c661`,
+and the exact 12-row natural factorial SHA is
+`d8c5712c22c5eddb975d211badd2fb191d6272850786b04234d4569bae5a63b6`.
+The historical rechecks are in
+`/private/tmp/leo-a119-a123-post-a125-r2-20260824`.
+
+The soup was an answer. The carrots were not a question.

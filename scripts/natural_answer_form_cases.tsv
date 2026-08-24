@@ -1,0 +1,14 @@
+case	prompt	pending_turns	control_grounded	control_reference	candidate_grounded	candidate_reference	candidate_food_asserted	candidate_food_rejected	candidate_home_asserted	candidate_home_rejected
+offered-em-dash-followup	Food—the soup gets carrots, garlic, lentils, and a little cumin. What foods feel like home to you?	0	none	unreferenced	food	elliptic	1	0	0	0
+offered-em-dash-statement	food—the soup gets carrots and garlic.	0	none	unreferenced	food	elliptic	1	0	0	0
+spaced-offered-em-dash	yes, food — the soup gets carrots.	0	none	unreferenced	food	elliptic	1	0	0	0
+both-em-dash	Both, really—the body feels stronger, and there’s a quiet joy in making it hold.	0	none	unreferenced	none	unreferenced	0	0	0	0
+two-options-em-dash	food and home—the soup feels familiar.	0	none	unreferenced	none	unreferenced	0	0	0	0
+unoffered-em-dash	water—the soup gets carrots.	0	none	unreferenced	none	unreferenced	0	0	0	0
+predicate-em-dash	the soup is food—the carrots are warm.	0	none	unreferenced	none	unreferenced	0	0	0	0
+ascii-hyphen	food-the soup gets carrots.	0	none	unreferenced	none	unreferenced	0	0	0	0
+delayed-offered-em-dash	food—the soup gets carrots.	1	none	unreferenced	none	unreferenced	0	0	0	0
+em-dash-question	food—what do you hear?	0	none	unreferenced	none	unreferenced	0	0	0	0
+plain-offered-followup	food. What do you hear?	0	food	elliptic	food	elliptic	1	0	0	0
+negative-em-dash	not food—the soup gets carrots.	0	none	unreferenced	none	elliptic	0	1	0	0
+both-alone	both.	0	none	unreferenced	none	unreferenced	0	0	0	0
