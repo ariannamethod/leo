@@ -1,0 +1,31 @@
+arm	path	case	prompt	reference	selected_glyph	max_count	max_ties	asserted_body	asserted_joy	rejected_body	rejected_joy
+control	pending	natural-both-expansion	Both, really—the body feels stronger, and there’s a quiet joy in making it hold.	unreferenced	none	0	0	0	0	0	0
+control	pending	bare-both	both.	unreferenced	none	0	0	0	0	0	0
+control	pending	two-offered-ellipse	body and joy.	unreferenced	none	0	0	0	0	0	0
+control	pending	explicit-tie-body-first	flom is body and joy.	explicit	body	1	2	1	1	0	0
+control	pending	explicit-tie-joy-first	flom is joy and body.	explicit	body	1	2	1	1	0	0
+control	pending	explicit-unique-dominant	flom is body body and joy.	explicit	body	2	1	2	1	0	0
+control	pending	explicit-one	flom is joy.	explicit	joy	1	1	0	1	0	0
+control	pending	explicit-negative-narrow	flom is not body but joy.	explicit	joy	1	1	0	1	1	0
+control	pending	elliptic-neither	neither body nor joy.	elliptic	none	0	0	0	0	1	1
+control	same-turn	definition-one-concept	a flom is warm fire	definition	fire	2	1	0	0	0	0
+control	same-turn	definition-tie-body-first	a flom is body and joy	definition	body	1	2	1	1	0	0
+control	same-turn	definition-tie-joy-first	a flom is joy and body	definition	body	1	2	1	1	0	0
+control	same-turn	definition-rich-tie	Flom is the gentle comfort of warm light or cool rain	definition	water	1	3	0	0	0	0
+control	same-turn	definition-unique-dominant	a flom is body body and joy	definition	body	2	1	2	1	0	0
+control	same-turn	definition-negative-narrow	a flom is not body but joy	definition	joy	1	1	0	1	1	0
+candidate	pending	natural-both-expansion	Both, really—the body feels stronger, and there’s a quiet joy in making it hold.	unreferenced	none	0	0	0	0	0	0
+candidate	pending	bare-both	both.	unreferenced	none	0	0	0	0	0	0
+candidate	pending	two-offered-ellipse	body and joy.	unreferenced	none	0	0	0	0	0	0
+candidate	pending	explicit-tie-body-first	flom is body and joy.	explicit	none	1	2	1	1	0	0
+candidate	pending	explicit-tie-joy-first	flom is joy and body.	explicit	none	1	2	1	1	0	0
+candidate	pending	explicit-unique-dominant	flom is body body and joy.	explicit	body	2	1	2	1	0	0
+candidate	pending	explicit-one	flom is joy.	explicit	joy	1	1	0	1	0	0
+candidate	pending	explicit-negative-narrow	flom is not body but joy.	explicit	joy	1	1	0	1	1	0
+candidate	pending	elliptic-neither	neither body nor joy.	elliptic	none	0	0	0	0	1	1
+candidate	same-turn	definition-one-concept	a flom is warm fire	definition	fire	2	1	0	0	0	0
+candidate	same-turn	definition-tie-body-first	a flom is body and joy	definition	none	1	2	1	1	0	0
+candidate	same-turn	definition-tie-joy-first	a flom is joy and body	definition	none	1	2	1	1	0	0
+candidate	same-turn	definition-rich-tie	Flom is the gentle comfort of warm light or cool rain	definition	none	1	3	0	0	0	0
+candidate	same-turn	definition-unique-dominant	a flom is body body and joy	definition	body	2	1	2	1	0	0
+candidate	same-turn	definition-negative-narrow	a flom is not body but joy	definition	joy	1	1	0	1	1	0

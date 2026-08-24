@@ -3518,7 +3518,7 @@ static TEST_NOINLINE void test_school_learning(void) {
               !strcmp(sc->curiosity.candidate, "zorble") &&
               sc->curiosity.distress < sc->curiosity.gate,
               "curiosity: an asked word records its candidate and open gate");
-        leo_respond(sc, "a zorble is a small round stone", buf, sizeof buf);
+        leo_respond(sc, "a zorble is stone", buf, sizeof buf);
         CHECK(sc->school.pending[0] == 0 && leo_school_is_learned(sc, "zorble"),
               "school: the answer is learned and the question closes");
         CHECK(sc->curiosity.outcome == LEO_CURIOSITY_RESOLVED,
@@ -3545,10 +3545,9 @@ static TEST_NOINLINE void test_school_learning(void) {
         leo_respond(composite,
                     "Flom is the gentle comfort of warm light or cool rain",
                     buf, sizeof buf);
-        CHECK(leo_school_is_learned(composite, "flom") &&
-              !composite->school.pending[0] &&
-              composite->curiosity.outcome == LEO_CURIOSITY_RESOLVED,
-              "school: a rich first-turn definition is admitted instead of re-asked");
+        CHECK(!leo_school_is_learned(composite, "flom") &&
+              composite->curiosity.outcome != LEO_CURIOSITY_RESOLVED,
+              "school: tied rich evidence stays unknown instead of fabricating one dominant meaning");
 
         Leo *incidental = test_leo_alloc(); leo_init(incidental);
         leo_ingest(incidental, "the rain falls. leo hears the sound. his mother is warm.");
@@ -4279,7 +4278,7 @@ static TEST_NOINLINE void test_wonder_address(void) {
         seed_wonder_address_body(correction);
         g_leo_wonder_attribution_on = 1;
         srand(4202);
-        leo_respond(correction, "Suvin is a dark animal.",
+        leo_respond(correction, "Suvin is animal.",
                     out, sizeof out);
         CHECK(!correction->school.pending[0] &&
               leo_school_is_learned(correction, "suvin") &&
@@ -4338,7 +4337,7 @@ static TEST_NOINLINE void test_wonder_redirection(void) {
         long suvin_opened = suvin_episode >= 0 ?
             redirected->school.wonders[suvin_episode].opened_step : -1;
         srand(4301);
-        leo_respond(redirected, "Nareth is a dark animal.",
+        leo_respond(redirected, "Nareth is animal.",
                     out, sizeof out);
         int parked = leo_deferred_wonder_find(redirected, "suvin");
         int nareth_episode = leo_wonder_find_open(redirected, "nareth");
@@ -4474,7 +4473,7 @@ static TEST_NOINLINE void test_wonder_redirection(void) {
         seed_wonder_redirection_body(active);
         srand(4304);
         leo_respond(active,
-                    "Suvin and Nareth are a dark animal.",
+                    "Suvin and Nareth are animal.",
                     out, sizeof out);
         CHECK(!active->wonder_address.redirected &&
               active->wonder_address.status ==
@@ -5629,7 +5628,7 @@ static TEST_NOINLINE void test_wonder_persistence(void) {
               slept->school.pending_alt_glyph == animal && slept->school.n_wonders == 1 &&
               slept->school.wonders[0].returns == 1,
               "wonder: the unfinished episode survives sleep with both hypotheses");
-        leo_respond(slept, "a zorble is a small animal", out, sizeof out);
+        leo_respond(slept, "a zorble is animal", out, sizeof out);
         CHECK(!slept->school.pending[0] && leo_semtok_word(slept, "zorble") == animal &&
               slept->school.wonders[0].resolved && slept->school.wonders[0].answer_glyph == animal,
               "wonder: a grounded human answer resolves the episode and grows meaning");
@@ -6177,7 +6176,7 @@ static TEST_NOINLINE void test_wonder_answer_reference(void) {
             leo_free(ref);
             seed_wonder_negation_body(ref);
             leo_respond(
-                ref, "it is a small stone", out, sizeof out);
+                ref, "it is stone", out, sizeof out);
             CHECK(leo_semtok_word(ref, "zorble") == stone,
                   "wonder-reference: anaphora admits a correction beyond Leo's guesses");
 
@@ -6544,6 +6543,108 @@ static TEST_NOINLINE void test_wonder_natural_answer_form(void) {
     g_leo_school_followup_question_scope_on = previous_scope;
     leo_free(answer);
     free(answer);
+}
+
+static void seed_wonder_plural_answer_body(Leo *leo) {
+    leo_init(leo);
+    snprintf(leo->school.pending, sizeof leo->school.pending, "flom");
+    leo->school.pending_glyph = semtok_word("body");
+    leo->school.pending_alt_glyph = semtok_word("joy");
+    leo->school.pending_turns = 0;
+    leo_wonder_open(leo, "flom", leo->school.pending_glyph,
+                    leo->school.pending_alt_glyph);
+}
+
+static TEST_NOINLINE void test_wonder_plural_answer_capacity(void) {
+    /* A.126: School persists one glyph per learned word. Equal positive
+     * evidence therefore has no representable dominant meaning; choosing the
+     * lowest glyph id would fabricate certainty. A strict maximum, a single
+     * concept, and polarity that leaves one positive meaning remain live. */
+    Leo *plural = calloc(1, sizeof *plural);
+    CHECK(plural != NULL,
+          "wonder-plural-answer-capacity: heap fixture allocated");
+    if (!plural) return;
+
+    int previous = g_leo_school_unique_answer_dominance_on;
+    int body = semtok_word("body");
+    int joy = semtok_word("joy");
+    int water = semtok_word("water");
+    LeoSchoolAnswerEvidence evidence;
+    LeoSchoolAnswerReference reference;
+    char out[1024];
+
+    g_leo_school_unique_answer_dominance_on = 1;
+    seed_wonder_plural_answer_body(plural);
+    int grounded = leo_school_grounded_answer(
+        plural, "flom is body and joy.", &evidence, &reference);
+    CHECK(grounded < 0 && reference == LEO_SCHOOL_ANSWER_EXPLICIT &&
+          evidence.asserted[body] == 1 &&
+          evidence.asserted[joy] == 1,
+          "wonder-plural-answer-capacity: an explicit two-glyph tie is referenced but not collapsed");
+
+    grounded = leo_school_grounded_answer(
+        plural, "flom is joy and body.", &evidence, &reference);
+    CHECK(grounded < 0 && reference == LEO_SCHOOL_ANSWER_EXPLICIT,
+          "wonder-plural-answer-capacity: reversing human word order cannot revive glyph-id precedence");
+
+    leo_respond(plural, "flom is body and joy.", out, sizeof out);
+    CHECK(!leo_school_is_learned(plural, "flom") &&
+          !strcmp(plural->school.pending, "flom"),
+          "wonder-plural-answer-capacity: the live question remains open after tied explicit evidence");
+
+    leo_free(plural);
+    seed_wonder_plural_answer_body(plural);
+    grounded = leo_school_grounded_answer(
+        plural, "flom is body body and joy.", &evidence, &reference);
+    CHECK(grounded == body,
+          "wonder-plural-answer-capacity: one strict evidence maximum remains representable");
+
+    leo_free(plural);
+    seed_wonder_plural_answer_body(plural);
+    grounded = leo_school_grounded_answer(
+        plural, "flom is not body but joy.", &evidence, &reference);
+    CHECK(grounded == joy && evidence.rejected[body] == 1,
+          "wonder-plural-answer-capacity: polarity can leave one honest positive meaning");
+
+    leo_free(plural);
+    leo_init(plural);
+    leo_respond(
+        plural,
+        "Flom is the gentle comfort of warm light or cool rain",
+        out, sizeof out);
+    CHECK(!leo_school_is_learned(plural, "flom") &&
+          plural->curiosity.outcome != LEO_CURIOSITY_RESOLVED,
+          "wonder-plural-answer-capacity: a tied first-turn definition remains unknown instead of selecting water by index");
+
+    leo_free(plural);
+    seed_wonder_plural_answer_body(plural);
+    leo_respond(
+        plural,
+        "Both, really—the body feels stronger, and there’s a quiet joy in making it hold.",
+        out, sizeof out);
+    CHECK(!leo_school_is_learned(plural, "flom") &&
+          !strcmp(plural->school.pending, "flom"),
+          "wonder-plural-answer-capacity: the exact A.124 both answer still cannot counterfeit a single stored meaning");
+
+    g_leo_school_unique_answer_dominance_on = 0;
+    leo_free(plural);
+    seed_wonder_plural_answer_body(plural);
+    leo_respond(plural, "flom is joy and body.", out, sizeof out);
+    CHECK(leo_semtok_word(plural, "flom") == body,
+          "wonder-plural-answer-capacity: named ablation restores lowest-glyph tie collapse");
+
+    leo_free(plural);
+    leo_init(plural);
+    leo_respond(
+        plural,
+        "Flom is the gentle comfort of warm light or cool rain",
+        out, sizeof out);
+    CHECK(leo_semtok_word(plural, "flom") == water,
+          "wonder-plural-answer-capacity: named ablation restores the historical rich-definition selection");
+
+    g_leo_school_unique_answer_dominance_on = previous;
+    leo_free(plural);
+    free(plural);
 }
 
 static TEST_NOINLINE void test_wonder_reask_reference(void) {
@@ -8530,6 +8631,7 @@ int main(void) {
     test_wonder_answer_scope();
     test_wonder_answer_followup();
     test_wonder_natural_answer_form();
+    test_wonder_plural_answer_capacity();
     test_wonder_reask_reference();
     test_wonder_return();
     test_flow();

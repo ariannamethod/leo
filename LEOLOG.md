@@ -10285,3 +10285,64 @@ The historical rechecks are in
 `/private/tmp/leo-a119-a123-post-a125-r2-20260824`.
 
 The soup was an answer. The carrots were not a question.
+
+## Phase A.126 - a tie is not a dominant meaning (2026-08-24)
+
+A.125 left the natural making answer `Both, really—the body feels stronger,
+and there’s a quiet joy in making it hold.` unlearned. That result is still
+correct for the present body: each learned School word owns exactly one glyph
+slot. Pretending that this answer had taught both `body` and `joy` would have
+required either discarding one meaning or silently treating a single glyph as
+plural memory. A.126 does neither and makes no plural-memory claim.
+
+The capacity audit did expose a separate falsification in both pending-answer
+and same-turn definition paths. The old maximum scan called an answer
+dominant even when several non-rejected glyphs had the same positive count.
+It then selected the lowest glyph index. Consequently both `flom is body and
+joy.` and `flom is joy and body.` learned `body`; the human's word order was
+irrelevant. A richer tie, `Flom is the gentle comfort of warm light or cool
+rain`, learned `water` from three equally supported glyphs for the same
+index-order reason.
+
+A.126 admits only a strict positive maximum. A tied maximum now abstains and
+leaves the pending Wonder open; a strict maximum, one positive glyph, and one
+positive glyph after explicit negative evidence remain learnable. The named
+`--no-school-unique-answer-dominance` ablation restores the historical
+index-order collapse. The state format remains version 27 because the learned
+representation itself has not changed.
+
+The direct two-arm court contains 15 cases per arm. In control, all five tied
+cases select a glyph; in the candidate, all five abstain. The other ten cases
+per arm remain unchanged, including strict dominance, one-concept answers,
+negative narrowing, `neither`, and the three forms that do not reference an
+offered answer. In particular, the exact natural `Both, really—...` witness is
+still unreferenced and unresolved rather than counterfeit plural learning.
+
+The two arms also replay all three frozen A.125 lives for 24 turns each: 144
+local turns and no API request. Control and candidate reproduce all three
+A.125 visible transcripts and final bodies byte for byte. Making still leaves
+`sturdier` open through turn 24. Thus A.126 has zero observed natural effect
+on this small frozen court; that is a boundary fact, not evidence of improved
+dialogue or hidden capacity.
+
+Historical A.119--A.125 matrices explicitly disable A.126 and reproduce their
+frozen contracts exactly. The full suite passes `692/692` unit checks plus
+every script gate; unit and production ASan/UBSan runs are clean. No sampler,
+coefficient, Flow law, state-swarm organ, or voice reader changes. No count,
+gate, transcript receipt, or internally consistent state proves coherent
+expression.
+
+Canonical evidence:
+`/private/tmp/leo-plural-answer-capacity-a126-r2-20260824`.
+The baseline anatomy SHA is
+`8455f072d14ac84b31383b26a313c1472620be31267acb6821c73bdebb61104f`,
+the plan SHA is
+`9048a0b87d7f4a6b9560c2803e82fa37225b698b713b58e57835f034951366e9`,
+the final anatomy SHA is
+`c29732037c630c16c326744e5d0c0bf0f23c1574256e2ea2b43c29bfc822e424`,
+and the exact natural matrix SHA is
+`30cd6b2ec5a91b9800417d83264001eb40980c3b00bced6958696089ea331fff`.
+Historical rechecks are in
+`/private/tmp/leo-a119-a125-post-a126-20260824`.
+
+A tie is not a meaning. Not knowing is smaller than a lie.

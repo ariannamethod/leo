@@ -2933,6 +2933,7 @@ static int g_leo_school_answer_followup_on = 1; /* A.122: a bounded answer may p
 static int g_leo_wonder_reask_reference_on = 1; /* A.123: one guessed glyph cannot recall an unnamed Wonder without an anaphoric hypothesis question. */
 static int g_leo_school_offered_answer_expansion_on = 1; /* A.125: one offered glyph before an em-dash explanation remains one bounded answer. */
 static int g_leo_school_followup_question_scope_on = 1; /* A.125: a separate human question cannot recruit words from the prior answer into the occupied queue. */
+static int g_leo_school_unique_answer_dominance_on = 1; /* A.126: tied meaning evidence cannot be collapsed to the lowest-numbered glyph and called dominant. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
@@ -7359,6 +7360,27 @@ static int leo_school_text_has_word(const char *text, const char *word) {
  * name the unknown. Adjacency alone cannot assign an unrelated clause to Leo's
  * question. A separate follow-up question may come after a completed answer;
  * the question itself never supplies reference or evidence. */
+static int leo_school_grounded_glyph(
+        const LeoSchoolAnswerEvidence *evidence) {
+    if (!evidence) return -1;
+    int best = -1, bestn = 0, tied = 0;
+    for (int glyph = 0; glyph < GLYPH_COUNT; glyph++) {
+        if (evidence->rejected[glyph] > 0 ||
+            evidence->asserted[glyph] <= 0)
+            continue;
+        if (evidence->asserted[glyph] > bestn) {
+            best = glyph;
+            bestn = evidence->asserted[glyph];
+            tied = 0;
+        } else if (evidence->asserted[glyph] == bestn) {
+            tied = 1;
+        }
+    }
+    if (g_leo_school_unique_answer_dominance_on && tied)
+        return -1;
+    return best;
+}
+
 static int leo_school_grounded_answer(
         const Leo *leo, const char *prompt,
         LeoSchoolAnswerEvidence *observed,
@@ -7377,14 +7399,7 @@ static int leo_school_grounded_answer(
     if (reference) *reference = ref;
     if (ref == LEO_SCHOOL_ANSWER_UNREFERENCED) return -1;
 
-    int best = -1, bestn = 0;
-    for (int i = 0; i < GLYPH_COUNT; i++)
-        if (evidence.rejected[i] == 0 &&
-            evidence.asserted[i] > bestn) {
-            bestn = evidence.asserted[i];
-            best = i;
-        }
-    return best;
+    return leo_school_grounded_glyph(&evidence);
 }
 
 /* A first mention may already be a human lesson. Admit only a bounded copular
@@ -7446,14 +7461,8 @@ static int leo_school_same_turn_grounding(
             leo_school_answer_evidence_range(
                 leo, meaning_begin, p, &evidence);
             if (observed) *observed = evidence;
-            int best = -1, bestn = 0;
-            for (int g = 0; g < GLYPH_COUNT; g++)
-                if (evidence.rejected[g] == 0 &&
-                    evidence.asserted[g] > bestn) {
-                    bestn = evidence.asserted[g];
-                    best = g;
-                }
-            if (best >= 0) return best;
+            int grounded = leo_school_grounded_glyph(&evidence);
+            if (grounded >= 0) return grounded;
         }
 
         if (!ch) break;
@@ -15212,6 +15221,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-offered-answer-expansion")) g_leo_school_offered_answer_expansion_on = 0;
         else if (!strcmp(argv[i], "--school-followup-question-scope")) g_leo_school_followup_question_scope_on = 1;
         else if (!strcmp(argv[i], "--no-school-followup-question-scope")) g_leo_school_followup_question_scope_on = 0;
+        else if (!strcmp(argv[i], "--school-unique-answer-dominance")) g_leo_school_unique_answer_dominance_on = 1;
+        else if (!strcmp(argv[i], "--no-school-unique-answer-dominance")) g_leo_school_unique_answer_dominance_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;
