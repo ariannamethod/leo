@@ -8,14 +8,20 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="${1:-${TMPDIR:-/tmp}/leo-natural-life-matrix-$STAMP}"
 CASES="${LEO_NATURAL_CASES:-$ROOT/scripts/natural_life_cases.tsv}"
+PHASE="${LEO_NATURAL_PHASE:-A.118}"
+QUESTION="${LEO_NATURAL_QUESTION:-what-does-ordinary-current-Leo-show-before-another-intervention}"
 TURNS="${LEO_NATURAL_TURNS:-24}"
 MODEL="${LEO_INTERLOCUTOR_MODEL:-gpt-5.6-luna}"
 KEY_FILE="${OPENAI_API_KEY_FILE:-}"
+HTTP_RETRIES="${LEO_NATURAL_CURL_RETRIES:-3}"
 PLAN_ONLY="${LEO_NATURAL_PLAN_ONLY:-0}"
 RESUME="${LEO_NATURAL_RESUME:-0}"
 
 [ -s "$CASES" ] || { printf 'missing natural-life cases: %s\n' "$CASES" >&2; exit 2; }
+[ -n "$PHASE" ] && [ -n "$QUESTION" ] || { printf 'phase and question must not be empty\n' >&2; exit 2; }
 case "$TURNS" in ''|*[!0-9]*) printf 'invalid turn count\n' >&2; exit 2;; esac
+case "$HTTP_RETRIES" in ''|*[!0-9]*) printf 'invalid curl retry count\n' >&2; exit 2;; esac
+[ "$HTTP_RETRIES" -le 8 ] || { printf 'curl retry count must be 0..8\n' >&2; exit 2; }
 [ "$TURNS" -ge 2 ] && [ "$TURNS" -le 64 ] || { printf 'turn count must be 2..64\n' >&2; exit 2; }
 [ "$RESUME" = 0 ] || [ "$RESUME" = 1 ] || { printf 'LEO_NATURAL_RESUME must be 0 or 1\n' >&2; exit 2; }
 if [ "$RESUME" = 0 ]; then
@@ -42,11 +48,13 @@ awk -F '\t' -v OFS='\t' -v turns="$TURNS" '
 
 {
     printf 'field\tvalue\n'
-    printf 'phase\tA.118\n'
-    printf 'question\twhat-does-ordinary-current-Leo-show-before-another-intervention\n'
+    printf 'phase\t%s\n' "$PHASE"
+    printf 'question\t%s\n' "$QUESTION"
     printf 'population\t3 independent fresh lives\n'
     printf 'turns_per_life\t%s\n' "$TURNS"
-    printf 'maximum_api_calls\t%s\n' "$((3 * TURNS))"
+    printf 'planned_api_turns\t%s\n' "$((3 * TURNS))"
+    printf 'automatic_http_retries\t%s\n' "$HTTP_RETRIES"
+    printf 'maximum_http_attempts\t%s\n' "$((3 * TURNS * (HTTP_RETRIES + 1)))"
     printf 'interlocutor\tResponses API visible transcript only\n'
     printf 'model\t%s\n' "$MODEL"
     printf 'api_store\tfalse\n'
@@ -58,7 +66,7 @@ awk -F '\t' -v OFS='\t' -v turns="$TURNS" '
 } > "$DESIGN"
 
 if [ "$PLAN_ONLY" = 1 ]; then
-    printf 'A.118 natural-life plan: %s\n' "$OUT"
+    printf '%s natural-life plan: %s\n' "$PHASE" "$OUT"
     exit 0
 fi
 [ -n "$KEY_FILE" ] && [ -f "$KEY_FILE" ] || {
@@ -86,6 +94,7 @@ while IFS=$'\t' read -r life seed turns opening; do
         life_resume=0
         [ ! -d "$api" ] || life_resume=1
         OPENAI_API_KEY_FILE="$KEY_FILE" LEO_INTERLOCUTOR_MODEL="$MODEL" \
+            LEO_NATURAL_PHASE="$PHASE" \
             LEO_NATURAL_LIFE="$life" LEO_NATURAL_ARM=api \
             LEO_NATURAL_SEED="$seed" LEO_NATURAL_TURNS="$turns" \
             LEO_NATURAL_OPENING="$opening" LEO_NATURAL_RESUME="$life_resume" \
@@ -99,6 +108,7 @@ while IFS=$'\t' read -r life seed turns opening; do
             life_resume=0
             [ ! -d "$destination" ] || life_resume=1
             LEO_NATURAL_REPLAY_FILE="$api/prompts.txt" \
+                LEO_NATURAL_PHASE="$PHASE" \
                 LEO_NATURAL_LIFE="$life" LEO_NATURAL_ARM="$arm" \
                 LEO_NATURAL_SEED="$seed" LEO_NATURAL_TURNS="$turns" \
                 LEO_NATURAL_OPENING="$opening" LEO_NATURAL_ASYNC="$async" \
@@ -129,4 +139,4 @@ done < "$PLAN"
 
 cat "$MATRIX"
 printf 'result\tnatural-life-scout-complete\n'
-printf 'A.118 natural-life matrix: %s\n' "$OUT"
+printf '%s natural-life matrix: %s\n' "$PHASE" "$OUT"

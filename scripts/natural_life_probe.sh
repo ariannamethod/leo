@@ -7,6 +7,7 @@ trap 'rc=$?; printf "natural life failed: line=%s rc=%s command=%s\n" "$LINENO" 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="${1:-${TMPDIR:-/tmp}/leo-natural-life-$STAMP}"
+PHASE="${LEO_NATURAL_PHASE:-A.118}"
 LIFE="${LEO_NATURAL_LIFE:-natural}"
 ARM="${LEO_NATURAL_ARM:-api}"
 BASE_SEED="${LEO_NATURAL_SEED:-211}"
@@ -34,7 +35,7 @@ case "$TURNS" in ''|*[!0-9]*) printf 'invalid turn count\n' >&2; exit 2;; esac
 [ "$LEXICAL_ROLE" = 0 ] || [ "$LEXICAL_ROLE" = 1 ] || { printf 'LEO_NATURAL_LEXICAL_ROLE must be 0 or 1\n' >&2; exit 2; }
 [ "$ANSWER_FOLLOWUP" = 0 ] || [ "$ANSWER_FOLLOWUP" = 1 ] || { printf 'LEO_NATURAL_ANSWER_FOLLOWUP must be 0 or 1\n' >&2; exit 2; }
 [ "$WONDER_REASK_REFERENCE" = 0 ] || [ "$WONDER_REASK_REFERENCE" = 1 ] || { printf 'LEO_NATURAL_WONDER_REASK_REFERENCE must be 0 or 1\n' >&2; exit 2; }
-[ -n "$LIFE" ] && [ -n "$OPENING" ] || { printf 'life and opening must not be empty\n' >&2; exit 2; }
+[ -n "$PHASE" ] && [ -n "$LIFE" ] && [ -n "$OPENING" ] || { printf 'phase, life, and opening must not be empty\n' >&2; exit 2; }
 if [ -n "$REPLAY_FILE" ]; then
     [ -f "$REPLAY_FILE" ] || { printf 'missing replay file: %s\n' "$REPLAY_FILE" >&2; exit 2; }
 else
@@ -206,7 +207,7 @@ source=responses-api-visible-transcript
 state_sha="$(shasum -a 256 "$STATE" | awk '{print $1}')"
 transcript_sha="$(shasum -a 256 "$TRANSCRIPT" | awk '{print $1}')"
 prompts_sha="$(shasum -a 256 "$PROMPTS" | awk '{print $1}')"
-jq -n --arg life "$LIFE" --arg arm "$ARM" --arg model "$MODEL" \
+jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MODEL" \
     --arg opening "$OPENING" --arg source "$source" \
     --arg state_sha "$state_sha" --arg transcript_sha "$transcript_sha" \
     --arg prompts_sha "$prompts_sha" --argjson base_seed "$BASE_SEED" \
@@ -217,7 +218,7 @@ jq -n --arg life "$LIFE" --arg arm "$ARM" --arg model "$MODEL" \
     --argjson lexical_role "$LEXICAL_ROLE" \
     --argjson answer_followup "$ANSWER_FOLLOWUP" \
     --argjson wonder_reask_reference "$WONDER_REASK_REFERENCE" \
-    '{phase: "A.118", life: $life, arm: $arm, model_requested: $model,
+    '{phase: $phase, life: $life, arm: $arm, model_requested: $model,
       opening_cue: $opening, source: $source, base_seed: $base_seed,
       turns: $turns, async: ($async == 1), api_store: (if $source == "responses-api-visible-transcript" then false else null end),
       process_resumed: ($resumed == 1), resumed_at_turn: $resumed_from,

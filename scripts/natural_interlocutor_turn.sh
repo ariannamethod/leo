@@ -16,10 +16,13 @@ MODEL="${LEO_INTERLOCUTOR_MODEL:-gpt-5.6-luna}"
 KEY_FILE="${OPENAI_API_KEY_FILE:-}"
 BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
 REQUEST_ONLY="${LEO_NATURAL_REQUEST_ONLY:-0}"
+HTTP_RETRIES="${LEO_NATURAL_CURL_RETRIES:-3}"
 REQUEST_FILE="${OUTPUT_JSON}.request.json"
 
 case "$TURN" in ''|*[!0-9]*) printf 'turn must be a positive integer\n' >&2; exit 2;; esac
 [ "$TURN" -ge 1 ] || { printf 'turn must be positive\n' >&2; exit 2; }
+case "$HTTP_RETRIES" in ''|*[!0-9]*) printf 'curl retries must be a non-negative integer\n' >&2; exit 2;; esac
+[ "$HTTP_RETRIES" -le 8 ] || { printf 'curl retries must be 0..8\n' >&2; exit 2; }
 [ -f "$HISTORY" ] || { printf 'missing visible history: %s\n' "$HISTORY" >&2; exit 2; }
 [ -n "$OPENING" ] || { printf 'opening cue must not be empty\n' >&2; exit 2; }
 
@@ -102,7 +105,7 @@ trap 'rm -f "$auth_file"' EXIT
 chmod 600 "$auth_file"
 printf 'header = "Authorization: Bearer %s"\n' "$key" > "$auth_file"
 
-http_code="$(curl -sS --retry 3 --retry-all-errors --max-time 180 \
+http_code="$(curl -sS --retry "$HTTP_RETRIES" --retry-all-errors --max-time 180 \
     --config "$auth_file" -o "$OUTPUT_RESPONSE" -w '%{http_code}' \
     "$BASE_URL/responses" -H 'Content-Type: application/json' \
     --data-binary "@$REQUEST_FILE")"
