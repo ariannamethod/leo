@@ -10,4 +10,7 @@ LEO_NATURAL_PHASE=A.124 \
 LEO_NATURAL_QUESTION=what-does-repaired-Leo-do-in-fresh-ordinary-life \
 LEO_NATURAL_CASES="$ROOT/scripts/natural_life_second_generation_cases.tsv" \
 LEO_NATURAL_CURL_RETRIES=0 \
+LEO_NATURAL_OFFERED_ANSWER_EXPANSION=0 \
+LEO_NATURAL_FOLLOWUP_QUESTION_SCOPE=0 \
+LEO_NATURAL_UNIQUE_ANSWER_DOMINANCE=0 \
     "$ROOT/scripts/natural_life_matrix.sh" "$OUT"

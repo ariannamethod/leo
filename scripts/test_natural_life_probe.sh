@@ -43,7 +43,8 @@ jq -e '.source == "frozen-visible-replay" and .api_store == null and
        .school_answer_followup == true and
        .wonder_reask_reference == true and
        .school_offered_answer_expansion == true and
-       .school_followup_question_scope == true' "$TMP/first/manifest.json" >/dev/null
+       .school_followup_question_scope == true and
+       .school_unique_answer_dominance == true' "$TMP/first/manifest.json" >/dev/null
 
 sed -n '1,2p' "$TMP/prompts.txt" > "$TMP/prompts-first-two.txt"
 LEO_NATURAL_REPLAY_FILE="$TMP/prompts-first-two.txt" \
