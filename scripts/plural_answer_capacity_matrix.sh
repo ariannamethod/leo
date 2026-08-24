@@ -54,6 +54,7 @@ while IFS=$'\t' read -r arm unique; do
             LEO_NATURAL_OFFERED_ANSWER_EXPANSION=1 \
             LEO_NATURAL_FOLLOWUP_QUESTION_SCOPE=1 \
             LEO_NATURAL_UNIQUE_ANSWER_DOMINANCE="$unique" \
+            LEO_NATURAL_TWO_GLYPH_LEARNING=0 \
             "$ROOT/scripts/natural_life_probe.sh" "$destination" \
             > "$OUT/lives/$arm-$life.out"
         transcript_sha="$(shasum -a 256 "$destination/visible_transcript.txt" | awk '{print $1}')"

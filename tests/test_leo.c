@@ -117,7 +117,10 @@ static long test_appetite_and_later_tail_size(const Leo *leo) {
         sizeof(LeoWonderAppetiteHoldouts) +
         sizeof(LeoWonderAppetiteAdmissions) +
         sizeof(LeoWonderAppetiteCheckpoints) +
-        sizeof(LeoStateSwarm));
+        sizeof(LeoStateSwarm) +
+        2 * sizeof(int32_t) +
+        leo->school.n_learned * (int)sizeof(int8_t) +
+        leo->school.n_wonders * (int)sizeof(int8_t));
 }
 
 static void test_state_swarm_turn(Leo *leo, uint64_t turn,
@@ -831,7 +834,7 @@ static void test_wonder_appetite_regret_surface(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 27,
+          LEO_STATE_VERSION == 28,
           "wonder-appetite-regret: observing cost rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
@@ -960,7 +963,7 @@ static void test_wonder_appetite_readiness_frontier(void) {
                   sizeof *school_before) &&
           !memcmp(flow_before, &leo->flow,
                   sizeof *flow_before) &&
-          LEO_STATE_VERSION == 27,
+          LEO_STATE_VERSION == 28,
           "wonder-appetite-readiness: candidacy rewrites no evidence, body, or state format");
     free(school_before);
     free(flow_before);
@@ -1143,11 +1146,17 @@ static void test_wonder_appetite_holdout_trial(void) {
             size > (long)(sizeof(LeoWonderAppetiteHoldouts) +
                           sizeof(LeoWonderAppetiteAdmissions) +
                           sizeof(LeoWonderAppetiteCheckpoints) +
-                          sizeof(LeoStateSwarm)) &&
+                          sizeof(LeoStateSwarm) +
+                          2 * sizeof(int32_t) +
+                          leo->school.n_learned * sizeof(int8_t) +
+                          leo->school.n_wonders * sizeof(int8_t)) &&
             (long)fread(bytes, 1, (size_t)size, fi) == size) {
             long checkpoint_tail =
                 (long)(sizeof(LeoWonderAppetiteCheckpoints) +
-                       sizeof(LeoStateSwarm));
+                       sizeof(LeoStateSwarm) +
+                       2 * sizeof(int32_t) +
+                       leo->school.n_learned * sizeof(int8_t) +
+                       leo->school.n_wonders * sizeof(int8_t));
             long admission_tail =
                 (long)sizeof(LeoWonderAppetiteAdmissions);
             long holdout_tail =
@@ -1563,7 +1572,7 @@ static void test_wonder_appetite_transport_witness(void) {
               LEO_WONDER_APPETITE_TRANSPORT_PROVISIONAL,
           "wonder-appetite-transport: a confirmed result remains applicable only on a new bounded life");
     CHECK(!memcmp(before, leo, sizeof *leo) &&
-          LEO_STATE_VERSION == 27,
+          LEO_STATE_VERSION == 28,
           "wonder-appetite-transport: reading applicability rewrites no body, evidence, or state format");
 
     leo_free(leo);
@@ -1803,7 +1812,7 @@ static void test_wonder_appetite_transport_chronology(void) {
               LEO_WONDER_APPETITE_CHRONOLOGY_PROVISIONAL,
           "wonder-appetite-transport-chronology: two bounded adjacent eras preserve only provisional continuity");
     CHECK(!memcmp(before, leo, sizeof *leo) &&
-          LEO_STATE_VERSION == 27,
+          LEO_STATE_VERSION == 28,
           "wonder-appetite-transport-chronology: reading eras rewrites no body, evidence, or state format");
 
     leo_free(leo);
@@ -2303,7 +2312,10 @@ static void test_wonder_appetite_transport_checkpoints(void) {
             malloc(size > 0 ? (size_t)size : 1);
         long checkpoint_tail =
             (long)sizeof(LeoWonderAppetiteCheckpoints);
-        long state_tail = (long)sizeof(LeoStateSwarm);
+        long state_tail = (long)(sizeof(LeoStateSwarm) +
+            2 * sizeof(int32_t) +
+            leo->school.n_learned * sizeof(int8_t) +
+            leo->school.n_wonders * sizeof(int8_t));
         long checkpoint_start = size - state_tail - checkpoint_tail;
         if (bytes && checkpoint_start > 0 &&
             (long)fread(bytes, 1, (size_t)size, fi) == size) {
@@ -4862,7 +4874,10 @@ static TEST_NOINLINE void test_wonder_appetite_calibration(void) {
                             (long)(sizeof(LeoWonderAppetiteHoldouts) +
                                    sizeof(LeoWonderAppetiteAdmissions) +
                                    sizeof(LeoWonderAppetiteCheckpoints) +
-                                   sizeof(LeoStateSwarm));
+                                   sizeof(LeoStateSwarm) +
+                                   2 * sizeof(int32_t) +
+                                   cal->school.n_learned * sizeof(int8_t) +
+                                   cal->school.n_wonders * sizeof(int8_t));
                         built_cut =
                             (long)fwrite(
                                 bytes, 1,
@@ -5532,7 +5547,7 @@ static TEST_NOINLINE void test_wonder_persistence(void) {
             unsigned char *bytes = malloc(sz > 0 ? (size_t)sz : 1);
             if (bytes && sz > 0 && (long)fread(bytes, 1, (size_t)sz, fi) == sz) {
                 long v12tail = (long)(4 * sizeof(int32_t) + sizeof(uint64_t) +
-                                      sizeof(LeoWonderEpisode));
+                                      sizeof(LeoWonderEpisodeV27));
                 long shadow_tail = (long)(2 * sizeof(int32_t) +
                                           w->shadow.n * (int)sizeof(LeoShadowReceipt));
                 long calibration_tail = (long)(2 * sizeof(int32_t) +
@@ -6449,6 +6464,8 @@ static TEST_NOINLINE void test_wonder_natural_answer_form(void) {
         g_leo_school_offered_answer_expansion_on;
     int previous_scope =
         g_leo_school_followup_question_scope_on;
+    int previous_two_glyph =
+        g_leo_school_two_glyph_learning_on;
     int food = semtok_word("food");
     LeoSchoolAnswerEvidence evidence;
     LeoSchoolAnswerReference reference;
@@ -6456,6 +6473,7 @@ static TEST_NOINLINE void test_wonder_natural_answer_form(void) {
 
     g_leo_school_offered_answer_expansion_on = 1;
     g_leo_school_followup_question_scope_on = 1;
+    g_leo_school_two_glyph_learning_on = 0;
     seed_wonder_natural_answer_body(answer);
     int grounded = leo_school_grounded_answer(
         answer,
@@ -6541,6 +6559,7 @@ static TEST_NOINLINE void test_wonder_natural_answer_form(void) {
 
     g_leo_school_offered_answer_expansion_on = previous_expansion;
     g_leo_school_followup_question_scope_on = previous_scope;
+    g_leo_school_two_glyph_learning_on = previous_two_glyph;
     leo_free(answer);
     free(answer);
 }
@@ -6566,6 +6585,8 @@ static TEST_NOINLINE void test_wonder_plural_answer_capacity(void) {
     if (!plural) return;
 
     int previous = g_leo_school_unique_answer_dominance_on;
+    int previous_two_glyph =
+        g_leo_school_two_glyph_learning_on;
     int body = semtok_word("body");
     int joy = semtok_word("joy");
     int water = semtok_word("water");
@@ -6574,6 +6595,7 @@ static TEST_NOINLINE void test_wonder_plural_answer_capacity(void) {
     char out[1024];
 
     g_leo_school_unique_answer_dominance_on = 1;
+    g_leo_school_two_glyph_learning_on = 0;
     seed_wonder_plural_answer_body(plural);
     int grounded = leo_school_grounded_answer(
         plural, "flom is body and joy.", &evidence, &reference);
@@ -6643,8 +6665,220 @@ static TEST_NOINLINE void test_wonder_plural_answer_capacity(void) {
           "wonder-plural-answer-capacity: named ablation restores the historical rich-definition selection");
 
     g_leo_school_unique_answer_dominance_on = previous;
+    g_leo_school_two_glyph_learning_on = previous_two_glyph;
     leo_free(plural);
     free(plural);
+}
+
+static TEST_NOINLINE void test_wonder_two_glyph_learned_meaning(void) {
+    /* A.127: a paired answer is a surface relation over the two meanings Leo
+     * actually offered, not a statistical tie. Both meanings must survive the
+     * learned map, semantic readers, Wonder receipt, return, sleep, and v28;
+     * v27 migration may preserve only the historical primary and must invent
+     * no partner. */
+    Leo *pair = calloc(1, sizeof *pair);
+    Leo *woke = calloc(1, sizeof *woke);
+    Leo *old = calloc(1, sizeof *old);
+    Leo *damaged = calloc(1, sizeof *damaged);
+    CHECK(pair && woke && old && damaged,
+          "wonder-two-glyph: heap fixtures allocated");
+    if (!pair || !woke || !old || !damaged) {
+        free(pair); free(woke); free(old); free(damaged);
+        return;
+    }
+
+    int previous = g_leo_school_two_glyph_learning_on;
+    int body = semtok_word("body");
+    int joy = semtok_word("joy");
+    int food = semtok_word("food");
+    char out[1024];
+    LeoSchoolAnswerEvidence evidence;
+    LeoSchoolAnswerReference reference;
+    int answer_alt = -1;
+
+    g_leo_school_two_glyph_learning_on = 1;
+    seed_wonder_plural_answer_body(pair);
+    int grounded = leo_school_grounded_answer_meanings(
+        pair,
+        "Both, really—the body feels stronger, and there’s a quiet joy in making it hold.",
+        &answer_alt, &evidence, &reference);
+    CHECK(grounded == body && answer_alt == joy &&
+          reference == LEO_SCHOOL_ANSWER_PAIRED &&
+          evidence.asserted[body] == 1 &&
+          evidence.asserted[joy] == 1,
+          "wonder-two-glyph: exact natural Both names both offered meanings before its explanation");
+
+    leo_respond(
+        pair,
+        "Both, really—the body feels stronger, and there’s a quiet joy in making it hold.",
+        out, sizeof out);
+    int learned = leo_school_learned_index(pair, "flom");
+    CHECK(learned >= 0 && !pair->school.pending[0] &&
+          pair->school.learned_glyph[learned] == body &&
+          pair->school.learned_alt_glyph[learned] == joy &&
+          pair->school.wonders[0].resolved &&
+          pair->school.wonders[0].answer_glyph == body &&
+          pair->school.wonders[0].answer_alt_glyph == joy &&
+          pair->curiosity.outcome == LEO_CURIOSITY_RESOLVED,
+          "wonder-two-glyph: the live answer closes one Wonder without discarding either meaning");
+
+    int glyphs[2];
+    int n_glyphs = leo_school_word_glyphs(pair, "flom", glyphs);
+    int hist[GLYPH_COUNT];
+    int votes = leo_school_glyph_votes(pair, "flom", hist, 1);
+    float meaning[GLYPH_COUNT];
+    float gap = leo_glyph_hist(pair, "flom", meaning);
+    leo_school_answer_evidence(pair, "it is flom", &evidence);
+    CHECK(n_glyphs == 2 && glyphs[0] == body && glyphs[1] == joy &&
+          votes == 2 && hist[body] == 1 && hist[joy] == 1 &&
+          fabsf(meaning[body] - 0.5f) < 1e-6f &&
+          fabsf(meaning[joy] - 0.5f) < 1e-6f && gap == 0.0f &&
+          evidence.asserted[body] == 1 &&
+          evidence.asserted[joy] == 1,
+          "wonder-two-glyph: votes, perceived meaning, and later lesson evidence all read both glyphs");
+
+    pair->step++;
+    pair->school.turn_clock++;
+    memset(meaning, 0, sizeof meaning);
+    int returned = leo_wonder_return_meaning(
+        pair, "flom", meaning);
+    CHECK(returned == 0 && meaning[body] > 0.0f &&
+          fabsf(meaning[body] - meaning[joy]) < 1e-6f &&
+          pair->school.wonders[0].recalls == 1,
+          "wonder-two-glyph: exact recall returns both learned meanings with equal answer mass");
+
+    const char *state = "/tmp/leo_two_glyph_v28.state";
+    const char *disabled = "/tmp/leo_two_glyph_v28_disabled.state";
+    const char *v27 = "/tmp/leo_two_glyph_v27.state";
+    const char *bad = "/tmp/leo_two_glyph_v28_bad.state";
+    int saved = leo_save_state(pair, state);
+    int loaded = saved && leo_load_state(woke, state);
+    int woke_index = leo_school_learned_index(woke, "flom");
+    CHECK(loaded && woke_index >= 0 &&
+          woke->school.learned_glyph[woke_index] == body &&
+          woke->school.learned_alt_glyph[woke_index] == joy &&
+          woke->school.wonders[0].answer_glyph == body &&
+          woke->school.wonders[0].answer_alt_glyph == joy &&
+          woke->school.wonders[0].recalls == 1,
+          "wonder-two-glyph: both learned meanings and the paired episode survive v28 sleep");
+
+    g_leo_school_two_glyph_learning_on = 0;
+    int saved_disabled = leo_save_state(woke, disabled);
+    int loaded_disabled = saved_disabled &&
+        leo_load_state(damaged, disabled);
+    int disabled_index =
+        leo_school_learned_index(damaged, "flom");
+    CHECK(loaded_disabled && disabled_index >= 0 &&
+          damaged->school.learned_glyph[disabled_index] == body &&
+          damaged->school.learned_alt_glyph[disabled_index] == joy &&
+          damaged->school.wonders[0].answer_alt_glyph == joy,
+          "wonder-two-glyph: parser ablation cannot erase an already lived pair at sleep");
+    g_leo_school_two_glyph_learning_on = 1;
+
+    int built_v27 = 0, built_bad = 0;
+    FILE *fi = fopen(state, "rb");
+    if (fi) {
+        fseek(fi, 0, SEEK_END);
+        long size = ftell(fi);
+        fseek(fi, 0, SEEK_SET);
+        long pair_tail = (long)(2 * sizeof(int32_t) +
+            pair->school.n_learned * (int)sizeof(int8_t) +
+            pair->school.n_wonders * (int)sizeof(int8_t));
+        unsigned char *bytes =
+            malloc(size > 0 ? (size_t)size : 1);
+        if (bytes && size > pair_tail &&
+            (long)fread(bytes, 1, (size_t)size, fi) == size) {
+            uint32_t old_version = 27;
+            memcpy(bytes + sizeof(uint32_t), &old_version,
+                   sizeof old_version);
+            FILE *fo = fopen(v27, "wb");
+            if (fo) {
+                built_v27 =
+                    (long)fwrite(bytes, 1,
+                                 (size_t)(size - pair_tail), fo) ==
+                        size - pair_tail;
+                fclose(fo);
+            }
+
+            uint32_t current_version = 28;
+            memcpy(bytes + sizeof(uint32_t), &current_version,
+                   sizeof current_version);
+            long tail_start = size - pair_tail;
+            bytes[tail_start + (long)sizeof(int32_t)] =
+                (unsigned char)body;
+            fo = fopen(bad, "wb");
+            if (fo) {
+                built_bad =
+                    (long)fwrite(bytes, 1, (size_t)size, fo) == size;
+                fclose(fo);
+            }
+        }
+        free(bytes);
+        fclose(fi);
+    }
+    CHECK(built_v27 && leo_load_state(old, v27) &&
+          leo_semtok_word(old, "flom") == body &&
+          old->school.learned_alt_glyph[
+              leo_school_learned_index(old, "flom")] == -1 &&
+          old->school.wonders[0].answer_alt_glyph == -1,
+          "wonder-two-glyph: v27 migration preserves the primary meaning without inventing a partner");
+    CHECK(built_bad && leo_load_state(damaged, bad) &&
+          leo_semtok_word(damaged, "flom") == body &&
+          damaged->school.learned_alt_glyph[
+              leo_school_learned_index(damaged, "flom")] == -1 &&
+          damaged->school.wonders[0].answer_alt_glyph == -1,
+          "wonder-two-glyph: a corrupt v28 pair tail fails soft to the honest singular history");
+
+    leo_free(pair);
+    seed_wonder_natural_answer_body(pair);
+    leo_respond(pair, "Food—the soup is warm.", out, sizeof out);
+    learned = leo_school_learned_index(pair, "flom");
+    CHECK(learned >= 0 &&
+          pair->school.learned_glyph[learned] == food &&
+          pair->school.learned_alt_glyph[learned] == -1,
+          "wonder-two-glyph: A.125 one-option expansion remains singular");
+
+    const char *refusals[] = {
+        "body or joy.",
+        "neither body nor joy.",
+        "both?",
+        "Both—what do you think?",
+        "Both, really--the body feels stronger and joy stays quiet."
+    };
+    for (size_t i = 0; i < sizeof refusals / sizeof refusals[0]; i++) {
+        leo_free(pair);
+        seed_wonder_plural_answer_body(pair);
+        leo_respond(pair, refusals[i], out, sizeof out);
+        CHECK(!leo_school_is_learned(pair, "flom") &&
+              !strcmp(pair->school.pending, "flom"),
+              "wonder-two-glyph: ambiguity and counterfeit paired surfaces remain unfinished");
+    }
+
+    leo_free(pair);
+    seed_wonder_plural_answer_body(pair);
+    pair->school.pending_turns = 2;
+    leo_respond(pair, "flom is body and joy.", out, sizeof out);
+    learned = leo_school_learned_index(pair, "flom");
+    CHECK(learned >= 0 &&
+          pair->school.learned_glyph[learned] == body &&
+          pair->school.learned_alt_glyph[learned] == joy,
+          "wonder-two-glyph: an explicit and keeps the offered pair grounded after adjacency");
+
+    g_leo_school_two_glyph_learning_on = 0;
+    leo_free(pair);
+    seed_wonder_plural_answer_body(pair);
+    leo_respond(
+        pair,
+        "Both, really—the body feels stronger, and there’s a quiet joy in making it hold.",
+        out, sizeof out);
+    CHECK(!leo_school_is_learned(pair, "flom") &&
+          !strcmp(pair->school.pending, "flom"),
+          "wonder-two-glyph: named ablation restores A.126 unresolved Both exactly");
+
+    g_leo_school_two_glyph_learning_on = previous;
+    remove(state); remove(disabled); remove(v27); remove(bad);
+    leo_free(pair); leo_free(woke); leo_free(old); leo_free(damaged);
+    free(pair); free(woke); free(old); free(damaged);
 }
 
 static TEST_NOINLINE void test_wonder_reask_reference(void) {
@@ -8090,7 +8324,7 @@ static TEST_NOINLINE void test_async_ring_and_consolidation(void) {
             long after_v10 =
                 (long)(4 * sizeof(int32_t) + sizeof(uint64_t) +
                        l->school.n_wonders *
-                           (int)sizeof(LeoWonderEpisode) +
+                           (int)sizeof(LeoWonderEpisodeV27) +
                        2 * sizeof(int32_t) +
                        l->flow.n * (int)sizeof(LeoFlowSnapshot) +
                        2 * sizeof(int32_t) +
@@ -8329,7 +8563,7 @@ static TEST_NOINLINE void test_state_swarm(void) {
                   leo_state_swarm_valid(state),
                   "state-swarm: the four-turn state sequence remains finite and internally valid");
 
-            const char *saved = "/tmp/leo_state_swarm_v27.state";
+            const char *saved = "/tmp/leo_state_swarm_v28.state";
             const char *v26 = "/tmp/leo_state_swarm_v26.state";
             const char *cut = "/tmp/leo_state_swarm_v27_cut.state";
             const char *bad = "/tmp/leo_state_swarm_v27_bad.state";
@@ -8348,10 +8582,14 @@ static TEST_NOINLINE void test_state_swarm(void) {
                 fseek(fi, 0, SEEK_END);
                 long size = ftell(fi);
                 fseek(fi, 0, SEEK_SET);
-                long tail = (long)sizeof(LeoStateSwarm);
+                long swarm_tail = (long)sizeof(LeoStateSwarm);
+                long pair_tail = (long)(2 * sizeof(int32_t) +
+                    state->school.n_learned * (int)sizeof(int8_t) +
+                    state->school.n_wonders * (int)sizeof(int8_t));
+                long v27_size = size - pair_tail;
                 unsigned char *bytes =
                     malloc(size > 0 ? (size_t)size : 1);
-                if (bytes && size > tail &&
+                if (bytes && v27_size > swarm_tail &&
                     (long)fread(bytes, 1, (size_t)size, fi) == size) {
                     uint32_t version = 26;
                     memcpy(bytes + sizeof(uint32_t), &version,
@@ -8359,8 +8597,9 @@ static TEST_NOINLINE void test_state_swarm(void) {
                     FILE *fo = fopen(v26, "wb");
                     if (fo) {
                         built_v26 =
-                            (long)fwrite(bytes, 1, (size_t)(size - tail), fo) ==
-                                size - tail;
+                            (long)fwrite(bytes, 1,
+                                         (size_t)(v27_size - swarm_tail), fo) ==
+                                v27_size - swarm_tail;
                         fclose(fo);
                     }
 
@@ -8370,19 +8609,24 @@ static TEST_NOINLINE void test_state_swarm(void) {
                     fo = fopen(cut, "wb");
                     if (fo) {
                         built_cut =
-                            (long)fwrite(bytes, 1, (size_t)(size - 1), fo) ==
-                                size - 1;
+                            (long)fwrite(bytes, 1,
+                                         (size_t)(v27_size - 1), fo) ==
+                                v27_size - 1;
                         fclose(fo);
                     }
 
                     LeoStateSwarm corrupt;
-                    memcpy(&corrupt, bytes + size - tail, sizeof corrupt);
+                    memcpy(&corrupt,
+                           bytes + v27_size - swarm_tail,
+                           sizeof corrupt);
                     corrupt.n = LEO_STATE_SWARM_MAX + 1;
-                    memcpy(bytes + size - tail, &corrupt, sizeof corrupt);
+                    memcpy(bytes + v27_size - swarm_tail,
+                           &corrupt, sizeof corrupt);
                     fo = fopen(bad, "wb");
                     if (fo) {
                         built_bad =
-                            (long)fwrite(bytes, 1, (size_t)size, fo) == size;
+                            (long)fwrite(bytes, 1,
+                                         (size_t)v27_size, fo) == v27_size;
                         fclose(fo);
                     }
                 }
@@ -8632,6 +8876,7 @@ int main(void) {
     test_wonder_answer_followup();
     test_wonder_natural_answer_form();
     test_wonder_plural_answer_capacity();
+    test_wonder_two_glyph_learned_meaning();
     test_wonder_reask_reference();
     test_wonder_return();
     test_flow();

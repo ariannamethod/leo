@@ -1,0 +1,19 @@
+case	path	pending_turns	offered	prompt	candidate_meaning	boundary
+natural-both-expansion	pending	0	body,joy	Both, really—the body feels stronger, and there’s a quiet joy in making it hold.	body,joy	adjacent both names the two offered meanings; explanation lends no evidence
+bare-both	pending	0	body,joy	both.	body,joy	adjacent both is a complete paired ellipse
+offered-and	pending	0	body,joy	body and joy.	body,joy	and asserts both offered meanings
+offered-and-reversed	pending	0	body,joy	joy and body.	body,joy	storage order follows offered hypotheses, not word order
+offered-or	pending	0	body,joy	body or joy.	none	or preserves ambiguity
+neither	pending	0	body,joy	neither body nor joy.	none	rejection is not a paired positive answer
+both-question	pending	0	body,joy	both?	none	a question cannot close the question
+delayed-both	pending	2	body,joy	both.	none	unnamed ellipsis loses adjacency
+single-offer-both	pending	0	body	both.	none	one offered meaning cannot become a pair
+duplicate-offer-both	pending	0	body,body	both.	none	the two stored meanings must be distinct
+single-food-expansion	pending	0	food,home	Food—the soup is warm.	food	A.125 one-option answer remains singular
+explicit-and	pending	2	body,joy	flom is body and joy.	body,joy	naming the active word keeps the paired assertion grounded after adjacency
+explicit-or	pending	2	body,joy	flom is body or joy.	none	explicit reference does not turn or into and
+same-turn-and	same-turn	0	none	a flom is body and joy	none	A.127 does not infer a pair without an offered Wonder
+same-turn-rich-tie	same-turn	0	none	Flom is the gentle comfort of warm light or cool rain	none	statistical thematic ties remain A.126 abstentions
+both-followup	pending	0	body,joy	Both. What do you think?	body,joy	A.122 isolates the later question from the completed paired answer
+both-question-explanation	pending	0	body,joy	Both—what do you think?	none	an em-dash question is not an explanatory answer tail
+ascii-hyphen-both	pending	0	body,joy	Both, really--the body feels stronger and joy stays quiet.	none	ASCII hyphens do not acquire the U+2014 answer boundary
