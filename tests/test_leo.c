@@ -6417,6 +6417,135 @@ static TEST_NOINLINE void test_wonder_answer_followup(void) {
     free(answer);
 }
 
+static void seed_wonder_natural_answer_body(Leo *leo) {
+    leo_init(leo);
+    snprintf(leo->school.pending, sizeof leo->school.pending, "flom");
+    leo->school.pending_glyph = semtok_word("food");
+    leo->school.pending_alt_glyph = semtok_word("home");
+    leo->school.pending_turns = 0;
+    leo_wonder_open(leo, "flom", leo->school.pending_glyph,
+                    leo->school.pending_alt_glyph);
+}
+
+static int test_deferred_wonder_has_word(
+        const Leo *leo, const char *word) {
+    for (int i = 0; i < leo->school.n_deferred; i++)
+        if (!strcmp(leo->school.deferred[i].word, word))
+            return 1;
+    return 0;
+}
+
+static TEST_NOINLINE void test_wonder_natural_answer_form(void) {
+    /* A.125: one offered glyph before an em-dash explanation is an
+     * adjacent elliptical answer. The independent follow-up question owns
+     * its own novelty scope, so an explanation word cannot counterfeit a
+     * queued question and veto that answer. Ambiguous and delayed forms
+     * remain unfinished. */
+    Leo *answer = calloc(1, sizeof *answer);
+    CHECK(answer != NULL,
+          "wonder-natural-answer-form: heap fixture allocated");
+    if (!answer) return;
+
+    int previous_expansion =
+        g_leo_school_offered_answer_expansion_on;
+    int previous_scope =
+        g_leo_school_followup_question_scope_on;
+    int food = semtok_word("food");
+    LeoSchoolAnswerEvidence evidence;
+    LeoSchoolAnswerReference reference;
+    char out[1024];
+
+    g_leo_school_offered_answer_expansion_on = 1;
+    g_leo_school_followup_question_scope_on = 1;
+    seed_wonder_natural_answer_body(answer);
+    int grounded = leo_school_grounded_answer(
+        answer,
+        "Food—the soup gets carrots, garlic, lentils, and a little cumin. What foods feel like home to you?",
+        &evidence, &reference);
+    CHECK(grounded == food &&
+          reference == LEO_SCHOOL_ANSWER_ELLIPTIC &&
+          evidence.asserted[food] == 1,
+          "wonder-natural-answer-form: one offered glyph survives its em-dash explanation and follow-up");
+
+    const char *refusals[] = {
+        "food and home—the soup feels familiar.",
+        "Both, really—the body feels stronger, and there’s a quiet joy in making it hold.",
+        "water—the soup gets carrots.",
+        "the soup is food—the carrots are warm.",
+        "food-the soup gets carrots.",
+        "food—one thought—then another."
+    };
+    for (size_t i = 0; i < sizeof refusals / sizeof refusals[0]; i++) {
+        leo_free(answer);
+        seed_wonder_natural_answer_body(answer);
+        grounded = leo_school_grounded_answer(
+            answer, refusals[i], &evidence, &reference);
+        CHECK(grounded < 0 &&
+              reference == LEO_SCHOOL_ANSWER_UNREFERENCED,
+              "wonder-natural-answer-form: ambiguity and counterfeit dashes cannot choose a meaning");
+    }
+
+    leo_free(answer);
+    seed_wonder_natural_answer_body(answer);
+    answer->school.pending_turns = 1;
+    grounded = leo_school_grounded_answer(
+        answer, "food—the soup gets carrots.",
+        &evidence, &reference);
+    CHECK(grounded < 0 &&
+          reference == LEO_SCHOOL_ANSWER_UNREFERENCED,
+          "wonder-natural-answer-form: a delayed ellipse cannot regain adjacency through an em dash");
+
+    leo_free(answer);
+    seed_wonder_natural_answer_body(answer);
+    grounded = leo_school_grounded_answer(
+        answer, "not food—the soup gets carrots.",
+        &evidence, &reference);
+    CHECK(grounded < 0 &&
+          reference == LEO_SCHOOL_ANSWER_ELLIPTIC &&
+          evidence.rejected[food] == 1,
+          "wonder-natural-answer-form: an expanded negative narrows without inventing a positive meaning");
+
+    /* Neither half can counterfeit the whole repair. The same fresh body and
+     * prompt expose the four causal arms directly. */
+    for (int expansion = 0; expansion <= 1; expansion++) {
+        for (int scope = 0; scope <= 1; scope++) {
+            leo_free(answer);
+            seed_wonder_natural_answer_body(answer);
+            g_leo_school_offered_answer_expansion_on = expansion;
+            g_leo_school_followup_question_scope_on = scope;
+            leo_respond(
+                answer,
+                "food—the flibble. What do you hear?",
+                out, sizeof out);
+            int learned = leo_school_is_learned(answer, "flom");
+            int queued = test_deferred_wonder_has_word(
+                answer, "flibble");
+            CHECK(learned == (expansion && scope) &&
+                  queued == (!scope),
+                  "wonder-natural-answer-form: expansion and question scope form an explicit two-factor repair");
+            if (learned)
+                CHECK(leo_semtok_word(answer, "flom") == food,
+                      "wonder-natural-answer-form: the paired repair learns only the offered glyph");
+        }
+    }
+
+    g_leo_school_offered_answer_expansion_on = 0;
+    g_leo_school_followup_question_scope_on = 0;
+    leo_free(answer);
+    seed_wonder_natural_answer_body(answer);
+    grounded = leo_school_grounded_answer(
+        answer, "food—the soup gets carrots.",
+        &evidence, &reference);
+    CHECK(grounded < 0 &&
+          reference == LEO_SCHOOL_ANSWER_UNREFERENCED,
+          "wonder-natural-answer-form: named ablations restore the A.124 answer loss");
+
+    g_leo_school_offered_answer_expansion_on = previous_expansion;
+    g_leo_school_followup_question_scope_on = previous_scope;
+    leo_free(answer);
+    free(answer);
+}
+
 static TEST_NOINLINE void test_wonder_reask_reference(void) {
     /* A.123: an active Wonder can return when the human names it or asks one
      * of Leo's hypotheses anaphorically. Mere co-presence of a broad guessed
@@ -8400,6 +8529,7 @@ int main(void) {
     test_wonder_answer_reference();
     test_wonder_answer_scope();
     test_wonder_answer_followup();
+    test_wonder_natural_answer_form();
     test_wonder_reask_reference();
     test_wonder_return();
     test_flow();

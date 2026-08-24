@@ -2931,6 +2931,8 @@ static int g_leo_school_lexical_family_on = 1; /* A.120: a high-confidence known
 static int g_leo_school_lexical_role_on = 1; /* A.121: exact relational/polarity grammar cannot masquerade as a teachable thing. */
 static int g_leo_school_answer_followup_on = 1; /* A.122: a bounded answer may precede a separate human follow-up question. */
 static int g_leo_wonder_reask_reference_on = 1; /* A.123: one guessed glyph cannot recall an unnamed Wonder without an anaphoric hypothesis question. */
+static int g_leo_school_offered_answer_expansion_on = 1; /* A.125: one offered glyph before an em-dash explanation remains one bounded answer. */
+static int g_leo_school_followup_question_scope_on = 1; /* A.125: a separate human question cannot recruit words from the prior answer into the occupied queue. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
@@ -6193,6 +6195,30 @@ static LeoSchoolAnswerReference leo_school_answer_scope(
     if (leo->school.pending_turns != 0)
         return LEO_SCHOOL_ANSWER_UNREFERENCED;
 
+    /* A.125: an adjacent human may choose one of Leo's offered alternatives
+     * and then explain it: "Food—the soup ...". Only the exact material before
+     * one U+2014 em dash is eligible, and it must already satisfy the strict
+     * one-option ellipsis law. The expansion can therefore add no glyph,
+     * convert "both" into a choice, or lend an unrelated proposition to the
+     * lesson. A plain ASCII hyphen remains ordinary word punctuation. */
+    if (g_leo_school_offered_answer_expansion_on) {
+        static const char em_dash[] = "\xe2\x80\x94";
+        const char *dash = strstr(prompt, em_dash);
+        if (dash && !strstr(dash + sizeof em_dash - 1, em_dash) &&
+            leo_school_range_has_words(
+                dash + sizeof em_dash - 1,
+                prompt + strlen(prompt))) {
+            LeoSchoolAnswerEvidence part;
+            leo_school_answer_evidence_range(
+                leo, prompt, dash, &part);
+            if (leo_school_range_is_elliptic(
+                    leo, prompt, dash, &part)) {
+                *evidence = part;
+                return LEO_SCHOOL_ANSWER_ELLIPTIC;
+            }
+        }
+    }
+
     begin = prompt;
     for (const char *p = prompt; ; p++) {
         unsigned char ch = (unsigned char)*p;
@@ -6252,6 +6278,24 @@ static int leo_school_first_substantive_range_has_copula(
     return 0;
 }
 
+/* Return the beginning of a genuine follow-up question clause. The hard
+ * boundary and non-empty tail are the same A.122 contract used to keep the
+ * question out of School's answer evidence. */
+static const char *leo_school_followup_question_begin(
+        const char *prompt) {
+    if (!prompt) return NULL;
+    const char *question = strchr(prompt, '?');
+    if (!question) return NULL;
+    const char *boundary = NULL;
+    for (const char *p = prompt; p < question; p++)
+        if (*p == '.' || *p == '!' || *p == ';' || *p == ':')
+            boundary = p;
+    if (!boundary ||
+        !leo_school_range_has_words(boundary + 1, question))
+        return NULL;
+    return boundary + 1;
+}
+
 /* A question does not erase a statement that was already completed before it.
  * Admit only a genuine question tail: the first question mark must follow a
  * hard statement boundary, and the tail before that mark must contain words.
@@ -6263,17 +6307,12 @@ static LeoSchoolAnswerReference leo_school_answer_before_followup(
         LeoSchoolAnswerEvidence *evidence) {
     memset(evidence, 0, sizeof *evidence);
     if (!leo || !prompt) return LEO_SCHOOL_ANSWER_UNREFERENCED;
-    const char *question = strchr(prompt, '?');
-    if (!question) return LEO_SCHOOL_ANSWER_UNREFERENCED;
-
-    const char *boundary = NULL;
-    for (const char *p = prompt; p < question; p++)
-        if (*p == '.' || *p == '!' || *p == ';' || *p == ':')
-            boundary = p;
-    if (!boundary ||
-        !leo_school_range_has_words(boundary + 1, question))
+    const char *question_begin =
+        leo_school_followup_question_begin(prompt);
+    if (!question_begin)
         return LEO_SCHOOL_ANSWER_UNREFERENCED;
 
+    const char *boundary = question_begin - 1;
     size_t prefix_len = (size_t)(boundary - prompt);
     char *prefix = malloc(prefix_len + 1);
     if (!prefix) return LEO_SCHOOL_ANSWER_UNREFERENCED;
@@ -12244,10 +12283,16 @@ static int leo_respond(Leo *leo, const char *prompt, char *out, int max_len) {
                 !address_redirected && strchr(prompt, '?') &&
                 !leo_school_text_has_word(
                     prompt, leo->school.pending)) {
+                const char *question_scope = prompt;
+                if (g_leo_school_followup_question_scope_on) {
+                    const char *bounded =
+                        leo_school_followup_question_begin(prompt);
+                    if (bounded) question_scope = bounded;
+                }
                 char beyond_novelty[LEO_HEARD_WORDLEN] = {0};
                 int beyond_heard = 0, from_waiting = 0;
                 if (leo_school_scan_unknown(
-                        leo, prompt, occupied_unknown,
+                        leo, question_scope, occupied_unknown,
                         beyond_novelty, &beyond_heard,
                         &from_waiting) &&
                     !from_waiting &&
@@ -15163,6 +15208,10 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-answer-followup")) g_leo_school_answer_followup_on = 0;
         else if (!strcmp(argv[i], "--wonder-reask-reference")) g_leo_wonder_reask_reference_on = 1;
         else if (!strcmp(argv[i], "--no-wonder-reask-reference")) g_leo_wonder_reask_reference_on = 0;
+        else if (!strcmp(argv[i], "--school-offered-answer-expansion")) g_leo_school_offered_answer_expansion_on = 1;
+        else if (!strcmp(argv[i], "--no-school-offered-answer-expansion")) g_leo_school_offered_answer_expansion_on = 0;
+        else if (!strcmp(argv[i], "--school-followup-question-scope")) g_leo_school_followup_question_scope_on = 1;
+        else if (!strcmp(argv[i], "--no-school-followup-question-scope")) g_leo_school_followup_question_scope_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;
