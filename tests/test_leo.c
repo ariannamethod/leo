@@ -6322,6 +6322,101 @@ static TEST_NOINLINE void test_wonder_answer_scope(void) {
 
 }
 
+static TEST_NOINLINE void test_wonder_answer_followup(void) {
+    /* A.122: a completed answer owns only its bounded statement. A later
+     * human question remains fully perceived but cannot revoke the answer or
+     * contribute School evidence. Question-shaped propositions, question-first
+     * turns, and comma-only tails retain the historical refusal. */
+    Leo *answer = calloc(1, sizeof *answer);
+    LeoSchoolAnswerEvidence evidence;
+    LeoSchoolAnswerReference reference;
+    CHECK(answer != NULL,
+          "wonder-answer-followup: heap fixture allocated");
+    if (!answer) return;
+
+    int previous = g_leo_school_answer_followup_on;
+    int water = semtok_word("water");
+    int animal = semtok_word("animal");
+    int music = semtok_word("music");
+    char out[1024];
+
+    g_leo_school_answer_followup_on = 1;
+    seed_wonder_negation_body(answer);
+    int grounded = leo_school_grounded_answer(
+        answer, "a zorble is water. What do you hear?",
+        &evidence, &reference);
+    CHECK(grounded == water &&
+          reference == LEO_SCHOOL_ANSWER_EXPLICIT &&
+          evidence.asserted[water] > 0,
+          "wonder-answer-followup: explicit answer survives a separate question tail");
+
+    leo_free(answer);
+    seed_wonder_negation_body(answer);
+    leo_respond(
+        answer, "it is an animal. Do you hear music?",
+        out, sizeof out);
+    const LeoFlowSnapshot *flow =
+        leo_flow_at(&answer->flow, answer->flow.n - 1);
+    CHECK(leo_semtok_word(answer, "zorble") == animal &&
+          flow && flow->perceived[music] > 0.0f,
+          "wonder-answer-followup: anaphoric answer closes while Flow perceives the question");
+
+    leo_free(answer);
+    seed_wonder_negation_body(answer);
+    g_leo_school_answer_followup_on = 0;
+    leo_respond(
+        answer, "it is an animal. Do you hear music?",
+        out, sizeof out);
+    flow = leo_flow_at(&answer->flow, answer->flow.n - 1);
+    CHECK(!leo_school_is_learned(answer, "zorble") &&
+          !strcmp(answer->school.pending, "zorble") &&
+          flow && flow->perceived[music] > 0.0f,
+          "wonder-answer-followup: named ablation restores the whole-turn question veto");
+
+    g_leo_school_answer_followup_on = 1;
+    const char *refusals[] = {
+        "it is water?",
+        "what do you think?",
+        "what is a zorble? it is water.",
+        "the river has water. What is a zorble?",
+        "it is water, can you hear it?",
+        "that sounds like a gentle memory. What do you hear?"
+    };
+    for (size_t i = 0; i < sizeof refusals / sizeof refusals[0]; i++) {
+        leo_free(answer);
+        seed_wonder_negation_body(answer);
+        grounded = leo_school_grounded_answer(
+            answer, refusals[i], &evidence, &reference);
+        CHECK(grounded < 0 &&
+              reference == LEO_SCHOOL_ANSWER_UNREFERENCED,
+              "wonder-answer-followup: a question cannot counterfeit a prior answer");
+    }
+
+    leo_free(answer);
+    seed_wonder_negation_body(answer);
+    answer->school.pending_turns = 1;
+    grounded = leo_school_grounded_answer(
+        answer, "it is animal. What do you remember?",
+        &evidence, &reference);
+    CHECK(grounded < 0 &&
+          reference == LEO_SCHOOL_ANSWER_UNREFERENCED,
+          "wonder-answer-followup: a delayed anaphor cannot regain adjacency");
+
+    leo_free(answer);
+    seed_wonder_negation_body(answer);
+    answer->school.pending_turns = 1;
+    grounded = leo_school_grounded_answer(
+        answer, "a zorble is animal. What do you remember?",
+        &evidence, &reference);
+    CHECK(grounded == animal &&
+          reference == LEO_SCHOOL_ANSWER_EXPLICIT,
+          "wonder-answer-followup: a delayed explicit answer still owns its name");
+
+    g_leo_school_answer_followup_on = previous;
+    leo_free(answer);
+    free(answer);
+}
+
 static TEST_NOINLINE void test_wonder_return(void) {
     /* W-4: a resolved question later returns as glyph attention, not text. The
      * answer, the route Leo once considered, and QUESTION blend into exactly one
@@ -8240,6 +8335,7 @@ int main(void) {
     test_wonder_negation();
     test_wonder_answer_reference();
     test_wonder_answer_scope();
+    test_wonder_answer_followup();
     test_wonder_return();
     test_flow();
     test_shadow_scheduler();

@@ -9965,3 +9965,64 @@ and verdict SHA is
 `59f6738b70f65ebb33884de4f7d6b3f6c1149c1f5635fbfbca44ab9fd8ee6b9a`.
 
 The floor is still warm beneath him. There was never a thing called beneath.
+
+## Phase A.122 - an answer survives the next question (2026-08-24)
+
+A.121 left `toy`, `smooth`, and `fragile` as honest questions, but School still
+required an answer to occupy the whole human turn. `A zorble is water. What do
+you hear?` was rejected only because a later question mark erased the already
+complete answer before it. That made natural dialogue weaker than the same
+answer sent alone.
+
+The new default-on answer-follow-up boundary gives School a bounded declarative
+prefix when the first question follows a hard statement boundary (`.`, `!`,
+`;`, or `:`). Only that prefix may provide the reference and answer evidence.
+The original, uncut prompt still reaches BPE, feeling, Flow, state-swarm, and
+voice, so Leo hears the human's follow-up rather than hiding it to obtain a
+School result. Explicit answers, an immediate copular anaphora such as `it is
+water`, and an offered-option ellipsis can therefore close the current Wonder
+before the human asks the next question.
+
+The boundary is deliberately narrower than sentence splitting. A
+question-shaped proposition (`it is water?`), a counterquestion, a
+question-first turn, a target named only inside the question, or a comma before
+the question cannot answer. Delayed anaphora cannot reach backward across an
+unrelated statement. Sensory continuations such as `That sounds like a gentle
+memory. What do you hear?` are also refused unless they explicitly name the
+unknown. The first implementation admitted that sensory form and changed the
+frozen weather life by falsely resolving `smooth`; restricting follow-up
+anaphora to the copular answer form restored the complete A.121 body and
+transcript. An explicit negative answer still contributes reference and
+narrowing evidence without inventing a grounded meaning. The named
+`--no-school-answer-followup` ablation restores the historical whole-turn
+question-mark veto.
+
+The paired court preserves all three A.121 lives byte and state exact while
+separating genuine answers from counterfeit question tails:
+
+~~~text
+metric                            A.121 whole-turn veto      A.122 bounded answer
+grounded answer follow-ups                              0                         7
+referenced negative follow-ups                          0                         1
+counterfeit question refusals                         7/7                       7/7
+A.121-exact natural lives                             3/3                       3/3
+open-Wonder turns                                      27                        27
+formal result                 questions-erase-prior-answers / bounded-answers-survive-followups
+~~~
+
+The A.119 apostrophe, A.120 lexical-family, and A.121 lexical-role matrices
+remain exact under their named ablations. The full suite passes `654/654` unit
+checks plus every script gate; unit and production ASan/UBSan runs are clean.
+No state format, sampler, coefficient, Flow law, state-swarm organ, or voice
+reader changes.
+
+Canonical evidence:
+`/private/tmp/leo-answer-followup-a122-r1-20260824`.
+The cases TSV and candidate anatomy share SHA
+`63c0b97f4fafd98aa93beb5dd600e1205ef04da39a8577b66325ccd1138c0fc4`,
+the candidate-natural SHA is
+`a627cbf001a5d1d8dd29ecf6a00e0e51171ed5b5e2c6295f6b1c5e0a11e0906d`,
+and the verdict SHA is
+`c00ddd5e0530883e2067c6213487ba923a46ee66c78cf416b108eab8e650140d`.
+
+The human answered Leo, then asked her own question. He now hears both acts.

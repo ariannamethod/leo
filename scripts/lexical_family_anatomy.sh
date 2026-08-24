@@ -11,12 +11,14 @@ CASES="${LEO_LEXICAL_FAMILY_CASES:-$ROOT/scripts/lexical_family_cases.tsv}"
 PLAN_ONLY="${LEO_LEXICAL_PLAN_ONLY:-0}"
 FAMILY="${LEO_LEXICAL_FAMILY:-1}"
 LEXICAL_ROLE="${LEO_LEXICAL_ROLE:-0}"
+ANSWER_FOLLOWUP="${LEO_ANSWER_FOLLOWUP:-0}"
 EXPECT="${LEO_LEXICAL_EXPECT:-none}"
 
 [ -s "$CASES" ] || { printf 'missing lexical-family cases: %s\n' "$CASES" >&2; exit 2; }
 [ "$PLAN_ONLY" = 0 ] || [ "$PLAN_ONLY" = 1 ] || { printf 'LEO_LEXICAL_PLAN_ONLY must be 0 or 1\n' >&2; exit 2; }
 [ "$FAMILY" = 0 ] || [ "$FAMILY" = 1 ] || { printf 'LEO_LEXICAL_FAMILY must be 0 or 1\n' >&2; exit 2; }
 [ "$LEXICAL_ROLE" = 0 ] || [ "$LEXICAL_ROLE" = 1 ] || { printf 'LEO_LEXICAL_ROLE must be 0 or 1\n' >&2; exit 2; }
+[ "$ANSWER_FOLLOWUP" = 0 ] || [ "$ANSWER_FOLLOWUP" = 1 ] || { printf 'LEO_ANSWER_FOLLOWUP must be 0 or 1\n' >&2; exit 2; }
 case "$EXPECT" in none|a119|a120) ;; *) printf 'LEO_LEXICAL_EXPECT must be none, a119, or a120\n' >&2; exit 2;; esac
 [ ! -e "$OUT" ] || { printf 'output path already exists: %s\n' "$OUT" >&2; exit 2; }
 mkdir -p "$OUT/lives"
@@ -70,6 +72,7 @@ while IFS=$'\t' read -r life seed fixture prompts_sha a119_transcript a119_state
         LEO_NATURAL_ARM=replay LEO_NATURAL_SEED="$seed" LEO_NATURAL_TURNS=24 \
         LEO_NATURAL_LEXICAL_FAMILY="$FAMILY" \
         LEO_NATURAL_LEXICAL_ROLE="$LEXICAL_ROLE" \
+        LEO_NATURAL_ANSWER_FOLLOWUP="$ANSWER_FOLLOWUP" \
         "$ROOT/scripts/natural_life_probe.sh" "$destination" > "$OUT/lives/$life.out"
     transcript_sha="$(shasum -a 256 "$destination/visible_transcript.txt" | awk '{print $1}')"
     state_sha="$(shasum -a 256 "$destination/state/leo.state" | awk '{print $1}')"

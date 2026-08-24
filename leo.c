@@ -2929,6 +2929,7 @@ static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School revers
 static int g_leo_school_natural_word_boundary_on = 1; /* A.119: curly apostrophes and contraction/possessive suffixes cannot manufacture a School word. */
 static int g_leo_school_lexical_family_on = 1; /* A.120: a high-confidence known family cannot masquerade as a novel School word. */
 static int g_leo_school_lexical_role_on = 1; /* A.121: exact relational/polarity grammar cannot masquerade as a teachable thing. */
+static int g_leo_school_answer_followup_on = 1; /* A.122: a bounded answer may precede a separate human follow-up question. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
@@ -6219,6 +6220,75 @@ static LeoSchoolAnswerReference leo_school_answer_scope(
     return LEO_SCHOOL_ANSWER_UNREFERENCED;
 }
 
+static int leo_school_range_has_copula(
+        const char *begin, const char *end) {
+    static const char *copulas[] = {
+        "am", "is", "are", "was", "were", "be", "been", "being",
+        "become", "becomes", "became",
+        "isn't", "isnt", "aren't", "arent",
+        "wasn't", "wasnt", "weren't", "werent"
+    };
+    for (size_t i = 0; i < sizeof copulas / sizeof copulas[0]; i++)
+        if (leo_school_range_has_word(begin, end, copulas[i]))
+            return 1;
+    return 0;
+}
+
+static int leo_school_first_substantive_range_has_copula(
+        const char *prompt) {
+    if (!prompt) return 0;
+    const char *begin = prompt;
+    for (const char *p = prompt; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && !leo_school_answer_scope_boundary_at(p))
+            continue;
+        if (leo_school_range_has_words(begin, p) &&
+            !leo_school_range_is_dialogue_marker(begin, p))
+            return leo_school_range_has_copula(begin, p);
+        if (!ch) break;
+        begin = p + 1;
+    }
+    return 0;
+}
+
+/* A question does not erase a statement that was already completed before it.
+ * Admit only a genuine question tail: the first question mark must follow a
+ * hard statement boundary, and the tail before that mark must contain words.
+ * School receives a private copy of the prefix so the question cannot lend its
+ * reference or glyph evidence to the answer. The full prompt remains untouched
+ * for BPE, feeling, Flow, state-swarm, and voice. */
+static LeoSchoolAnswerReference leo_school_answer_before_followup(
+        const Leo *leo, const char *prompt,
+        LeoSchoolAnswerEvidence *evidence) {
+    memset(evidence, 0, sizeof *evidence);
+    if (!leo || !prompt) return LEO_SCHOOL_ANSWER_UNREFERENCED;
+    const char *question = strchr(prompt, '?');
+    if (!question) return LEO_SCHOOL_ANSWER_UNREFERENCED;
+
+    const char *boundary = NULL;
+    for (const char *p = prompt; p < question; p++)
+        if (*p == '.' || *p == '!' || *p == ';' || *p == ':')
+            boundary = p;
+    if (!boundary ||
+        !leo_school_range_has_words(boundary + 1, question))
+        return LEO_SCHOOL_ANSWER_UNREFERENCED;
+
+    size_t prefix_len = (size_t)(boundary - prompt);
+    char *prefix = malloc(prefix_len + 1);
+    if (!prefix) return LEO_SCHOOL_ANSWER_UNREFERENCED;
+    memcpy(prefix, prompt, prefix_len);
+    prefix[prefix_len] = 0;
+    LeoSchoolAnswerReference reference =
+        leo_school_answer_scope(leo, prefix, evidence);
+    if (reference == LEO_SCHOOL_ANSWER_ANAPHORIC &&
+        !leo_school_first_substantive_range_has_copula(prefix)) {
+        memset(evidence, 0, sizeof *evidence);
+        reference = LEO_SCHOOL_ANSWER_UNREFERENCED;
+    }
+    free(prefix);
+    return reference;
+}
+
 /* Shared semantic support for one unfinished question. Two matching votes are
  * needed for full evidence, and they must cover the prompt rather than hide in
  * a mixed list of meanings. Field identity is deliberately absent here: it may
@@ -7247,7 +7317,8 @@ static int leo_school_text_has_word(const char *text, const char *word) {
  * the open Wonder. The first turn after Leo asks admits an anaphoric answer or
  * one elliptical choice among his own offered alternatives; richer corrections
  * name the unknown. Adjacency alone cannot assign an unrelated clause to Leo's
- * question. Questions never close questions. */
+ * question. A separate follow-up question may come after a completed answer;
+ * the question itself never supplies reference or evidence. */
 static int leo_school_grounded_answer(
         const Leo *leo, const char *prompt,
         LeoSchoolAnswerEvidence *observed,
@@ -7256,8 +7327,11 @@ static int leo_school_grounded_answer(
     memset(&evidence, 0, sizeof evidence);
     if (observed) *observed = evidence;
     if (reference) *reference = LEO_SCHOOL_ANSWER_UNREFERENCED;
-    if (!leo->school.pending[0] || strchr(prompt, '?')) return -1;
-    LeoSchoolAnswerReference ref =
+    if (!leo->school.pending[0]) return -1;
+    int has_question = strchr(prompt, '?') != NULL;
+    if (has_question && !g_leo_school_answer_followup_on) return -1;
+    LeoSchoolAnswerReference ref = has_question ?
+        leo_school_answer_before_followup(leo, prompt, &evidence) :
         leo_school_answer_scope(leo, prompt, &evidence);
     if (observed) *observed = evidence;
     if (reference) *reference = ref;
@@ -14969,6 +15043,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-lexical-family")) g_leo_school_lexical_family_on = 0;
         else if (!strcmp(argv[i], "--school-lexical-role")) g_leo_school_lexical_role_on = 1;
         else if (!strcmp(argv[i], "--no-school-lexical-role")) g_leo_school_lexical_role_on = 0;
+        else if (!strcmp(argv[i], "--school-answer-followup")) g_leo_school_answer_followup_on = 1;
+        else if (!strcmp(argv[i], "--no-school-answer-followup")) g_leo_school_answer_followup_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;
