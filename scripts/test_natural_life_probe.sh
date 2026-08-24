@@ -60,6 +60,15 @@ jq -e '.process_resumed == true and .resumed_at_turn == 3' \
 LEO_NATURAL_PLAN_ONLY=1 LEO_NATURAL_TURNS=4 \
     "$ROOT/scripts/natural_life_matrix.sh" "$TMP/plan" >/dev/null
 grep -q $'^maximum_api_calls\t12$' "$TMP/plan/design.tsv"
+grep -q $'^phase\tA.118$' "$TMP/plan/design.tsv"
 [ "$(wc -l < "$TMP/plan/plan.tsv" | tr -d ' ')" -eq 4 ]
+
+LEO_NATURAL_PLAN_ONLY=1 LEO_NATURAL_PHASE=A.124 \
+    LEO_NATURAL_QUESTION=what-does-repaired-Leo-do-in-fresh-ordinary-life \
+    LEO_NATURAL_TURNS=4 \
+    "$ROOT/scripts/natural_life_matrix.sh" "$TMP/second-generation-plan" >/dev/null
+grep -q $'^phase\tA.124$' "$TMP/second-generation-plan/design.tsv"
+grep -q $'^question\twhat-does-repaired-Leo-do-in-fresh-ordinary-life$' \
+    "$TMP/second-generation-plan/design.tsv"
 
 printf 'natural-life probe contracts: ok\n'
