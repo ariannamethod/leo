@@ -5692,7 +5692,9 @@ static TEST_NOINLINE void test_school_lexical_family(void) {
     Leo *family = test_leo_alloc();
     leo_init(family);
     int previous = g_leo_school_lexical_family_on;
+    int previous_role = g_leo_school_lexical_role_on;
     g_leo_school_lexical_family_on = 1;
+    g_leo_school_lexical_role_on = 0;
 
     static const char *const witnessed[] = {
         "belong", "calm", "respect", "dust", "neighbour", "brought", NULL
@@ -5788,7 +5790,105 @@ static TEST_NOINLINE void test_school_lexical_family(void) {
           "lexical-family: explicit ablation restores surface-form questions");
 
     g_leo_school_lexical_family_on = previous;
+    g_leo_school_lexical_role_on = previous_role;
     test_leo_delete(family);
+}
+
+static TEST_NOINLINE void test_school_lexical_role(void) {
+    /* A.121: a whole word can carry grammar without naming a teachable thing.
+     * The refusal reuses exact relational, polarity, and discourse witnesses;
+     * it neither assigns a glyph nor searches inside larger words. */
+    Leo *role = test_leo_alloc();
+    leo_init(role);
+    int previous = g_leo_school_lexical_role_on;
+    g_leo_school_lexical_role_on = 1;
+
+    struct RoleCase {
+        const char *surface;
+        LeoSchoolLexicalRole role;
+        const char *witness;
+    } cases[] = {
+        {"across", LEO_SCHOOL_ROLE_RELATION, "through"},
+        {"against", LEO_SCHOOL_ROLE_RELATION, "at"},
+        {"along", LEO_SCHOOL_ROLE_RELATION, "through"},
+        {"alongside", LEO_SCHOOL_ROLE_RELATION, "by"},
+        {"among", LEO_SCHOOL_ROLE_RELATION, "between"},
+        {"amongst", LEO_SCHOOL_ROLE_RELATION, "between"},
+        {"around", LEO_SCHOOL_ROLE_RELATION, "about"},
+        {"beneath", LEO_SCHOOL_ROLE_RELATION, "under"},
+        {"beside", LEO_SCHOOL_ROLE_RELATION, "by"},
+        {"beyond", LEO_SCHOOL_ROLE_RELATION, "over"},
+        {"near", LEO_SCHOOL_ROLE_RELATION, "by"},
+        {"nearby", LEO_SCHOOL_ROLE_RELATION, "by"},
+        {"onto", LEO_SCHOOL_ROLE_RELATION, "on"},
+        {"throughout", LEO_SCHOOL_ROLE_RELATION, "through"},
+        {"toward", LEO_SCHOOL_ROLE_RELATION, "to"},
+        {"towards", LEO_SCHOOL_ROLE_RELATION, "to"},
+        {"underneath", LEO_SCHOOL_ROLE_RELATION, "under"},
+        {"within", LEO_SCHOOL_ROLE_RELATION, "in"},
+        {"neither", LEO_SCHOOL_ROLE_POLARITY, "not"},
+        {"nor", LEO_SCHOOL_ROLE_POLARITY, "not"},
+        {"without", LEO_SCHOOL_ROLE_POLARITY, "not"},
+        {"however", LEO_SCHOOL_ROLE_DISCOURSE, "but"},
+        {"instead", LEO_SCHOOL_ROLE_DISCOURSE, "but"},
+        {"rather", LEO_SCHOOL_ROLE_DISCOURSE, "but"},
+        {NULL, LEO_SCHOOL_ROLE_NONE, NULL}
+    };
+    for (int i = 0; cases[i].surface; i++) {
+        const char *witness = NULL;
+        char label[128];
+        LeoSchoolLexicalRole observed =
+            leo_school_lexical_role(cases[i].surface, &witness);
+        snprintf(label, sizeof label,
+                 "lexical-role: %s carries only its exact grammar role",
+                 cases[i].surface);
+        CHECK(observed == cases[i].role && witness &&
+                  !strcmp(witness, cases[i].witness), label);
+    }
+
+    static const char *const refusals[] = {
+        "underworld", "beneathness", "nearness", "surround",
+        "withinness", "nothing", "toy", "smooth", "fragile", NULL
+    };
+    for (int i = 0; refusals[i]; i++) {
+        const char *witness = NULL;
+        char label[128];
+        LeoSchoolLexicalRole observed =
+            leo_school_lexical_role(refusals[i], &witness);
+        snprintf(label, sizeof label,
+                 "lexical-role: %s cannot borrow grammar from a substring",
+                 refusals[i]);
+        CHECK(observed == LEO_SCHOOL_ROLE_NONE && !witness, label);
+    }
+
+    char unknown[LEO_HEARD_WORDLEN] = {0};
+    CHECK(!leo_school_find_unknown(role, "beneath nearby nor without however",
+                                   unknown),
+          "lexical-role: exact grammar cannot masquerade as School novelty");
+    CHECK(leo_school_find_unknown(role, "underworld", unknown) &&
+              !strcmp(unknown, "underworld") &&
+              leo_school_find_unknown(role, "toy", unknown) &&
+              !strcmp(unknown, "toy") &&
+              leo_school_find_unknown(role, "smooth", unknown) &&
+              !strcmp(unknown, "smooth") &&
+              leo_school_find_unknown(role, "fragile", unknown) &&
+              !strcmp(unknown, "fragile"),
+          "lexical-role: exact-word controls remain honest questions");
+    CHECK(leo_semtok_word(role, "beneath") < 0 &&
+              !leo_school_is_learned(role, "beneath"),
+          "lexical-role: refusing grammar invents no concept or lesson");
+
+    g_leo_school_lexical_role_on = 0;
+    CHECK(leo_school_find_unknown(role, "beneath", unknown) &&
+              !strcmp(unknown, "beneath") &&
+              leo_school_find_unknown(role, "nearby", unknown) &&
+              !strcmp(unknown, "nearby") &&
+              leo_school_find_unknown(role, "nor", unknown) &&
+              !strcmp(unknown, "nor"),
+          "lexical-role: explicit ablation restores A.120 questions");
+
+    g_leo_school_lexical_role_on = previous;
+    test_leo_delete(role);
 }
 
 static TEST_NOINLINE void test_wonder_ablation(void) {
@@ -8134,6 +8234,7 @@ int main(void) {
     test_school_form_and_wonder();
     test_natural_school_word_boundary();
     test_school_lexical_family();
+    test_school_lexical_role();
     test_wonder_persistence();
     test_wonder_ablation();
     test_wonder_negation();
