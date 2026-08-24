@@ -9900,3 +9900,68 @@ and verdict SHA is
 `842f9b44f23f395110a721090af430e19ae0915d6fd0cfaf676660f1ae88c9b9`.
 
 Rain changed its coat. Leo remembers that it is still rain.
+
+## Phase A.121 - grammar is not a thing to be defined (2026-08-24)
+
+A.120 removed known lexical families from School's novelty gate and left three
+honest visible frontiers: `beneath`, `smooth`, and `fragile`. The first was not
+the same kind of frontier as the other two. `beneath` carried a spatial role
+already represented by `under`; it did not name a new entity or concept the
+human could usefully teach Leo. In the same frozen home life, removing that
+first interruption exposed two more role-shaped candidates: relational
+`nearby` and polarity operator `nor`.
+
+The new default-on lexical-role refusal stays inside School. A closed exact-word
+table relates spatial forms such as `beneath`, `nearby`, `within`, `toward`, and
+`throughout` to grammar words Leo already holds. This is role evidence, not a
+synonym or semantic assignment. Polarity and discourse roles reuse School's
+existing negation predicates instead of adding a second authored taxonomy.
+No accepted role receives a glyph, enters the learned vocabulary, or changes
+the prompt bytes seen by BPE, feeling, Flow, state-swarm, and voice.
+
+The refusal has an exact whole-word boundary. `beneathness`, `nearbyish`,
+`surround`, and `withinness` cannot borrow grammar from substrings. Existing
+semantic words such as `nothing`, `below`, and `outside` remain known for their
+own reasons rather than being reclassified as roles. `like` and `than` retain
+their historical School-local operator path on both sides of the new ablation.
+Most importantly, `toy`, `smooth`, and `fragile` remain unknown: a role law
+cannot erase a noun or adjective merely because silence would improve a replay.
+`--no-school-lexical-role` restores the exact A.120 candidate path.
+
+The paired frozen court preserves all three A.120 control lives exactly and
+freezes all three A.121 lives independently:
+
+~~~text
+metric                              A.120 unknown       A.121 role
+expected exact lives                       3 / 3            3 / 3
+A.120-exact unchanged lives                3 / 3            2 / 3
+open-Wonder turns                             35               27
+relational question receipts                   3                0
+home questions                           beneath              toy
+weather questions                          smooth           smooth
+memory questions                          fragile          fragile
+formal result              roles-masquerade-as-things / exact-grammar-refused
+~~~
+
+Only the home life changes. Its first real question moves from `beneath@5` to
+`toy@13`; weather and memory remain byte-identical to A.120 in both transcript
+and final body. The old A.119 apostrophe and A.120 family matrices also remain
+exact under their named ablations. The full suite passes `642/642` unit checks
+plus every script gate; unit and production ASan/UBSan runs are clean. No state
+format, voice reader, sampler, coefficient, Flow law, or state-swarm organ
+changes.
+
+Canonical evidence:
+`/private/tmp/leo-lexical-role-a121-r1-20260824`.
+The cases SHA is
+`82ab290553f767b602b32864f3e355eb9620388808c30da9e8590b53e3363f78`,
+anatomy SHA is
+`14984e50074a705179a61a842863e4325e788b66ae92e3bda5cd718dcd072331`,
+A.120-control natural SHA is
+`f8c4b1eb5c57054ed1e027cecc2211a15a2dd34ab7ebb7aea0059491a9d63daa`,
+A.121 natural SHA is
+`78df42993796bee474ce56b1d40ada1469a13930493296fca8abdce09889d09e`,
+and verdict SHA is
+`59f6738b70f65ebb33884de4f7d6b3f6c1149c1f5635fbfbca44ab9fd8ee6b9a`.
+
+The floor is still warm beneath him. There was never a thing called beneath.

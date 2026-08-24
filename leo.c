@@ -2928,6 +2928,7 @@ static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_school_natural_word_boundary_on = 1; /* A.119: curly apostrophes and contraction/possessive suffixes cannot manufacture a School word. */
 static int g_leo_school_lexical_family_on = 1; /* A.120: a high-confidence known family cannot masquerade as a novel School word. */
+static int g_leo_school_lexical_role_on = 1; /* A.121: exact relational/polarity grammar cannot masquerade as a teachable thing. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
@@ -6689,6 +6690,70 @@ static int leo_school_word_is_operator(const char *w) {
     return !strcmp(w, "like") || !strcmp(w, "than");
 }
 
+typedef enum {
+    LEO_SCHOOL_ROLE_NONE = 0,
+    LEO_SCHOOL_ROLE_RELATION,
+    LEO_SCHOOL_ROLE_POLARITY,
+    LEO_SCHOOL_ROLE_DISCOURSE
+} LeoSchoolLexicalRole;
+
+typedef struct {
+    const char *surface;
+    const char *witness;
+} LeoSchoolRoleWitness;
+
+/* These are exact role witnesses, not synonym or substring claims. Each right
+ * side already belongs to Leo's grammar boundary; the left side is another
+ * whole-word way ordinary speech can carry the same relational job. Keep the
+ * table School-local so prompt gravity, feeling, Flow, and voice still receive
+ * every original word unchanged. */
+static const LeoSchoolRoleWitness LEO_SCHOOL_RELATION_WITNESSES[] = {
+    {"across", "through"},
+    {"against", "at"},
+    {"along", "through"},
+    {"alongside", "by"},
+    {"among", "between"},
+    {"amongst", "between"},
+    {"around", "about"},
+    {"beneath", "under"},
+    {"beside", "by"},
+    {"beyond", "over"},
+    {"near", "by"},
+    {"nearby", "by"},
+    {"onto", "on"},
+    {"throughout", "through"},
+    {"toward", "to"},
+    {"towards", "to"},
+    {"underneath", "under"},
+    {"within", "in"},
+    {NULL, NULL}
+};
+
+static LeoSchoolLexicalRole leo_school_lexical_role(
+        const char *word, const char **witness) {
+    if (witness) *witness = NULL;
+    if (!word || !word[0]) return LEO_SCHOOL_ROLE_NONE;
+    if (leo_school_word_negates(word)) {
+        if (witness) *witness = "not";
+        return LEO_SCHOOL_ROLE_POLARITY;
+    }
+    if (leo_school_word_ends_negation(word)) {
+        if (witness) *witness = "but";
+        return LEO_SCHOOL_ROLE_DISCOURSE;
+    }
+    for (int i = 0; LEO_SCHOOL_RELATION_WITNESSES[i].surface; i++) {
+        const LeoSchoolRoleWitness *candidate =
+            &LEO_SCHOOL_RELATION_WITNESSES[i];
+        if (strcmp(word, candidate->surface)) continue;
+        if (!leo_word_is_function(candidate->witness) &&
+            !semtok_is_stop_word(candidate->witness))
+            return LEO_SCHOOL_ROLE_NONE;
+        if (witness) *witness = candidate->witness;
+        return LEO_SCHOOL_ROLE_RELATION;
+    }
+    return LEO_SCHOOL_ROLE_NONE;
+}
+
 /* A.119: School asks about the word the human actually uttered, not a byte
  * shard produced by typographic punctuation. U+2018/U+2019 are the ordinary
  * opening/closing single quotes used by natural interlocutors. Only School's
@@ -7118,11 +7183,14 @@ static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out
             int family_familiar = g_leo_school_lexical_family_on &&
                 leo_school_lexical_family(leo, word, NULL) !=
                     LEO_SCHOOL_FAMILY_NONE;
+            int role_familiar = g_leo_school_lexical_role_on &&
+                leo_school_lexical_role(word, NULL) != LEO_SCHOOL_ROLE_NONE;
             if ((natural || !g_leo_school_natural_word_boundary_on) &&
                 !leo_word_is_function(word) &&
                 !leo_school_word_is_operator(word) &&
                 !semtok_is_stop_word(word) &&
-                leo_school_unknown(leo, word) && !family_familiar) {
+                leo_school_unknown(leo, word) && !family_familiar &&
+                !role_familiar) {
                 int heard = leo_heard_count(&leo->heard, word);
                 int remembered = g_leo_wonder_on &&
                     g_leo_deferred_wonder_on &&
@@ -14899,6 +14967,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-natural-word-boundary")) g_leo_school_natural_word_boundary_on = 0;
         else if (!strcmp(argv[i], "--school-lexical-family")) g_leo_school_lexical_family_on = 1;
         else if (!strcmp(argv[i], "--no-school-lexical-family")) g_leo_school_lexical_family_on = 0;
+        else if (!strcmp(argv[i], "--school-lexical-role")) g_leo_school_lexical_role_on = 1;
+        else if (!strcmp(argv[i], "--no-school-lexical-role")) g_leo_school_lexical_role_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;
