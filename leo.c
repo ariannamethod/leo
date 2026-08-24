@@ -2927,6 +2927,7 @@ static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE
                                          * θ=0 paradigm, learns by living, not by an offline marathon. --no-rae → 0. */
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_school_natural_word_boundary_on = 1; /* A.119: curly apostrophes and contraction/possessive suffixes cannot manufacture a School word. */
+static int g_leo_school_lexical_family_on = 1; /* A.120: a high-confidence known family cannot masquerade as a novel School word. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
@@ -6747,6 +6748,322 @@ static int leo_school_natural_candidate(
            !semtok_is_stop_word(out) &&
            leo_school_unknown(leo, out);
 }
+
+typedef enum {
+    LEO_SCHOOL_FAMILY_NONE = 0,
+    LEO_SCHOOL_FAMILY_MEANING,
+    LEO_SCHOOL_FAMILY_HEARD,
+    LEO_SCHOOL_FAMILY_COMPOUND
+} LeoSchoolFamilyEvidence;
+
+/* A compound atom must be a complete grammar word or a complete semantic
+ * word. The only suffix admitted inside an atom is a regular final `s` on a
+ * semantic word, so `out+doors` may inherit `door` while `with+out` remains
+ * grammar-only. No substring can borrow knowledge from a larger neighbour. */
+static int leo_school_family_atom(
+        const Leo *leo, const char *surface,
+        char canonical[LEO_HEARD_WORDLEN], int *concept) {
+    if (!surface || !surface[0]) return 0;
+    strncpy(canonical, surface, LEO_HEARD_WORDLEN - 1);
+    canonical[LEO_HEARD_WORDLEN - 1] = 0;
+    if (leo_word_is_function(canonical) ||
+        leo_school_word_is_operator(canonical) ||
+        semtok_is_stop_word(canonical)) {
+        if (concept) *concept = 0;
+        return 1;
+    }
+    int glyph = leo_semtok_word(leo, canonical);
+    if (glyph >= 0) {
+        if (concept) *concept = leo_glyph_concept(glyph);
+        return 1;
+    }
+    size_t len = strlen(canonical);
+    if (len > 3 && canonical[len - 1] == 's' &&
+        canonical[len - 2] != 's' && strcmp(canonical, "news")) {
+        canonical[len - 1] = 0;
+        glyph = leo_semtok_word(leo, canonical);
+        if (glyph >= 0) {
+            if (concept) *concept = leo_glyph_concept(glyph);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int leo_school_family_compound(
+        const Leo *leo, const char *surface,
+        char base[LEO_HEARD_WORDLEN]) {
+    size_t len = strlen(surface);
+    if (len < 6 || len >= LEO_HEARD_WORDLEN) return 0;
+    for (size_t split = 2; split + 3 <= len; split++) {
+        char left[LEO_HEARD_WORDLEN] = {0};
+        char right[LEO_HEARD_WORDLEN] = {0};
+        char left_base[LEO_HEARD_WORDLEN] = {0};
+        char right_base[LEO_HEARD_WORDLEN] = {0};
+        int left_concept = 0, right_concept = 0;
+        memcpy(left, surface, split);
+        left[split] = 0;
+        strncpy(right, surface + split, LEO_HEARD_WORDLEN - 1);
+        if (!leo_school_family_atom(
+                leo, left, left_base, &left_concept) ||
+            !leo_school_family_atom(
+                leo, right, right_base, &right_concept) ||
+            (!left_concept && !right_concept))
+            continue;
+        if (strlen(left_base) + strlen(right_base) >= LEO_HEARD_WORDLEN)
+            continue;
+        snprintf(base, LEO_HEARD_WORDLEN, "%s%s", left_base, right_base);
+        return 1;
+    }
+    return 0;
+}
+
+static LeoSchoolFamilyEvidence leo_school_family_base_evidence(
+        const Leo *leo, const char *base) {
+    if (!base || strlen(base) < 3) return LEO_SCHOOL_FAMILY_NONE;
+    if (!leo_school_unknown(leo, base)) return LEO_SCHOOL_FAMILY_MEANING;
+    if (leo_heard_count(&leo->heard, base) > LEO_SCHOOL_NOVEL_MAX)
+        return LEO_SCHOOL_FAMILY_HEARD;
+    return LEO_SCHOOL_FAMILY_NONE;
+}
+
+static LeoSchoolFamilyEvidence leo_school_family_try_base(
+        const Leo *leo, const char *candidate,
+        char base[LEO_HEARD_WORDLEN]) {
+    LeoSchoolFamilyEvidence evidence =
+        leo_school_family_base_evidence(leo, candidate);
+    if (evidence == LEO_SCHOOL_FAMILY_NONE) return evidence;
+    if (base) {
+        strncpy(base, candidate, LEO_HEARD_WORDLEN - 1);
+        base[LEO_HEARD_WORDLEN - 1] = 0;
+    }
+    return evidence;
+}
+
+typedef struct {
+    const char *surface;
+    const char *relative;
+} LeoSchoolFamilyBridge;
+
+/* Tiny witnessed bridges for families whose whole-word relation is not a
+ * productive suffix. Keep this closed and auditable: these entries exist
+ * because Leo's own corpus/body supplies the relative on the right. */
+static const LeoSchoolFamilyBridge LEO_SCHOOL_FAMILY_BRIDGES[] = {
+    {"neighbor", "neighbour"},
+    {"neighbors", "neighbour"},
+    {"bring", "brought"},
+    {"brings", "brought"},
+    {"bringing", "brought"},
+    {"lose", "lost"},
+    {"loses", "lost"},
+    {"losing", "lost"},
+    {"loss", "lost"},
+    {"losses", "lost"},
+    {NULL, NULL}
+};
+
+/* This is a refusal boundary, not a general English stemmer. A family silences
+ * School only when a witnessed form reaches whole-word evidence: rain+y,
+ * belong+ed, a user-taught root, or a composition such as out+door+s. If no
+ * candidate earns evidence, the original surface remains the honest question. */
+static LeoSchoolFamilyEvidence leo_school_lexical_family(
+        const Leo *leo, const char *surface,
+        char base[LEO_HEARD_WORDLEN]) {
+    if (base) base[0] = 0;
+    if (!leo || !surface || !surface[0]) return LEO_SCHOOL_FAMILY_NONE;
+    if (leo_word_is_function(surface) ||
+        leo_school_word_is_operator(surface) ||
+        semtok_is_stop_word(surface) ||
+        !leo_school_unknown(leo, surface))
+        return LEO_SCHOOL_FAMILY_NONE;
+
+    char candidate[LEO_HEARD_WORDLEN] = {0};
+    char compound[LEO_HEARD_WORDLEN] = {0};
+    size_t len = strlen(surface);
+    if (len >= LEO_HEARD_WORDLEN) return LEO_SCHOOL_FAMILY_NONE;
+
+    if (leo_school_family_compound(leo, surface, compound)) {
+        if (base) {
+            strncpy(base, compound, LEO_HEARD_WORDLEN - 1);
+            base[LEO_HEARD_WORDLEN - 1] = 0;
+        }
+        return LEO_SCHOOL_FAMILY_COMPOUND;
+    }
+
+    for (int i = 0; LEO_SCHOOL_FAMILY_BRIDGES[i].surface; i++) {
+        if (strcmp(surface, LEO_SCHOOL_FAMILY_BRIDGES[i].surface)) continue;
+        LeoSchoolFamilyEvidence evidence = leo_school_family_try_base(
+            leo, LEO_SCHOOL_FAMILY_BRIDGES[i].relative, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+    }
+
+    if (len > 4 && !strcmp(surface + len - 3, "ied")) {
+        memcpy(candidate, surface, len - 3);
+        candidate[len - 3] = 'y';
+        candidate[len - 2] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+    }
+
+    if (len > 5 && !strcmp(surface + len - 3, "ing")) {
+        memcpy(candidate, surface, len - 3); /* raining -> rain */
+        candidate[len - 3] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        size_t root_len = strlen(candidate);
+        if (root_len >= 2 &&
+            candidate[root_len - 1] == candidate[root_len - 2]) {
+            candidate[root_len - 1] = 0; /* running -> run */
+            evidence = leo_school_family_try_base(leo, candidate, base);
+            if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+            candidate[root_len - 1] = candidate[root_len - 2];
+        }
+        if (root_len + 1 < LEO_HEARD_WORDLEN) {
+            candidate[root_len] = 'e'; /* making -> make */
+            candidate[root_len + 1] = 0;
+            evidence = leo_school_family_try_base(leo, candidate, base);
+            if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        }
+    }
+
+    if (len > 4 && !strcmp(surface + len - 2, "ed")) {
+        strncpy(candidate, surface, len - 1); /* loved -> love */
+        candidate[len - 1] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+
+        memcpy(candidate, surface, len - 2); /* walked -> walk */
+        candidate[len - 2] = 0;
+        evidence = leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        size_t root_len = strlen(candidate);
+        if (root_len >= 2 &&
+            candidate[root_len - 1] == candidate[root_len - 2]) {
+            candidate[root_len - 1] = 0; /* stopped -> stop */
+            evidence = leo_school_family_try_base(leo, candidate, base);
+            if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        }
+    }
+
+    if (len > 4 && surface[len - 1] == 'y') {
+        memcpy(candidate, surface, len - 1); /* rainy -> rain */
+        candidate[len - 1] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        size_t root_len = strlen(candidate);
+        if (root_len >= 2 &&
+            candidate[root_len - 1] == candidate[root_len - 2]) {
+            candidate[root_len - 1] = 0; /* sunny -> sun */
+            evidence = leo_school_family_try_base(leo, candidate, base);
+            if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        }
+    }
+
+    if (len > 5 && !strcmp(surface + len - 4, "iest")) {
+        memcpy(candidate, surface, len - 4);
+        candidate[len - 4] = 'y';
+        candidate[len - 3] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+    }
+
+    if (len > 5 && !strcmp(surface + len - 3, "est")) {
+        strncpy(candidate, surface, len - 2); /* largest -> large */
+        candidate[len - 2] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        memcpy(candidate, surface, len - 3); /* warmest -> warm */
+        candidate[len - 3] = 0;
+        evidence = leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        size_t root_len = strlen(candidate);
+        if (root_len >= 2 &&
+            candidate[root_len - 1] == candidate[root_len - 2]) {
+            candidate[root_len - 1] = 0; /* biggest -> big */
+            evidence = leo_school_family_try_base(leo, candidate, base);
+            if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        }
+    }
+
+    if (len > 4 && !strcmp(surface + len - 2, "er")) {
+        strncpy(candidate, surface, len - 1); /* larger -> large */
+        candidate[len - 1] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        memcpy(candidate, surface, len - 2); /* calmer -> calm */
+        candidate[len - 2] = 0;
+        evidence = leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+    }
+
+    static const char *const suffixes[] = {
+        "fulness", "lessness", "ness", "less", "ful", "ly", NULL
+    };
+    for (int i = 0; suffixes[i]; i++) {
+        size_t suffix_len = strlen(suffixes[i]);
+        if (len <= suffix_len + 2 ||
+            strcmp(surface + len - suffix_len, suffixes[i]))
+            continue;
+        memcpy(candidate, surface, len - suffix_len);
+        candidate[len - suffix_len] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        size_t root_len = strlen(candidate);
+        if (!strcmp(suffixes[i], "ly") &&
+            root_len + 1 < LEO_HEARD_WORDLEN) {
+            candidate[root_len] = 'e'; /* gently -> gentle */
+            candidate[root_len + 1] = 0;
+            evidence = leo_school_family_try_base(leo, candidate, base);
+            if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+        }
+    }
+
+    if (len > 6 && !strcmp(surface + len - 5, "iness")) {
+        memcpy(candidate, surface, len - 5);
+        candidate[len - 5] = 'y'; /* happiness -> happy */
+        candidate[len - 4] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+    }
+
+    if (len > 4 && !strcmp(surface + len - 3, "ies")) {
+        memcpy(candidate, surface, len - 3);
+        candidate[len - 3] = 'y';
+        candidate[len - 2] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+    }
+
+    if (len > 4 && !strcmp(surface + len - 2, "es")) {
+        memcpy(candidate, surface, len - 2);
+        candidate[len - 2] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+    }
+
+    /* A whole-word exception protects the indivisible noun `news` from the
+     * otherwise productive final-s family. */
+    if (len > 3 && surface[len - 1] == 's' &&
+        surface[len - 2] != 's' && strcmp(surface, "news")) {
+        memcpy(candidate, surface, len - 1);
+        candidate[len - 1] = 0;
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_family_try_base(leo, candidate, base);
+        if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+    }
+    return LEO_SCHOOL_FAMILY_NONE;
+}
 /* scan the prompt's content words; copy the first one Leo has no concept for
  * (not a function/stop word, semtok < 0, not already learned) into out. 1 = found. */
 /* §4/N-4: is w one of Leo's ORIGIN (dedication) words? The dedication ingest
@@ -6798,11 +7115,14 @@ static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out
             int natural = g_leo_school_natural_word_boundary_on ?
                 leo_school_natural_candidate(leo, cur, candidate) : 0;
             const char *word = natural ? candidate : cur;
+            int family_familiar = g_leo_school_lexical_family_on &&
+                leo_school_lexical_family(leo, word, NULL) !=
+                    LEO_SCHOOL_FAMILY_NONE;
             if ((natural || !g_leo_school_natural_word_boundary_on) &&
                 !leo_word_is_function(word) &&
                 !leo_school_word_is_operator(word) &&
                 !semtok_is_stop_word(word) &&
-                leo_school_unknown(leo, word)) {
+                leo_school_unknown(leo, word) && !family_familiar) {
                 int heard = leo_heard_count(&leo->heard, word);
                 int remembered = g_leo_wonder_on &&
                     g_leo_deferred_wonder_on &&
@@ -14577,6 +14897,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school")) g_leo_school_on = 0;
         else if (!strcmp(argv[i], "--school-natural-word-boundary")) g_leo_school_natural_word_boundary_on = 1;
         else if (!strcmp(argv[i], "--no-school-natural-word-boundary")) g_leo_school_natural_word_boundary_on = 0;
+        else if (!strcmp(argv[i], "--school-lexical-family")) g_leo_school_lexical_family_on = 1;
+        else if (!strcmp(argv[i], "--no-school-lexical-family")) g_leo_school_lexical_family_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;

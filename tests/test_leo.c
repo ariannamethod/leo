@@ -5685,6 +5685,112 @@ static TEST_NOINLINE void test_natural_school_word_boundary(void) {
     test_leo_delete(boundary);
 }
 
+static TEST_NOINLINE void test_school_lexical_family(void) {
+    /* A.120: School refuses only a whole-word family relation backed by a
+     * concept or by repeated hearing. Productive suffixes, closed irregular
+     * bridges, and complete compounds share that evidence boundary. */
+    Leo *family = test_leo_alloc();
+    leo_init(family);
+    int previous = g_leo_school_lexical_family_on;
+    g_leo_school_lexical_family_on = 1;
+
+    static const char *const witnessed[] = {
+        "belong", "calm", "respect", "dust", "neighbour", "brought", NULL
+    };
+    for (int i = 0; witnessed[i]; i++)
+        for (int n = 0; n <= LEO_SCHOOL_NOVEL_MAX; n++)
+            leo_heard_add(&family->heard, witnessed[i]);
+
+    struct FamilyCase {
+        const char *surface;
+        const char *base;
+        LeoSchoolFamilyEvidence evidence;
+    } cases[] = {
+        {"rainy", "rain", LEO_SCHOOL_FAMILY_MEANING},
+        {"belonged", "belong", LEO_SCHOOL_FAMILY_HEARD},
+        {"outdoors", "outdoor", LEO_SCHOOL_FAMILY_COMPOUND},
+        {"dusty", "dust", LEO_SCHOOL_FAMILY_HEARD},
+        {"calmer", "calm", LEO_SCHOOL_FAMILY_HEARD},
+        {"respecting", "respect", LEO_SCHOOL_FAMILY_HEARD},
+        {"loved", "love", LEO_SCHOOL_FAMILY_MEANING},
+        {"making", "make", LEO_SCHOOL_FAMILY_MEANING},
+        {"stopped", "stop", LEO_SCHOOL_FAMILY_MEANING},
+        {"mothers", "mother", LEO_SCHOOL_FAMILY_MEANING},
+        {"stories", "story", LEO_SCHOOL_FAMILY_MEANING},
+        {"peaceful", "peace", LEO_SCHOOL_FAMILY_MEANING},
+        {"kindness", "kind", LEO_SCHOOL_FAMILY_MEANING},
+        {"happiness", "happy", LEO_SCHOOL_FAMILY_MEANING},
+        {"bedroom", "bedroom", LEO_SCHOOL_FAMILY_COMPOUND},
+        {"sunlight", "sunlight", LEO_SCHOOL_FAMILY_COMPOUND},
+        {"neighbor", "neighbour", LEO_SCHOOL_FAMILY_HEARD},
+        {"neighbors", "neighbour", LEO_SCHOOL_FAMILY_HEARD},
+        {"loss", "lost", LEO_SCHOOL_FAMILY_MEANING},
+        {"losses", "lost", LEO_SCHOOL_FAMILY_MEANING},
+        {"bring", "brought", LEO_SCHOOL_FAMILY_HEARD},
+        {"brings", "brought", LEO_SCHOOL_FAMILY_HEARD},
+        {"lover", "love", LEO_SCHOOL_FAMILY_MEANING},
+        {NULL, NULL, LEO_SCHOOL_FAMILY_NONE}
+    };
+    for (int i = 0; cases[i].surface; i++) {
+        char base[LEO_HEARD_WORDLEN] = {0};
+        char label[128];
+        LeoSchoolFamilyEvidence evidence = leo_school_lexical_family(
+            family, cases[i].surface, base);
+        snprintf(label, sizeof label,
+                 "lexical-family: %s reaches only its witnessed relative",
+                 cases[i].surface);
+        CHECK(evidence == cases[i].evidence &&
+                  !strcmp(base, cases[i].base), label);
+    }
+
+    static const char *const refusals[] = {
+        "beneath", "news", "moth", "thing", "without", "raincoat",
+        "smooth", "fragile", "zorbled", NULL
+    };
+    for (int i = 0; refusals[i]; i++) {
+        char base[LEO_HEARD_WORDLEN] = {0};
+        char label[128];
+        LeoSchoolFamilyEvidence evidence = leo_school_lexical_family(
+            family, refusals[i], base);
+        snprintf(label, sizeof label,
+                 "lexical-family: %s cannot borrow an unwitnessed substring",
+                 refusals[i]);
+        CHECK(evidence == LEO_SCHOOL_FAMILY_NONE && !base[0], label);
+    }
+
+    leo_school_learn(family, "zorble", semtok_find_glyph("water"));
+    char learned_base[LEO_HEARD_WORDLEN] = {0};
+    CHECK(leo_school_lexical_family(family, "zorbled", learned_base) ==
+              LEO_SCHOOL_FAMILY_MEANING && !strcmp(learned_base, "zorble"),
+          "lexical-family: a human-taught root immediately grows a family");
+
+    char unknown[LEO_HEARD_WORDLEN] = {0};
+    CHECK(!leo_school_find_unknown(family, "rainy", unknown) &&
+              !leo_school_find_unknown(family, "belonged", unknown) &&
+              !leo_school_find_unknown(family, "outdoors", unknown) &&
+              !leo_school_find_unknown(family, "neighbor", unknown) &&
+              !leo_school_find_unknown(family, "loss", unknown) &&
+              !leo_school_find_unknown(family, "bring", unknown),
+          "lexical-family: witnessed relatives do not masquerade as School novelty");
+    CHECK(leo_school_find_unknown(family, "beneath", unknown) &&
+              !strcmp(unknown, "beneath") &&
+              leo_school_find_unknown(family, "smooth", unknown) &&
+              !strcmp(unknown, "smooth"),
+          "lexical-family: unrelated whole words remain honest questions");
+
+    g_leo_school_lexical_family_on = 0;
+    CHECK(leo_school_find_unknown(family, "rainy", unknown) &&
+              !strcmp(unknown, "rainy") &&
+              leo_school_find_unknown(family, "belonged", unknown) &&
+              !strcmp(unknown, "belonged") &&
+              leo_school_find_unknown(family, "outdoors", unknown) &&
+              !strcmp(unknown, "outdoors"),
+          "lexical-family: explicit ablation restores surface-form questions");
+
+    g_leo_school_lexical_family_on = previous;
+    test_leo_delete(family);
+}
+
 static TEST_NOINLINE void test_wonder_ablation(void) {
     /* W-3 ablation: --no-wonder restores the exact old School semantics — one
      * primary guess only, and the next turn closes the pending UI question. */
@@ -8027,6 +8133,7 @@ int main(void) {
     test_wonder_appetite_reliability();
     test_school_form_and_wonder();
     test_natural_school_word_boundary();
+    test_school_lexical_family();
     test_wonder_persistence();
     test_wonder_ablation();
     test_wonder_negation();

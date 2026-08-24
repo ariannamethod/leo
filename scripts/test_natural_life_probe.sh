@@ -37,7 +37,8 @@ cmp -s "$TMP/first/state/leo.state" "$TMP/second/state/leo.state"
 grep -q '^result[[:space:]]natural-life-observed-not-judged$' "$TMP/first/summary.txt"
 jq -e '.source == "frozen-visible-replay" and .api_store == null and
        .diagnostics_visible_to_interlocutor == false and
-       .school_natural_word_boundary == true' "$TMP/first/manifest.json" >/dev/null
+       .school_natural_word_boundary == true and
+       .school_lexical_family == true' "$TMP/first/manifest.json" >/dev/null
 
 sed -n '1,2p' "$TMP/prompts.txt" > "$TMP/prompts-first-two.txt"
 LEO_NATURAL_REPLAY_FILE="$TMP/prompts-first-two.txt" \
