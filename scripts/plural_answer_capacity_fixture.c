@@ -76,6 +76,7 @@ static void evidence_maximum(
 int main(int argc, char **argv) {
     Leo *leo = calloc(1, sizeof *leo);
     if (!leo) return 2;
+    g_leo_school_two_glyph_learning_on = 0;
     const char *arm = "candidate";
     if (argc == 2 && !strcmp(argv[1], "--ablation")) {
         arm = "control";

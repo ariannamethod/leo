@@ -75,6 +75,7 @@ while IFS=$'\t' read -r life seed fixture prompts_sha a118_transcript_sha a118_s
         LEO_NATURAL_OFFERED_ANSWER_EXPANSION=0 \
         LEO_NATURAL_FOLLOWUP_QUESTION_SCOPE=0 \
         LEO_NATURAL_UNIQUE_ANSWER_DOMINANCE=0 \
+        LEO_NATURAL_TWO_GLYPH_LEARNING=0 \
         "$ROOT/scripts/natural_life_probe.sh" "$destination" > "$OUT/lives/$life.out"
     transcript_sha="$(shasum -a 256 "$destination/visible_transcript.txt" | awk '{print $1}')"
     state_sha="$(shasum -a 256 "$destination/state/leo.state" | awk '{print $1}')"

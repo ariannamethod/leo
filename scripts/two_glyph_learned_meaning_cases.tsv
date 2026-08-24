@@ -1,0 +1,37 @@
+arm	case	path	prompt	reference	grounded	grounded_alt	learned	primary	alternate	pending	episode_resolved	episode_answer	episode_answer_alt	projected_primary	projected_alternate
+control	natural-both-expansion	pending	Both, really—the body feels stronger, and there’s a quiet joy in making it hold.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	bare-both	pending	both.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	offered-and	pending	body and joy.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	offered-and-reversed	pending	joy and body.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	offered-or	pending	body or joy.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	neither	pending	neither body nor joy.	elliptic	none	none	no	none	none	flom	0	none	none	none	none
+control	both-question	pending	both?	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	delayed-both	pending	both.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	single-offer-both	pending	both.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	duplicate-offer-both	pending	both.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	single-food-expansion	pending	Food—the soup is warm.	elliptic	food	none	yes	food	none	none	1	food	none	food	none
+control	explicit-and	pending	flom is body and joy.	explicit	none	none	no	none	none	flom	0	none	none	none	none
+control	explicit-or	pending	flom is body or joy.	explicit	none	none	no	none	none	flom	0	none	none	none	none
+control	same-turn-and	same-turn	a flom is body and joy	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	same-turn-rich-tie	same-turn	Flom is the gentle comfort of warm light or cool rain	unreferenced	none	none	no	none	none	none	0	none	none	none	none
+control	both-followup	pending	Both. What do you think?	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	both-question-explanation	pending	Both—what do you think?	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+control	ascii-hyphen-both	pending	Both, really--the body feels stronger and joy stays quiet.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+candidate	natural-both-expansion	pending	Both, really—the body feels stronger, and there’s a quiet joy in making it hold.	paired	body	joy	yes	body	joy	none	1	body	joy	body	joy
+candidate	bare-both	pending	both.	paired	body	joy	yes	body	joy	none	1	body	joy	body	joy
+candidate	offered-and	pending	body and joy.	paired	body	joy	yes	body	joy	none	1	body	joy	body	joy
+candidate	offered-and-reversed	pending	joy and body.	paired	body	joy	yes	body	joy	none	1	body	joy	body	joy
+candidate	offered-or	pending	body or joy.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+candidate	neither	pending	neither body nor joy.	elliptic	none	none	no	none	none	flom	0	none	none	none	none
+candidate	both-question	pending	both?	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+candidate	delayed-both	pending	both.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+candidate	single-offer-both	pending	both.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+candidate	duplicate-offer-both	pending	both.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+candidate	single-food-expansion	pending	Food—the soup is warm.	elliptic	food	none	yes	food	none	none	1	food	none	food	none
+candidate	explicit-and	pending	flom is body and joy.	explicit	body	joy	yes	body	joy	none	1	body	joy	body	joy
+candidate	explicit-or	pending	flom is body or joy.	explicit	none	none	no	none	none	flom	0	none	none	none	none
+candidate	same-turn-and	same-turn	a flom is body and joy	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+candidate	same-turn-rich-tie	same-turn	Flom is the gentle comfort of warm light or cool rain	unreferenced	none	none	no	none	none	none	0	none	none	none	none
+candidate	both-followup	pending	Both. What do you think?	paired	body	joy	yes	body	joy	none	1	body	joy	body	joy
+candidate	both-question-explanation	pending	Both—what do you think?	unreferenced	none	none	no	none	none	flom	0	none	none	none	none
+candidate	ascii-hyphen-both	pending	Both, really--the body feels stronger and joy stays quiet.	unreferenced	none	none	no	none	none	flom	0	none	none	none	none

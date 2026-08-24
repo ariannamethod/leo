@@ -10346,3 +10346,90 @@ Historical rechecks are in
 `/private/tmp/leo-a119-a125-post-a126-20260824`.
 
 A tie is not a meaning. Not knowing is smaller than a lie.
+
+## Phase A.127 - one answer may keep both offered meanings (2026-08-24)
+
+A.126 proved that a statistical tie is not one dominant meaning. It did not
+give Leo a plural learned representation, so the natural making answer
+`Both, really—the body feels stronger, and there’s a quiet joy in making it
+hold.` still left `sturdier` unfinished. A.127 adds exactly that missing
+capacity without reopening the index-order fabrication that A.126 removed.
+
+One grown School word may now hold a primary and one distinct alternate glyph.
+That pair is admitted only when an active Wonder offered two valid, distinct
+hypotheses and the human surface relates those same hypotheses explicitly.
+Adjacent `both`, the two offered meanings joined by `and`, and a later explicit
+`flom is body and joy` can teach the pair. Storage order follows Leo's offered
+hypotheses rather than human word order. A separate follow-up question may
+follow a completed `Both.` answer under A.122's existing boundary.
+
+This is not general polysemy and it is not a new tie-breaking rule. `or`,
+`either`, `neither`, negation, a question, a third meaning, one offered glyph,
+duplicated hypotheses, and delayed anonymous `both` do not resolve the Wonder.
+Neither `a flom is body and joy` nor a rich same-turn thematic tie creates a
+pair, because no prior Wonder offered those two meanings. A.125's one-option
+U+2014 answer remains singular. Its em-dash question and an ASCII-hyphen
+counterfeit remain refused.
+
+The second glyph is read wherever learned meaning actually enters the body:
+School votes, answer evidence, elliptic reference, perceived meaning, and
+resolved-Wonder return. A returned paired answer divides its answer mass
+equally across the two stored glyphs; it does not silently double the old
+single-answer weight. The historical singular accessor continues to expose the
+primary glyph to old mechanical callers.
+
+State version 28 appends the alternate learned glyphs and alternate Wonder
+answers after the complete v27 body. The old School and Wonder disk records are
+frozen rather than reinterpreted through the larger in-memory structs. Bodies
+v5--v27 wake with no invented partners. A truncated or invalid v28 extension
+warns and fails soft to the intact primary meanings. The named
+`--no-school-two-glyph-learning` ablation writes the exact v27 path unless an
+already learned pair must be preserved; turning the parser off cannot erase
+existing plural memory.
+
+The preregistered direct court contains 18 cases in both arms. Control learns
+none of the paired forms. Candidate learns both `body` and `joy` for the four
+adjacent offered forms, the delayed explicit `and`, and the bounded `Both.`
+plus follow-up. All refusal cases remain unfinished, and the singular food
+case remains exactly one `food` meaning. The learned pair survives save/load,
+both glyphs re-enter later semantic readers, and a handcrafted v27 body wakes
+with only its historical primary meaning.
+
+The natural matrix replays the three frozen A.125 lives in both arms: 144 local
+turns and no API request. Every A.127-off control transcript and final body is
+byte-identical to A.126. With A.127 on, making turn 2 resolves `sturdier` as
+`body+joy`; open-Wonder turns fall from 24 to 15 and the later trajectory asks
+`unhurried` at turn 11. That later transcript divergence is a consequence of
+the now-closed mouth, not a claim that the resulting prose is better. Meal and
+walk contain no paired lesson, so their visible transcripts remain exactly
+A.126. Their saved bytes differ only because the default-on bodies carry the
+new v28 empty alternate-meaning tail.
+
+Historical A.119--A.126 courts explicitly disable A.127 and reproduce their
+frozen contracts exactly. During that audit, an initially incorrect plural
+reader treated a known non-concept glyph as unknown dark matter and changed
+the A.126 control after its second turn. The exact replay caught it; restoring
+the historical known-grammar/unknown-word distinction returned all six A.126
+lives byte for byte. A.125's standalone C fixture was also explicitly frozen
+under the A.127 ablation rather than allowed to inherit a new default.
+
+The full suite passes `709/709` unit checks plus every script gate. Unit and
+production ASan/UBSan runs are clean. No coefficient, sampler, Flow law,
+state-swarm organ, or general voice reader changes. No parser result, state
+roundtrip, reduced open-Wonder count, or transcript checksum proves coherent
+expression.
+
+Canonical evidence:
+`/private/tmp/leo-two-glyph-learned-meaning-a127-natural-verify-final`.
+The preregistered plan SHA is
+`83f7f5476b428b78c166824f54be6a6218810a0f5f8c78b2758ac33f8da0a980`,
+the exact 36-row anatomy SHA is
+`7ec619c77ea412a72f03995503e3e684b3dbdb052b7e30e0c5c87ec6aa6d6a5d`,
+and the exact six-life natural matrix SHA is
+`514634c6a689db3810fc3c37a50a157e9f0b12832198bf93a965ddb550fe6933`.
+Historical A.119--A.123 rechecks are in
+`/private/tmp/leo-a127-history-r2.6PbWHS`; the exact A.125 and A.126 rechecks
+are in `/private/tmp/leo-natural-answer-form-post-a127-r2-20260824` and
+`/private/tmp/leo-plural-answer-capacity-post-a127-fix-20260824`.
+
+Both meanings were offered. This time neither had to disappear.
