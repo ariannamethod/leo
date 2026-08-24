@@ -1,0 +1,14 @@
+case	prompt	default_reask	default_shadow_invite	ablation_reask	ablation_shadow_invite
+exact-statement	the zorble still puzzles me	1	1	1	1
+exact-question	what is zorble?	1	1	1	1
+anaphoric-inverted	is it water?	1	1	1	1
+anaphoric-declarative	that is animal?	1	1	1	1
+anaphoric-modal	could it be water?	1	1	1	1
+plain-hypothesis	the cup holds water	0	0	1	1
+other-subject-question	are you holding water?	0	0	1	1
+nominal-subject-question	is the stone water?	0	0	1	1
+prior-clause-only	water is nearby. What do you hear?	0	0	1	1
+both-unreferenced	water and animal move together	0	0	1	1
+sensory-anaphora	that sounds like water. What do you hear?	0	0	1	1
+what-about	what about animal?	0	0	1	1
+unrelated	the room is quiet	0	0	0	0

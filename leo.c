@@ -2930,6 +2930,7 @@ static int g_leo_school_natural_word_boundary_on = 1; /* A.119: curly apostrophe
 static int g_leo_school_lexical_family_on = 1; /* A.120: a high-confidence known family cannot masquerade as a novel School word. */
 static int g_leo_school_lexical_role_on = 1; /* A.121: exact relational/polarity grammar cannot masquerade as a teachable thing. */
 static int g_leo_school_answer_followup_on = 1; /* A.122: a bounded answer may precede a separate human follow-up question. */
+static int g_leo_wonder_reask_reference_on = 1; /* A.123: one guessed glyph cannot recall an unnamed Wonder without an anaphoric hypothesis question. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
@@ -7567,14 +7568,135 @@ static void leo_wonder_resolve(Leo *leo, int answer_glyph) {
     ep->closed_step = leo->step;
 }
 
-static int leo_wonder_resonates(const Leo *leo, const char *prompt) {
-    if (!leo->school.pending[0]) return 0;
-    if (leo_school_text_has_word(prompt, leo->school.pending)) return 1;
+static int leo_wonder_reask_word_is_deictic(const char *word) {
+    return !strcmp(word, "it") || !strcmp(word, "this") ||
+           !strcmp(word, "that");
+}
+
+static int leo_wonder_reask_word_is_copula(const char *word) {
+    static const char *copulas[] = {
+        "am", "is", "are", "was", "were", "be", "been", "being",
+        "become", "becomes", "became",
+        "isn't", "isnt", "aren't", "arent",
+        "wasn't", "wasnt", "weren't", "werent"
+    };
+    for (size_t i = 0; i < sizeof copulas / sizeof copulas[0]; i++)
+        if (!strcmp(word, copulas[i])) return 1;
+    return 0;
+}
+
+static int leo_wonder_reask_word_is_modal(const char *word) {
+    static const char *modals[] = {
+        "can", "could", "will", "would", "shall", "should",
+        "may", "might", "must"
+    };
+    for (size_t i = 0; i < sizeof modals / sizeof modals[0]; i++)
+        if (!strcmp(word, modals[i])) return 1;
+    return 0;
+}
+
+static int leo_wonder_reask_range_has_hypothesis(
+        const Leo *leo, const char *begin, const char *end,
+        int offered_glyph, int offered_alt_glyph) {
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch = p < end ? (unsigned char)*p : 0;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi >= 2) {
+            cur[wi] = 0;
+            int glyph = leo_semtok_word(leo, cur);
+            if (leo_glyph_teachable(glyph) &&
+                (glyph == offered_glyph ||
+                 glyph == offered_alt_glyph))
+                return 1;
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
+/* Without the unknown's name, a hypothesis may recall it only inside a small
+ * anaphoric copular question: "is it water?", "that is water?", or
+ * "could it be water?". The glyph must occur in that same question clause;
+ * an earlier mention cannot lend evidence to a later generic question. */
+static int leo_wonder_reask_anaphoric_question(
+        const Leo *leo, const char *begin, const char *end,
+        int offered_glyph, int offered_alt_glyph) {
+    if (!leo || !begin || !end || end < begin) return 0;
+    char words[4][LEO_HEARD_WORDLEN];
+    int n_words = 0, wi = 0;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch = p < end ? (unsigned char)*p : 0;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (n_words < 4 && wi < LEO_HEARD_WORDLEN - 1)
+                words[n_words][wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0 && n_words < 4) {
+            words[n_words][wi] = 0;
+            n_words++;
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    int referenced =
+        n_words >= 2 &&
+        ((leo_wonder_reask_word_is_deictic(words[0]) &&
+          leo_wonder_reask_word_is_copula(words[1])) ||
+         (leo_wonder_reask_word_is_copula(words[0]) &&
+          leo_wonder_reask_word_is_deictic(words[1])) ||
+         (n_words >= 3 &&
+          leo_wonder_reask_word_is_modal(words[0]) &&
+          leo_wonder_reask_word_is_deictic(words[1]) &&
+          leo_wonder_reask_word_is_copula(words[2])));
+    if (!referenced) return 0;
+
+    return leo_wonder_reask_range_has_hypothesis(
+        leo, begin, end,
+        offered_glyph, offered_alt_glyph);
+}
+
+static int leo_wonder_reask_prompt_references(
+        const Leo *leo, const char *prompt, const char *word,
+        int offered_glyph, int offered_alt_glyph) {
+    if (!leo || !prompt || !word || !word[0]) return 0;
+    if (leo_school_text_has_word(prompt, word)) return 1;
+    if (g_leo_wonder_reask_reference_on) {
+        const char *begin = prompt;
+        for (const char *p = prompt; ; p++) {
+            unsigned char ch = (unsigned char)*p;
+            if (ch == '?' &&
+                leo_wonder_reask_anaphoric_question(
+                    leo, begin, p,
+                    offered_glyph, offered_alt_glyph))
+                return 1;
+            if (!ch) break;
+            if (ch == '.' || ch == '!' || ch == ';' ||
+                ch == ':' || ch == '?')
+                begin = p + 1;
+        }
+        return 0;
+    }
     int hist[GLYPH_COUNT];
     leo_school_glyph_votes(leo, prompt, hist, 1);
-    int g = leo->school.pending_glyph, a = leo->school.pending_alt_glyph;
-    return (g >= 0 && g < GLYPH_COUNT && hist[g] > 0) ||
-           (a >= 0 && a < GLYPH_COUNT && hist[a] > 0);
+    return (offered_glyph >= 0 && offered_glyph < GLYPH_COUNT &&
+            hist[offered_glyph] > 0) ||
+           (offered_alt_glyph >= 0 && offered_alt_glyph < GLYPH_COUNT &&
+            hist[offered_alt_glyph] > 0);
+}
+
+static int leo_wonder_resonates(const Leo *leo, const char *prompt) {
+    if (!leo || !leo->school.pending[0]) return 0;
+    return leo_wonder_reask_prompt_references(
+        leo, prompt, leo->school.pending,
+        leo->school.pending_glyph,
+        leo->school.pending_alt_glyph);
 }
 
 /* A resolved wonder may be recognized later. Select at most one cooled episode,
@@ -11655,31 +11777,25 @@ static const char *leo_calibration_verdict_name(int verdict) {
     return verdict >= 0 && verdict < LEO_CALIB_VERDICT_COUNT ? names[verdict] : "unscorable";
 }
 
-/* The human can causally invite an unfinished question without repeating its
- * title. Mirror Wonder's own open-episode resonance contract against the exact
- * episode named by the proposal: literal target OR either offered hypothesis.
- * This only changes how the observer scores a lived return. */
+/* Mirror the live reask-reference contract against the exact episode named by
+ * the shadow proposal. This only changes how the observer scores a lived
+ * return; it gives the diagnostic no independent notion of human invitation. */
 static int leo_wonder_prompt_invites(const Leo *leo, uint64_t wonder_id,
                                      const char *prompt) {
     const LeoWonderEpisode *ep = leo_wonder_for_id(leo, wonder_id);
     if (!ep || !prompt) return 0;
-    if (leo_flow_prompt_has_word(prompt, ep->word)) return 1;
-    int hist[GLYPH_COUNT];
-    leo_school_glyph_votes(leo, prompt, hist, 1);
-    int offered[2] = {ep->offered_glyph, ep->offered_alt_glyph};
-    for (int i = 0; i < 2; i++)
-        if (offered[i] >= 0 && offered[i] < GLYPH_COUNT &&
-            hist[offered[i]] > 0) return 1;
-    return 0;
+    return leo_wonder_reask_prompt_references(
+        leo, prompt, ep->word,
+        ep->offered_glyph, ep->offered_alt_glyph);
 }
 
 /* Judge the PREVIOUS proposal against this already-lived turn, before writing
  * a proposal for the next one. SPACE/HOLD both forbid immediate pressure;
  * HOLD additionally requires the unfinished identity not to disappear.
  * RELEASE requires that the same identity not reopen. A human who names the
- * target or returns one of that episode's offered hypotheses confounds
- * REASKED/REOPENED: that is a return invited from outside, not evidence that
- * Leo applied autonomous pressure. */
+ * target or asks an offered hypothesis through the same bounded anaphoric law
+ * confounds REASKED/REOPENED: that is a return invited from outside, not
+ * evidence that Leo applied autonomous pressure. */
 static void leo_shadow_calibrate(Leo *leo, const char *prompt) {
     if (!g_leo_shadow_on || !g_leo_flow_on || !leo ||
         leo->shadow.n <= 0 || leo->flow.n <= 0) return;
@@ -15045,6 +15161,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-lexical-role")) g_leo_school_lexical_role_on = 0;
         else if (!strcmp(argv[i], "--school-answer-followup")) g_leo_school_answer_followup_on = 1;
         else if (!strcmp(argv[i], "--no-school-answer-followup")) g_leo_school_answer_followup_on = 0;
+        else if (!strcmp(argv[i], "--wonder-reask-reference")) g_leo_wonder_reask_reference_on = 1;
+        else if (!strcmp(argv[i], "--no-wonder-reask-reference")) g_leo_wonder_reask_reference_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;
