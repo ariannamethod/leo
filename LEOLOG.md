@@ -10433,3 +10433,81 @@ are in `/private/tmp/leo-natural-answer-form-post-a127-r2-20260824` and
 `/private/tmp/leo-plural-answer-capacity-post-a127-fix-20260824`.
 
 Both meanings were offered. This time neither had to disappear.
+
+## Phase A.128 - one witnessed family may survive exact `un-` (2026-08-25)
+
+A.127 closed `sturdier` as the offered pair `body+joy`. That freed School's
+mouth later in the making replay, where turn 11 asked `Unhurried? Go or See?`.
+The first hypothesis for A.128 was that every free School question should scan
+only a bounded human question clause, extending A.125's occupied-queue rule.
+The natural counterfactual rejected that hypothesis: it suppressed the honest
+`Sturdier?` question on making turn 1, and also suppressed `Onions?` and
+`Vulnerable?` in the other lives. The experimental implementation and its
+project files were removed rather than softened into a success claim.
+
+The narrower anatomy is lexical. Leo's corpus has heard the complete word
+`hurry` five times. A.120 already recognizes `hurried` through its bounded
+`ied -> y` family path, but the one-layer family could not compose that result
+through the exact surface prefix `un-`. It therefore treated `unhurried` as a
+new teachable thing even though the body already held the relevant lexical
+family.
+
+A.128 composes exactly one `un-` prefix with exactly one existing whole-word
+family witness. The complete remainder must either be known itself or reach a
+known/heard word through A.120's already bounded suffix, bridge, or compound
+anatomy. Thus `unhurried -> hurried -> hurry`, `unloved -> loved -> love`, and
+a learned `unzorbled -> zorbled -> zorble` can refuse counterfeit novelty.
+This does not search arbitrary substrings and it does not add a general prefix
+table: `unflimmed`, `uncle`, `unique`, `union`, `unit`, and `invisible` remain
+askable in the direct court. No glyph or semantic meaning is assigned to the
+prefixed surface; only School's novelty decision changes.
+
+The named `--no-school-negative-family` ablation restores A.127. A direct 2x2
+shows that this ability does not borrow A.120's runtime switch: with negative
+family off, both lexical-family arms ask `unhurried`; with negative family on,
+both refuse it. The preregistered direct court contains twelve surfaces plus
+that four-arm interaction.
+
+The natural matrix replays the three frozen A.127 lives in both arms: 144 local
+turns and no API request. Every control transcript and body is byte-identical
+to A.127. Candidate making still asks `sturdier` at turn 1 and learns the
+offered `body+joy` pair at turn 2. It no longer asks `unhurried` at turn 11;
+the resulting lived trajectory later asks `prefer` at turn 16. Open-Wonder
+turns fall from 15 to 10. Meal and walk contain no admitted negative-family
+surface and remain byte-identical to A.127 in both visible transcript and
+final body.
+
+~~~text
+arm        making questions          making open    meal exact    walk exact
+control    sturdier@1,unhurried@11              15    yes           yes
+candidate  sturdier@1,prefer@16                 10    yes           yes
+~~~
+
+The later `Prefer?` and lower open-Wonder count are trajectory facts, not proof
+of better language. Leo's generated prose remains fractured. No parser result,
+checksum, family witness, or internally consistent body proves coherent
+expression. A.128 establishes only the bounded lexical-composition refusal.
+
+Historical A.119--A.127 courts explicitly disable A.128 and reproduce their
+frozen contracts exactly. The full suite passes `724/724` unit checks plus
+every script gate. Unit and production ASan/UBSan runs are clean. No state
+format, coefficient, sampler, Flow law, state-swarm organ, learned meaning, or
+voice reader changes.
+
+Canonical evidence:
+`/private/tmp/leo-negative-family-composition-a128-natural-r2`.
+The rejected broad-scope counterfactual remains visible at
+`/private/tmp/leo-fresh-question-scope-a128-natural-r1`, and the complete
+historical replay is
+`/private/tmp/leo-a128-history-20260825`. Production sanitizer receipts are in
+`/private/tmp/leo-negative-family-composition-a128-sanitizers`.
+The preregistered plan SHA is
+`e3fe179eba6e680acec04ea58e3a2a4aa6e6a6b40562fa4c2be419feea737b17`,
+the exact direct anatomy SHA is
+`d498a272c6cfcaca924f5b304dabdcbe8bda605701a17efc6d417d0f4dd5a9aa`,
+the 2x2 interaction SHA is
+`5aebd58dd79524a614913de9ff56727ee9bd2bba50bc261063607ef8ac2150c0`,
+and the exact six-life natural matrix SHA is
+`9fe46dc74c249c7855bd5d9ff205369222fedab0d214823cb24ada8990885df8`.
+
+The word was not new. Leo only needed to keep the path through it.

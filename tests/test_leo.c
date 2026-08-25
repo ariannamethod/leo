@@ -5808,6 +5808,86 @@ static TEST_NOINLINE void test_school_lexical_family(void) {
     test_leo_delete(family);
 }
 
+static TEST_NOINLINE void test_school_negative_family(void) {
+    /* A.128: exact `un-` may compose with one already witnessed A.120
+     * relative. The complete remainder must itself be known or reach a known
+     * whole word; orthographic prefix resemblance alone remains askable. */
+    Leo *family = test_leo_alloc();
+    leo_init(family);
+    int previous = g_leo_school_negative_family_on;
+    int previous_lexical = g_leo_school_lexical_family_on;
+    g_leo_school_negative_family_on = 1;
+    g_leo_school_lexical_family_on = 1;
+    for (int n = 0; n <= LEO_SCHOOL_NOVEL_MAX; n++)
+        leo_heard_add(&family->heard, "hurry");
+    leo_school_learn(
+        family, "zorble", semtok_find_glyph("water"));
+
+    struct NegativeFamilyCase {
+        const char *surface;
+        const char *base;
+        LeoSchoolFamilyEvidence evidence;
+    } cases[] = {
+        {"unhurried", "hurry", LEO_SCHOOL_FAMILY_HEARD},
+        {"unhappy", "happy", LEO_SCHOOL_FAMILY_MEANING},
+        {"unloved", "love", LEO_SCHOOL_FAMILY_MEANING},
+        {"unrainy", "rain", LEO_SCHOOL_FAMILY_MEANING},
+        {"unzorbled", "zorble", LEO_SCHOOL_FAMILY_MEANING},
+        {NULL, NULL, LEO_SCHOOL_FAMILY_NONE}
+    };
+    for (int i = 0; cases[i].surface; i++) {
+        char base[LEO_HEARD_WORDLEN] = {0};
+        char label[128];
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_negative_family(
+                family, cases[i].surface, base);
+        snprintf(label, sizeof label,
+                 "negative-family: %s reaches only its whole-word witness",
+                 cases[i].surface);
+        CHECK(evidence == cases[i].evidence &&
+                  !strcmp(base, cases[i].base), label);
+    }
+
+    static const char *const refusals[] = {
+        "unflimmed", "uncle", "unique", "union", "invisible",
+        "unit", NULL
+    };
+    for (int i = 0; refusals[i]; i++) {
+        char base[LEO_HEARD_WORDLEN] = {0};
+        char label[128];
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_negative_family(
+                family, refusals[i], base);
+        snprintf(label, sizeof label,
+                 "negative-family: %s cannot borrow an un- substring",
+                 refusals[i]);
+        CHECK(evidence == LEO_SCHOOL_FAMILY_NONE && !base[0], label);
+    }
+
+    char unknown[LEO_HEARD_WORDLEN] = {0};
+    CHECK(!leo_school_find_unknown(family, "unhurried", unknown) &&
+              !leo_school_find_unknown(family, "unhappy", unknown) &&
+              !leo_school_find_unknown(family, "unzorbled", unknown),
+          "negative-family: witnessed relatives cannot masquerade as School novelty");
+    CHECK(leo_school_find_unknown(family, "uncle", unknown) &&
+              !strcmp(unknown, "uncle") &&
+              leo_school_find_unknown(family, "unflimmed", unknown) &&
+              !strcmp(unknown, "unflimmed"),
+          "negative-family: indivisible and unwitnessed controls remain honest questions");
+
+    g_leo_school_lexical_family_on = 0;
+    CHECK(!leo_school_find_unknown(family, "unhurried", unknown),
+          "negative-family: the composed witness does not borrow A.120's runtime switch");
+    g_leo_school_negative_family_on = 0;
+    CHECK(leo_school_find_unknown(family, "unhurried", unknown) &&
+              !strcmp(unknown, "unhurried"),
+          "negative-family: named ablation restores the A.127 surface question");
+
+    g_leo_school_negative_family_on = previous;
+    g_leo_school_lexical_family_on = previous_lexical;
+    test_leo_delete(family);
+}
+
 static TEST_NOINLINE void test_school_lexical_role(void) {
     /* A.121: a whole word can carry grammar without naming a teachable thing.
      * The refusal reuses exact relational, polarity, and discourse witnesses;
@@ -8867,6 +8947,7 @@ int main(void) {
     test_school_form_and_wonder();
     test_natural_school_word_boundary();
     test_school_lexical_family();
+    test_school_negative_family();
     test_school_lexical_role();
     test_wonder_persistence();
     test_wonder_ablation();

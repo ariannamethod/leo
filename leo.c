@@ -2954,6 +2954,7 @@ static int g_leo_school_offered_answer_expansion_on = 1; /* A.125: one offered g
 static int g_leo_school_followup_question_scope_on = 1; /* A.125: a separate human question cannot recruit words from the prior answer into the occupied queue. */
 static int g_leo_school_unique_answer_dominance_on = 1; /* A.126: tied meaning evidence cannot be collapsed to the lowest-numbered glyph and called dominant. */
 static int g_leo_school_two_glyph_learning_on = 1; /* A.127: a strict paired answer may preserve both distinct offered meanings. */
+static int g_leo_school_negative_family_on = 1; /* A.128: un- may preserve an exact known or witnessed lexical family instead of manufacturing novelty. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
@@ -7445,6 +7446,29 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
     }
     return LEO_SCHOOL_FAMILY_NONE;
 }
+
+/* A.128: compose one witnessed negative prefix with the already bounded A.120
+ * family relation. This is not substring stemming and it is not a general
+ * English prefix table. Only exact `un-` is admitted, only when the complete
+ * remainder is itself known or reaches one whole-word family witness. Thus
+ * `unhurried` may reach corpus-heard `hurry` through `hurried`, while `uncle`,
+ * `unique`, and an invented root remain honest unknowns. */
+static LeoSchoolFamilyEvidence leo_school_negative_family(
+        const Leo *leo, const char *surface,
+        char base[LEO_HEARD_WORDLEN]) {
+    if (base) base[0] = 0;
+    if (!leo || !surface || strncmp(surface, "un", 2))
+        return LEO_SCHOOL_FAMILY_NONE;
+    size_t len = strlen(surface);
+    if (len <= 4 || len >= LEO_HEARD_WORDLEN)
+        return LEO_SCHOOL_FAMILY_NONE;
+
+    const char *relative = surface + 2;
+    LeoSchoolFamilyEvidence evidence =
+        leo_school_family_try_base(leo, relative, base);
+    if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
+    return leo_school_lexical_family(leo, relative, base);
+}
 /* scan the prompt's content words; copy the first one Leo has no concept for
  * (not a function/stop word, semtok < 0, not already learned) into out. 1 = found. */
 /* §4/N-4: is w one of Leo's ORIGIN (dedication) words? The dedication ingest
@@ -7499,6 +7523,10 @@ static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out
             int family_familiar = g_leo_school_lexical_family_on &&
                 leo_school_lexical_family(leo, word, NULL) !=
                     LEO_SCHOOL_FAMILY_NONE;
+            int negative_family_familiar =
+                g_leo_school_negative_family_on &&
+                leo_school_negative_family(leo, word, NULL) !=
+                    LEO_SCHOOL_FAMILY_NONE;
             int role_familiar = g_leo_school_lexical_role_on &&
                 leo_school_lexical_role(word, NULL) != LEO_SCHOOL_ROLE_NONE;
             if ((natural || !g_leo_school_natural_word_boundary_on) &&
@@ -7506,6 +7534,7 @@ static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out
                 !leo_school_word_is_operator(word) &&
                 !semtok_is_stop_word(word) &&
                 leo_school_unknown(leo, word) && !family_familiar &&
+                !negative_family_familiar &&
                 !role_familiar) {
                 int heard = leo_heard_count(&leo->heard, word);
                 int remembered = g_leo_wonder_on &&
@@ -15641,6 +15670,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-unique-answer-dominance")) g_leo_school_unique_answer_dominance_on = 0;
         else if (!strcmp(argv[i], "--school-two-glyph-learning")) g_leo_school_two_glyph_learning_on = 1;
         else if (!strcmp(argv[i], "--no-school-two-glyph-learning")) g_leo_school_two_glyph_learning_on = 0;
+        else if (!strcmp(argv[i], "--school-negative-family")) g_leo_school_negative_family_on = 1;
+        else if (!strcmp(argv[i], "--no-school-negative-family")) g_leo_school_negative_family_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;
