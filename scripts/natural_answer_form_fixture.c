@@ -84,6 +84,7 @@ static int run_interaction(Leo *leo) {
 int main(int argc, char **argv) {
     Leo *leo = calloc(1, sizeof *leo);
     if (!leo) return 2;
+    g_leo_school_negative_family_on = 0;
     /* This is the frozen A.125 court. A.127 has its own paired-answer
      * fixture and must not rewrite the historical `both` abstention here. */
     g_leo_school_two_glyph_learning_on = 0;

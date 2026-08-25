@@ -1,0 +1,13 @@
+kind	surface	evidence	base	default_question	ablation_question
+natural	unhurried	heard	hurry	none	unhurried
+direct	unhappy	meaning	happy	none	unhappy
+nested	unloved	meaning	love	none	unloved
+nested	unrainy	meaning	rain	none	unrainy
+learned-root	unzorbled	meaning	zorble	none	unzorbled
+unknown-root	unflimmed	none	none	unflimmed	unflimmed
+indivisible	uncle	none	none	uncle	uncle
+indivisible	unique	none	none	unique	unique
+indivisible	union	none	none	union	union
+other-prefix	invisible	none	none	invisible	invisible
+short-relative	unit	none	none	unit	unit
+a120-control	hurried	none	none	none	none
