@@ -2955,6 +2955,7 @@ static int g_leo_school_followup_question_scope_on = 1; /* A.125: a separate hum
 static int g_leo_school_unique_answer_dominance_on = 1; /* A.126: tied meaning evidence cannot be collapsed to the lowest-numbered glyph and called dominant. */
 static int g_leo_school_two_glyph_learning_on = 1; /* A.127: a strict paired answer may preserve both distinct offered meanings. */
 static int g_leo_school_negative_family_on = 1; /* A.128: un- may preserve an exact known or witnessed lexical family instead of manufacturing novelty. */
+static int g_leo_school_reciprocal_s_family_on = 1; /* A.129: a witnessed complete Xs form may keep its bare X relative from masquerading as novelty. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
 static int g_leo_deferred_wonder_on = 1; /* pre-Wonder: a distress-blocked question remains askable when its word returns safely. */
 static int g_leo_occupied_wonder_queue_on = 1; /* a counter-question can wait while another Wonder owns the mouth. */
@@ -7469,6 +7470,36 @@ static LeoSchoolFamilyEvidence leo_school_negative_family(
     if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     return leo_school_lexical_family(leo, relative, base);
 }
+
+/* A.129: admit one observed reciprocal direction of A.120's final-s relation.
+ * Reverse morphology is ambiguous (`always` must not manufacture `alway`), so
+ * this table is closed: a bare unknown may consult only the complete relative
+ * named by lived evidence below. No suffix is generated and no meaning is
+ * assigned to the bare word. */
+static const LeoSchoolFamilyBridge LEO_SCHOOL_RECIPROCAL_S_BRIDGES[] = {
+    {"prefer", "prefers"},
+    {NULL, NULL}
+};
+
+static LeoSchoolFamilyEvidence leo_school_reciprocal_s_family(
+        const Leo *leo, const char *surface,
+        char relative[LEO_HEARD_WORDLEN]) {
+    if (relative) relative[0] = 0;
+    if (!leo || !surface || !surface[0] ||
+        leo_word_is_function(surface) ||
+        leo_school_word_is_operator(surface) ||
+        semtok_is_stop_word(surface) ||
+        !leo_school_unknown(leo, surface))
+        return LEO_SCHOOL_FAMILY_NONE;
+
+    for (int i = 0; LEO_SCHOOL_RECIPROCAL_S_BRIDGES[i].surface; i++) {
+        if (strcmp(surface, LEO_SCHOOL_RECIPROCAL_S_BRIDGES[i].surface))
+            continue;
+        return leo_school_family_try_base(
+            leo, LEO_SCHOOL_RECIPROCAL_S_BRIDGES[i].relative, relative);
+    }
+    return LEO_SCHOOL_FAMILY_NONE;
+}
 /* scan the prompt's content words; copy the first one Leo has no concept for
  * (not a function/stop word, semtok < 0, not already learned) into out. 1 = found. */
 /* §4/N-4: is w one of Leo's ORIGIN (dedication) words? The dedication ingest
@@ -7527,6 +7558,10 @@ static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out
                 g_leo_school_negative_family_on &&
                 leo_school_negative_family(leo, word, NULL) !=
                     LEO_SCHOOL_FAMILY_NONE;
+            int reciprocal_s_family_familiar =
+                g_leo_school_reciprocal_s_family_on &&
+                leo_school_reciprocal_s_family(leo, word, NULL) !=
+                    LEO_SCHOOL_FAMILY_NONE;
             int role_familiar = g_leo_school_lexical_role_on &&
                 leo_school_lexical_role(word, NULL) != LEO_SCHOOL_ROLE_NONE;
             if ((natural || !g_leo_school_natural_word_boundary_on) &&
@@ -7535,6 +7570,7 @@ static int leo_school_scan_unknown(const Leo *leo, const char *prompt, char *out
                 !semtok_is_stop_word(word) &&
                 leo_school_unknown(leo, word) && !family_familiar &&
                 !negative_family_familiar &&
+                !reciprocal_s_family_familiar &&
                 !role_familiar) {
                 int heard = leo_heard_count(&leo->heard, word);
                 int remembered = g_leo_wonder_on &&
@@ -15672,6 +15708,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-two-glyph-learning")) g_leo_school_two_glyph_learning_on = 0;
         else if (!strcmp(argv[i], "--school-negative-family")) g_leo_school_negative_family_on = 1;
         else if (!strcmp(argv[i], "--no-school-negative-family")) g_leo_school_negative_family_on = 0;
+        else if (!strcmp(argv[i], "--school-reciprocal-s-family")) g_leo_school_reciprocal_s_family_on = 1;
+        else if (!strcmp(argv[i], "--no-school-reciprocal-s-family")) g_leo_school_reciprocal_s_family_on = 0;
         else if (!strcmp(argv[i], "--no-wonder")) g_leo_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-deferred-wonder")) g_leo_deferred_wonder_on = 0;
         else if (!strcmp(argv[i], "--no-occupied-wonder-queue")) g_leo_occupied_wonder_queue_on = 0;

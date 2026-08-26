@@ -59,7 +59,7 @@ wonder-reask-reference:
 natural-answer-form:
 	./scripts/natural_answer_form_matrix.sh
 
-.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition
+.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition reciprocal-s-family
 plural-answer-capacity:
 	./scripts/plural_answer_capacity_matrix.sh
 
@@ -68,6 +68,9 @@ two-glyph-learned-meaning:
 
 negative-family-composition:
 	./scripts/negative_family_composition_matrix.sh
+
+reciprocal-s-family:
+	./scripts/reciprocal_s_family_matrix.sh
 
 state-swarm-ecology: leo
 	./scripts/state_swarm_ecology_matrix.sh
@@ -389,6 +392,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_plural_answer_capacity_anatomy.sh
 	./scripts/test_two_glyph_learned_meaning_anatomy.sh
 	./scripts/test_negative_family_composition_anatomy.sh
+	./scripts/test_reciprocal_s_family_anatomy.sh
 	./scripts/test_state_swarm_liminal_confirmation_select.sh
 	./scripts/test_state_swarm_liminal_confirmation_report.sh
 	./scripts/test_state_swarm_liminal_trajectory_fixture.sh

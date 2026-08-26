@@ -59,6 +59,7 @@ static int run_interaction(Leo *leo) {
 int main(int argc, char **argv) {
     Leo *leo = calloc(1, sizeof *leo);
     if (!leo) return 2;
+    g_leo_school_reciprocal_s_family_on = 0;
     seed_body(leo);
     if (argc == 2 && !strcmp(argv[1], "--interaction")) {
         int rc = run_interaction(leo);

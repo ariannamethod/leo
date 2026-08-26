@@ -1,0 +1,11 @@
+kind	surface	evidence	relative	default_question	ablation_question
+natural	prefer	heard	prefers	none	prefer
+learned	prefer	meaning	prefers	none	prefer
+unlisted	zorble	none	none	zorble	zorble
+threshold	prefer	none	none	prefer	prefer
+unheard	narp	none	none	narp	narp
+indivisible	new	none	none	none	none
+doubled-s	pres	none	none	pres	pres
+grammar	alway	none	none	alway	alway
+short	thi	none	none	thi	thi
+forward	prefers	none	none	prefers	prefers
