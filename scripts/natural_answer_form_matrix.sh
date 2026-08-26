@@ -53,6 +53,7 @@ while IFS=$'\t' read -r arm expansion scope; do
             LEO_NATURAL_UNIQUE_ANSWER_DOMINANCE=0 \
             LEO_NATURAL_NEGATIVE_FAMILY=0 \
             LEO_NATURAL_RECIPROCAL_S_FAMILY=0 \
+            LEO_NATURAL_PRESENCE_SURFACE_BOUNDARY=0 \
             "$ROOT/scripts/natural_life_probe.sh" "$destination" \
             > "$OUT/lives/$arm-$life.out"
         transcript_sha="$(shasum -a 256 "$destination/visible_transcript.txt" | awk '{print $1}')"

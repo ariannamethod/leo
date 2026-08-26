@@ -61,6 +61,7 @@ while IFS=$'\t' read -r arm reciprocal; do
             LEO_NATURAL_TWO_GLYPH_LEARNING=1 \
             LEO_NATURAL_NEGATIVE_FAMILY=1 \
             LEO_NATURAL_RECIPROCAL_S_FAMILY="$reciprocal" \
+            LEO_NATURAL_PRESENCE_SURFACE_BOUNDARY=0 \
             "$ROOT/scripts/natural_life_probe.sh" "$destination" \
             > "$OUT/lives/$arm-$life.out"
         transcript_sha="$(shasum -a 256 "$destination/visible_transcript.txt" | awk '{print $1}')"

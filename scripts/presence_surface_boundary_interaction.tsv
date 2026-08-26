@@ -1,0 +1,5 @@
+school_word_boundary	presence_surface_boundary	voice_seen	school_seen
+0	0	1	0
+0	1	0	0
+1	0	1	0
+1	1	0	0
