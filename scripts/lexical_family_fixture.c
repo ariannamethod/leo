@@ -32,6 +32,7 @@ int main(void) {
     if (!leo) return 2;
     g_leo_school_negative_family_on = 0;
     g_leo_school_reciprocal_s_family_on = 0;
+    g_leo_school_family_heard_threshold_on = 0;
     leo_init(leo);
     g_leo_school_lexical_role_on = 0;
 

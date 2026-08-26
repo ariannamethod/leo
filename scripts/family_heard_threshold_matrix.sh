@@ -1,43 +1,43 @@
 #!/usr/bin/env bash
-# A.129: replay the three A.128 lives with and without the closed reciprocal final-s witness.
+# A.131: replay the three A.130 lives with pairwise heard evidence on/off.
 set -Eeuo pipefail
 
-trap 'rc=$?; printf "reciprocal-s-family matrix failed: line=%s rc=%s command=%s\n" "$LINENO" "$rc" "$BASH_COMMAND" >&2; exit "$rc"' ERR
+trap 'rc=$?; printf "family-heard-threshold matrix failed: line=%s rc=%s command=%s\n" "$LINENO" "$rc" "$BASH_COMMAND" >&2; exit "$rc"' ERR
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-OUT="${1:-${TMPDIR:-/tmp}/leo-reciprocal-s-family-$STAMP}"
-CASES="${LEO_RECIPROCAL_S_FAMILY_NATURAL_CASES:-$ROOT/scripts/natural_life_second_generation_frozen.tsv}"
-A128="${LEO_RECIPROCAL_S_FAMILY_A128:-$ROOT/scripts/negative_family_composition_expected.tsv}"
-EXPECTED="${LEO_RECIPROCAL_S_FAMILY_EXPECTED:-$ROOT/scripts/reciprocal_s_family_expected.tsv}"
-PLAN_ONLY="${LEO_RECIPROCAL_S_FAMILY_PLAN_ONLY:-0}"
-VERIFY="${LEO_RECIPROCAL_S_FAMILY_VERIFY:-1}"
+OUT="${1:-${TMPDIR:-/tmp}/leo-family-heard-threshold-$STAMP}"
+CASES="${LEO_FAMILY_HEARD_THRESHOLD_NATURAL_CASES:-$ROOT/scripts/natural_life_second_generation_frozen.tsv}"
+A130="${LEO_FAMILY_HEARD_THRESHOLD_A130:-$ROOT/scripts/presence_surface_boundary_expected.tsv}"
+EXPECTED="${LEO_FAMILY_HEARD_THRESHOLD_EXPECTED:-$ROOT/scripts/family_heard_threshold_expected.tsv}"
+PLAN_ONLY="${LEO_FAMILY_HEARD_THRESHOLD_PLAN_ONLY:-0}"
+VERIFY="${LEO_FAMILY_HEARD_THRESHOLD_VERIFY:-1}"
 
 [ -s "$CASES" ] || { printf 'missing frozen natural cases: %s\n' "$CASES" >&2; exit 2; }
-[ -s "$A128" ] || { printf 'missing A.128 frozen replay: %s\n' "$A128" >&2; exit 2; }
-[ "$PLAN_ONLY" = 0 ] || [ "$PLAN_ONLY" = 1 ] || { printf 'LEO_RECIPROCAL_S_FAMILY_PLAN_ONLY must be 0 or 1\n' >&2; exit 2; }
-[ "$VERIFY" = 0 ] || [ "$VERIFY" = 1 ] || { printf 'LEO_RECIPROCAL_S_FAMILY_VERIFY must be 0 or 1\n' >&2; exit 2; }
-[ "$VERIFY" = 0 ] || [ -s "$EXPECTED" ] || { printf 'missing A.129 frozen replay: %s\n' "$EXPECTED" >&2; exit 2; }
+[ -s "$A130" ] || { printf 'missing A.130 frozen replay: %s\n' "$A130" >&2; exit 2; }
+[ "$PLAN_ONLY" = 0 ] || [ "$PLAN_ONLY" = 1 ] || { printf 'LEO_FAMILY_HEARD_THRESHOLD_PLAN_ONLY must be 0 or 1\n' >&2; exit 2; }
+[ "$VERIFY" = 0 ] || [ "$VERIFY" = 1 ] || { printf 'LEO_FAMILY_HEARD_THRESHOLD_VERIFY must be 0 or 1\n' >&2; exit 2; }
+[ "$VERIFY" = 0 ] || [ -s "$EXPECTED" ] || { printf 'missing A.131 frozen replay: %s\n' "$EXPECTED" >&2; exit 2; }
 [ ! -e "$OUT" ] || { printf 'output path already exists: %s\n' "$OUT" >&2; exit 2; }
 mkdir -p "$OUT/lives"
 
 {
-    printf 'arm\treciprocal_s_family\n'
+    printf 'arm\tfamily_heard_threshold\n'
     printf 'control\t0\n'
     printf 'candidate\t1\n'
 } > "$OUT/plan.tsv"
 
 if [ "$PLAN_ONLY" = 1 ]; then
-    printf 'A.129 reciprocal final-s family plan: %s\n' "$OUT"
+    printf 'A.131 family heard threshold plan: %s\n' "$OUT"
     exit 0
 fi
 
-LEO_RECIPROCAL_S_FAMILY_VERIFY="$VERIFY" \
-    "$ROOT/scripts/reciprocal_s_family_anatomy.sh" \
+LEO_FAMILY_HEARD_THRESHOLD_VERIFY="$VERIFY" \
+    "$ROOT/scripts/family_heard_threshold_anatomy.sh" \
     "$OUT/anatomy" > "$OUT/anatomy.out"
 
-printf 'arm\tlife\tseed\treciprocal_s_family\ttranscript_sha256\tstate_sha256\twonder_open_turns\tschool_questions\ta128_transcript_exact\ta128_state_exact\n' > "$OUT/natural.tsv"
-while IFS=$'\t' read -r arm reciprocal; do
+printf 'arm\tlife\tseed\tfamily_heard_threshold\ttranscript_sha256\tstate_sha256\twonder_open_turns\tschool_questions\ta130_transcript_exact\ta130_state_exact\n' > "$OUT/natural.tsv"
+while IFS=$'\t' read -r arm threshold; do
     [ "$arm" != arm ] || continue
     while IFS=$'\t' read -r life seed fixture prompts_sha _rest; do
         [ "$life" != life ] || continue
@@ -46,13 +46,13 @@ while IFS=$'\t' read -r arm reciprocal; do
         [ "$(shasum -a 256 "$fixture_path" | awk '{print $1}')" = "$prompts_sha" ] || {
             printf 'fixture SHA drift: %s\n' "$life" >&2; exit 2;
         }
-        a128_row="$(awk -F '\t' -v life="$life" '$1 == "candidate" && $2 == life {print; found++} END {if (found != 1) exit 2}' "$A128")"
-        IFS=$'\t' read -r _a128_arm _a128_life _a128_seed _a128_negative a128_transcript a128_state _a128_open _a128_questions _a127_tx _a127_state <<< "$a128_row"
-        [ "$seed" = "$_a128_seed" ] || { printf 'A.128 seed drift: %s\n' "$life" >&2; exit 2; }
+        a130_row="$(awk -F '\t' -v life="$life" '$1 == "candidate" && $2 == life {print; found++} END {if (found != 1) exit 2}' "$A130")"
+        IFS=$'\t' read -r _a130_arm _a130_life _a130_seed _a130_boundary a130_transcript a130_state _a130_open _a130_questions _a129_tx _a129_state <<< "$a130_row"
+        [ "$seed" = "$_a130_seed" ] || { printf 'A.130 seed drift: %s\n' "$life" >&2; exit 2; }
 
         destination="$OUT/lives/$arm/$life"
         LEO_NATURAL_REPLAY_FILE="$fixture_path" \
-            LEO_NATURAL_PHASE=A.129 LEO_NATURAL_LIFE="$life" \
+            LEO_NATURAL_PHASE=A.131 LEO_NATURAL_LIFE="$life" \
             LEO_NATURAL_ARM=replay LEO_NATURAL_SEED="$seed" \
             LEO_NATURAL_TURNS=24 \
             LEO_NATURAL_OFFERED_ANSWER_EXPANSION=1 \
@@ -60,9 +60,9 @@ while IFS=$'\t' read -r arm reciprocal; do
             LEO_NATURAL_UNIQUE_ANSWER_DOMINANCE=1 \
             LEO_NATURAL_TWO_GLYPH_LEARNING=1 \
             LEO_NATURAL_NEGATIVE_FAMILY=1 \
-            LEO_NATURAL_RECIPROCAL_S_FAMILY="$reciprocal" \
-            LEO_NATURAL_PRESENCE_SURFACE_BOUNDARY=0 \
-            LEO_NATURAL_FAMILY_HEARD_THRESHOLD=0 \
+            LEO_NATURAL_RECIPROCAL_S_FAMILY=1 \
+            LEO_NATURAL_PRESENCE_SURFACE_BOUNDARY=1 \
+            LEO_NATURAL_FAMILY_HEARD_THRESHOLD="$threshold" \
             "$ROOT/scripts/natural_life_probe.sh" "$destination" \
             > "$OUT/lives/$arm-$life.out"
         transcript_sha="$(shasum -a 256 "$destination/visible_transcript.txt" | awk '{print $1}')"
@@ -74,10 +74,10 @@ while IFS=$'\t' read -r arm reciprocal; do
               "@" + (.turn | tostring))] | join(",")
         ' "$destination/dialogue.jsonl")"
         transcript_exact=false; state_exact=false
-        [ "$transcript_sha" != "$a128_transcript" ] || transcript_exact=true
-        [ "$state_sha" != "$a128_state" ] || state_exact=true
+        [ "$transcript_sha" != "$a130_transcript" ] || transcript_exact=true
+        [ "$state_sha" != "$a130_state" ] || state_exact=true
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$arm" "$life" "$seed" "$reciprocal" \
+            "$arm" "$life" "$seed" "$threshold" \
             "$transcript_sha" "$state_sha" "$open" "$questions" \
             "$transcript_exact" "$state_exact" >> "$OUT/natural.tsv"
     done < "$CASES"
@@ -93,11 +93,11 @@ awk -F '\t' '
 if [ "$VERIFY" = 1 ]; then
     cmp -s "$EXPECTED" "$OUT/natural.tsv" || {
         diff -u "$EXPECTED" "$OUT/natural.tsv" >&2 || true
-        printf 'A.129 frozen natural replay drift\n' >&2
+        printf 'A.131 frozen natural replay drift\n' >&2
         exit 2
     }
 fi
 
 cat "$OUT/natural.tsv"
-printf 'result\treciprocal-s-family-natural-exact\n'
-printf 'A.129 reciprocal final-s family matrix: %s\n' "$OUT"
+printf 'result\tfamily-heard-threshold-natural-exact\n'
+printf 'A.131 family heard threshold matrix: %s\n' "$OUT"

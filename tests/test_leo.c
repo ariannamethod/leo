@@ -5849,6 +5849,117 @@ static TEST_NOINLINE void test_school_lexical_family(void) {
     test_leo_delete(family);
 }
 
+static TEST_NOINLINE void test_school_family_heard_threshold(void) {
+    /* A.131: heard familiarity may be split across the two witnessed ends of
+     * one relation A.120 already admits. This neither invents a reverse edge
+     * nor pools siblings, substrings, or an unwitnessed relative. */
+    int previous = g_leo_school_family_heard_threshold_on;
+    int previous_lexical = g_leo_school_lexical_family_on;
+    int previous_role = g_leo_school_lexical_role_on;
+    int previous_negative = g_leo_school_negative_family_on;
+    int previous_reciprocal = g_leo_school_reciprocal_s_family_on;
+
+    struct FamilyThresholdCase {
+        const char *surface;
+        const char *relative;
+        int surface_heard;
+        int relative_heard;
+        int learned;
+        LeoSchoolFamilyEvidence candidate;
+        LeoSchoolFamilyEvidence ablation;
+    } cases[] = {
+        {"onions", "onion", 2, 2, 0,
+         LEO_SCHOOL_FAMILY_HEARD, LEO_SCHOOL_FAMILY_NONE},
+        {"zorbles", "zorble", 1, 2, 0,
+         LEO_SCHOOL_FAMILY_HEARD, LEO_SCHOOL_FAMILY_NONE},
+        {"zorbles", "zorble", 1, 1, 0,
+         LEO_SCHOOL_FAMILY_NONE, LEO_SCHOOL_FAMILY_NONE},
+        {"zorbles", "zorble", 3, 0, 0,
+         LEO_SCHOOL_FAMILY_NONE, LEO_SCHOOL_FAMILY_NONE},
+        {"zorbles", "zorble", 1, 3, 0,
+         LEO_SCHOOL_FAMILY_HEARD, LEO_SCHOOL_FAMILY_HEARD},
+        {"zorbles", "zorble", 1, 0, 1,
+         LEO_SCHOOL_FAMILY_MEANING, LEO_SCHOOL_FAMILY_MEANING},
+        {"guided", "guide", 1, 2, 0,
+         LEO_SCHOOL_FAMILY_HEARD, LEO_SCHOOL_FAMILY_NONE},
+        {"neighbor", "neighbour", 1, 2, 0,
+         LEO_SCHOOL_FAMILY_HEARD, LEO_SCHOOL_FAMILY_NONE},
+        {"onion", "onions", 2, 2, 0,
+         LEO_SCHOOL_FAMILY_NONE, LEO_SCHOOL_FAMILY_NONE},
+        {"news", "new", 2, 2, 0,
+         LEO_SCHOOL_FAMILY_NONE, LEO_SCHOOL_FAMILY_NONE},
+        {"press", "pres", 2, 2, 0,
+         LEO_SCHOOL_FAMILY_NONE, LEO_SCHOOL_FAMILY_NONE},
+        {"rain", "training", 2, 2, 0,
+         LEO_SCHOOL_FAMILY_NONE, LEO_SCHOOL_FAMILY_NONE},
+        {NULL, NULL, 0, 0, 0,
+         LEO_SCHOOL_FAMILY_NONE, LEO_SCHOOL_FAMILY_NONE}
+    };
+
+    for (int i = 0; cases[i].surface; i++) {
+        Leo *family = test_leo_alloc();
+        leo_init(family);
+        for (int n = 0; n < cases[i].surface_heard; n++)
+            leo_heard_add(&family->heard, cases[i].surface);
+        for (int n = 0; n < cases[i].relative_heard; n++)
+            leo_heard_add(&family->heard, cases[i].relative);
+        if (cases[i].learned)
+            leo_school_learn(
+                family, cases[i].relative, semtok_find_glyph("water"));
+
+        char base[LEO_HEARD_WORDLEN] = {0};
+        g_leo_school_family_heard_threshold_on = 1;
+        LeoSchoolFamilyEvidence candidate = leo_school_lexical_family(
+            family, cases[i].surface, base);
+        g_leo_school_family_heard_threshold_on = 0;
+        LeoSchoolFamilyEvidence ablation = leo_school_lexical_family(
+            family, cases[i].surface, NULL);
+        char label[192];
+        snprintf(label, sizeof label,
+                 "family-heard-threshold: %s -> %s stays bounded",
+                 cases[i].surface, cases[i].relative);
+        CHECK(candidate == cases[i].candidate &&
+                  ablation == cases[i].ablation &&
+                  (candidate == LEO_SCHOOL_FAMILY_NONE ||
+                   !strcmp(base, cases[i].relative)),
+              label);
+        test_leo_delete(family);
+    }
+
+    Leo *interaction = test_leo_alloc();
+    leo_init(interaction);
+    for (int n = 0; n < 2; n++) {
+        leo_heard_add(&interaction->heard, "onions");
+        leo_heard_add(&interaction->heard, "onion");
+    }
+    g_leo_school_lexical_role_on = 0;
+    g_leo_school_negative_family_on = 0;
+    g_leo_school_reciprocal_s_family_on = 0;
+    for (int lexical = 0; lexical <= 1; lexical++) {
+        for (int threshold = 0; threshold <= 1; threshold++) {
+            char unknown[LEO_HEARD_WORDLEN] = {0};
+            g_leo_school_lexical_family_on = lexical;
+            g_leo_school_family_heard_threshold_on = threshold;
+            int found = leo_school_find_unknown(
+                interaction, "onions", unknown);
+            char label[160];
+            snprintf(label, sizeof label,
+                     "family-heard-threshold: 2x2 lexical=%d threshold=%d",
+                     lexical, threshold);
+            CHECK(found == !(lexical && threshold) &&
+                      (!found || !strcmp(unknown, "onions")),
+                  label);
+        }
+    }
+
+    g_leo_school_family_heard_threshold_on = previous;
+    g_leo_school_lexical_family_on = previous_lexical;
+    g_leo_school_lexical_role_on = previous_role;
+    g_leo_school_negative_family_on = previous_negative;
+    g_leo_school_reciprocal_s_family_on = previous_reciprocal;
+    test_leo_delete(interaction);
+}
+
 static TEST_NOINLINE void test_school_negative_family(void) {
     /* A.128: exact `un-` may compose with one already witnessed A.120
      * relative. The complete remainder must itself be known or reach a known
@@ -9076,6 +9187,7 @@ int main(void) {
     test_school_form_and_wonder();
     test_natural_school_word_boundary();
     test_school_lexical_family();
+    test_school_family_heard_threshold();
     test_school_negative_family();
     test_school_reciprocal_s_family();
     test_school_lexical_role();

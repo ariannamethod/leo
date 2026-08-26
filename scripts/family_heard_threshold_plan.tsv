@@ -1,0 +1,13 @@
+case	surface	relative	surface_heard	relative_heard	candidate_evidence	ablation_evidence	boundary
+natural-onions	onions	onion	2	2	heard	none	the exact A.120 final-s edge may keep familiarity split across its two witnessed ends
+threshold-plural	zorbles	zorble	1	2	heard	none	the third hearing across one admitted pair crosses the existing novelty threshold
+thin-plural	zorbles	zorble	1	1	none	none	two joint hearings remain genuinely thin
+surface-only	zorbles	zorble	3	0	none	none	an unwitnessed relative cannot borrow the surface count
+base-familiar	zorbles	zorble	1	3	heard	heard	the existing A.120 base witness remains sufficient in both arms
+base-learned	zorbles	zorble	1	0	meaning	meaning	explicit learned meaning remains stronger than joint familiarity
+past-pair	guided	guide	1	2	heard	none	one admitted ed-to-e edge may share its two endpoint counts
+closed-bridge	neighbor	neighbour	1	2	heard	none	one listed A.120 bridge may share its two endpoint counts
+reverse-control	onion	onions	2	2	none	none	A.131 creates no productive reverse plural edge
+news-control	news	new	2	2	none	none	the existing indivisible-news exception remains closed
+doubled-s-control	press	pres	2	2	none	none	a doubled-s surface remains outside the final-s edge
+substring-control	rain	training	2	2	none	none	orthographic containment cannot manufacture a family edge
