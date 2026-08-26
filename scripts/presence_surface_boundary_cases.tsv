@@ -1,0 +1,11 @@
+kind	word	displayed_text	candidate_seen	ablation_seen
+exact-lower	rain	Rain waits.	1	1
+exact-case	rain	RAIN.	1	1
+exact-punctuation	rain	The rain, then quiet.	1	1
+infix-training	rain	Training takes time.	0	1
+infix-brain	rain	A brain remembers.	0	1
+infix-train	rain	The train stops.	0	1
+compound-raincoat	rain	His raincoat is warm.	0	1
+possessive-rains	rain	Rain's sound remains.	0	1
+infix-kindness	kind	Kindness arrived.	0	1
+unrelated	rain	The window is quiet.	0	0

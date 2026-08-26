@@ -29,6 +29,7 @@ UNIQUE_ANSWER_DOMINANCE="${LEO_NATURAL_UNIQUE_ANSWER_DOMINANCE:-1}"
 TWO_GLYPH_LEARNING="${LEO_NATURAL_TWO_GLYPH_LEARNING:-1}"
 NEGATIVE_FAMILY="${LEO_NATURAL_NEGATIVE_FAMILY:-1}"
 RECIPROCAL_S_FAMILY="${LEO_NATURAL_RECIPROCAL_S_FAMILY:-1}"
+PRESENCE_SURFACE_BOUNDARY="${LEO_NATURAL_PRESENCE_SURFACE_BOUNDARY:-1}"
 
 case "$ARM" in api|replay|async-a|async-b) ;; *) printf 'invalid arm: %s\n' "$ARM" >&2; exit 2;; esac
 case "$BASE_SEED" in ''|*[!0-9]*) printf 'invalid seed\n' >&2; exit 2;; esac
@@ -47,6 +48,7 @@ case "$TURNS" in ''|*[!0-9]*) printf 'invalid turn count\n' >&2; exit 2;; esac
 [ "$TWO_GLYPH_LEARNING" = 0 ] || [ "$TWO_GLYPH_LEARNING" = 1 ] || { printf 'LEO_NATURAL_TWO_GLYPH_LEARNING must be 0 or 1\n' >&2; exit 2; }
 [ "$NEGATIVE_FAMILY" = 0 ] || [ "$NEGATIVE_FAMILY" = 1 ] || { printf 'LEO_NATURAL_NEGATIVE_FAMILY must be 0 or 1\n' >&2; exit 2; }
 [ "$RECIPROCAL_S_FAMILY" = 0 ] || [ "$RECIPROCAL_S_FAMILY" = 1 ] || { printf 'LEO_NATURAL_RECIPROCAL_S_FAMILY must be 0 or 1\n' >&2; exit 2; }
+[ "$PRESENCE_SURFACE_BOUNDARY" = 0 ] || [ "$PRESENCE_SURFACE_BOUNDARY" = 1 ] || { printf 'LEO_NATURAL_PRESENCE_SURFACE_BOUNDARY must be 0 or 1\n' >&2; exit 2; }
 [ -n "$PHASE" ] && [ -n "$LIFE" ] && [ -n "$OPENING" ] || { printf 'phase, life, and opening must not be empty\n' >&2; exit 2; }
 if [ -n "$REPLAY_FILE" ]; then
     [ -f "$REPLAY_FILE" ] || { printf 'missing replay file: %s\n' "$REPLAY_FILE" >&2; exit 2; }
@@ -152,6 +154,7 @@ for ((turn = start_turn; turn <= TURNS; turn++)); do
     [ "$TWO_GLYPH_LEARNING" = 1 ] || args+=(--no-school-two-glyph-learning)
     [ "$NEGATIVE_FAMILY" = 1 ] || args+=(--no-school-negative-family)
     [ "$RECIPROCAL_S_FAMILY" = 1 ] || args+=(--no-school-reciprocal-s-family)
+    [ "$PRESENCE_SURFACE_BOUNDARY" = 1 ] || args+=(--no-presence-surface-boundary)
     "$BIN" "${args[@]}" < "$input" > "$raw" 2>&1
     if [ "$turn" -gt 1 ]; then
         grep -Fq "[leo] loaded state from $STATE" "$raw" || {
@@ -242,6 +245,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
     --argjson two_glyph_learning "$TWO_GLYPH_LEARNING" \
     --argjson negative_family "$NEGATIVE_FAMILY" \
     --argjson reciprocal_s_family "$RECIPROCAL_S_FAMILY" \
+    --argjson presence_surface_boundary "$PRESENCE_SURFACE_BOUNDARY" \
     '{phase: $phase, life: $life, arm: $arm, model_requested: $model,
       opening_cue: $opening, source: $source, base_seed: $base_seed,
       turns: $turns, async: ($async == 1), api_store: (if $source == "responses-api-visible-transcript" then false else null end),
@@ -257,6 +261,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
       school_two_glyph_learning: ($two_glyph_learning == 1),
       school_negative_family: ($negative_family == 1),
       school_reciprocal_s_family: ($reciprocal_s_family == 1),
+      presence_surface_boundary: ($presence_surface_boundary == 1),
       transcript_visible_to_interlocutor: ($source == "responses-api-visible-transcript"),
       diagnostics_visible_to_interlocutor: false,
       state_sha256: $state_sha, transcript_sha256: $transcript_sha,

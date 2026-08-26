@@ -2915,6 +2915,7 @@ static void leo_ingest(Leo *leo, const char *text) {
 #define LEO_ARC_ETA          0.3f   /* how much each spoken word deforms the arc (L2-normalized after — no saturation) */
 #define LEO_START_GRAVITY_W  3.0f   /* theme tilt on the start token */
 static int g_leo_presence_on = 1;   /* --no-presence → 0 (ablation baseline) */
+static int g_leo_presence_surface_boundary_on = 1; /* A.130: a displayed substring cannot counterfeit the exact heard word. */
 static int g_leo_dario_on    = 1;   /* --no-dario → 0 (Dario boundary-injection off) */
 /* Dario boundary-injection (paper-style, field-free): between sentences,
  * deepen the theme's NON-DIRECT associations (gravity-raised neighbours, not
@@ -5046,6 +5047,47 @@ static int leo_visible_len(const char *s) {
     return n - i > 0 ? n - i : 0;
 }
 
+/* Whole-word receipt shared by voice presence and School. Apostrophes remain
+ * inside a word, so "rain's" cannot certify that the exact heard word "rain"
+ * surfaced. Punctuation closes a word; matching is ASCII case-insensitive. */
+static int leo_text_has_word(const char *text, const char *word) {
+    if (!text || !word || !word[0]) return 0;
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0;
+    for (const char *p = text; ; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (!strcmp(cur, word)) return 1;
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
+/* A.130's named ablation is exact: it restores the former lowercase strstr
+ * receipt rather than approximating it through a different reader. */
+static int leo_presence_surface_seen(const char *text, const char *word) {
+    if (!text || !word || !word[0]) return 0;
+    if (g_leo_presence_surface_boundary_on)
+        return leo_text_has_word(text, word);
+    char low[1024];
+    int n = (int)strlen(text);
+    if (n > (int)sizeof(low) - 1) n = (int)sizeof(low) - 1;
+    for (int i = 0; i < n; i++) {
+        char c = text[i];
+        low[i] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
+    }
+    low[n] = 0;
+    return strstr(low, word) != NULL;
+}
+
 /* SPA — Sentence Phonon Attention (port from q, postgpt_q.c:1461). After the chain is
  * generated, embed each sentence as the exp-weighted mean of its tokens' w_embed[32]
  * (recency-weighted, L2-normed), cross-attend (cos + distance bias) for a per-sentence
@@ -5199,16 +5241,10 @@ static int leo_chain(Leo *leo, int n_sentences, char *out, int max_len) {
             }
         }
         total += produced;
-        if (wstr[0] && !surfaced) {        /* scan the DISPLAYED text, not tokens */
-            char low[1024];
-            int  tl = (int)strlen(sent_text[s]);
-            if (tl > 1023) tl = 1023;
-            for (int i = 0; i < tl; i++) {
-                char c = sent_text[s][i];
-                low[i] = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
-            }
-            low[tl] = 0;
-            if (strstr(low, wstr)) { surfaced = 1; surfaced_idx = s; }
+        if (wstr[0] && !surfaced &&
+            leo_presence_surface_seen(sent_text[s], wstr)) {
+            surfaced = 1;
+            surfaced_idx = s;
         }
         int sn = tok_cap > LEO_GEN_MAX ? LEO_GEN_MAX : tok_cap;   /* store sentence tokens for SPA */
         for (int i = 0; i < sn; i++) sent_tok[s][i] = sent_ids[i];
@@ -7606,22 +7642,7 @@ static int leo_school_find_unknown(const Leo *leo, const char *prompt, char *out
 }
 
 static int leo_school_text_has_word(const char *text, const char *word) {
-    if (!text || !word || !word[0]) return 0;
-    char cur[LEO_HEARD_WORDLEN]; int wi = 0;
-    for (const char *p = text; ; p++) {
-        unsigned char ch = (unsigned char)*p;
-        if (ch && (isalpha(ch) || ch == '\'')) {
-            if (wi < LEO_HEARD_WORDLEN - 1) cur[wi++] = (char)tolower(ch);
-            continue;
-        }
-        if (wi > 0) {
-            cur[wi] = 0;
-            if (!strcmp(cur, word)) return 1;
-        }
-        wi = 0;
-        if (!ch) break;
-    }
-    return 0;
+    return leo_text_has_word(text, word);
 }
 
 /* A human answer must assert grounded, teachable glyph evidence and refer to
@@ -15667,6 +15688,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = atol(argv[++i]);
         else if (!strcmp(argv[i], "--respond") && i + 1 < argc) respond_prompt = argv[++i];
         else if (!strcmp(argv[i], "--no-presence")) g_leo_presence_on = 0;
+        else if (!strcmp(argv[i], "--presence-surface-boundary")) g_leo_presence_surface_boundary_on = 1;
+        else if (!strcmp(argv[i], "--no-presence-surface-boundary")) g_leo_presence_surface_boundary_on = 0;
         else if (!strcmp(argv[i], "--no-dario")) g_leo_dario_on = 0;
         else if (!strcmp(argv[i], "--no-heard")) g_leo_heard_on = 0;
         else if (!strcmp(argv[i], "--no-register")) g_leo_register_on = 0;

@@ -10585,3 +10585,65 @@ and the exact six-life natural matrix SHA is
 `533c35de7eec6f6072f7ae80ec67ca230673da5bfe54d8aa52b28abe349ad7bd`.
 
 The relation was heard. The reverse path had to be earned, not guessed.
+
+## Phase A.130 - a displayed neighbour cannot counterfeit presence (2026-08-26)
+
+A.129 left no new dishonest School question in its three frozen lives. Reading
+the complete 72-turn transcripts exposed a different, older mechanical risk in
+the voice path. `leo_chain` decided that the primary heard word had surfaced by
+lowercasing each displayed sentence and calling `strstr`. Thus `training`,
+`brain`, `train`, or `raincoat` could certify that `rain` itself had been said.
+That receipt controls both the later presence fallback and the sentence index
+protected from SPA reseeding. The larger surface was therefore able to close a
+path reserved for the exact heard word.
+
+A.130 replaces that one receipt with a case-insensitive whole-word reader over
+the text the human actually sees. Punctuation closes a word. An apostrophe
+remains inside it, so `rain's` is a distinct surface and cannot certify `rain`.
+The existing School whole-word reader now delegates to the same primitive;
+School's decisions and switches are unchanged. This is a reader boundary, not
+a grammar correction, morphological inference, new token source, or prose
+polisher.
+
+The named `--no-presence-surface-boundary` ablation restores the former
+lowercase `strstr` behavior exactly. The direct court contains ten frozen
+surfaces. Exact lowercase, uppercase, and punctuated `rain` pass in both arms.
+`training`, `brain`, `train`, `raincoat`, `rain's`, and `kindness` pass only in
+the ablation; an unrelated sentence passes neither. A separate 2x2 crosses the
+new switch with School's natural-word-boundary switch. Only the presence switch
+changes the voice receipt, while School continues to reject the substring in
+all four cells.
+
+The natural matrix replays the three frozen A.129 lives in both arms: 144 local
+turns and no API request. Every transcript and final body is byte-identical to
+A.129, including all School questions and open-Wonder counts. An independent
+turn-level audit of the 72 A.129 replies found zero cases where the primary
+heard word appeared only as a substring. A.130 therefore claims no observed
+natural-dialogue improvement from these lives. It closes a proved direct hole
+before a future reply happens to step into it.
+
+Historical A.119--A.129 gates explicitly disable A.130 and pass. The complete
+A.129 six-life replay is exact under the named ablation. The full suite passes
+`749/749` unit checks plus every script gate; unit and production ASan/UBSan
+runs are clean. No state format, coefficient, sampler, Flow law, state-swarm
+organ, learned meaning, or generated token changes.
+
+Canonical evidence:
+`/private/tmp/leo-presence-surface-boundary-a130-natural-r2`.
+The complete A.129 historical replay is
+`/private/tmp/leo-a130-a129-history-r1`. The independent turn-level audit is in
+`/private/tmp/leo-a130-exact2-making-surface.tsv`,
+`/private/tmp/leo-a130-exact2-meal-surface.tsv`, and
+`/private/tmp/leo-a130-exact2-walk-surface.tsv`. Sanitizer receipts are
+`/private/tmp/leo-a130-test-asan.out` and
+`/private/tmp/leo-a130-production-asan.out`.
+The preregistered plan SHA is
+`d1cc31b401a65e26881a77490cc9879c3a831566f8971c317283770c5efb4ef9`,
+the exact direct anatomy SHA is
+`a17b3bcf7de5bac751d6a8ea4b0834eb85af1ad330d22b229bf197cb664986d7`,
+the 2x2 interaction SHA is
+`1eb2430cfbf18b3f00c758e4e0e1989543f98a121e102a175341acca9b18651c`,
+and the exact six-life natural matrix SHA is
+`7e9771342743e3954f6f48fd3224cfd8b4e2f7b0cf83742f78a5628ce827a10e`.
+
+Presence is not a substring. Leo has to say the word he is credited with.

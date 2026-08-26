@@ -1,0 +1,12 @@
+case	heard_word	displayed_text	candidate_seen	ablation_seen	boundary
+exact-lower	rain	Rain waits.	1	1	a complete displayed word satisfies the presence receipt
+exact-case	rain	RAIN.	1	1	the receipt is case-insensitive without changing word identity
+exact-punctuation	rain	The rain, then quiet.	1	1	ordinary punctuation closes a complete word
+infix-training	rain	Training takes time.	0	1	a suffix-bearing neighbour cannot counterfeit the heard word
+infix-brain	rain	A brain remembers.	0	1	a prefix-bearing neighbour cannot counterfeit the heard word
+infix-train	rain	The train stops.	0	1	a larger whole word cannot lend an internal substring
+compound-raincoat	rain	His raincoat is warm.	0	1	a closed compound is not the exact heard surface
+possessive-rains	rain	Rain's sound remains.	0	1	the apostrophe form remains one distinct whole word
+infix-kindness	kind	Kindness arrived.	0	1	a related-looking surface cannot claim an exact receipt
+unrelated	rain	The window is quiet.	0	0	absence remains absence in both arms
+natural-a129	none	72 frozen turns	0	0	no A.129 reply contains a substring-only primary-word witness, so both arms must stay byte-exact

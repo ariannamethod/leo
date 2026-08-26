@@ -3110,6 +3110,47 @@ static TEST_NOINLINE void test_breath_retag(void) {
 }
 
 static TEST_NOINLINE void test_multiturn_presence(void) {
+    /* A.130: presence is a receipt for the complete displayed heard word, not
+     * any larger surface that happens to contain the same bytes. The named
+     * ablation restores the old lowercase-substring reader exactly. */
+    {
+        int previous = g_leo_presence_surface_boundary_on;
+        struct PresenceSurfaceCase {
+            const char *word;
+            const char *text;
+            int candidate;
+            int ablation;
+        } cases[] = {
+            {"rain", "Rain waits.", 1, 1},
+            {"rain", "RAIN.", 1, 1},
+            {"rain", "The rain, then quiet.", 1, 1},
+            {"rain", "Training takes time.", 0, 1},
+            {"rain", "A brain remembers.", 0, 1},
+            {"rain", "The train stops.", 0, 1},
+            {"rain", "His raincoat is warm.", 0, 1},
+            {"rain", "Rain's sound remains.", 0, 1},
+            {"kind", "Kindness arrived.", 0, 1},
+            {"rain", "The window is quiet.", 0, 0},
+            {NULL, NULL, 0, 0}
+        };
+        for (int i = 0; cases[i].word; i++) {
+            g_leo_presence_surface_boundary_on = 1;
+            int candidate = leo_presence_surface_seen(
+                cases[i].text, cases[i].word);
+            g_leo_presence_surface_boundary_on = 0;
+            int ablation = leo_presence_surface_seen(
+                cases[i].text, cases[i].word);
+            char label[192];
+            snprintf(label, sizeof label,
+                     "A.130 presence surface: %s / %s",
+                     cases[i].word, cases[i].text);
+            CHECK(candidate == cases[i].candidate &&
+                      ablation == cases[i].ablation,
+                  label);
+        }
+        g_leo_presence_surface_boundary_on = previous;
+    }
+
     /* 14. multi-turn continuity (the --chat engine path): the field LIVES across
      *     turns. Repeating a word makes Leo HOLD it (heard-count climbs past the
      *     trace threshold), and step advances each turn — the dedication's
