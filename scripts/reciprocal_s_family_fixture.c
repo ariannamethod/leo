@@ -58,6 +58,7 @@ static int run_interaction(void) {
     Leo *leo = seed_body(&test);
     if (!leo) return 2;
     g_leo_school_negative_family_on = 0;
+    g_leo_school_family_heard_threshold_on = 0;
     g_leo_school_lexical_role_on = 0;
     puts("lexical_family\treciprocal_s_family\tquestion");
     for (int lexical = 0; lexical <= 1; lexical++) {
@@ -83,6 +84,7 @@ int main(int argc, char **argv) {
     g_leo_school_lexical_family_on = 0;
     g_leo_school_lexical_role_on = 0;
     g_leo_school_negative_family_on = 0;
+    g_leo_school_family_heard_threshold_on = 0;
     puts("kind\tsurface\tevidence\trelative\tdefault_question\tablation_question");
     for (int i = 0; CASES[i].kind; i++) {
         Leo *leo = seed_body(&CASES[i]);

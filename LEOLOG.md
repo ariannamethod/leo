@@ -10647,3 +10647,72 @@ and the exact six-life natural matrix SHA is
 `7e9771342743e3954f6f48fd3224cfd8b4e2f7b0cf83742f78a5628ce827a10e`.
 
 Presence is not a substring. Leo has to say the word he is credited with.
+
+## Phase A.131 - familiarity may live across one admitted family edge (2026-08-26)
+
+A.130 left the frozen meal life asking `Onions?` at turn 1. The question was
+not honest novelty. Leo's starting corpus contains two exact `onion` hearings
+and one exact `onions` hearing, for a joint count of three; after the first
+meal prompt the counts are two and two, for a joint count of four. School's
+existing novelty ceiling is two, but it applied that ceiling independently to
+each spelling. A.120 already admitted the exact `onions -> onion` edge, while
+School still ignored the evidence heard at its other endpoint.
+
+A.131 changes only that evidence receipt. Once an existing A.120 or closed
+A.129 relation offers one exact surface-relative pair, School applies its
+unchanged novelty threshold to the two exact heard counts together. Both ends
+must have been witnessed. A frequent surface cannot create an unheard
+relative. The reader does not scan siblings, infer a reverse edge, add an
+inflection, assign a meaning, or generalize a stem. It is deliberately
+pairwise: `guides + guide + guided` is not pooled as a three-member family.
+
+The named `--no-school-family-heard-threshold` ablation restores A.130. The
+frozen direct court contains twelve cases and a separate 2x2 crossing with
+A.120. `onions 2 + onion 2`, `zorbles 1 + zorble 2`, `guided 1 + guide 2`, and
+`neighbor 1 + neighbour 2` cross the threshold only in the candidate arm.
+Thin `1 + 1`, a surface-only `3 + 0`, reverse `onion -> onions`, and the
+unadmitted `news/new`, `press/pres`, and `rain/training` pairs do not. A base
+already heard above the threshold or carrying learned meaning retains its
+older A.120 evidence. In the 2x2, only the cell with both the admitted-family
+reader and the joint threshold refuses `onions` as novelty. A separate corpus
+receipt freezes the real `2 + 1` startup and `2 + 2` meal-turn-1 counts.
+
+The natural matrix replays the three frozen A.130 lives in both arms: 144 local
+turns and no API request. Every control transcript and final body is
+byte-identical to A.130. Candidate making and walk are also byte-identical to
+A.130. Candidate meal no longer asks the counterfeit `Onions?` at turn 1; its
+ordinary reply is `He smells after a day. Once. Leo.` The changed trajectory
+later asks `Lentil?` at turn 2. `lentil` occurs zero times in the corpus, so
+that question is honest novelty rather than a replacement success claim.
+Open-Wonder turns rise from 22 to 23 because this honest Wonder remains
+unanswered. That count is neither evidence of better prose nor evidence of a
+better life. Leo's first reply remains fractured, and A.131 makes no coherence
+claim.
+
+Historical A.119--A.130 direct gates explicitly disable A.131 and pass. The
+complete A.130 six-life replay is byte-identical under the named ablation. The
+full suite passes `765/765` unit checks plus every script gate; unit and
+production ASan/UBSan runs are clean. No state format, coefficient, sampler,
+Flow law, state-swarm organ, learned meaning, generated token source, or voice
+reader changes.
+
+Canonical evidence:
+`/private/tmp/leo-family-heard-threshold-a131-natural-r2`.
+The frozen direct receipts are in
+`/private/tmp/leo-family-heard-threshold-a131-direct-r2`, and the complete
+A.130 historical replay is
+`/private/tmp/leo-a131-a130-history-r1`. Sanitizer receipts are
+`/private/tmp/leo-a131-test-asan.out` and
+`/private/tmp/leo-a131-production-asan.out`.
+The preregistered plan SHA is
+`50608bb1bb43415508ef252ad188e5ee6c16c192293239d004670ca182e73f90`,
+the exact direct anatomy SHA is
+`a4f030b7aeba86d4fbbd9565886763c39a71b376d063a1ba9b11c778d561816f`,
+the 2x2 interaction SHA is
+`23efeb7649327bc7e11e5b6963dd29d9c7dd8095ad1652b5560cc7f0e1e4b88a`,
+the corpus receipt SHA is
+`abf112a2767fe52c45c225866f00f01ad3a74ea3b333be0dfe4632e02ead6cd9`,
+and the exact six-life natural matrix SHA is
+`1ac4fb3ccdfea89428c11b0e5b98f6d907ba9b0ca2b189fff4a5fb5bd69059ee`.
+
+The edge was already admitted. Familiarity had to be counted across it.

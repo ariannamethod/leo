@@ -2948,6 +2948,7 @@ static int g_leo_rae_on = 1;            /* DEFAULT ON (Oleg 2026-07-10): the RAE
 static int g_leo_school_on = 1;         /* --no-school → 0 (A.5: School reversed-role re-ask on an unknown word) */
 static int g_leo_school_natural_word_boundary_on = 1; /* A.119: curly apostrophes and contraction/possessive suffixes cannot manufacture a School word. */
 static int g_leo_school_lexical_family_on = 1; /* A.120: a high-confidence known family cannot masquerade as a novel School word. */
+static int g_leo_school_family_heard_threshold_on = 1; /* A.131: two witnessed ends of one admitted A.120 edge share the existing novelty threshold. */
 static int g_leo_school_lexical_role_on = 1; /* A.121: exact relational/polarity grammar cannot masquerade as a teachable thing. */
 static int g_leo_school_answer_followup_on = 1; /* A.122: a bounded answer may precede a separate human follow-up question. */
 static int g_leo_wonder_reask_reference_on = 1; /* A.123: one guessed glyph cannot recall an unnamed Wonder without an anaphoric hypothesis question. */
@@ -7246,11 +7247,25 @@ static LeoSchoolFamilyEvidence leo_school_family_base_evidence(
     return LEO_SCHOOL_FAMILY_NONE;
 }
 
+/* A.131 keeps A.120's relation inventory unchanged. Once that caller offers
+ * one exact surface -> relative edge, however, familiarity belongs to both
+ * witnessed ends together: the current novelty threshold is applied to their
+ * joint heard count. Both ends must exist, so a frequent surface cannot invent
+ * an unseen relative; this helper never searches siblings or reverse edges. */
 static LeoSchoolFamilyEvidence leo_school_family_try_base(
-        const Leo *leo, const char *candidate,
+        const Leo *leo, const char *surface, const char *candidate,
         char base[LEO_HEARD_WORDLEN]) {
     LeoSchoolFamilyEvidence evidence =
         leo_school_family_base_evidence(leo, candidate);
+    if (evidence == LEO_SCHOOL_FAMILY_NONE &&
+        g_leo_school_family_heard_threshold_on &&
+        surface && strcmp(surface, candidate)) {
+        int surface_heard = leo_heard_count(&leo->heard, surface);
+        int candidate_heard = leo_heard_count(&leo->heard, candidate);
+        if (surface_heard > 0 && candidate_heard > 0 &&
+            (long)surface_heard + candidate_heard > LEO_SCHOOL_NOVEL_MAX)
+            evidence = LEO_SCHOOL_FAMILY_HEARD;
+    }
     if (evidence == LEO_SCHOOL_FAMILY_NONE) return evidence;
     if (base) {
         strncpy(base, candidate, LEO_HEARD_WORDLEN - 1);
@@ -7312,7 +7327,7 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
     for (int i = 0; LEO_SCHOOL_FAMILY_BRIDGES[i].surface; i++) {
         if (strcmp(surface, LEO_SCHOOL_FAMILY_BRIDGES[i].surface)) continue;
         LeoSchoolFamilyEvidence evidence = leo_school_family_try_base(
-            leo, LEO_SCHOOL_FAMILY_BRIDGES[i].relative, base);
+            leo, surface, LEO_SCHOOL_FAMILY_BRIDGES[i].relative, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     }
 
@@ -7321,7 +7336,7 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         candidate[len - 3] = 'y';
         candidate[len - 2] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     }
 
@@ -7329,20 +7344,22 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         memcpy(candidate, surface, len - 3); /* raining -> rain */
         candidate[len - 3] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         size_t root_len = strlen(candidate);
         if (root_len >= 2 &&
             candidate[root_len - 1] == candidate[root_len - 2]) {
             candidate[root_len - 1] = 0; /* running -> run */
-            evidence = leo_school_family_try_base(leo, candidate, base);
+            evidence = leo_school_family_try_base(
+                leo, surface, candidate, base);
             if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
             candidate[root_len - 1] = candidate[root_len - 2];
         }
         if (root_len + 1 < LEO_HEARD_WORDLEN) {
             candidate[root_len] = 'e'; /* making -> make */
             candidate[root_len + 1] = 0;
-            evidence = leo_school_family_try_base(leo, candidate, base);
+            evidence = leo_school_family_try_base(
+                leo, surface, candidate, base);
             if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         }
     }
@@ -7351,18 +7368,20 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         strncpy(candidate, surface, len - 1); /* loved -> love */
         candidate[len - 1] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
 
         memcpy(candidate, surface, len - 2); /* walked -> walk */
         candidate[len - 2] = 0;
-        evidence = leo_school_family_try_base(leo, candidate, base);
+        evidence = leo_school_family_try_base(
+            leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         size_t root_len = strlen(candidate);
         if (root_len >= 2 &&
             candidate[root_len - 1] == candidate[root_len - 2]) {
             candidate[root_len - 1] = 0; /* stopped -> stop */
-            evidence = leo_school_family_try_base(leo, candidate, base);
+            evidence = leo_school_family_try_base(
+                leo, surface, candidate, base);
             if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         }
     }
@@ -7371,13 +7390,14 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         memcpy(candidate, surface, len - 1); /* rainy -> rain */
         candidate[len - 1] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         size_t root_len = strlen(candidate);
         if (root_len >= 2 &&
             candidate[root_len - 1] == candidate[root_len - 2]) {
             candidate[root_len - 1] = 0; /* sunny -> sun */
-            evidence = leo_school_family_try_base(leo, candidate, base);
+            evidence = leo_school_family_try_base(
+                leo, surface, candidate, base);
             if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         }
     }
@@ -7387,7 +7407,7 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         candidate[len - 4] = 'y';
         candidate[len - 3] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     }
 
@@ -7395,17 +7415,19 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         strncpy(candidate, surface, len - 2); /* largest -> large */
         candidate[len - 2] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         memcpy(candidate, surface, len - 3); /* warmest -> warm */
         candidate[len - 3] = 0;
-        evidence = leo_school_family_try_base(leo, candidate, base);
+        evidence = leo_school_family_try_base(
+            leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         size_t root_len = strlen(candidate);
         if (root_len >= 2 &&
             candidate[root_len - 1] == candidate[root_len - 2]) {
             candidate[root_len - 1] = 0; /* biggest -> big */
-            evidence = leo_school_family_try_base(leo, candidate, base);
+            evidence = leo_school_family_try_base(
+                leo, surface, candidate, base);
             if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         }
     }
@@ -7414,11 +7436,12 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         strncpy(candidate, surface, len - 1); /* larger -> large */
         candidate[len - 1] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         memcpy(candidate, surface, len - 2); /* calmer -> calm */
         candidate[len - 2] = 0;
-        evidence = leo_school_family_try_base(leo, candidate, base);
+        evidence = leo_school_family_try_base(
+            leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     }
 
@@ -7433,14 +7456,15 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         memcpy(candidate, surface, len - suffix_len);
         candidate[len - suffix_len] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         size_t root_len = strlen(candidate);
         if (!strcmp(suffixes[i], "ly") &&
             root_len + 1 < LEO_HEARD_WORDLEN) {
             candidate[root_len] = 'e'; /* gently -> gentle */
             candidate[root_len + 1] = 0;
-            evidence = leo_school_family_try_base(leo, candidate, base);
+            evidence = leo_school_family_try_base(
+                leo, surface, candidate, base);
             if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
         }
     }
@@ -7450,7 +7474,7 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         candidate[len - 5] = 'y'; /* happiness -> happy */
         candidate[len - 4] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     }
 
@@ -7459,7 +7483,7 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         candidate[len - 3] = 'y';
         candidate[len - 2] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     }
 
@@ -7467,7 +7491,7 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         memcpy(candidate, surface, len - 2);
         candidate[len - 2] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     }
 
@@ -7478,7 +7502,7 @@ static LeoSchoolFamilyEvidence leo_school_lexical_family(
         memcpy(candidate, surface, len - 1);
         candidate[len - 1] = 0;
         LeoSchoolFamilyEvidence evidence =
-            leo_school_family_try_base(leo, candidate, base);
+            leo_school_family_try_base(leo, surface, candidate, base);
         if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     }
     return LEO_SCHOOL_FAMILY_NONE;
@@ -7502,7 +7526,7 @@ static LeoSchoolFamilyEvidence leo_school_negative_family(
 
     const char *relative = surface + 2;
     LeoSchoolFamilyEvidence evidence =
-        leo_school_family_try_base(leo, relative, base);
+        leo_school_family_try_base(leo, relative, relative, base);
     if (evidence != LEO_SCHOOL_FAMILY_NONE) return evidence;
     return leo_school_lexical_family(leo, relative, base);
 }
@@ -7532,7 +7556,8 @@ static LeoSchoolFamilyEvidence leo_school_reciprocal_s_family(
         if (strcmp(surface, LEO_SCHOOL_RECIPROCAL_S_BRIDGES[i].surface))
             continue;
         return leo_school_family_try_base(
-            leo, LEO_SCHOOL_RECIPROCAL_S_BRIDGES[i].relative, relative);
+            leo, surface, LEO_SCHOOL_RECIPROCAL_S_BRIDGES[i].relative,
+            relative);
     }
     return LEO_SCHOOL_FAMILY_NONE;
 }
@@ -15715,6 +15740,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-natural-word-boundary")) g_leo_school_natural_word_boundary_on = 0;
         else if (!strcmp(argv[i], "--school-lexical-family")) g_leo_school_lexical_family_on = 1;
         else if (!strcmp(argv[i], "--no-school-lexical-family")) g_leo_school_lexical_family_on = 0;
+        else if (!strcmp(argv[i], "--school-family-heard-threshold")) g_leo_school_family_heard_threshold_on = 1;
+        else if (!strcmp(argv[i], "--no-school-family-heard-threshold")) g_leo_school_family_heard_threshold_on = 0;
         else if (!strcmp(argv[i], "--school-lexical-role")) g_leo_school_lexical_role_on = 1;
         else if (!strcmp(argv[i], "--no-school-lexical-role")) g_leo_school_lexical_role_on = 0;
         else if (!strcmp(argv[i], "--school-answer-followup")) g_leo_school_answer_followup_on = 1;
