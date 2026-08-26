@@ -39,6 +39,7 @@ int main(void) {
     Leo *answer = calloc(1, sizeof *answer);
     if (!leo || !answer) return 2;
     g_leo_school_negative_family_on = 0;
+    g_leo_school_reciprocal_s_family_on = 0;
     leo_init(leo);
     leo_init(answer);
     g_leo_school_lexical_family_on = 0;

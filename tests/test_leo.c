@@ -5888,6 +5888,94 @@ static TEST_NOINLINE void test_school_negative_family(void) {
     test_leo_delete(family);
 }
 
+static TEST_NOINLINE void test_school_reciprocal_s_family(void) {
+    /* A.129: the reciprocal relation is one exact X -> Xs edge backed by
+     * whole-word evidence. It is independently ablatable and never becomes a
+     * general inflector, substring matcher, or source of semantic meaning. */
+    Leo *family = test_leo_alloc();
+    leo_init(family);
+    int previous = g_leo_school_reciprocal_s_family_on;
+    int previous_lexical = g_leo_school_lexical_family_on;
+    int previous_role = g_leo_school_lexical_role_on;
+    g_leo_school_reciprocal_s_family_on = 1;
+    g_leo_school_lexical_family_on = 1;
+    g_leo_school_lexical_role_on = 0;
+
+    static const char *const witnessed[] = {
+        "prefers", "zorbles", "news", "press", "always", "this", NULL
+    };
+    for (int i = 0; witnessed[i]; i++)
+        for (int n = 0; n <= LEO_SCHOOL_NOVEL_MAX; n++)
+            leo_heard_add(&family->heard, witnessed[i]);
+
+    struct ReciprocalCase {
+        const char *surface;
+        const char *relative;
+        LeoSchoolFamilyEvidence evidence;
+    } cases[] = {
+        {"prefer", "prefers", LEO_SCHOOL_FAMILY_HEARD},
+        {"zorble", "", LEO_SCHOOL_FAMILY_NONE},
+        {"flim", "", LEO_SCHOOL_FAMILY_NONE},
+        {"narp", "", LEO_SCHOOL_FAMILY_NONE},
+        {"new", "", LEO_SCHOOL_FAMILY_NONE},
+        {"pres", "", LEO_SCHOOL_FAMILY_NONE},
+        {"alway", "", LEO_SCHOOL_FAMILY_NONE},
+        {"thi", "", LEO_SCHOOL_FAMILY_NONE},
+        {"prefers", "", LEO_SCHOOL_FAMILY_NONE},
+        {NULL, NULL, LEO_SCHOOL_FAMILY_NONE}
+    };
+    for (int i = 0; cases[i].surface; i++) {
+        char relative[LEO_HEARD_WORDLEN] = {0};
+        LeoSchoolFamilyEvidence evidence = leo_school_reciprocal_s_family(
+            family, cases[i].surface, relative);
+        CHECK(evidence == cases[i].evidence &&
+                  !strcmp(relative, cases[i].relative),
+              "reciprocal-s-family: each surface reaches only its complete Xs witness");
+    }
+
+    char unknown[LEO_HEARD_WORDLEN] = {0};
+    CHECK(!leo_school_find_unknown(family, "prefer", unknown) &&
+              leo_school_find_unknown(family, "zorble", unknown) &&
+              !strcmp(unknown, "zorble"),
+          "reciprocal-s-family: only a listed witnessed relative can silence novelty");
+    CHECK(leo_school_find_unknown(family, "flim", unknown) &&
+              !strcmp(unknown, "flim") &&
+              leo_school_find_unknown(family, "narp", unknown) &&
+              !strcmp(unknown, "narp") &&
+              leo_school_find_unknown(family, "pres", unknown) &&
+              !strcmp(unknown, "pres") &&
+              leo_school_find_unknown(family, "alway", unknown) &&
+              !strcmp(unknown, "alway"),
+          "reciprocal-s-family: threshold and orthographic controls remain questions");
+
+    leo_school_learn(family, "prefers", semtok_find_glyph("water"));
+    char relative[LEO_HEARD_WORDLEN] = {0};
+    CHECK(leo_school_reciprocal_s_family(family, "prefer", relative) ==
+              LEO_SCHOOL_FAMILY_MEANING && !strcmp(relative, "prefers"),
+          "reciprocal-s-family: an explicitly learned listed relative is meaning evidence");
+
+    Leo *thin = test_leo_alloc();
+    leo_init(thin);
+    leo_heard_add(&thin->heard, "prefers");
+    CHECK(leo_school_reciprocal_s_family(thin, "prefer", relative) ==
+              LEO_SCHOOL_FAMILY_NONE,
+          "reciprocal-s-family: one hearing stays below the evidence threshold");
+
+    g_leo_school_lexical_family_on = 0;
+    CHECK(!leo_school_find_unknown(family, "prefer", unknown),
+          "reciprocal-s-family: reverse evidence does not borrow A.120's runtime switch");
+    g_leo_school_reciprocal_s_family_on = 0;
+    CHECK(leo_school_find_unknown(family, "prefer", unknown) &&
+              !strcmp(unknown, "prefer"),
+          "reciprocal-s-family: named ablation restores the A.128 question");
+
+    g_leo_school_reciprocal_s_family_on = previous;
+    g_leo_school_lexical_family_on = previous_lexical;
+    g_leo_school_lexical_role_on = previous_role;
+    test_leo_delete(thin);
+    test_leo_delete(family);
+}
+
 static TEST_NOINLINE void test_school_lexical_role(void) {
     /* A.121: a whole word can carry grammar without naming a teachable thing.
      * The refusal reuses exact relational, polarity, and discourse witnesses;
@@ -8948,6 +9036,7 @@ int main(void) {
     test_natural_school_word_boundary();
     test_school_lexical_family();
     test_school_negative_family();
+    test_school_reciprocal_s_family();
     test_school_lexical_role();
     test_wonder_persistence();
     test_wonder_ablation();

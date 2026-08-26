@@ -10511,3 +10511,77 @@ and the exact six-life natural matrix SHA is
 `9fe46dc74c249c7855bd5d9ff205369222fedab0d214823cb24ada8990885df8`.
 
 The word was not new. Leo only needed to keep the path through it.
+
+## Phase A.129 - one heard inflection may protect its exact bare relative (2026-08-25)
+
+A.128 removed the counterfeit `unhurried` novelty. Its changed making life then
+reached a second lexical boundary: turn 15 produced `He prefers small. Like.`,
+yet the human's turn-16 question caused `Prefer? Small or Man?`. The corpus has
+zero exact `prefer` tokens and sixteen exact `prefers` tokens. A.120 can travel
+from an inflected surface down to a witnessed base, but School had no justified
+path in the other direction.
+
+The first A.129 implementation tried a productive reverse final-s rule. The
+direct court rejected it before natural replay: repeated or known `always`
+would have licensed the nonexistent shard `alway`. That code was narrowed
+rather than presented as success. Reverse English morphology is ambiguous, and
+a large corpus of s-final words is not permission to invent their bare forms.
+
+A.129 therefore adds one closed, auditable whole-word bridge:
+`prefer <-> prefers`. The bare surface is refused as novelty only when the
+complete `prefers` relative is already a learned meaning or has been heard
+above School's existing novelty threshold. One hearing is insufficient. The
+bridge assigns no glyph or meaning to `prefer`; it changes only whether School
+may pretend that the surface is new. Repeated `zorbles` does not license
+`zorble`, and `new/news`, `pres/press`, `alway/always`, `thi/this`, unheard
+forms, and A.120's forward direction remain outside this reader.
+
+The named `--no-school-reciprocal-s-family` ablation restores A.128. A direct
+2x2 shows that the bridge does not borrow A.120's runtime switch: both lexical
+family arms ask `prefer` when A.129 is off, and both refuse it when A.129 is on.
+The frozen direct court contains ten surfaces plus that four-arm interaction.
+
+The natural matrix replays the three frozen A.128 lives in both arms: 144 local
+turns and no API request. Every control transcript and final body is
+byte-identical to A.128. Candidate making still asks `sturdier` at turn 1 and
+keeps A.128's negative-family repair. It no longer opens the counterfeit
+`prefer` Wonder at turn 16; its visible reply is instead `He cannot remember.
+Small kind. It walked off.` With the mouth free, the human's new turn-18 word
+`courage` becomes an honest question. `courage` occurs zero times in the
+corpus. Open-Wonder turns fall from 10 to 8. Meal and walk contain no admitted
+A.129 bridge and remain byte-identical to A.128.
+
+~~~text
+arm        making questions          making open    meal exact    walk exact
+control    sturdier@1,prefer@16                 10    yes           yes
+candidate  sturdier@1,courage@18                 8    yes           yes
+~~~
+
+The later `Courage?` and lower open-Wonder count are trajectory facts, not
+proof that Leo's prose is coherent or that every bare/inflected relation should
+be admitted. The closed table is deliberately smaller than a general English
+inflector. No parser result, count, checksum, or internally consistent body is
+presented as evidence of organism-level expression.
+
+Historical A.119--A.128 direct gates explicitly disable A.129 and pass. The
+complete A.128 six-life replay is byte-identical under the named ablation. The
+full suite passes `739/739` unit checks plus every script gate; unit and
+production ASan/UBSan runs are clean. No state format, coefficient, sampler,
+Flow law, state-swarm organ, learned meaning, or voice reader changes.
+
+Canonical evidence:
+`/private/tmp/leo-reciprocal-s-family-a129-natural-r2`.
+The complete A.128 historical replay is
+`/private/tmp/leo-a129-a128-history-r1`. Sanitizer receipts are
+`/private/tmp/leo-a129-test-asan.out` and
+`/private/tmp/leo-a129-production-asan.out`.
+The preregistered plan SHA is
+`13603bccac0f587a2362d547ca9550237c75522cb4774e69d7573f63e8f826e4`,
+the exact direct anatomy SHA is
+`c17d83aecec50724bb7b904ab583936789eeedfc73995fb2e8c34c565ebaefda`,
+the 2x2 interaction SHA is
+`cab91efe6ca69c0e0b0e0035cea582b972dee929fd83212cba07116edebeca09`,
+and the exact six-life natural matrix SHA is
+`533c35de7eec6f6072f7ae80ec67ca230673da5bfe54d8aa52b28abe349ad7bd`.
+
+The relation was heard. The reverse path had to be earned, not guessed.

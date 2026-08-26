@@ -54,6 +54,7 @@ int main(void) {
     Leo *leo = calloc(1, sizeof *leo);
     if (!leo) return 2;
     g_leo_school_negative_family_on = 0;
+    g_leo_school_reciprocal_s_family_on = 0;
     int water = semtok_word("water");
     int animal = semtok_word("animal");
 

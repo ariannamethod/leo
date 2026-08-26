@@ -77,6 +77,7 @@ int main(int argc, char **argv) {
     Leo *leo = calloc(1, sizeof *leo);
     if (!leo) return 2;
     g_leo_school_negative_family_on = 0;
+    g_leo_school_reciprocal_s_family_on = 0;
     g_leo_school_two_glyph_learning_on = 0;
     const char *arm = "candidate";
     if (argc == 2 && !strcmp(argv[1], "--ablation")) {
