@@ -77,6 +77,7 @@ static int run_interaction(void) {
 }
 
 int main(int argc, char **argv) {
+    g_leo_school_two_layer_family_composition_on = 0;
     if (argc == 2 && !strcmp(argv[1], "--interaction"))
         return run_interaction();
     if (argc != 1) return 2;

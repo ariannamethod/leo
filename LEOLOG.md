@@ -10786,3 +10786,78 @@ and the frozen life receipt SHA is
 `ae57923b6b312e28554f8f84ec3de0b3d71dcc8b1571743528b43dfc48b7a3c6`.
 
 The question was honest. This time the conversation was allowed to answer it.
+
+## Phase A.133 - exactly two admitted family edges may carry one witness (2026-08-30)
+
+A.132 left the responsive meal life asking `Meaningful? Man or Go?` at turn
+14. The exact body at that boundary had heard `meaningful` once, `meaning`
+once, and `mean` seven times. A.120 already admitted each of the two forward
+whole-word relations `meaningful -> meaning` and `meaning -> mean`, and A.131
+already admitted the second pair's heard evidence. School nevertheless read
+only one relation at a time and presented the outer surface as a new thing.
+
+A.133 adds a separate, default-on reader that may follow exactly two relations
+already owned by A.120. It adds no suffix, stem, reverse edge, sibling search,
+substring search, or meaning. The second edge must independently reach the
+same whole-word learned, semantic, or A.131 heard evidence that A.120 accepts.
+The three heard counts are never pooled. A direct one-edge result remains
+A.120's responsibility, and a path needing a third edge remains unknown. The
+old one-layer entry point is preserved as a one-edge wrapper over the bounded
+reader.
+
+The named `--no-school-two-layer-family-composition` ablation restores A.132.
+The preregistered direct court contains twelve cases. It admits the natural
+`meaningful -> meaning -> mean` path, a synthetic second-edge threshold, a
+learned deep endpoint, two semantic deep endpoints, and nothing else. It
+refuses three thin nodes, surface-only frequency, an intermediate-only
+one-edge result, an unseen endpoint, the true three-edge
+`meaningfully -> meaningful -> meaning -> mean` path, and the unrelated
+`newsworthy/newsworth/news` spelling. A 2x2 crossing with A.120's runtime
+switch shows that A.133 owns only the new composition decision: both lexical
+family arms ask `meaningful` when A.133 is off, and both refuse the counterfeit
+question when A.133 is on.
+
+The natural court replays the tracked A.132 meal prompts for 24 local turns in
+both arms and makes no API request. The control transcript and final body are
+byte-identical to A.132. The candidate preserves the honest `Lentil?` at turn
+2 and its answer at turn 3. At turn 14 it answers ordinarily with `He could
+not. Small. He walks slow.` instead of asking `Meaningful? Man or Go?`.
+Replies differ on turns 14--17 and then visibly reconverge. Open-Wonder turns
+fall from 12 to 1 because the eleven-turn counterfeit `meaningful` Wonder no
+longer opens.
+
+~~~text
+arm        questions                 open turns    reply differences    A.132 exact
+control    lentil@2,meaningful@14             12    none                 yes
+candidate  lentil@2                            1    14,15,16,17          no
+~~~
+
+That lower count is a boundary receipt, not a coherence score. Several replies
+remain fractured, the final bodies differ, and A.133 makes no claim that Leo's
+grammar, narrative continuity, or organism-level expression is repaired. It
+proves only that one already witnessed two-edge family path no longer
+counterfeits novelty.
+
+Historical A.118--A.132 runners explicitly disable A.133 and pass. The complete
+A.132 responsive replay is byte-identical under the named ablation. The full
+suite passes `781/781` unit checks plus every script gate; unit and production
+ASan/UBSan runs are clean. No state format, coefficient, sampler, Flow law,
+state-swarm organ, learned meaning, generated token source, or voice reader
+changes.
+
+Canonical evidence:
+`/private/tmp/leo-two-layer-family-composition-a133-natural-r1`.
+The complete A.132 historical replay is
+`/private/tmp/leo-a133-a132-history-r1`. Full-suite and sanitizer logs are
+`/private/tmp/leo-a133-make-test.log` and
+`/private/tmp/leo-a133-sanitizers.log`.
+The preregistered plan SHA is
+`99cff849ac13680dfa0a622d4b0b20484ec42a346a7c3524496040973fc1f015`,
+the exact direct anatomy SHA is
+`677e9706c9d6ef9f483f8c6ede694fc7a73d89bc4db5ff7db1b51730f266a10d`,
+the 2x2 interaction SHA is
+`9e14f173e16a7fd1019ef15a7f6305de52c78dc76f401abb2227c796d3fedc5a`,
+and the exact two-arm natural matrix SHA is
+`2754062d14002508332cbb7b2975707d12c8d6da90ee7dccb3283467f7d3a5d3`.
+
+The path was already there. School had to stop forgetting its second edge.

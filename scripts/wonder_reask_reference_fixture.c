@@ -29,6 +29,7 @@ int main(void) {
     g_leo_school_negative_family_on = 0;
     g_leo_school_reciprocal_s_family_on = 0;
     g_leo_school_family_heard_threshold_on = 0;
+    g_leo_school_two_layer_family_composition_on = 0;
     leo_init(leo);
     snprintf(leo->school.pending, sizeof leo->school.pending, "zorble");
     leo->school.pending_glyph = (int8_t)semtok_word("water");

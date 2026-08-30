@@ -107,6 +107,7 @@ static int run_corpus(const char *path) {
 }
 
 int main(int argc, char **argv) {
+    g_leo_school_two_layer_family_composition_on = 0;
     if (argc == 2 && !strcmp(argv[1], "--interaction"))
         return run_interaction();
     if (argc == 3 && !strcmp(argv[1], "--corpus"))

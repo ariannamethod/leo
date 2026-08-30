@@ -5960,6 +5960,121 @@ static TEST_NOINLINE void test_school_family_heard_threshold(void) {
     test_leo_delete(interaction);
 }
 
+static TEST_NOINLINE void test_school_two_layer_family_composition(void) {
+    /* A.133 may follow exactly two relations already admitted by A.120. The
+     * second edge still needs its own whole-word evidence; three thin nodes,
+     * an unheard endpoint, or a path requiring a third edge cannot pool their
+     * way into familiarity. */
+    int previous = g_leo_school_two_layer_family_composition_on;
+    int previous_lexical = g_leo_school_lexical_family_on;
+    int previous_role = g_leo_school_lexical_role_on;
+    int previous_negative = g_leo_school_negative_family_on;
+    int previous_reciprocal = g_leo_school_reciprocal_s_family_on;
+    int previous_threshold = g_leo_school_family_heard_threshold_on;
+    g_leo_school_family_heard_threshold_on = 1;
+
+    struct TwoLayerCase {
+        const char *surface;
+        const char *intermediate;
+        const char *deep;
+        int surface_heard;
+        int intermediate_heard;
+        int deep_heard;
+        int deep_learned;
+        int add_mean;
+        LeoSchoolFamilyEvidence evidence;
+        const char *base;
+    } cases[] = {
+        {"meaningful", "meaning", "mean", 1, 1, 7, 0, 0,
+         LEO_SCHOOL_FAMILY_HEARD, "mean"},
+        {"zorbledness", "zorbled", "zorble", 1, 1, 2, 0, 0,
+         LEO_SCHOOL_FAMILY_HEARD, "zorble"},
+        {"zorbledness", "zorbled", "zorble", 1, 1, 0, 1, 0,
+         LEO_SCHOOL_FAMILY_MEANING, "zorble"},
+        {"peacefully", "peaceful", "peace", 1, 1, 0, 0, 0,
+         LEO_SCHOOL_FAMILY_MEANING, "peace"},
+        {"kindnesses", "kindness", "kind", 1, 1, 0, 0, 0,
+         LEO_SCHOOL_FAMILY_MEANING, "kind"},
+        {"zorbledness", "zorbled", "zorble", 1, 1, 1, 0, 0,
+         LEO_SCHOOL_FAMILY_NONE, ""},
+        {"zorbledness", "zorbled", "zorble", 3, 0, 0, 0, 0,
+         LEO_SCHOOL_FAMILY_NONE, ""},
+        {"zorbledness", "zorbled", "zorble", 1, 3, 0, 0, 0,
+         LEO_SCHOOL_FAMILY_NONE, ""},
+        {"zorbledness", "zorbled", "zorble", 1, 1, 1, 0, 0,
+         LEO_SCHOOL_FAMILY_NONE, ""},
+        {"flimmedness", "flimmed", "flim", 1, 1, 0, 0, 0,
+         LEO_SCHOOL_FAMILY_NONE, ""},
+        {"meaningfully", "meaningful", "meaning", 1, 1, 1, 0, 7,
+         LEO_SCHOOL_FAMILY_NONE, ""},
+        {"newsworthy", "newsworth", "news", 1, 1, 7, 0, 0,
+         LEO_SCHOOL_FAMILY_NONE, ""},
+        {NULL, NULL, NULL, 0, 0, 0, 0, 0,
+         LEO_SCHOOL_FAMILY_NONE, ""}
+    };
+
+    for (int i = 0; cases[i].surface; i++) {
+        Leo *family = test_leo_alloc();
+        leo_init(family);
+        for (int n = 0; n < cases[i].surface_heard; n++)
+            leo_heard_add(&family->heard, cases[i].surface);
+        for (int n = 0; n < cases[i].intermediate_heard; n++)
+            leo_heard_add(&family->heard, cases[i].intermediate);
+        for (int n = 0; n < cases[i].deep_heard; n++)
+            leo_heard_add(&family->heard, cases[i].deep);
+        for (int n = 0; n < cases[i].add_mean; n++)
+            leo_heard_add(&family->heard, "mean");
+        if (cases[i].deep_learned)
+            leo_school_learn(
+                family, cases[i].deep, semtok_find_glyph("water"));
+
+        char base[LEO_HEARD_WORDLEN] = {0};
+        LeoSchoolFamilyEvidence evidence =
+            leo_school_two_layer_family_composition(
+                family, cases[i].surface, base);
+        char label[192];
+        snprintf(label, sizeof label,
+                 "two-layer-family: %s keeps exactly two admitted edges",
+                 cases[i].surface);
+        CHECK(evidence == cases[i].evidence &&
+                  !strcmp(base, cases[i].base), label);
+        test_leo_delete(family);
+    }
+
+    Leo *interaction = test_leo_alloc();
+    leo_init(interaction);
+    leo_heard_add(&interaction->heard, "meaningful");
+    leo_heard_add(&interaction->heard, "meaning");
+    for (int n = 0; n < 7; n++)
+        leo_heard_add(&interaction->heard, "mean");
+    g_leo_school_lexical_role_on = 0;
+    g_leo_school_negative_family_on = 0;
+    g_leo_school_reciprocal_s_family_on = 0;
+    for (int lexical = 0; lexical <= 1; lexical++) {
+        for (int composition = 0; composition <= 1; composition++) {
+            char unknown[LEO_HEARD_WORDLEN] = {0};
+            g_leo_school_lexical_family_on = lexical;
+            g_leo_school_two_layer_family_composition_on = composition;
+            int found = leo_school_find_unknown(
+                interaction, "meaningful", unknown);
+            char label[176];
+            snprintf(label, sizeof label,
+                     "two-layer-family: 2x2 lexical=%d composition=%d",
+                     lexical, composition);
+            CHECK(found == !composition &&
+                      (!found || !strcmp(unknown, "meaningful")), label);
+        }
+    }
+
+    g_leo_school_two_layer_family_composition_on = previous;
+    g_leo_school_lexical_family_on = previous_lexical;
+    g_leo_school_lexical_role_on = previous_role;
+    g_leo_school_negative_family_on = previous_negative;
+    g_leo_school_reciprocal_s_family_on = previous_reciprocal;
+    g_leo_school_family_heard_threshold_on = previous_threshold;
+    test_leo_delete(interaction);
+}
+
 static TEST_NOINLINE void test_school_negative_family(void) {
     /* A.128: exact `un-` may compose with one already witnessed A.120
      * relative. The complete remainder must itself be known or reach a known
@@ -9188,6 +9303,7 @@ int main(void) {
     test_natural_school_word_boundary();
     test_school_lexical_family();
     test_school_family_heard_threshold();
+    test_school_two_layer_family_composition();
     test_school_negative_family();
     test_school_reciprocal_s_family();
     test_school_lexical_role();

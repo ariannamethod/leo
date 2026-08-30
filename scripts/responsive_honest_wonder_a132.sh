@@ -30,6 +30,7 @@ if [ ! -f "$API/dialogue.jsonl" ]; then
         LEO_NATURAL_LIFE=meal LEO_NATURAL_ARM=api \
         LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=2 \
         LEO_NATURAL_OPENING='Continue the exact A.131 meal fork.' \
+        LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=0 \
         "$ROOT/scripts/natural_life_probe.sh" "$API" > "$OUT/lives/prefix.out"
 fi
 
@@ -50,6 +51,7 @@ if [ "$completed" -eq 2 ]; then
         LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=24 \
         LEO_NATURAL_OPENING='Continue the exact A.131 meal fork.' \
         LEO_NATURAL_RESUME=1 \
+        LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=0 \
         "$ROOT/scripts/natural_life_probe.sh" "$API" > "$OUT/lives/api.out"
 elif [ "$completed" -ne 24 ]; then
     printf 'unexpected completed turn count: %s\n' "$completed" >&2
@@ -73,6 +75,7 @@ for arm in replay async-a async-b; do
             LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=24 \
             LEO_NATURAL_OPENING='Continue the exact A.131 meal fork.' \
             LEO_NATURAL_ASYNC="$async" \
+            LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=0 \
             "$ROOT/scripts/natural_life_probe.sh" "$destination" \
             > "$OUT/lives/$arm.out"
     fi

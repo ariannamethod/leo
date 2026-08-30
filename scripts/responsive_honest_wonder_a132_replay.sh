@@ -34,6 +34,7 @@ for arm in replay async-a async-b; do
         LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=24 \
         LEO_NATURAL_OPENING='Continue the exact A.131 meal fork.' \
         LEO_NATURAL_ASYNC="$async" \
+        LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=0 \
         "$ROOT/scripts/natural_life_probe.sh" "$destination" \
         > "$OUT/lives/$arm.out"
 done
@@ -55,6 +56,7 @@ LEO_NATURAL_REPLAY_FILE="$OUT/first14.txt" \
     LEO_NATURAL_LIFE=meal LEO_NATURAL_ARM=replay \
     LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=14 \
     LEO_NATURAL_OPENING='Continue the exact A.131 meal fork.' \
+    LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=0 \
     "$ROOT/scripts/natural_life_probe.sh" "$OUT/first14" \
     > "$OUT/first14.out"
 cc "$ROOT/scripts/responsive_honest_wonder_a132_fixture.c" \

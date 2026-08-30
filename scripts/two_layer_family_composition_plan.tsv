@@ -1,0 +1,14 @@
+field	value
+phase	A.133
+question	may-exactly-two-already-admitted-A120-edges-carry-whole-word-evidence-without-general-recursion
+source_witness	A.132 responsive meal turn 14
+natural_path	meaningful -> meaning -> mean
+maximum_edges	2
+relation_inventory	existing A.120 only
+requires	whole-word evidence at the second edge under existing A.120/A.131 laws
+forbids	third edge, sibling pooling, reverse inference, substring search, new suffix, or assigned meaning
+direct_cases	12
+interaction	2x2 lexical-family x two-layer-family-composition
+natural_arms	A.132 control and A.133 candidate
+api_turns	0
+decision	admit only if direct controls pass and A.132 reproduces under named ablation
