@@ -1,0 +1,6 @@
+kind	return_prompt	expected_pending	expected_primary	expected_alternate	expected_learned	expected_resolved	expected_returns	expected_reply
+literal-return	what is zorble?	zorble	none	none	none	0	1	Zorble?
+sleep-literal-return	what is zorble?	zorble	none	none	none	0	1	Zorble?
+rejected-anaphora	is it water?	zorble	none	none	none	0	0	ordinary
+unoffered-anaphora	is it animal?	zorble	none	none	none	0	0	ordinary
+later-positive	a zorble is animal	none	none	none	animal	1	0	ordinary

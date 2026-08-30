@@ -6431,6 +6431,32 @@ static TEST_NOINLINE void test_wonder_negation(void) {
                   woke->school.wonders[0].resolved,
                   "wonder-negation: later positive evidence can still ground the narrowed question");
 
+            /* A.135 freezes the zero-survivor edge witnessed by A.134. When
+             * the only offered glyph is rejected, a later literal return is
+             * the bare word: rejection cannot be resurrected as a guess. */
+            leo_free(neg);
+            seed_wonder_negation_body(neg);
+            neg->school.pending_alt_glyph = -1;
+            neg->school.pending_origin.offered_alt_glyph = -1;
+            neg->school.wonders[0].offered_alt_glyph = -1;
+            leo_respond(
+                neg, "a zorble is not water",
+                out, sizeof out);
+            CHECK(!leo_school_is_learned(neg, "zorble") &&
+                  !strcmp(neg->school.pending, "zorble") &&
+                  neg->school.pending_glyph == -1 &&
+                  neg->school.pending_alt_glyph == -1 &&
+                  !neg->school.wonders[0].resolved,
+                  "single-hypothesis rejection: no surviving guess is not a fabricated answer");
+            leo_respond(
+                neg, "what is zorble?",
+                out, sizeof out);
+            CHECK(!strcmp(out, "Zorble?") &&
+                  neg->school.wonders[0].returns == 1 &&
+                  neg->school.wonders[0].offered_glyph == -1 &&
+                  !leo_school_is_learned(neg, "zorble"),
+                  "single-hypothesis rejection: literal return is bare and cannot resurrect the rejected glyph");
+
             leo_free(neg);
             seed_wonder_negation_body(neg);
             leo_respond(

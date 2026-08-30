@@ -1,0 +1,6 @@
+kind	return_prompt	pending	primary	alternate	learned	resolved	returns	reply
+literal-return	what is zorble?	zorble	none	none	none	0	1	Zorble?
+sleep-literal-return	what is zorble?	zorble	none	none	none	0	1	Zorble?
+rejected-anaphora	is it water?	zorble	none	none	none	0	0	ordinary
+unoffered-anaphora	is it animal?	zorble	none	none	none	0	0	ordinary
+later-positive	a zorble is animal	none	none	none	animal	1	0	ordinary
