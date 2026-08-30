@@ -1,0 +1,13 @@
+kind	surface	intermediate	deep	surface_heard	intermediate_heard	deep_heard	deep_learned	expected_evidence	expected_base
+natural	meaningful	meaning	mean	1	1	7	0	heard	mean
+edge-threshold	zorbledness	zorbled	zorble	1	1	2	0	heard	zorble
+learned-deep	zorbledness	zorbled	zorble	1	1	0	1	meaning	zorble
+semantic-deep	peacefully	peaceful	peace	1	1	0	0	meaning	peace
+plural-outer	kindnesses	kindness	kind	1	1	0	0	meaning	kind
+thin-chain	zorbledness	zorbled	zorble	1	1	1	0	none	none
+surface-only	zorbledness	zorbled	zorble	3	0	0	0	none	none
+intermediate-only	zorbledness	zorbled	zorble	1	3	0	0	none	none
+path-sum-only	zorbledness	zorbled	zorble	1	1	1	0	none	none
+unseen-deep	flimmedness	flimmed	flim	1	1	0	0	none	none
+three-layer	meaningfully	meaningful	meaning	1	1	1	0	none	none
+unrelated	newsworthy	newsworth	news	1	1	7	0	none	none

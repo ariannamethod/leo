@@ -98,6 +98,7 @@ while IFS=$'\t' read -r life seed turns opening; do
             LEO_NATURAL_LIFE="$life" LEO_NATURAL_ARM=api \
             LEO_NATURAL_SEED="$seed" LEO_NATURAL_TURNS="$turns" \
             LEO_NATURAL_OPENING="$opening" LEO_NATURAL_RESUME="$life_resume" \
+            LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=0 \
             "$ROOT/scripts/natural_life_probe.sh" "$api" > "$OUT/lives/$life-api.out"
     fi
     for arm in replay async-a async-b; do
@@ -113,6 +114,7 @@ while IFS=$'\t' read -r life seed turns opening; do
                 LEO_NATURAL_SEED="$seed" LEO_NATURAL_TURNS="$turns" \
                 LEO_NATURAL_OPENING="$opening" LEO_NATURAL_ASYNC="$async" \
                 LEO_NATURAL_RESUME="$life_resume" \
+                LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=0 \
                 "$ROOT/scripts/natural_life_probe.sh" "$destination" \
                 > "$OUT/lives/$life-$arm.out"
         fi

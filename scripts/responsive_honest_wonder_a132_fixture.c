@@ -15,6 +15,7 @@ int main(int argc, char **argv) {
     Leo *leo = calloc(1, sizeof *leo);
     if (!leo) return 2;
     leo_init(leo);
+    g_leo_school_two_layer_family_composition_on = 0;
     if (!leo_load_state(leo, argv[1])) return 2;
 
     char meaningful_base[LEO_HEARD_WORDLEN] = {0};

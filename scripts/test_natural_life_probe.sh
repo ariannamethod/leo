@@ -50,7 +50,8 @@ jq -e '.source == "frozen-visible-replay" and .api_store == null and
        .school_negative_family == true and
        .school_reciprocal_s_family == true and
        .presence_surface_boundary == true and
-       .school_family_heard_threshold == true' "$TMP/first/manifest.json" >/dev/null
+       .school_family_heard_threshold == true and
+       .school_two_layer_family_composition == true' "$TMP/first/manifest.json" >/dev/null
 
 sed -n '1,2p' "$TMP/prompts.txt" > "$TMP/prompts-first-two.txt"
 LEO_NATURAL_REPLAY_FILE="$TMP/prompts-first-two.txt" \
