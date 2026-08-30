@@ -1,0 +1,13 @@
+field	value
+phase	A.135
+question	after-the-only-offered-hypothesis-is-rejected-can-an-unresolved-Wonder-return-bare-without-resurrection
+source_witness	A.134 difficult Wonder at turns 15-16
+natural_state	A.134 final synchronous body
+existing_law	A.74 negative evidence narrows but never resolves or assigns meaning
+expected_return	Difficult?
+requires	exact literal return after the ordinary reask gap
+forbids	resurrecting Man, inferring feeling, resolving rejection, or learning without positive evidence
+synthetic_cases	5
+api_turns	0
+runtime_change	prohibited unless the preregistered court fails
+decision	proof-only gate if existing law already satisfies every boundary

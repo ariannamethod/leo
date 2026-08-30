@@ -10928,3 +10928,53 @@ and the exact final-body anatomy SHA is
 
 The old answer disappeared. The next human had to meet the words Leo actually
 said.
+
+## Phase A.135 - the rejected guess does not return with the question (2026-08-30)
+
+A.134 ended with an unresolved `difficult` Wonder. Leo had offered `Man`, the
+human rejected it, and School correctly retained the word while emptying both
+hypothesis slots. A.135 preregisters the narrow next question: after the only
+offered hypothesis is rejected, can that Wonder later return as a bare word
+without resurrecting the rejected glyph or manufacturing a replacement?
+
+No Leo runtime change was necessary. The existing A.74 negative-evidence law
+already satisfies the boundary. A.135 therefore adds a proof-only contract
+rather than tuning the organism to the witnessed conversation.
+
+The natural arm reproduces the exact 24-turn A.134 synchronous body, including
+the same visible-transcript and final-state hashes, then supplies the explicit
+later prompt `What is difficult?`. Leo replies exactly `Difficult?`. The
+episode remains unresolved, `pending=difficult` remains alive, both pending
+hypotheses remain empty, and no meaning is learned. This direct probe is not
+presented as a new natural conversation or as evidence that `difficult` means
+anything in particular.
+
+Five preregistered synthetic controls isolate the same zero-survivor edge. A
+literal return says exactly `Zorble?`; save/load preserves that result; a
+question naming the rejected `water` does not revive it; a question naming an
+unoffered `animal` does not create it; and later positive evidence may still
+teach `animal` and resolve the Wonder. Thus rejection is neither a lesson nor
+an irreversible ban on a future real answer.
+
+Two unit assertions freeze the zero-survivor state and its bare return. The
+full suite passes `783/783` unit checks plus every script gate, and the unit
+ASan/UBSan run is clean. No state format, coefficient, sampler, Flow law,
+state-swarm organ, learned representation, generated token source, or voice
+reader changes.
+
+The exact receipt routes A.136: freeze the visible life through the returned
+`Difficult?`, let a blinded natural interlocutor answer that question, and
+observe whether a genuinely positive explanation appears. A.135 grants no
+authority to infer one in advance.
+
+Canonical evidence:
+`/private/tmp/leo-single-hypothesis-rejection-return-a135-r1`.
+Full-suite and sanitizer logs are `/private/tmp/leo-a135-make-test.log` and
+`/private/tmp/leo-a135-test-asan.log`. The preregistered plan SHA is
+`782b161d137dbf448e94fc4f3449ce52573b9f4049ebe090f8545d6eafe2e59f`,
+the exact five-case synthetic receipt SHA is
+`0ced1290d26aa02dbcce69ff0101c108b5831ef0f265f6cf40d4a612ce90efcf`,
+and the exact A.134-body return receipt SHA is
+`c814508d7622b46d05ed7158289c221f0bfc370232e7c5f4828883ef1cb7e391`.
+
+The guess was refused. The question survived without it.
