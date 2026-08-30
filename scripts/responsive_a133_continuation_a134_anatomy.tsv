@@ -1,0 +1,14 @@
+metric	value
+lentil_primary	food
+lentil_episode_resolved	1
+difficult_heard	2
+difficult_learned_primary	none
+difficult_episode_offered	none
+difficult_episode_answer	none
+difficult_episode_resolved	0
+difficult_episode_returns	0
+pending	difficult
+pending_primary	none
+pending_alternate	none
+wonder_count	2
+resolved_wonder_count	1
