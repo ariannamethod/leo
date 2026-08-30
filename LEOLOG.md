@@ -10978,3 +10978,83 @@ and the exact A.134-body return receipt SHA is
 `c814508d7622b46d05ed7158289c221f0bfc370232e7c5f4828883ef1cb7e391`.
 
 The guess was refused. The question survived without it.
+
+## Phase A.136 - the returned question exposes a false lesson (2026-08-30)
+
+A.135 proved one narrow fact: after `Man` was rejected and both hypothesis
+slots were emptied, a later literal return could say exactly `Difficult?`
+without restoring a guess. A.136 freezes that complete 25-turn path, then asks
+what happens when a blinded natural interlocutor receives the returned question
+as ordinary speech.
+
+The preregistration contains no answer instruction and no desired meaning. The
+interlocutor sees only the visible `human`/`leo` dialogue. Ten foreground
+Responses API turns use `gpt-5.6-luna`, structured one-line output, and
+`store:false`; no School state, diagnostics, expected answer, or evaluation
+language enters the request.
+
+The first external continuation does not define the word. It says: `I meant
+the difficult feeling he might be carrying. Does it still feel difficult now?`
+Its declared stance is `clarify`, not `answer`. Nevertheless, School closes the
+Wonder and learns `difficult=man`. At turn 25 the exact body had heard
+`difficult` three times, learned no meaning, retained no offered glyph, and
+kept the episode unresolved with one return. Immediately after the turn-26
+line it has heard the word five times, learned `man`, records `answer=man`,
+marks the episode resolved, and clears the pending word.
+
+This is a fabricated lesson. It is not the stored rejected hypothesis silently
+reappearing: the offered slot remains empty. The bounded answer path newly
+treats the ordinary pronoun `he` inside the explicitly referencing statement
+as meaning evidence. Post-observation localization makes the grammatical leak
+visible:
+
+~~~text
+statement                                                     learned meaning
+I meant the difficult feeling he might be carrying.            man
+He might be carrying the difficult feeling.                    none
+I meant the difficult feeling she might be carrying.           woman
+I meant the difficult feeling the child might be carrying.     child
+~~~
+
+Disabling the whole A.122 answer-followup organ also prevents the false lesson,
+but that is only a coarse localization, not an acceptable repair: it would
+again let a later human question erase genuine completed answers. The
+declarative prefix alone still fabricates `man`, proving that the question tail
+does not cause the semantic error. Explicit mention currently establishes
+reference and then admits a grammatical participant as though it were the
+unknown word's predicate.
+
+The remaining nine human turns naturally follow warmth, kindness, attention,
+night, a grandmother, and a small tree. Nine of ten API turns declare a visible
+reply reference; none declares an answer stance. The false `man` lesson remains
+in the final turn-35 body. Those later themes are observations, not semantic
+support for that lesson.
+
+A.136 changes no Leo runtime and does not repair or conceal the failure. The
+full 35-turn synchronous replay and two async shadows are reproducible; sync
+and async differ on 18 replies. The full suite passes `783/783` unit checks plus
+every script gate, and the A.136 anatomy fixture is clean under ASan/UBSan. No
+state format, coefficient, sampler, Flow law, state-swarm organ, generated token
+source, or voice reader changes.
+
+The evidence routes A.137: separate explicit reference from semantic
+predication. A named unknown may identify which Wonder the human addresses, but
+an unrelated subject, pronoun, possessor, or co-present entity must not become
+its meaning. The repair court must retain real A.122 answer-before-follow-up
+lessons while refusing the exact `he`, `she`, and `child` counterexamples above.
+
+Canonical external-first evidence:
+`/private/tmp/leo-responsive-difficult-return-a136-natural-r1`.
+Canonical no-API replay and localization:
+`/private/tmp/leo-responsive-difficult-return-a136-replay-r1`.
+The preregistered plan SHA is
+`ae59afd15e0eac6a197ea26c02fdcdb6ef82ed9cc29e394f2ba0dd0da9f95cf7`,
+the frozen API-turn receipt SHA is
+`c83c2df10c56a66089f9488ff557afd62ffd22b7e123457cce11a07123ba3716`,
+the full-prompt SHA is
+`7da59d9d2e6922ad2289797df6a8c2f9876a45dc5c905431d504b3d8e8ae4816`,
+and the exact anatomy SHA is
+`54cc53562a451e247a1803824bf73e7046682a55ede1cbeb77a9612f4951e96c`.
+
+The human named the question. School mistook a person in the sentence for its
+answer.

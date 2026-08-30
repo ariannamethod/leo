@@ -1,0 +1,16 @@
+field	value
+phase	A.136
+question	what-does-a-visible-only-interlocutor-say-after-Leos-bare-Difficult-return-and-what-does-Leo-do-next
+source_body	A.135 exact synchronous body after turn 25 What is difficult / Difficult
+fork	meal after exact turns 1-25
+base_seed	617
+prefix_turns	25
+continuation_turns	10
+planned_api_turns	10
+interlocutor	Responses API visible transcript only
+model	gpt-5.6-luna
+api_store	false
+private_diagnostics_visible	false
+answer_instruction	absent
+controls	exact full-prompt synchronous replay and two reproducible async shadows
+decision	descriptive scout only; no runtime change, forced lesson, or quality claim

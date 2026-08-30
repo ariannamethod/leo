@@ -1,0 +1,11 @@
+turn	utterance	stance	reply_reference	model
+26	I meant the difficult feeling he might be carrying. Does it still feel difficult now?	clarify	true	gpt-5.6-luna
+27	Small warmth can be enough for now. What helps you hold onto it?	follow	true	gpt-5.6-luna
+28	A small kindness walking beside you sounds comforting. What kind of kindness is it?	follow	true	gpt-5.6-luna
+29	That sounds gentle. Is it kindness he offers someone, or gives himself?	clarify	true	gpt-5.6-luna
+30	That kind of attention matters. Who is he giving it to tonight?	follow	true	gpt-5.6-luna
+31	That sounds like a gentle gift. What kind word would he offer you tonight?	follow	true	gpt-5.6-luna
+32	Night can make room for both. What feels good about it tonight?	follow	false	gpt-5.6-luna
+33	That sounds like a special memory. What did your grandmother say about the small tree?	follow	true	gpt-5.6-luna
+34	What did the small tree look like in the morning light?	follow	true	gpt-5.6-luna
+35	Was the tree growing outside your grandmother’s home?	follow	true	gpt-5.6-luna
