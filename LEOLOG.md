@@ -10716,3 +10716,73 @@ and the exact six-life natural matrix SHA is
 `1ac4fb3ccdfea89428c11b0e5b98f6d907ba9b0ca2b189fff4a5fb5bd69059ee`.
 
 The edge was already admitted. Familiarity had to be counted across it.
+
+## Phase A.132 - the first honest question receives a visible answer (2026-08-26)
+
+A.131 removed the counterfeit `Onions?` question from the frozen meal life
+and exposed `Lentil? Food or Fire?` at turn 2. Unlike the earlier family
+questions, `lentil` had zero corpus hearings. The old frozen interlocutor could
+not answer a question that did not exist on its original trajectory, so later
+turns in that counterfactual were useful only as deterministic consequences.
+Changing `leo.c` again from those mismatched turns would have treated a stale
+script as a living witness.
+
+A.132 therefore changes no Leo runtime. It freezes the exact A.131 meal fork:
+the first two human prompts, seeds 617 and 618, replies `He smells after a day.
+Once. Leo.` and `Lentil? Food or Fire?`, and the body after the honest Wonder
+opens. A transcript-visible interlocutor then continues only from those visible
+words for 22 turns. The Responses API uses a strict structured-output schema,
+stores no response, and receives no field diagnostics, state, expected answer,
+or experimental hypothesis. One synchronous replay and two asynchronous
+shadows reuse the frozen 24 prompt lines locally; no later replay calls the
+API.
+
+The first responsive utterance is `Food—lentils simmered with tomatoes,
+carrots, and spices. Have you tasted lentil soup before?` A.122 and A.125 keep
+the answer separate from the follow-up question. On turn 3 the `lentil` Wonder
+resolves, its learned primary glyph is exactly `food`, it acquires no alternate
+glyph, and Leo returns an ordinary non-question reply. The complete synchronous
+transcript and final body reproduce byte for byte from the frozen prompts. The
+two async shadows reproduce each other; they differ from synchronous Leo on
+9 of 24 replies. That async difference is an observation, not a quality score.
+
+With the honest lesson closed, School remains silent for eleven turns. At turn
+14 the human says `Leaving something small behind can be meaningful. What did
+he leave there?`, and Leo asks `Meaningful? Man or Go?`. The exact turn-14 body
+contains one `meaningful`, one `meaning`, and seven `mean` hearings. A.120 can
+already prove `meaning -> mean` from those hearings, but its one-layer reader
+cannot compose the already admitted `meaningful -> meaning -> mean` path. Thus
+A.132 routes a narrower suffix-composition court to A.133; it does not quietly
+install that composition or call every multi-suffix reduction valid.
+
+The resulting life contains 12 open-Wonder turns: `lentil` at turn 2 and
+`meaningful` at turns 14--24. Its replies remain grammatically fractured and
+referents shift. The interlocutor marks every one of its 22 API continuations
+as referring to Leo's prior reply, but those labels describe the
+interlocutor's own stance. They do not prove that Leo supplied the continuity,
+spoke coherently, or improved as an organism.
+
+The full local replay court freezes the learned `lentil=food` receipt, the
+second Wonder anatomy, exact synchronous body and transcript, and reproducible
+async shadow. The full suite passes `765/765` unit checks plus every script
+gate. No state format, coefficient, sampler, Flow law, state-swarm organ,
+School rule, lexical relation, learned representation, token source, or voice
+reader changes.
+
+Canonical external-first evidence:
+`/private/tmp/leo-responsive-honest-wonder-a132-natural-r1`.
+The independent turn-14 anatomy is in
+`/private/tmp/leo-responsive-honest-wonder-a132-audit-r1`; every durable
+reproduction uses the tracked prompt fixture and no API key.
+The preregistered plan SHA is
+`2e56d0de780df9b3db0090e165966e96ebede1305f4ba823f45866c2c31223a6`,
+the exact two-turn prefix SHA is
+`3b1f4525f04d5efb10e4110c00d4b18b8a946a91a9f27682255e07e66e10e229`,
+the exact prefix-reply receipt SHA is
+`a83a37f285d2574bf17400b231343427704c4620dca80596230261bd7643cc0b`,
+the turn-14 anatomy SHA is
+`7370ddf4d98cfab53d71964cac53aeb1bbe9856ba0cffa771e179bdb4e74aabe`,
+and the frozen life receipt SHA is
+`ae57923b6b312e28554f8f84ec3de0b3d71dcc8b1571743528b43dfc48b7a3c6`.
+
+The question was honest. This time the conversation was allowed to answer it.
