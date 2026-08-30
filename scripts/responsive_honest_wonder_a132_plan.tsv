@@ -1,0 +1,15 @@
+field	value
+phase	A.132
+question	what-does-Leo-do-when-the-first-honest-A131-Wonder-receives-a-visible-only-response
+source_body	merged A.131 default synchronous Leo
+fork	candidate meal after exact turns 1-2
+base_seed	617
+prefix_turns	2
+continuation_turns	22
+planned_api_turns	22
+interlocutor	Responses API visible transcript only
+model	gpt-5.6-luna
+api_store	false
+private_diagnostics_visible	false
+controls	exact full-prompt synchronous replay and two reproducible async shadows
+decision	descriptive scout only; no runtime change or quality claim

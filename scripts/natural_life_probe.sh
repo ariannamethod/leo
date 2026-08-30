@@ -226,8 +226,14 @@ jq -sr --arg life "$LIFE" --arg arm "$ARM" '
 awk -v expected_turns="$TURNS" -f "$ROOT/scripts/natural_life_summary.awk" \
     "$TURNS_TSV" > "$SUMMARY"
 
+replay_turns="$(awk -F '\t' 'NR > 1 && $6 == "replay" { n++ } END { print n + 0 }' "$SESSIONS")"
+api_turns="$(awk -F '\t' 'NR > 1 && $6 != "replay" { n++ } END { print n + 0 }' "$SESSIONS")"
 source=responses-api-visible-transcript
-[ -z "$REPLAY_FILE" ] || source=frozen-visible-replay
+if [ "$api_turns" -eq 0 ]; then
+    source=frozen-visible-replay
+elif [ "$replay_turns" -gt 0 ]; then
+    source=frozen-prefix-then-responses-api-visible-transcript
+fi
 state_sha="$(shasum -a 256 "$STATE" | awk '{print $1}')"
 transcript_sha="$(shasum -a 256 "$TRANSCRIPT" | awk '{print $1}')"
 prompts_sha="$(shasum -a 256 "$PROMPTS" | awk '{print $1}')"
@@ -236,6 +242,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
     --arg state_sha "$state_sha" --arg transcript_sha "$transcript_sha" \
     --arg prompts_sha "$prompts_sha" --argjson base_seed "$BASE_SEED" \
     --argjson turns "$TURNS" --argjson async "$ASYNC" \
+    --argjson replay_turns "$replay_turns" --argjson api_turns "$api_turns" \
     --argjson resumed "$RESUME" --argjson resumed_from "$resume_from_json" \
     --argjson natural_word_boundary "$NATURAL_WORD_BOUNDARY" \
     --argjson lexical_family "$LEXICAL_FAMILY" \
@@ -252,7 +259,9 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
     --argjson family_heard_threshold "$FAMILY_HEARD_THRESHOLD" \
     '{phase: $phase, life: $life, arm: $arm, model_requested: $model,
       opening_cue: $opening, source: $source, base_seed: $base_seed,
-      turns: $turns, async: ($async == 1), api_store: (if $source == "responses-api-visible-transcript" then false else null end),
+      turns: $turns, async: ($async == 1),
+      replay_prefix_turns: $replay_turns, api_turns: $api_turns,
+      api_store: (if $api_turns > 0 then false else null end),
       process_resumed: ($resumed == 1), resumed_at_turn: $resumed_from,
       school_natural_word_boundary: ($natural_word_boundary == 1),
       school_lexical_family: ($lexical_family == 1),
@@ -267,7 +276,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
       school_reciprocal_s_family: ($reciprocal_s_family == 1),
       presence_surface_boundary: ($presence_surface_boundary == 1),
       school_family_heard_threshold: ($family_heard_threshold == 1),
-      transcript_visible_to_interlocutor: ($source == "responses-api-visible-transcript"),
+      transcript_visible_to_interlocutor: ($api_turns > 0),
       diagnostics_visible_to_interlocutor: false,
       state_sha256: $state_sha, transcript_sha256: $transcript_sha,
       prompts_sha256: $prompts_sha}' > "$OUT/manifest.json"
