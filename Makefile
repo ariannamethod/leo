@@ -59,7 +59,7 @@ wonder-reask-reference:
 natural-answer-form:
 	./scripts/natural_answer_form_matrix.sh
 
-.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition reciprocal-s-family presence-surface-boundary family-heard-threshold responsive-honest-wonder-life two-layer-family-composition
+.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition reciprocal-s-family presence-surface-boundary family-heard-threshold responsive-honest-wonder-life two-layer-family-composition responsive-a133-continuation
 plural-answer-capacity:
 	./scripts/plural_answer_capacity_matrix.sh
 
@@ -83,6 +83,9 @@ responsive-honest-wonder-life:
 
 two-layer-family-composition:
 	./scripts/two_layer_family_composition_matrix.sh
+
+responsive-a133-continuation:
+	./scripts/responsive_a133_continuation_a134_replay.sh
 
 state-swarm-ecology: leo
 	./scripts/state_swarm_ecology_matrix.sh
@@ -409,6 +412,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_family_heard_threshold_anatomy.sh
 	./scripts/test_responsive_honest_wonder_a132.sh
 	./scripts/test_two_layer_family_composition_anatomy.sh
+	./scripts/test_responsive_a133_continuation_a134.sh
 	./scripts/test_state_swarm_liminal_confirmation_select.sh
 	./scripts/test_state_swarm_liminal_confirmation_report.sh
 	./scripts/test_state_swarm_liminal_trajectory_fixture.sh

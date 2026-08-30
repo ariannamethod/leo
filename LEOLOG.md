@@ -10861,3 +10861,70 @@ and the exact two-arm natural matrix SHA is
 `2754062d14002508332cbb7b2975707d12c8d6da90ee7dccb3283467f7d3a5d3`.
 
 The path was already there. School had to stop forgetting its second edge.
+
+## Phase A.134 - the changed reply receives its own continuation (2026-08-30)
+
+A.133 changed the responsive meal at turn 14 from `Meaningful? Man or Go?` to
+`He could not. Small. He walks slow.` The remaining A.132 prompts had been
+written in reply to the old question. In particular, turn 15 began `I'm not
+sure—do you mean...`; continuing to interpret that stale branch as a living
+conversation would repeat the counterfactual error A.132 was created to avoid.
+
+A.134 changes no Leo runtime. It freezes the exact synchronous A.133 body and
+visible transcript through turn 14, then gives only those visible words to the
+same blinded natural interlocutor for ten new turns. The Responses API request
+stores no response and exposes no field diagnostics, state, hypothesis, score,
+or expected answer. The resulting 24 prompt lines are tracked and replayed
+locally by one exact synchronous body and two reproducible async shadows; no
+durable replay needs an API key.
+
+The first new human turn follows Leo's actual speech: `He walks slowly, as if
+carrying something difficult. Does he know where he’s going?` Leo answers
+`Difficult? Man?`. This is honest novelty: `difficult` occurs zero times in
+the corpus and zero times in the fourteen-turn prefix. The next human turn
+explicitly addresses the word and rejects the offered hypothesis: `Maybe not
+a man—just someone carrying a difficult feeling. Where does he go?`
+
+School neither fabricates a lesson nor calls rejection an answer. The final
+body has heard `difficult` twice, carries no learned glyph for it, marks the
+episode unresolved, and retains `pending=difficult` with both pending glyphs
+empty. The offered `Man` guess is gone. The episode records no return because
+the word is not voiced as a question again during these 24 turns. The human's
+phrase may be an ordinary explanation, but A.134 does not reinterpret an
+adjectival context as a positive word definition.
+
+The life contains two School questions: the resolved `Lentil?` at turn 2 and
+the unresolved `Difficult?` at turn 15. Its eleven open-Wonder turns are one
+`lentil` turn plus ten `difficult` turns. All ten API continuations declare a
+visible reply reference. They follow Leo's themes of walking, rain, a candle,
+his mother's laugh, and a quiet secret; those interlocutor labels and thematic
+echoes are observations, not proof that Leo's grammar or continuity is sound.
+Several replies remain visibly fractured.
+
+The exact negative receipt routes A.135 without prejudging a repair: construct
+a later explicit return to the still-unknown `difficult` and test whether Leo
+can voice a bare `Difficult?` without resurrecting the rejected `Man` guess.
+That is a single-hypothesis rejection/return court, not authority to infer a
+meaning from `difficult feeling`.
+
+The full suite still passes `781/781` unit checks plus every script gate. A.134
+adds only external-first fixtures, a resumable scout, local replay/anatomy
+gates, and this record. No state format, School rule, coefficient, sampler,
+Flow law, state-swarm organ, learned representation, token source, or voice
+reader changes.
+
+Canonical external-first evidence:
+`/private/tmp/leo-responsive-a133-continuation-a134-natural-r1`.
+The tracked plan SHA is
+`b38f8199a6188659f2a9dd054a0704d4b350bf94b20bbc0d1989c73aa253af04`,
+the exact fourteen-turn prefix receipt SHA is
+`730a0790e05ab7605d3e72acbd688a6ee7d9246103ff6c0a59c3d04197bff1f9`,
+the frozen full-prompt SHA is
+`4c28ed1b967de4babdfb1e62e670066a82a0d2208ad6b4cdb7b34d568ad18fd1`,
+the frozen life receipt SHA is
+`fc01b045da18f5dc0d92f4717902de9c503a10a20d671d0d10c74b69c4133b55`,
+and the exact final-body anatomy SHA is
+`b649bf67b2b75458c83538af162ef52695a8bee07545222d64872d65cb63ff3c`.
+
+The old answer disappeared. The next human had to meet the words Leo actually
+said.
