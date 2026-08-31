@@ -22,6 +22,7 @@ NATURAL_WORD_BOUNDARY="${LEO_NATURAL_WORD_BOUNDARY:-1}"
 LEXICAL_FAMILY="${LEO_NATURAL_LEXICAL_FAMILY:-1}"
 LEXICAL_ROLE="${LEO_NATURAL_LEXICAL_ROLE:-1}"
 ANSWER_FOLLOWUP="${LEO_NATURAL_ANSWER_FOLLOWUP:-1}"
+REFERENCE_PREDICATION="${LEO_NATURAL_REFERENCE_PREDICATION:-1}"
 WONDER_REASK_REFERENCE="${LEO_NATURAL_WONDER_REASK_REFERENCE:-1}"
 OFFERED_ANSWER_EXPANSION="${LEO_NATURAL_OFFERED_ANSWER_EXPANSION:-1}"
 FOLLOWUP_QUESTION_SCOPE="${LEO_NATURAL_FOLLOWUP_QUESTION_SCOPE:-1}"
@@ -43,6 +44,7 @@ case "$TURNS" in ''|*[!0-9]*) printf 'invalid turn count\n' >&2; exit 2;; esac
 [ "$LEXICAL_FAMILY" = 0 ] || [ "$LEXICAL_FAMILY" = 1 ] || { printf 'LEO_NATURAL_LEXICAL_FAMILY must be 0 or 1\n' >&2; exit 2; }
 [ "$LEXICAL_ROLE" = 0 ] || [ "$LEXICAL_ROLE" = 1 ] || { printf 'LEO_NATURAL_LEXICAL_ROLE must be 0 or 1\n' >&2; exit 2; }
 [ "$ANSWER_FOLLOWUP" = 0 ] || [ "$ANSWER_FOLLOWUP" = 1 ] || { printf 'LEO_NATURAL_ANSWER_FOLLOWUP must be 0 or 1\n' >&2; exit 2; }
+[ "$REFERENCE_PREDICATION" = 0 ] || [ "$REFERENCE_PREDICATION" = 1 ] || { printf 'LEO_NATURAL_REFERENCE_PREDICATION must be 0 or 1\n' >&2; exit 2; }
 [ "$WONDER_REASK_REFERENCE" = 0 ] || [ "$WONDER_REASK_REFERENCE" = 1 ] || { printf 'LEO_NATURAL_WONDER_REASK_REFERENCE must be 0 or 1\n' >&2; exit 2; }
 [ "$OFFERED_ANSWER_EXPANSION" = 0 ] || [ "$OFFERED_ANSWER_EXPANSION" = 1 ] || { printf 'LEO_NATURAL_OFFERED_ANSWER_EXPANSION must be 0 or 1\n' >&2; exit 2; }
 [ "$FOLLOWUP_QUESTION_SCOPE" = 0 ] || [ "$FOLLOWUP_QUESTION_SCOPE" = 1 ] || { printf 'LEO_NATURAL_FOLLOWUP_QUESTION_SCOPE must be 0 or 1\n' >&2; exit 2; }
@@ -151,6 +153,7 @@ for ((turn = start_turn; turn <= TURNS; turn++)); do
     [ "$LEXICAL_FAMILY" = 1 ] || args+=(--no-school-lexical-family)
     [ "$LEXICAL_ROLE" = 1 ] || args+=(--no-school-lexical-role)
     [ "$ANSWER_FOLLOWUP" = 1 ] || args+=(--no-school-answer-followup)
+    [ "$REFERENCE_PREDICATION" = 1 ] || args+=(--no-school-reference-predication)
     [ "$WONDER_REASK_REFERENCE" = 1 ] || args+=(--no-wonder-reask-reference)
     [ "$OFFERED_ANSWER_EXPANSION" = 1 ] || args+=(--no-school-offered-answer-expansion)
     [ "$FOLLOWUP_QUESTION_SCOPE" = 1 ] || args+=(--no-school-followup-question-scope)
@@ -251,6 +254,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
     --argjson lexical_family "$LEXICAL_FAMILY" \
     --argjson lexical_role "$LEXICAL_ROLE" \
     --argjson answer_followup "$ANSWER_FOLLOWUP" \
+    --argjson reference_predication "$REFERENCE_PREDICATION" \
     --argjson wonder_reask_reference "$WONDER_REASK_REFERENCE" \
     --argjson offered_answer_expansion "$OFFERED_ANSWER_EXPANSION" \
     --argjson followup_question_scope "$FOLLOWUP_QUESTION_SCOPE" \
@@ -271,6 +275,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
       school_lexical_family: ($lexical_family == 1),
       school_lexical_role: ($lexical_role == 1),
       school_answer_followup: ($answer_followup == 1),
+      school_reference_predication: ($reference_predication == 1),
       wonder_reask_reference: ($wonder_reask_reference == 1),
       school_offered_answer_expansion: ($offered_answer_expansion == 1),
       school_followup_question_scope: ($followup_question_scope == 1),

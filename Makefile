@@ -59,7 +59,7 @@ wonder-reask-reference:
 natural-answer-form:
 	./scripts/natural_answer_form_matrix.sh
 
-.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition reciprocal-s-family presence-surface-boundary family-heard-threshold responsive-honest-wonder-life two-layer-family-composition responsive-a133-continuation single-hypothesis-rejection-return responsive-difficult-return
+.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition reciprocal-s-family presence-surface-boundary family-heard-threshold responsive-honest-wonder-life two-layer-family-composition responsive-a133-continuation single-hypothesis-rejection-return responsive-difficult-return reference-predication-boundary
 plural-answer-capacity:
 	./scripts/plural_answer_capacity_matrix.sh
 
@@ -92,6 +92,9 @@ single-hypothesis-rejection-return:
 
 responsive-difficult-return:
 	./scripts/responsive_difficult_return_a136_replay.sh
+
+reference-predication-boundary:
+	./scripts/reference_predication_boundary_a137_anatomy.sh
 
 state-swarm-ecology: leo
 	./scripts/state_swarm_ecology_matrix.sh
@@ -421,6 +424,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_responsive_a133_continuation_a134.sh
 	./scripts/test_single_hypothesis_rejection_return_anatomy.sh
 	./scripts/test_responsive_difficult_return_a136.sh
+	./scripts/test_reference_predication_boundary_a137.sh
 	./scripts/test_state_swarm_liminal_confirmation_select.sh
 	./scripts/test_state_swarm_liminal_confirmation_report.sh
 	./scripts/test_state_swarm_liminal_trajectory_fixture.sh

@@ -1,0 +1,16 @@
+case	prompt	pending_turns	candidate_primary	candidate_alternate	candidate_reference	candidate_water_asserted	candidate_water_rejected	control_primary	control_alternate	control_reference	control_water_asserted	control_water_rejected
+he-after	I meant the zorble feeling he might be carrying.	0	none	none	explicit	0	0	man	none	explicit	0	0
+she-after	I meant the zorble feeling she might be carrying.	0	none	none	explicit	0	0	woman	none	explicit	0	0
+child-after	I meant the zorble feeling the child might be carrying.	0	none	none	explicit	0	0	child	none	explicit	0	0
+pronoun-front	He might be carrying the zorble feeling.	0	none	none	explicit	0	0	none	none	explicit	0	0
+co-present-child	The child carries a zorble.	0	none	none	explicit	0	0	child	none	explicit	0	0
+bare-reference	I meant zorble.	0	none	none	explicit	0	0	none	none	explicit	0	0
+natural-negative-correction	Maybe not water—just someone carrying a zorble feeling. Where does he go?	0	none	none	explicit	0	1	none	none	explicit	0	1
+explicit-followup	a zorble is water. What do you hear?	0	water	none	explicit	1	0	water	none	explicit	1	0
+delayed-explicit	a zorble is animal. What do you remember?	1	animal	none	explicit	0	0	animal	none	explicit	0	0
+anaphoric-followup	it is an animal. Do you hear music?	0	animal	none	anaphoric	0	0	animal	none	anaphoric	0	0
+elliptic-followup	water. What do you hear?	0	water	none	elliptic	1	0	water	none	elliptic	1	0
+negative-followup	a zorble is not water. Is it animal?	0	none	none	explicit	0	1	none	none	explicit	0	1
+tail-evidence-isolated	a zorble is animal. Is it water?	0	animal	none	explicit	0	0	animal	none	explicit	0	0
+positive-definition	a zorble is pain.	0	pain	none	explicit	0	0	pain	none	explicit	0	0
+paired-definition	a zorble is water and animal.	0	water	animal	explicit	1	0	water	animal	explicit	1	0

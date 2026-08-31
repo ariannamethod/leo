@@ -51,6 +51,7 @@ static int run_prompt(
     leo_init(leo);
     if (!leo_load_state(leo, path)) return 3;
     g_leo_school_answer_followup_on = answer_followup;
+    g_leo_school_reference_predication_on = 0;
     char out[1024];
     leo_respond(leo, prompt, out, sizeof out);
     print_row(arm, prompt, leo);
@@ -89,5 +90,6 @@ int main(int argc, char **argv) {
         return 3;
     if (inspect_state("turn35", final_state)) return 3;
     g_leo_school_answer_followup_on = 1;
+    g_leo_school_reference_predication_on = 1;
     return 0;
 }
