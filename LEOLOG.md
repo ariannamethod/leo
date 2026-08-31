@@ -11200,3 +11200,60 @@ and the anatomy SHA is
 
 The conversation offered a clarification, not a definition. Leo kept the
 question instead of manufacturing the answer.
+
+## Phase A.139 - the unanswered question may return twice (2026-08-31)
+
+A.138 ends after 35 ordinary turns with one exact unresolved body:
+`difficult` has been heard four times, has no learned glyph or answer, retains
+no offered hypothesis, has returned once, and remains pending. Ten turns have
+passed since the first literal `Difficult?`. A.139 preregisters the next narrow
+question before touching that body: can the same unanswered Wonder return a
+second time after the ordinary gap, survive save/load, and still refuse an
+immediate mouth loop?
+
+The existing law already satisfies the whole court. On the byte-exact A.138
+turn-35 state, the human line `What is difficult?` produces exactly
+`Difficult?`. Heard count moves from four to five, `returns` moves from one to
+two, and `pending_turns` resets from ten to zero. Learned meaning, recorded
+answer, resolution, and both hypothesis slots remain empty. Saving and loading
+the same turn-35 body before the invitation produces the identical state and
+reply.
+
+An immediate third `What is difficult?` does not emit another literal return.
+It yields ordinary generated speech, leaves `returns=2`, advances
+`pending_turns` to one, and keeps the Wonder unresolved. Thus repeated human
+interest can bring a question back after lived distance, while one repeated
+surface cannot seize Leo's mouth on every turn.
+
+Three isolated `zorble` cases reproduce the same boundary independently of the
+meal body: a second return, a second return after sleep, and a cooldown-protected
+immediate third invitation. Together with the four natural cases they show
+that no rejected `Man`, inferred `feeling`, new glyph, or false closure is
+required for recurrence.
+
+A.139 is therefore proof-only. It adds two unit assertions and permanent
+natural/synthetic receipts but changes no Leo runtime, state format,
+coefficient, sampler, Flow law, state-swarm organ, generated token source, or
+voice reader. The full suite passes `791/791` unit checks and every script
+gate. Unit tests and both seven-case fixture arms are clean under ASan/UBSan.
+
+A.140 should close the recurrence arc without assigning a convenient meaning
+to the real `difficult`. A synthetic long-delay body should receive a genuine
+bounded copular answer only after its second return, then prove that the answer
+resolves exactly once, survives sleep, and remains separate from a following
+human question. The natural A.138 body stays unresolved unless ordinary speech
+actually supplies its meaning.
+
+Canonical evidence:
+`/private/tmp/leo-second-unanswered-wonder-return-a139-r2`.
+The preregistered plan SHA is
+`34966313ad306fe50546462aa955860a058f512ecef27413a948e8a6212c4253`,
+the exact natural receipt SHA is
+`442f353aaa440f700b50795ecfe9ec9a6562d179546d0f49056e80a04f6c7e5d`,
+the exact synthetic receipt SHA is
+`c348b3be828e7c3abece95f562fcd5eaec5a0740e8a5d26609add22e1499b8d1`,
+and the frozen receipt SHA is
+`d3564b59874257d291c94b83c27f4293ae760322c081e89efe4d32262e46e9c7`.
+
+Distance made room for the question again. Cooldown kept recurrence from
+becoming compulsion.

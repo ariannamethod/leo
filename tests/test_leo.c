@@ -7507,6 +7507,19 @@ static TEST_NOINLINE void test_wonder_reask_reference(void) {
           reask->school.wonders[0].returns == 1,
           "wonder-reask-reference: an invited hypothesis question still returns through the live path");
 
+    reask->school.pending_turns = LEO_WONDER_REASK_GAP;
+    leo_respond(reask, "what is zorble?", out, sizeof out);
+    CHECK(strstr(out, "Zorble? Water or Animal?") &&
+          reask->school.pending_turns == 0 &&
+          reask->school.wonders[0].returns == 2,
+          "wonder-reask-reference: the same unanswered Wonder may return a second time after the ordinary gap");
+
+    leo_respond(reask, "what is zorble?", out, sizeof out);
+    CHECK(strncmp(out, "Zorble?", 7) != 0 &&
+          reask->school.pending_turns == 1 &&
+          reask->school.wonders[0].returns == 2,
+          "wonder-reask-reference: immediate repetition cannot turn a living return into a mouth loop");
+
     g_leo_wonder_reask_reference_on = previous;
     leo_free(reask);
     free(reask);
