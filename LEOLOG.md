@@ -11123,3 +11123,80 @@ and the frozen replay receipt SHA is
 `1062c91dca7ca0e2aae274757892a1d295b5edfc3bcb9d66d69addea8c1584da`.
 
 The name points to the question. The predicate, if there is one, answers it.
+
+## Phase A.138 - a clarification is allowed to leave the question open (2026-08-31)
+
+A.137 repaired the exact grammatical leak, but its 35-turn court replayed an
+already frozen interlocutor. A.138 returns to the clean decision point: the
+exact first 25 meal turns end with the human asking `What is difficult?` and
+Leo replying exactly `Difficult?`. A fresh interlocutor receives only that
+visible dialogue under the merged reference-predication law. The ten A.136
+continuation lines, School state, diagnostics, desired meaning, and earlier
+failure are absent.
+
+The preregistration admits every honest outcome before the request. A genuine
+copular predicate may teach; a reference-only clarification must leave the
+Wonder open; a subject change makes no semantic claim; and any unrelated
+pronoun, possessor, or co-present entity becoming the meaning is failure. There
+is no answer instruction and no runtime change before observation. The ten
+foreground Responses API calls use `gpt-5.6-luna`, strict one-line structured
+output, and `store:false`; all ten response receipts report completed and
+`store:false`.
+
+The fresh first continuation says: `I meant the feeling he might be carrying.
+Does anything feel difficult right now?` Its declared stance is `clarify`, not
+`answer`. This is ordinary reference to a feeling and a question about the
+present moment. It does not predicate a meaning of the word `difficult`.
+School now makes exactly that distinction: after the line, `difficult` has
+been heard four times but has no learned glyph, no recorded answer, no offered
+hypothesis, and remains unresolved and pending.
+
+The next nine turns follow smallness, soup, warmth, watching, laughter, a
+window, paper, and kindness. Every API turn declares a visible reply reference;
+the stance distribution is five `clarify`, three `follow`, two `comfort`, and
+zero `answer`. At turn 35 the semantic state is unchanged: `learned=none`,
+`answer=none`, `resolved=0`, `returns=1`, and `pending=difficult`. The Wonder is
+open for all ten continuation turns, raising the complete-life open count from
+12 at turn 25 to 22 at turn 35.
+
+This is not evidence that School has become unable to learn. On the exact same
+turn-25 body, the explicit positive control `Difficult is pain.` records
+`pain`, resolves the episode, and clears pending state. The control is a
+synthetic organ check, not a claim that the real word means pain. The natural
+continuation simply did not contain an answer, and Leo did not invent one.
+
+The frozen 35 prompts reproduce byte-exact synchronously; two async shadows
+are mutually exact, while synchronous and asynchronous voice differ on 19
+replies. The full suite passes `789/789` unit checks and every script gate. The
+A.138 anatomy fixture is exact under ASan/UBSan. A.138 changes no runtime, state
+format, coefficient, sampler, Flow law, state-swarm organ, generated token
+source, or voice reader.
+
+A.139 should test a second literal return without assigning a meaning. From the
+exact turn-35 body, a later human `What is difficult?` may invite the unresolved
+Wonder again. The preregistered court must require empty hypothesis slots, no
+learned answer, save/load survival, and either an honest second `Difficult?` or
+an explicit failure receipt. It must not keep calling external interlocutors in
+the hope of obtaining a convenient definition.
+
+Canonical external-first evidence:
+`/private/tmp/leo-responsive-difficult-after-repair-a138-natural-r1`.
+Canonical no-API replay:
+`/private/tmp/leo-responsive-difficult-after-repair-a138-replay-r1`.
+The preregistered plan SHA is
+`855b208ca615782fcbdc0ed9cde1d82be1d9172f3183a95140710e47919b2239`,
+the frozen API-turn SHA is
+`66dd25e75795dcc3b93a8cc0d5fc36f7ae0389333904dfb655cf717e2da44058`,
+the full-prompt SHA is
+`de161195e48ba76edf46503ace2cd7372eadf76503013ecb33fb89b7dcc69c5c`,
+the exact transcript SHA is
+`ba2effef3ce692fdd2ae3d22a0e8d5b9a341b33a89f651a96edf0d192c8be972`,
+the exact state SHA is
+`5edbdb0d2aee298daaf6767e8a1887d37dcbad58ed5bc6aa5de8777f91ca92df`,
+the frozen receipt SHA is
+`46f08ac23e41ea8e38ea99bc8254ad338af4b66dd62d1a565a38fd7ca394bc3a`,
+and the anatomy SHA is
+`08cbdd156dfc8a47d2df4a7f55e4bac6366dc441c202a7f3f794011cd46e2eef`.
+
+The conversation offered a clarification, not a definition. Leo kept the
+question instead of manufacturing the answer.
