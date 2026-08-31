@@ -11058,3 +11058,68 @@ and the exact anatomy SHA is
 
 The human named the question. School mistook a person in the sentence for its
 answer.
+
+## Phase A.137 - reference is not predication (2026-08-30)
+
+A.136 left one exact fault: an explicit mention of the pending word selected
+the right Wonder, but School then harvested every concept in that statement as
+positive meaning evidence. In `I meant the difficult feeling he might be
+carrying`, the word `he` was ordinary grammar. It was not a definition of
+`difficult`.
+
+A.137 preregisters and installs a narrower boundary. An explicit occurrence of
+the pending word still establishes which Wonder is being addressed. Positive
+meaning evidence, however, begins only after a bounded copula whose subject is
+that pending word: `a zorble is water`. Leading articles, dialogue
+affirmations, and the established leading `no` correction marker are admitted;
+a coordinated subject such as `Suvin and Nareth are animal` may reach the
+copula. Other material between the unknown and the copula refuses positive
+predication. Rejection polarity remains available across the addressed
+statement because removing a proposed meaning does not assign a replacement.
+
+The 15-case direct court first reproduced all four false lessons under the
+named control and then refused them under the candidate law: `he`, `she`, `the
+child`, and a co-present child no longer become the unknown word's meaning.
+Two neutral explicit references remain references, seven genuine positive
+answer forms survive, and two negative forms still narrow. In particular, the
+exact A.134 line removes the offered `Man` while leaving `difficult` unresolved,
+and the genuine A.122 form `a zorble is water. What do you hear?` still teaches
+`water` before its separate follow-up question. The named
+`--no-school-reference-predication` ablation restores the exact A.136
+`difficult=man` failure rather than approximating it.
+
+The no-API natural replay uses the same 35 human prompts as A.136. Candidate and
+control visible replies are exact through turn 26; they differ on five later
+replies as their bodies diverge. Under the candidate law, `difficult` has been
+heard five times but remains unlearned, unanswered, unresolved, and pending,
+with 22 open-Wonder turns. Under the control, the historical A.136 transcript
+and state are byte-exact: `difficult=man`, the episode is resolved, and the
+pending word is cleared after 12 open-Wonder turns. Both arms ask the same three
+School questions: `lentil@2,difficult@15,difficult@25`. Thus the repair changes
+the body's false lesson without rewriting the visible turn that exposed it.
+
+The full suite passes `789/789` unit checks and every script gate, including the
+new reference-predication court and the historical A.136 control. Production
+and unit ASan/UBSan runs are clean. No state format, coefficient, sampler, Flow
+law, state-swarm organ, generated token source, or voice reader changes.
+
+A.138 should return the still-unanswered `Difficult?` from this repaired body
+to a fresh visible-only continuation. It must observe whether ordinary
+dialogue eventually supplies a real predicate, without instructing an external
+interlocutor to define the word and without accepting grammatical co-presence
+as an answer.
+
+Canonical replay evidence:
+`/private/tmp/leo-reference-predication-boundary-a137-r3`.
+The preregistered plan SHA is
+`2662d868b019ac2c0577c6890ef3fca271d5e0dc40fc3c96aa7202181cfb1879`,
+the direct-case SHA is
+`89c8c4fe4306eede1ac8acc6bb68be21165cbfaaf85802026b618a90ee8678e5`,
+the exact direct-output SHA is
+`e1bd3764c5ca3037ac2cf3e2aaba1a9b659c01c5868c4c28e2dfe207d2283314`,
+the exact natural-state summary SHA is
+`ce0ee1c188a29ba5ecaa88be52ca2f5ae589197a6206e5d6b8b51352c8454ba7`,
+and the frozen replay receipt SHA is
+`1062c91dca7ca0e2aae274757892a1d295b5edfc3bcb9d66d69addea8c1584da`.
+
+The name points to the question. The predicate, if there is one, answers it.

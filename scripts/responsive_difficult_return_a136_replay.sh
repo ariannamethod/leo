@@ -34,6 +34,7 @@ LEO_NATURAL_REPLAY_FILE="$PREFIX" \
     LEO_NATURAL_LIFE=meal LEO_NATURAL_ARM=replay \
     LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=25 \
     LEO_NATURAL_OPENING='Reproduce the exact A.135 difficult-return fork.' \
+    LEO_NATURAL_REFERENCE_PREDICATION=0 \
     LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=1 \
     "$ROOT/scripts/natural_life_probe.sh" "$OUT/prefix" \
     > "$OUT/prefix.out"
@@ -52,6 +53,7 @@ for arm in replay async-a async-b; do
         LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=35 \
         LEO_NATURAL_OPENING='Continue the exact A.135 difficult-return fork.' \
         LEO_NATURAL_ASYNC="$async" \
+        LEO_NATURAL_REFERENCE_PREDICATION=0 \
         LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=1 \
         "$ROOT/scripts/natural_life_probe.sh" "$destination" \
         > "$OUT/lives/$arm.out"

@@ -2952,6 +2952,7 @@ static int g_leo_school_family_heard_threshold_on = 1; /* A.131: two witnessed e
 static int g_leo_school_two_layer_family_composition_on = 1; /* A.133: exactly two admitted A.120 edges may carry one whole-word witness. */
 static int g_leo_school_lexical_role_on = 1; /* A.121: exact relational/polarity grammar cannot masquerade as a teachable thing. */
 static int g_leo_school_answer_followup_on = 1; /* A.122: a bounded answer may precede a separate human follow-up question. */
+static int g_leo_school_reference_predication_on = 1; /* A.137: naming a Wonder supplies reference; only its copular predicate supplies meaning. */
 static int g_leo_wonder_reask_reference_on = 1; /* A.123: one guessed glyph cannot recall an unnamed Wonder without an anaphoric hypothesis question. */
 static int g_leo_school_offered_answer_expansion_on = 1; /* A.125: one offered glyph before an em-dash explanation remains one bounded answer. */
 static int g_leo_school_followup_question_scope_on = 1; /* A.125: a separate human question cannot recruit words from the prior answer into the occupied queue. */
@@ -6375,6 +6376,73 @@ static void leo_school_answer_evidence_add(
     dst->rejected_total += src->rejected_total;
 }
 
+/* A.137: an explicit name identifies the Wonder but does not turn every
+ * concept in the same statement into its meaning. Meaning evidence begins
+ * only after a bounded copula whose subject is the pending word itself:
+ * "a zorble is animal". Articles, dialogue affirmations, and Leo's established
+ * leading `no` correction marker may precede the subject. A coordinated
+ * subject such as "suvin and nareth are animal" may continue through its
+ * conjunction and peer; other material between the unknown and the copula
+ * refuses predication. The caller still records explicit reference, so
+ * rejected or absent evidence can leave the question honestly unresolved. */
+static int leo_school_explicit_predicate_evidence_range(
+        const Leo *leo, const char *begin, const char *end,
+        LeoSchoolAnswerEvidence *evidence) {
+    memset(evidence, 0, sizeof *evidence);
+    if (!leo || !begin || !end || end < begin ||
+        !leo->school.pending[0])
+        return 0;
+
+    int be = semtok_find_glyph("BE");
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0, words_before = 0, subject_seen = 0;
+    int compound_subject = 0;
+    const char *meaning_begin = NULL;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch = p < end ? (unsigned char)*p : 0;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (!subject_seen) {
+                if (!strcmp(cur, leo->school.pending)) {
+                    subject_seen = 1;
+                } else if (!leo_school_word_is_article(cur) &&
+                           !leo_school_word_is_affirmation(cur) &&
+                           strcmp(cur, "no")) {
+                    words_before++;
+                }
+            } else if (!meaning_begin) {
+                if (words_before == 0 &&
+                    compound_subject != 1 &&
+                    leo_semtok_word(leo, cur) == be) {
+                    meaning_begin = p + 1;
+                } else if ((!strcmp(cur, "and") ||
+                            !strcmp(cur, "or")) &&
+                           compound_subject != 1) {
+                    compound_subject = 1;
+                } else if (compound_subject == 1 &&
+                           leo_school_word_is_article(cur)) {
+                    /* article inside a coordinated subject */
+                } else if (compound_subject == 1) {
+                    compound_subject = 2;
+                } else {
+                    return 0;
+                }
+            }
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    if (!meaning_begin || meaning_begin > end) return 0;
+    leo_school_answer_evidence_range(
+        leo, meaning_begin, end, evidence);
+    return 1;
+}
+
 /* A reference licenses evidence from a bounded statement, not every sentence
  * that happens to share the same human turn. Explicitly named statements may
  * occur later and may cooperate with one another. Without a name, only the
@@ -6397,8 +6465,26 @@ static LeoSchoolAnswerReference leo_school_answer_scope(
         if (leo_school_range_has_word(
                 begin, p, leo->school.pending)) {
             LeoSchoolAnswerEvidence part;
-            leo_school_answer_evidence_range(
-                leo, begin, p, &part);
+            if (g_leo_school_reference_predication_on) {
+                leo_school_explicit_predicate_evidence_range(
+                    leo, begin, p, &part);
+                /* A lexical rejection removes a hypothesis; it assigns no
+                 * replacement meaning and therefore does not need copular
+                 * predication. Preserve all rejection polarity from the
+                 * addressed statement while positive evidence stays scoped
+                 * to the unknown's predicate. */
+                LeoSchoolAnswerEvidence whole;
+                leo_school_answer_evidence_range(
+                    leo, begin, p, &whole);
+                part.rejected_total = 0;
+                for (int g = 0; g < GLYPH_COUNT; g++) {
+                    part.rejected[g] = whole.rejected[g];
+                    part.rejected_total += part.rejected[g];
+                }
+            } else {
+                leo_school_answer_evidence_range(
+                    leo, begin, p, &part);
+            }
             leo_school_answer_evidence_add(
                 evidence, &part);
             explicit_statements++;
@@ -15825,6 +15911,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-lexical-role")) g_leo_school_lexical_role_on = 0;
         else if (!strcmp(argv[i], "--school-answer-followup")) g_leo_school_answer_followup_on = 1;
         else if (!strcmp(argv[i], "--no-school-answer-followup")) g_leo_school_answer_followup_on = 0;
+        else if (!strcmp(argv[i], "--school-reference-predication")) g_leo_school_reference_predication_on = 1;
+        else if (!strcmp(argv[i], "--no-school-reference-predication")) g_leo_school_reference_predication_on = 0;
         else if (!strcmp(argv[i], "--wonder-reask-reference")) g_leo_wonder_reask_reference_on = 1;
         else if (!strcmp(argv[i], "--no-wonder-reask-reference")) g_leo_wonder_reask_reference_on = 0;
         else if (!strcmp(argv[i], "--school-offered-answer-expansion")) g_leo_school_offered_answer_expansion_on = 1;

@@ -6892,6 +6892,112 @@ static TEST_NOINLINE void test_wonder_answer_followup(void) {
     free(answer);
 }
 
+static TEST_NOINLINE void test_reference_predication_boundary(void) {
+    /* A.137: naming the pending word establishes reference, not meaning.
+     * Only a bounded copular predicate whose subject is that word may teach;
+     * grammatical participants elsewhere in the statement remain perception. */
+    Leo *leo = calloc(1, sizeof *leo);
+    CHECK(leo != NULL,
+          "reference-predication: heap fixture allocated");
+    if (!leo) return;
+
+    int previous = g_leo_school_reference_predication_on;
+    LeoSchoolAnswerEvidence evidence;
+    LeoSchoolAnswerReference reference;
+    const char *false_lessons[] = {
+        "I meant the zorble feeling he might be carrying.",
+        "I meant the zorble feeling she might be carrying.",
+        "I meant the zorble feeling the child might be carrying.",
+        "The child carries a zorble."
+    };
+    int refused = 1;
+    g_leo_school_reference_predication_on = 1;
+    for (size_t i = 0;
+         i < sizeof false_lessons / sizeof false_lessons[0]; i++) {
+        seed_wonder_negation_body(leo);
+        int grounded = leo_school_grounded_answer(
+            leo, false_lessons[i], &evidence, &reference);
+        refused = refused && grounded < 0 &&
+            reference == LEO_SCHOOL_ANSWER_EXPLICIT &&
+            evidence.asserted_total == 0 &&
+            evidence.rejected_total == 0;
+        leo_free(leo);
+    }
+    CHECK(refused,
+          "reference-predication: he, she, child, and co-presence identify the Wonder but cannot become its meaning");
+
+    leo_init(leo);
+    snprintf(leo->school.pending, sizeof leo->school.pending,
+             "difficult");
+    leo->school.pending_glyph = semtok_word("man");
+    leo->school.pending_alt_glyph = -1;
+    leo_wonder_open(
+        leo, "difficult", leo->school.pending_glyph, -1);
+    char out[1024];
+    leo_respond(
+        leo,
+        "Maybe not a man—just someone carrying a difficult feeling. "
+        "Where does he go?",
+        out, sizeof out);
+    CHECK(!leo_school_is_learned(leo, "difficult") &&
+          !strcmp(leo->school.pending, "difficult") &&
+          leo->school.pending_glyph == -1 &&
+          leo->school.pending_alt_glyph == -1 &&
+          !leo->school.wonders[0].resolved,
+          "reference-predication: A.134 natural rejection still removes Man without assigning a replacement");
+
+    leo_free(leo);
+    leo_init(leo);
+    snprintf(leo->school.pending, sizeof leo->school.pending,
+             "difficult");
+    leo->school.pending_glyph = -1;
+    leo->school.pending_alt_glyph = -1;
+    leo_wonder_open(leo, "difficult", -1, -1);
+    leo_respond(
+        leo,
+        "I meant the difficult feeling he might be carrying. "
+        "Does it still feel difficult now?",
+        out, sizeof out);
+    const LeoWonderEpisode *episode =
+        &leo->school.wonders[0];
+    CHECK(!leo_school_is_learned(leo, "difficult") &&
+          !strcmp(leo->school.pending, "difficult") &&
+          !episode->resolved && episode->answer_glyph == -1,
+          "reference-predication: the exact A.136 clarification leaves the returned question unanswered");
+
+    leo_free(leo);
+    leo_init(leo);
+    snprintf(leo->school.pending, sizeof leo->school.pending,
+             "difficult");
+    leo->school.pending_glyph = -1;
+    leo->school.pending_alt_glyph = -1;
+    leo_wonder_open(leo, "difficult", -1, -1);
+    g_leo_school_reference_predication_on = 0;
+    leo_respond(
+        leo,
+        "I meant the difficult feeling he might be carrying. "
+        "Does it still feel difficult now?",
+        out, sizeof out);
+    CHECK(leo_semtok_word(leo, "difficult") == semtok_word("man") &&
+          leo->school.wonders[0].resolved,
+          "reference-predication: named ablation restores the exact A.136 false lesson");
+
+    leo_free(leo);
+    seed_wonder_negation_body(leo);
+    g_leo_school_reference_predication_on = 1;
+    int grounded = leo_school_grounded_answer(
+        leo, "a zorble is water. What do you hear?",
+        &evidence, &reference);
+    CHECK(grounded == semtok_word("water") &&
+          reference == LEO_SCHOOL_ANSWER_EXPLICIT &&
+          evidence.asserted[semtok_word("water")] == 1,
+          "reference-predication: a genuine A.122 explicit answer still survives its follow-up question");
+
+    g_leo_school_reference_predication_on = previous;
+    leo_free(leo);
+    free(leo);
+}
+
 static void seed_wonder_natural_answer_body(Leo *leo) {
     leo_init(leo);
     snprintf(leo->school.pending, sizeof leo->school.pending, "flom");
@@ -9339,6 +9445,7 @@ int main(void) {
     test_wonder_answer_reference();
     test_wonder_answer_scope();
     test_wonder_answer_followup();
+    test_reference_predication_boundary();
     test_wonder_natural_answer_form();
     test_wonder_plural_answer_capacity();
     test_wonder_two_glyph_learned_meaning();

@@ -30,6 +30,7 @@ if [ ! -f "$API/dialogue.jsonl" ]; then
         LEO_NATURAL_LIFE=meal LEO_NATURAL_ARM=api \
         LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=25 \
         LEO_NATURAL_OPENING='Continue the exact A.135 difficult-return fork.' \
+        LEO_NATURAL_REFERENCE_PREDICATION=0 \
         LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=1 \
         "$ROOT/scripts/natural_life_probe.sh" "$API" > "$OUT/lives/prefix.out"
 fi
@@ -51,6 +52,7 @@ if [ "$completed" -ge 25 ] && [ "$completed" -lt 35 ]; then
         LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=35 \
         LEO_NATURAL_OPENING='Continue the exact A.135 difficult-return fork.' \
         LEO_NATURAL_RESUME=1 \
+        LEO_NATURAL_REFERENCE_PREDICATION=0 \
         LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=1 \
         "$ROOT/scripts/natural_life_probe.sh" "$API" > "$OUT/lives/api.out"
 elif [ "$completed" -ne 35 ]; then
@@ -62,6 +64,7 @@ jq -e '.source == "frozen-prefix-then-responses-api-visible-transcript" and
        .replay_prefix_turns == 25 and .api_turns == 10 and
        .api_store == false and .transcript_visible_to_interlocutor == true and
        .diagnostics_visible_to_interlocutor == false and
+       .school_reference_predication == false and
        .school_two_layer_family_composition == true' \
     "$API/manifest.json" >/dev/null
 
@@ -77,6 +80,7 @@ for arm in replay async-a async-b; do
             LEO_NATURAL_SEED=617 LEO_NATURAL_TURNS=35 \
             LEO_NATURAL_OPENING='Continue the exact A.135 difficult-return fork.' \
             LEO_NATURAL_ASYNC="$async" \
+            LEO_NATURAL_REFERENCE_PREDICATION=0 \
             LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION=1 \
             "$ROOT/scripts/natural_life_probe.sh" "$destination" \
             > "$OUT/lives/$arm.out"

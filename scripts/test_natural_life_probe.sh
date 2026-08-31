@@ -42,6 +42,7 @@ jq -e '.source == "frozen-visible-replay" and .api_store == null and
        .school_lexical_family == true and
        .school_lexical_role == true and
        .school_answer_followup == true and
+       .school_reference_predication == true and
        .wonder_reask_reference == true and
        .school_offered_answer_expansion == true and
        .school_followup_question_scope == true and
