@@ -1,0 +1,9 @@
+arm	prompt	heard	learned	offered	answer	resolved	returns	pending
+turn25	none	3	none	none	none	0	1	difficult
+actual-turn26	I meant the difficult feeling he might be carrying. Does it still feel difficult now?	5	man	none	man	1	1	none
+no-answer-followup	I meant the difficult feeling he might be carrying. Does it still feel difficult now?	5	none	none	none	0	1	difficult
+declarative-prefix	I meant the difficult feeling he might be carrying.	4	man	none	man	1	1	none
+pronoun-front	He might be carrying the difficult feeling.	4	none	none	none	0	1	difficult
+she-after	I meant the difficult feeling she might be carrying.	4	woman	none	woman	1	1	none
+child-after	I meant the difficult feeling the child might be carrying.	4	child	none	child	1	1	none
+turn35	none	5	man	none	man	1	1	none
