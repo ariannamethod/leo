@@ -1,0 +1,23 @@
+field	value
+phase	A.138
+question	what-does-a-fresh-visible-only-interlocutor-say-after-the-repaired-Difficult-return-and-does-School-assign-only-a-real-predicate
+source_body	A.135 exact synchronous body after turn 25 What is difficult / Difficult under merged A.137 law
+fork	meal after exact turns 1-25
+base_seed	617
+prefix_turns	25
+continuation_turns	10
+planned_api_turns	10
+interlocutor	Responses API visible transcript only
+model	gpt-5.6-luna
+api_store	false
+private_diagnostics_visible	false
+prior_a136_continuation_visible	false
+answer_instruction	absent
+candidate_law	explicit reference alone leaves difficult unresolved; only a bounded copular predicate with difficult as subject may teach
+possible_answer	observe whether an ordinary continuation supplies a genuine predicate and whether School records exactly that evidence
+possible_reference_only	keep difficult pending and unresolved without assigning co-present grammar
+possible_shift	make no semantic claim when the conversation moves elsewhere
+failure	any unrelated subject pronoun possessor or co-present entity becomes difficult meaning
+controls	exact full-prompt synchronous replay and two reproducible async shadows
+runtime_change	forbidden before observation
+decision	descriptive external court; freeze every response before interpretation

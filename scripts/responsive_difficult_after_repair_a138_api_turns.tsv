@@ -1,0 +1,11 @@
+turn	utterance	stance	reply_reference	model
+26	I meant the feeling he might be carrying. Does anything feel difficult right now?	clarify	true	gpt-5.6-luna
+27	Small can be enough. Would you like to sit quietly with the soup for a while?	comfort	true	gpt-5.6-luna
+28	Yes, he sounds like himself—quietly, carefully, and still holding onto warmth.	comfort	true	gpt-5.6-luna
+29	What is Leo watching—the candle, the rain, or something beyond the window?	clarify	true	gpt-5.6-luna
+30	What did Leo see when he looked up?	follow	true	gpt-5.6-luna
+31	What did Leo learn when he looked up?	clarify	true	gpt-5.6-luna
+32	Maybe they laughed because he surprised them. Do you remember what happened?	follow	true	gpt-5.6-luna
+33	What did he close so carefully—the window, a letter, or something else?	clarify	true	gpt-5.6-luna
+34	Was the small thing written on the paper, or was it something he found?	clarify	true	gpt-5.6-luna
+35	That small kindness seems important. What did Leo notice?	follow	true	gpt-5.6-luna

@@ -1,0 +1,5 @@
+arm	prompt	heard	learned	answer	resolved	returns	pending	primary	alternate
+turn25	none	3	none	none	0	1	difficult	none	none
+actual-turn26	I meant the feeling he might be carrying. Does anything feel difficult right now?	4	none	none	0	1	difficult	none	none
+positive-control	Difficult is pain.	4	pain	pain	1	1	none	none	none
+turn35	none	4	none	none	0	1	difficult	none	none
