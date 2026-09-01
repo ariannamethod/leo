@@ -1,0 +1,5 @@
+arm	word	heard	learned_primary	learned_alternate	episode	offered_primary	offered_alternate	answer_primary	answer_alternate	resolved	returns	pending	pending_primary	pending_alternate	pending_turns	wonders
+control	simply	3	none	none	1	light	now	none	none	0	0	simply	light	now	19	1
+control	difficult	1	none	none	0	none	none	none	none	-1	-1	simply	light	now	19	1
+candidate	simply	3	light	now	1	light	now	light	now	1	0	difficult	make	home	11	2
+candidate	difficult	1	none	none	1	make	home	none	none	0	0	difficult	make	home	11	2

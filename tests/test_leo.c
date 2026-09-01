@@ -7448,6 +7448,116 @@ static TEST_NOINLINE void test_wonder_two_glyph_learned_meaning(void) {
     free(pair); free(woke); free(old); free(damaged);
 }
 
+static TEST_NOINLINE void test_wonder_cautious_paired_answer(void) {
+    /* A.142: hesitation may qualify a complete paired selection without
+     * becoming a third meaning or allowing an unfinished surface to close. */
+    Leo *cautious = calloc(1, sizeof *cautious);
+    Leo *woke = calloc(1, sizeof *woke);
+    CHECK(cautious && woke,
+          "wonder-cautious-pair: heap fixtures allocated");
+    if (!cautious || !woke) {
+        free(cautious); free(woke);
+        return;
+    }
+
+    int previous = g_leo_school_cautious_pair_on;
+    int body = semtok_word("body");
+    int joy = semtok_word("joy");
+    char out[1024];
+    LeoSchoolAnswerEvidence evidence;
+    LeoSchoolAnswerReference reference;
+    int answer_alt = -1;
+    const char *exact =
+        "Both, maybe: the body is here now, and we can keep flom gentle.";
+
+    g_leo_school_cautious_pair_on = 1;
+    seed_wonder_plural_answer_body(cautious);
+    int grounded = leo_school_grounded_answer_meanings(
+        cautious, exact, &answer_alt, &evidence, &reference);
+    CHECK(grounded == body && answer_alt == joy &&
+          reference == LEO_SCHOOL_ANSWER_PAIRED &&
+          evidence.asserted[body] == 1 &&
+          evidence.asserted[joy] == 1,
+          "wonder-cautious-pair: exact Both maybe prefix preserves both offered meanings before explanation");
+
+    leo_respond(cautious, exact, out, sizeof out);
+    int learned = leo_school_learned_index(cautious, "flom");
+    CHECK(learned >= 0 && !cautious->school.pending[0] &&
+          cautious->school.learned_glyph[learned] == body &&
+          cautious->school.learned_alt_glyph[learned] == joy &&
+          cautious->school.wonders[0].resolved,
+          "wonder-cautious-pair: live cautious answer closes without erasing either choice");
+
+    const char *state = "/tmp/leo_cautious_pair_v28.state";
+    int saved = leo_save_state(cautious, state);
+    int loaded = saved && leo_load_state(woke, state);
+    int woke_index = leo_school_learned_index(woke, "flom");
+    CHECK(loaded && woke_index >= 0 &&
+          woke->school.learned_glyph[woke_index] == body &&
+          woke->school.learned_alt_glyph[woke_index] == joy &&
+          woke->school.wonders[0].answer_glyph == body &&
+          woke->school.wonders[0].answer_alt_glyph == joy,
+          "wonder-cautious-pair: paired answer survives sleep exactly");
+
+    leo_free(cautious);
+    seed_wonder_plural_answer_body(cautious);
+    leo_respond(cautious, "Body and joy, perhaps.", out, sizeof out);
+    learned = leo_school_learned_index(cautious, "flom");
+    CHECK(learned >= 0 &&
+          cautious->school.learned_glyph[learned] == body &&
+          cautious->school.learned_alt_glyph[learned] == joy,
+          "wonder-cautious-pair: a postposed hedge may follow one complete joined pair");
+
+    const char *refusals[] = {
+        "Both, maybe?",
+        "Both, maybe not.",
+        "Maybe both.",
+        "Both, maybe, perhaps.",
+        "Both water, maybe.",
+        "Both both, maybe.",
+        "Both, maybe, or body.",
+        "Body body and joy, maybe."
+    };
+    for (size_t i = 0; i < sizeof refusals / sizeof refusals[0]; i++) {
+        leo_free(cautious);
+        seed_wonder_plural_answer_body(cautious);
+        leo_respond(cautious, refusals[i], out, sizeof out);
+        CHECK(!leo_school_is_learned(cautious, "flom") &&
+              !strcmp(cautious->school.pending, "flom"),
+              "wonder-cautious-pair: unsafe or incomplete cautious surface remains unfinished");
+    }
+
+    leo_free(cautious);
+    seed_wonder_plural_answer_body(cautious);
+    cautious->school.pending_turns = 1;
+    leo_respond(cautious, "Both, maybe.", out, sizeof out);
+    CHECK(!leo_school_is_learned(cautious, "flom") &&
+          !strcmp(cautious->school.pending, "flom"),
+          "wonder-cautious-pair: hedge cannot reopen adjacency after the answer window closes");
+
+    g_leo_school_cautious_pair_on = 0;
+    leo_free(cautious);
+    seed_wonder_plural_answer_body(cautious);
+    leo_respond(cautious, exact, out, sizeof out);
+    CHECK(!leo_school_is_learned(cautious, "flom") &&
+          !strcmp(cautious->school.pending, "flom"),
+          "wonder-cautious-pair: named ablation restores the exact unresolved natural surface");
+
+    leo_free(cautious);
+    seed_wonder_plural_answer_body(cautious);
+    leo_respond(cautious, "Both.", out, sizeof out);
+    learned = leo_school_learned_index(cautious, "flom");
+    CHECK(learned >= 0 &&
+          cautious->school.learned_glyph[learned] == body &&
+          cautious->school.learned_alt_glyph[learned] == joy,
+          "wonder-cautious-pair: ablation leaves the older bare Both law intact");
+
+    g_leo_school_cautious_pair_on = previous;
+    remove(state);
+    leo_free(cautious); leo_free(woke);
+    free(cautious); free(woke);
+}
+
 static TEST_NOINLINE void test_wonder_reask_reference(void) {
     /* A.123: an active Wonder can return when the human names it or asks one
      * of Leo's hypotheses anaphorically. Mere co-presence of a broad guessed
@@ -9526,6 +9636,7 @@ int main(void) {
     test_wonder_natural_answer_form();
     test_wonder_plural_answer_capacity();
     test_wonder_two_glyph_learned_meaning();
+    test_wonder_cautious_paired_answer();
     test_wonder_reask_reference();
     test_delayed_answer_after_second_return();
     test_wonder_return();

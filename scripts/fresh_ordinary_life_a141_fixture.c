@@ -75,6 +75,9 @@ static int run_prompt(
 
 int main(int argc, char **argv) {
     if (argc != 4) return 2;
+    /* Historical replay: A.141 predates the cautious-pair law judged in
+     * A.142, including the counterfactual prompts below. */
+    g_leo_school_cautious_pair_on = 0;
     const char *turn5 = argv[1];
     const char *turn6 = argv[2];
     const char *turn24 = argv[3];

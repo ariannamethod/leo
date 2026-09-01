@@ -2958,6 +2958,7 @@ static int g_leo_school_offered_answer_expansion_on = 1; /* A.125: one offered g
 static int g_leo_school_followup_question_scope_on = 1; /* A.125: a separate human question cannot recruit words from the prior answer into the occupied queue. */
 static int g_leo_school_unique_answer_dominance_on = 1; /* A.126: tied meaning evidence cannot be collapsed to the lowest-numbered glyph and called dominant. */
 static int g_leo_school_two_glyph_learning_on = 1; /* A.127: a strict paired answer may preserve both distinct offered meanings. */
+static int g_leo_school_cautious_pair_on = 1; /* A.142: one postposed maybe/perhaps may hedge an already complete paired answer without erasing it. */
 static int g_leo_school_negative_family_on = 1; /* A.128: un- may preserve an exact known or witnessed lexical family instead of manufacturing novelty. */
 static int g_leo_school_reciprocal_s_family_on = 1; /* A.129: a witnessed complete Xs form may keep its bare X relative from masquerading as novelty. */
 static int g_leo_wonder_on = 1;         /* unfinished wonder: grounded alternatives + persistence across non-answers. --no-wonder restores the prior School contract. */
@@ -6098,11 +6099,65 @@ static int leo_school_word_is_pair_modifier(const char *word) {
            !strcmp(word, "actually");
 }
 
-/* A.127: two offered hypotheses become a paired answer only through explicit
+static int leo_school_word_is_cautious_pair_modifier(
+        const char *word) {
+    return !strcmp(word, "maybe") || !strcmp(word, "perhaps");
+}
+
+static int leo_school_range_has_cautious_pair_modifier(
+        const char *begin, const char *end) {
+    if (!begin || !end || end < begin) return 0;
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch = p < end ? (unsigned char)*p : 0;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (leo_school_word_is_cautious_pair_modifier(cur))
+                return 1;
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
+static int leo_school_range_has_negation(
+        const char *begin, const char *end) {
+    if (!begin || !end || end < begin) return 0;
+    char cur[LEO_HEARD_WORDLEN];
+    int wi = 0;
+    for (const char *p = begin; ; p++) {
+        unsigned char ch = p < end ? (unsigned char)*p : 0;
+        if (ch && (isalpha(ch) || ch == '\'')) {
+            if (wi < LEO_HEARD_WORDLEN - 1)
+                cur[wi++] = (char)tolower(ch);
+            continue;
+        }
+        if (wi > 0) {
+            cur[wi] = 0;
+            if (leo_school_word_negates(cur) ||
+                leo_school_word_ends_negation(cur))
+                return 1;
+        }
+        wi = 0;
+        if (!ch) break;
+    }
+    return 0;
+}
+
+/* A.127/A.142: two offered hypotheses become a paired answer only through explicit
  * surface relation, never through equal counts alone. `both` may stand by
  * itself (with a tiny discourse modifier set), or the two offered meanings may
- * be joined by `and`. `or`, negation, an unknown predicate, a third glyph, one
- * offered glyph, and a duplicated offer all refuse the pair. */
+ * be joined by `and`. One postposed `maybe` or `perhaps` may preserve an
+ * already complete pair, but it must be the final word in the bounded answer.
+ * `or`, negation, a preposed or doubled hedge, an unknown predicate, a third
+ * glyph, one offered glyph, and a duplicated offer all refuse the pair. */
 static int leo_school_range_is_paired_elliptic(
         const Leo *leo, const char *begin, const char *end,
         LeoSchoolAnswerEvidence *evidence) {
@@ -6117,7 +6172,7 @@ static int leo_school_range_is_paired_elliptic(
 
     char cur[LEO_HEARD_WORDLEN];
     int wi = 0, words = 0, both = 0, conjunctions = 0;
-    int content = 0, invalid = 0;
+    int content = 0, pair_modifiers = 0, cautions = 0, invalid = 0;
     for (const char *p = begin; ; p++) {
         unsigned char ch = p < end ? (unsigned char)*p : 0;
         if (ch && (isalpha(ch) || ch == '\'')) {
@@ -6128,6 +6183,7 @@ static int leo_school_range_is_paired_elliptic(
         if (wi > 0) {
             cur[wi] = 0;
             words++;
+            if (cautions > 0) invalid = 1;
             if (!strcmp(cur, "both")) {
                 both++;
             } else if (!strcmp(cur, "and")) {
@@ -6135,8 +6191,23 @@ static int leo_school_range_is_paired_elliptic(
             } else if (!strcmp(cur, "or") || !strcmp(cur, "either") ||
                        leo_school_word_negates(cur)) {
                 invalid = 1;
+            } else if (leo_school_word_is_cautious_pair_modifier(cur)) {
+                int complete_both =
+                    both == 1 && conjunctions == 0 && content == 0;
+                int complete_joined =
+                    both == 0 && conjunctions == 1 && content == 2 &&
+                    evidence && evidence->rejected_total == 0 &&
+                    evidence->asserted_total == 2 &&
+                    evidence->asserted[first] == 1 &&
+                    evidence->asserted[second] == 1;
+                if (!g_leo_school_cautious_pair_on || cautions > 0 ||
+                    pair_modifiers > 0 ||
+                    (!complete_both && !complete_joined))
+                    invalid = 1;
+                cautions++;
+            } else if (leo_school_word_is_pair_modifier(cur)) {
+                pair_modifiers++;
             } else if (leo_school_word_is_affirmation(cur) ||
-                       leo_school_word_is_pair_modifier(cur) ||
                        leo_school_word_is_article(cur)) {
                 /* bounded answer grammar */
             } else {
@@ -6178,6 +6249,56 @@ static int leo_school_range_is_paired_elliptic(
         return 1;
     }
     return 0;
+}
+
+static int leo_school_range_has_words(
+        const char *begin, const char *end);
+
+/* A.142: a complete cautious pair before one explanation boundary keeps its
+ * answer authority even when the explanation later repeats the pending word.
+ * Only ':' or the established single U+2014 em dash may open that explanation;
+ * the prefix must independently satisfy the strict paired law, the tail must
+ * contain words, and negation anywhere refuses the shortcut. The explanation
+ * supplies no glyph evidence and therefore cannot add a third meaning. */
+static int leo_school_cautious_pair_explanation_prefix(
+        const Leo *leo, const char *prompt,
+        LeoSchoolAnswerEvidence *evidence) {
+    if (!g_leo_school_cautious_pair_on || !leo || !prompt || !evidence ||
+        leo->school.pending_turns != 0)
+        return 0;
+
+    static const char em_dash[] = "\xe2\x80\x94";
+    const char *colon = strchr(prompt, ':');
+    const char *dash = strstr(prompt, em_dash);
+    const char *boundary = NULL;
+    size_t boundary_bytes = 1;
+    if (colon && (!dash || colon < dash)) {
+        boundary = colon;
+    } else if (dash && !strstr(dash + sizeof em_dash - 1, em_dash)) {
+        boundary = dash;
+        boundary_bytes = sizeof em_dash - 1;
+    }
+    if (!boundary ||
+        !leo_school_range_has_words(
+            boundary + boundary_bytes, prompt + strlen(prompt)) ||
+        leo_school_range_has_negation(
+            prompt, prompt + strlen(prompt)))
+        return 0;
+    for (const char *p = prompt; p < boundary; p++)
+        if (*p == '.' || *p == ';' || *p == '!' || *p == '?')
+            return 0;
+    if (!leo_school_range_has_cautious_pair_modifier(
+            prompt, boundary))
+        return 0;
+
+    LeoSchoolAnswerEvidence part;
+    leo_school_answer_evidence_range(
+        leo, prompt, boundary, &part);
+    if (!leo_school_range_is_paired_elliptic(
+            leo, prompt, boundary, &part))
+        return 0;
+    *evidence = part;
+    return 1;
 }
 
 static int leo_school_explicit_asserts_offered_pair(
@@ -6455,6 +6576,10 @@ static LeoSchoolAnswerReference leo_school_answer_scope(
     memset(evidence, 0, sizeof *evidence);
     if (!leo || !prompt || !leo->school.pending[0])
         return LEO_SCHOOL_ANSWER_UNREFERENCED;
+
+    if (leo_school_cautious_pair_explanation_prefix(
+            leo, prompt, evidence))
+        return LEO_SCHOOL_ANSWER_PAIRED;
 
     int explicit_statements = 0;
     const char *begin = prompt;
@@ -15923,6 +16048,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-unique-answer-dominance")) g_leo_school_unique_answer_dominance_on = 0;
         else if (!strcmp(argv[i], "--school-two-glyph-learning")) g_leo_school_two_glyph_learning_on = 1;
         else if (!strcmp(argv[i], "--no-school-two-glyph-learning")) g_leo_school_two_glyph_learning_on = 0;
+        else if (!strcmp(argv[i], "--school-cautious-pair")) g_leo_school_cautious_pair_on = 1;
+        else if (!strcmp(argv[i], "--no-school-cautious-pair")) g_leo_school_cautious_pair_on = 0;
         else if (!strcmp(argv[i], "--school-negative-family")) g_leo_school_negative_family_on = 1;
         else if (!strcmp(argv[i], "--no-school-negative-family")) g_leo_school_negative_family_on = 0;
         else if (!strcmp(argv[i], "--school-reciprocal-s-family")) g_leo_school_reciprocal_s_family_on = 1;
