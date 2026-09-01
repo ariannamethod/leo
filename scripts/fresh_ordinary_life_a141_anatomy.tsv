@@ -1,0 +1,8 @@
+arm	prompt	heard	learned_primary	learned_alternate	answer_primary	answer_alternate	resolved	returns	pending	offered_primary	offered_alternate	pending_turns	wonders
+turn5	none	2	none	none	none	none	0	0	simply	light	now	0	1
+actual-turn6	Both, maybe: the light is here now, and we can simply listen.	3	none	none	none	none	0	0	simply	light	now	1	1
+turn6	none	3	none	none	none	none	0	0	simply	light	now	1	1
+bare-both-control	Both.	2	light	now	light	now	1	0	none	none	none	0	1
+qualified-both-control	Both, maybe.	2	none	none	none	none	0	0	simply	light	now	1	1
+single-choice-control	Light.	2	light	none	light	none	1	0	none	none	none	0	1
+turn24	none	3	none	none	none	none	0	0	simply	light	now	19	1

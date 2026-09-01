@@ -1,0 +1,25 @@
+turn	utterance	stance	reply_reference	model
+1	The kettle is humming softly, and a pale patch of sunlight has reached the kitchen floor.	open	false	gpt-5.6-luna
+2	Maybe the kettle is saying morning in its own gentle language.	follow	true	gpt-5.6-luna
+3	Small quiet feelings can still matter; shall we sit with this one a little?	comfort	true	gpt-5.6-luna
+4	We can stay with it gently; nothing needs to be decided just yet.	comfort	true	gpt-5.6-luna
+5	That’s enough for now. We can simply listen to the kettle and let the morning be.	comfort	true	gpt-5.6-luna
+6	Both, maybe: the light is here now, and we can simply listen.	answer	true	gpt-5.6-luna
+7	You don’t need a better answer. Just holding the stone is enough for this morning.	comfort	true	gpt-5.6-luna
+8	That sounds gentle—the window kept a little night while morning came in.	follow	true	gpt-5.6-luna
+9	Yes, a little moment is enough; we can breathe with the room.	follow	false	gpt-5.6-luna
+10	It’s okay not to hear clearly; your hands can rest on the table while the morning settles.	comfort	true	gpt-5.6-luna
+11	You can walk away for a while; the table and morning will still be here when you return.	comfort	true	gpt-5.6-luna
+12	Maybe the window can hold this moment until you’re ready to return.	comfort	true	gpt-5.6-luna
+13	Letting the outside in can make room for quiet, even when seeing is difficult.	follow	true	gpt-5.6-luna
+14	You can keep the quiet as long as you need; I’m here with you.	comfort	true	gpt-5.6-luna
+15	The morning can stay softly with us, without asking anything more.	comfort	true	gpt-5.6-luna
+16	You can grow at your own pace; staying here quietly is already enough.	comfort	false	gpt-5.6-luna
+17	What would Leo like, if he could choose something small for this morning?	clarify	false	gpt-5.6-luna
+18	Maybe Leo would like warm tea and a little more time by the window.	follow	true	gpt-5.6-luna
+19	You can like yourself gently, too; there’s no need to hurry this morning.	comfort	false	gpt-5.6-luna
+20	A small laugh is welcome here; what did you notice that made you smile?	open	true	gpt-5.6-luna
+21	That sounds lovely—what small thing did you make?	follow	true	gpt-5.6-luna
+22	Sometimes small spills happen; we can wipe it up together and keep the morning gentle.	comfort	false	gpt-5.6-luna
+23	I’m glad the kind word helped; we can keep this moment gentle together.	comfort	true	gpt-5.6-luna
+24	The candle can share its warmth, and the book can keep you company for a while.	comfort	true	gpt-5.6-luna
