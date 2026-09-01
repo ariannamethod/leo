@@ -1,0 +1,4 @@
+kind	prompt	heard	pending_turns	learned	answer	resolved	returns	pending	primary	alternate	literal_return	reply
+synthetic-second	What is zorble?	1	0	none	none	0	2	zorble	none	none	1	Zorble?
+synthetic-sleep-second	What is zorble?	1	0	none	none	0	2	zorble	none	none	1	Zorble?
+synthetic-immediate-third	What is zorble?	2	1	none	none	0	2	zorble	none	none	0	... ... ...

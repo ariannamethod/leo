@@ -1,0 +1,5 @@
+kind	prompt	heard	pending_turns	learned	answer	resolved	returns	pending	primary	alternate	literal_return	reply
+turn35	none	4	10	none	none	0	1	difficult	none	none	0	none
+second-return	What is difficult?	5	0	none	none	0	2	difficult	none	none	1	Difficult?
+sleep-second-return	What is difficult?	5	0	none	none	0	2	difficult	none	none	1	Difficult?
+immediate-third	What is difficult?	6	1	none	none	0	2	difficult	none	none	0	I quiet that fills. Difficult.

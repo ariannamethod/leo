@@ -1,0 +1,18 @@
+field	value
+phase	A.139
+question	can-the-same-unanswered-Wonder-return-a-second-time-after-ten-ordinary-turns-without-learning-or-looping
+source_body	A.138 exact synchronous turn-35 state
+source_state	difficult heard four times learned none answer none resolved zero returns one pending difficult with empty hypotheses
+human_invitation	What is difficult?
+expected_second_return	Difficult?
+expected_return_count	2
+requires	literal second return after the ordinary reask gap and after save-load
+cooldown	an immediate third invitation must not emit another literal return or increment returns
+forbids	resurrecting Man inferring feeling assigning a meaning resolving the Wonder or filling either hypothesis slot
+positive_future	a later genuine copular predicate remains admissible but is not part of the natural result
+natural_cases	4
+synthetic_cases	3
+api_turns	0
+state_format_change	forbidden
+runtime_change	prohibited unless the preregistered court fails
+decision	proof-only gate if the existing repeated-return law satisfies every boundary
