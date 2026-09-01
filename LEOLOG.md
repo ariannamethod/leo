@@ -11313,3 +11313,93 @@ and the frozen receipt SHA is
 
 The second return did not harden the question against an answer. The answer
 closed it without rewriting how long it had waited.
+
+## Phase A.141 - an ordinary life asks before the court chooses a word (2026-09-01)
+
+A.140 ended the synthetic recurrence arc. A.141 therefore returns to life
+before making another law. The procedure was preregistered from merged A.140:
+one empty conversational body plus `leo.txt`, no frozen prefix or inherited
+state, no target word, desired Wonder, answer instruction, or runtime change.
+The deterministic session seed is 853, but no prior conversation is seeded into
+the body. A Responses API interlocutor receives only the visible dialogue and
+one generic cue to begin with an ordinary concrete observation.
+
+All 24 `gpt-5.6-luna` responses completed under strict structured output and
+reported `store:false`. Their utterances and stance/reference receipts were
+frozen before the transcript was interpreted. The first four turns stay with a
+kettle, sunlight, a quiet house, and small feelings. On turn 5 the human says
+`We can simply listen to the kettle and let the morning be.` Leo then makes the
+life's only School question:
+
+~~~text
+Simply? Light or Now?
+~~~
+
+This question was not selected by the experiment. It offered two concrete
+meanings from the lived line. The visible interlocutor immediately declared an
+`answer` stance with reply reference and said:
+
+~~~text
+Both, maybe: the light is here now, and we can simply listen.
+~~~
+
+School does not close the Wonder. The exact turn-5 body has
+`pending=simply`, offers `light/now`, and has no learned or recorded answer.
+After the natural turn-6 response it still has no learned or recorded answer,
+and pending age advances to one. At turn 24 the same episode remains open with
+`pending_turns=19`; `simply` has been heard three times and still has no
+assigned meaning. The life consequently has one question at `simply@5` and 20
+open-Wonder turns.
+
+The direct court localizes the boundary without yet changing it. On the exact
+turn-5 body, bare `Both.` closes the episode with both `light` and `now`, while
+`Light.` closes it with the one chosen option. `Both, maybe.` remains open, as
+does the exact natural `Both, maybe:` line. The missing recognition is therefore
+not two-glyph storage or offered-option grounding. It is the narrow paired
+ellipsis grammar refusing a cautious discourse hedge before the explanation.
+
+The word `difficult` does occur once on turn 13, but it was introduced
+spontaneously by the blinded interlocutor after the `simply` episode was already
+open; it was absent from the preregistration and opening request. No result from
+the earlier difficult arc was planted into this body.
+
+The 24 frozen prompts reproduce the API life byte-exact synchronously. Two
+asynchronous shadows are mutually byte-exact. Their generated voice differs
+from synchronous voice on 15 of 24 replies, yet both modes make the same
+`simply@5` question and retain 20 open-Wonder turns. A.141 is observation-only:
+it changes no Leo runtime, state format, coefficient, sampler, Flow law,
+state-swarm organ, generated token source, or voice reader. The full suite
+passes `796/796` unit checks and every script gate, including the new frozen
+life contract. Unit, production, and A.141 fixture runs are clean under
+ASan/UBSan.
+
+A.142 should put the newly exposed surface into a narrow court before granting
+it authority. Starting from the exact turn-5 body, test whether cautious paired
+answers such as `Both, maybe:` or `Both, perhaps` can preserve both offered
+meanings without admitting question-shaped uncertainty, negation, unrelated
+predicates, third glyphs, repeated offers, or explanation leakage. Bare
+`Both.`, a single offered choice, the old em-dash paired form, save/load, and a
+named ablation must remain exact. The court should decide the grammar; it must
+not retrofit the already frozen A.141 life to make its outcome convenient.
+
+Canonical external-first evidence:
+`/private/tmp/leo-fresh-ordinary-life-a141-natural-r1`.
+Canonical no-API replay:
+`/private/tmp/leo-fresh-ordinary-life-a141-replay-r1`.
+The preregistered plan SHA is
+`7713b6dd1f78115ab4c07305dcc96b782dfb2c085d63f4c8d954d369c4dad044`,
+the frozen API-turn SHA is
+`b2ac23105e749c7b0d62d4eb3f708663f29889275ca5661d9474b6d9f07b18c5`,
+the exact prompt SHA is
+`50c2d1ebf2b06ec386a3bce19a0902821c5a9a39d6ffbc736463b3edf029b5a1`,
+the exact transcript SHA is
+`189f93c9bd27a1ef07096f6e2ff66464087793a423b7b2d2b702eda5a4ffee08`,
+the exact state SHA is
+`526d024413be6921e25fb167dafa74fcef934c543e484d48cac6129bfad2e918`,
+the anatomy SHA is
+`89796d6c0005dfa3a3f604e5987df1ea42f1306e7532e00034e9506d3bed7b39`,
+and the frozen receipt SHA is
+`7fa9dbd89a6e44fbabd25b171f634b9aea6f443799e9f7224b9c47eaa68cbc7a`.
+
+Leo offered light or now. The answer chose both, but caution stood between the
+choice and the lesson.

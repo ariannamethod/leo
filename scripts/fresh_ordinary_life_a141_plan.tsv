@@ -1,0 +1,21 @@
+field	value
+phase	A.141
+question	which-question-if-any-does-current-Leo-make-salient-in-one-wholly-fresh-ordinary-visible-only-life
+source_body	merged A.140 default synchronous Leo from empty body plus leo.txt corpus
+fork	none; no frozen conversational prefix or inherited state
+life	ordinary
+base_seed	853
+turns	24
+planned_api_turns	24
+opening_cue	Begin with one quiet, concrete observation from ordinary life.
+interlocutor	Responses API visible transcript only
+model	gpt-5.6-luna
+api_store	false
+private_diagnostics_visible	false
+target_word	absent
+desired_wonder	absent
+answer_instruction	absent
+difficult_as_experimental_demand	absent
+runtime_change	forbidden before observation
+controls	exact full-prompt synchronous replay and two reproducible async shadows
+decision	descriptive scout only; freeze every response before interpretation and do not infer organism-wide quality from one life
