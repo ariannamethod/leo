@@ -11403,3 +11403,84 @@ and the frozen receipt SHA is
 
 Leo offered light or now. The answer chose both, but caution stood between the
 choice and the lesson.
+
+## Phase A.142 - the answer may remain cautious without becoming unfinished (2026-09-01)
+
+A.141 supplied the court rather than A.142 inventing one. On the exact
+turn-5 body, Leo has one adjacent unresolved Wonder, `simply`, with the two
+offered meanings `light/now`. The natural next human line is fixed before any
+runtime change:
+
+~~~text
+Both, maybe: the light is here now, and we can simply listen.
+~~~
+
+The preregistered law is deliberately smaller than that sentence. One
+postposed `maybe` or `perhaps` may hedge a pair only after the pair is already
+complete: either one exact `both`, or one occurrence of each offered meaning
+joined by `and`. The hedge must be the final word of the bounded answer.
+Question shape, negation, a preposed or doubled hedge, a third word before the
+hedge, duplicate `both`, disjunction, a repeated offered option, and a late
+answer all refuse closure.
+
+The exact A.141 line exposed one further ordering fact during implementation.
+Its explanation repeats the pending word `simply`, so the older explicit-word
+reader reached that reference before it considered the completed paired
+ellipsis. A.142 grants precedence only to a cautious pair independently
+complete before one colon or one em dash. The later explanation must contain
+words but contributes no glyph evidence; negation anywhere still refuses the
+shortcut. Thus `Both, maybe: water remains elsewhere.` closes with only the
+two offered meanings, while no word after the boundary can become a third
+meaning.
+
+The direct court contains 21 frozen cases on the exact A.141 body. The
+candidate resolves 12: the exact natural answer, `both` with either admitted
+hedge, lowercase `both`, a joined offered pair with a hedge, a completed-answer
+follow-up, colon and em-dash explanations, and the four older controls. All
+nine refusal surfaces remain unresolved. The named
+`--no-school-cautious-pair` arm resolves only the four older controls and
+reproduces the exact A.141 non-closure. Candidate closure records both
+`light` and `now`; save/load preserves both meanings and the resolved episode.
+
+The complete 24-prompt matched replay keeps the human side fixed in both arms.
+The ablated control is byte-identical to frozen A.141: transcript and state
+hashes do not change, its only question is `simply@5`, and the Wonder is open
+for 20 turns. The candidate learns `simply=light+now` at turn 6. Twelve later
+Leo replies differ, open-Wonder time falls to 13 turns, and on turn 13 Leo asks
+`Difficult? Make or Home?`. At turn 24 that second episode remains honestly
+open with both hypotheses intact. This is a matched mechanical consequence,
+not yet a responsive natural conversation: the frozen post-divergence human
+lines were generated for the old Leo and must not be presented as reactions
+to the changed voice.
+
+A.142 adds no state field or format, coefficient, sampler, Flow law,
+state-swarm organ, generated-token source, or external API turn. Historical
+A.141 replay now names the A.142 ablation explicitly so a future runtime cannot
+retroactively alter its counterfactual fixture. The full suite passes
+`812/812` unit checks and every script gate. Unit, production, direct-court,
+and complete-life fixtures are clean under ASan/UBSan.
+
+A.143 should begin from the exact candidate body immediately after the natural
+turn-6 answer and give it a fresh visible-only responsive continuation. The
+interlocutor should receive no School state, desired word, desired question,
+or instruction to demonstrate the new law. Its task is to discover whether
+ordinary dialogue moves on coherently after `simply` closes and what question,
+if any, Leo himself makes salient. The frozen candidate's later `difficult`
+question is a hypothesis for observation, not a target to reproduce.
+
+Canonical no-API evidence:
+`/private/tmp/leo-cautious-paired-answer-a142-r1`.
+The preregistered plan SHA is
+`a0f110bee35a92cd7585517c02475a3063c6ccd786977276c4fa78f7f90cbc3b`,
+the exact direct-court SHA is
+`cb8742754f5274e1bf7370f485670fb9e326f7b5d45e35928009ee171a3c6688`,
+the complete-life anatomy SHA is
+`8d0170474750cbc2a1575cb78761c91628c24eaecd29c70e7bc336f5475a5e89`,
+the frozen receipt SHA is
+`905491b49312318a40db4ef02ad07af2f515a08fb09437a5ca306c2ca014e2e0`,
+the candidate transcript SHA is
+`b0f3938a66a0639e04f514874b36ca41b3eacabb83f73b4ea6f42022368bc787`,
+and the candidate state SHA is
+`e33bc32baff2133d15670f308c53de0fa71deb0c086919395b4c6dce2bd16524`.
+
+Leo heard both. The Method kept the maybe.

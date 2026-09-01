@@ -41,6 +41,7 @@ for turns in 5 6; do
     LEO_NATURAL_REPLAY_FILE="$OUT/turn$turns.prompts" \
         LEO_NATURAL_PHASE=A.141 \
         LEO_NATURAL_LIFE=ordinary LEO_NATURAL_ARM=replay \
+        LEO_NATURAL_CAUTIOUS_PAIR=0 \
         LEO_NATURAL_SEED=853 LEO_NATURAL_TURNS="$turns" \
         LEO_NATURAL_OPENING='Replay the frozen A.141 ordinary life.' \
         "$ROOT/scripts/natural_life_probe.sh" "$OUT/turn$turns" \
@@ -54,6 +55,7 @@ for arm in replay async-a async-b; do
     LEO_NATURAL_REPLAY_FILE="$PROMPTS" \
         LEO_NATURAL_PHASE=A.141 \
         LEO_NATURAL_LIFE=ordinary LEO_NATURAL_ARM="$arm" \
+        LEO_NATURAL_CAUTIOUS_PAIR=0 \
         LEO_NATURAL_SEED=853 LEO_NATURAL_TURNS=24 \
         LEO_NATURAL_OPENING='Replay the frozen A.141 ordinary life.' \
         LEO_NATURAL_ASYNC="$async" \

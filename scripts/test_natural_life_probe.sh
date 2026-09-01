@@ -48,6 +48,7 @@ jq -e '.source == "frozen-visible-replay" and .api_store == null and
        .school_followup_question_scope == true and
        .school_unique_answer_dominance == true and
        .school_two_glyph_learning == true and
+       .school_cautious_pair == true and
        .school_negative_family == true and
        .school_reciprocal_s_family == true and
        .presence_surface_boundary == true and

@@ -28,6 +28,7 @@ OFFERED_ANSWER_EXPANSION="${LEO_NATURAL_OFFERED_ANSWER_EXPANSION:-1}"
 FOLLOWUP_QUESTION_SCOPE="${LEO_NATURAL_FOLLOWUP_QUESTION_SCOPE:-1}"
 UNIQUE_ANSWER_DOMINANCE="${LEO_NATURAL_UNIQUE_ANSWER_DOMINANCE:-1}"
 TWO_GLYPH_LEARNING="${LEO_NATURAL_TWO_GLYPH_LEARNING:-1}"
+CAUTIOUS_PAIR="${LEO_NATURAL_CAUTIOUS_PAIR:-1}"
 NEGATIVE_FAMILY="${LEO_NATURAL_NEGATIVE_FAMILY:-1}"
 RECIPROCAL_S_FAMILY="${LEO_NATURAL_RECIPROCAL_S_FAMILY:-1}"
 PRESENCE_SURFACE_BOUNDARY="${LEO_NATURAL_PRESENCE_SURFACE_BOUNDARY:-1}"
@@ -50,6 +51,7 @@ case "$TURNS" in ''|*[!0-9]*) printf 'invalid turn count\n' >&2; exit 2;; esac
 [ "$FOLLOWUP_QUESTION_SCOPE" = 0 ] || [ "$FOLLOWUP_QUESTION_SCOPE" = 1 ] || { printf 'LEO_NATURAL_FOLLOWUP_QUESTION_SCOPE must be 0 or 1\n' >&2; exit 2; }
 [ "$UNIQUE_ANSWER_DOMINANCE" = 0 ] || [ "$UNIQUE_ANSWER_DOMINANCE" = 1 ] || { printf 'LEO_NATURAL_UNIQUE_ANSWER_DOMINANCE must be 0 or 1\n' >&2; exit 2; }
 [ "$TWO_GLYPH_LEARNING" = 0 ] || [ "$TWO_GLYPH_LEARNING" = 1 ] || { printf 'LEO_NATURAL_TWO_GLYPH_LEARNING must be 0 or 1\n' >&2; exit 2; }
+[ "$CAUTIOUS_PAIR" = 0 ] || [ "$CAUTIOUS_PAIR" = 1 ] || { printf 'LEO_NATURAL_CAUTIOUS_PAIR must be 0 or 1\n' >&2; exit 2; }
 [ "$NEGATIVE_FAMILY" = 0 ] || [ "$NEGATIVE_FAMILY" = 1 ] || { printf 'LEO_NATURAL_NEGATIVE_FAMILY must be 0 or 1\n' >&2; exit 2; }
 [ "$RECIPROCAL_S_FAMILY" = 0 ] || [ "$RECIPROCAL_S_FAMILY" = 1 ] || { printf 'LEO_NATURAL_RECIPROCAL_S_FAMILY must be 0 or 1\n' >&2; exit 2; }
 [ "$PRESENCE_SURFACE_BOUNDARY" = 0 ] || [ "$PRESENCE_SURFACE_BOUNDARY" = 1 ] || { printf 'LEO_NATURAL_PRESENCE_SURFACE_BOUNDARY must be 0 or 1\n' >&2; exit 2; }
@@ -159,6 +161,7 @@ for ((turn = start_turn; turn <= TURNS; turn++)); do
     [ "$FOLLOWUP_QUESTION_SCOPE" = 1 ] || args+=(--no-school-followup-question-scope)
     [ "$UNIQUE_ANSWER_DOMINANCE" = 1 ] || args+=(--no-school-unique-answer-dominance)
     [ "$TWO_GLYPH_LEARNING" = 1 ] || args+=(--no-school-two-glyph-learning)
+    [ "$CAUTIOUS_PAIR" = 1 ] || args+=(--no-school-cautious-pair)
     [ "$NEGATIVE_FAMILY" = 1 ] || args+=(--no-school-negative-family)
     [ "$RECIPROCAL_S_FAMILY" = 1 ] || args+=(--no-school-reciprocal-s-family)
     [ "$PRESENCE_SURFACE_BOUNDARY" = 1 ] || args+=(--no-presence-surface-boundary)
@@ -260,6 +263,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
     --argjson followup_question_scope "$FOLLOWUP_QUESTION_SCOPE" \
     --argjson unique_answer_dominance "$UNIQUE_ANSWER_DOMINANCE" \
     --argjson two_glyph_learning "$TWO_GLYPH_LEARNING" \
+    --argjson cautious_pair "$CAUTIOUS_PAIR" \
     --argjson negative_family "$NEGATIVE_FAMILY" \
     --argjson reciprocal_s_family "$RECIPROCAL_S_FAMILY" \
     --argjson presence_surface_boundary "$PRESENCE_SURFACE_BOUNDARY" \
@@ -281,6 +285,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
       school_followup_question_scope: ($followup_question_scope == 1),
       school_unique_answer_dominance: ($unique_answer_dominance == 1),
       school_two_glyph_learning: ($two_glyph_learning == 1),
+      school_cautious_pair: ($cautious_pair == 1),
       school_negative_family: ($negative_family == 1),
       school_reciprocal_s_family: ($reciprocal_s_family == 1),
       presence_surface_boundary: ($presence_surface_boundary == 1),

@@ -1,0 +1,44 @@
+arm	case	cautious_pair	prompt	pending_before	learned_primary	learned_alternate	answer_primary	answer_alternate	resolved	pending	offered_primary	offered_alternate	pending_after	wonders
+candidate	a141-exact	1	Both, maybe: the light is here now, and we can simply listen.	0	light	now	light	now	1	none	none	none	0	1
+candidate	both-maybe	1	Both, maybe.	0	light	now	light	now	1	none	none	none	0	1
+candidate	both-perhaps	1	Both, perhaps.	0	light	now	light	now	1	none	none	none	0	1
+candidate	lowercase	1	both, maybe.	0	light	now	light	now	1	none	none	none	0	1
+candidate	joined-pair-maybe	1	Light and now, maybe.	0	light	now	light	now	1	none	none	none	0	1
+candidate	separate-followup	1	Both, maybe. What do you remember?	0	light	now	light	now	1	none	none	none	0	1
+candidate	emdash-explanation	1	Both, perhaps—the light remains and now stays.	0	light	now	light	now	1	none	none	none	0	1
+candidate	colon-third-explanation	1	Both, maybe: water remains elsewhere.	0	light	now	light	now	1	none	none	none	0	1
+candidate	legacy-bare-both	1	Both.	0	light	now	light	now	1	none	none	none	0	1
+candidate	legacy-single-light	1	Light.	0	light	none	light	none	1	none	none	none	0	1
+candidate	legacy-really-emdash	1	Both, really—the light remains and now stays.	0	light	now	light	now	1	none	none	none	0	1
+candidate	legacy-explicit-pair	1	Simply is light and now.	0	light	now	light	now	1	none	none	none	0	1
+candidate	refuse-question	1	Both, maybe?	0	none	none	none	none	0	simply	light	now	1	1
+candidate	refuse-negation	1	Both, maybe not.	0	none	none	none	none	0	simply	light	now	1	1
+candidate	refuse-preposed	1	Maybe both.	0	none	none	none	none	0	simply	light	now	1	1
+candidate	refuse-doubled	1	Both, maybe, perhaps.	0	none	none	none	none	0	simply	light	now	1	1
+candidate	refuse-third-before	1	Both water, maybe.	0	none	none	none	none	0	simply	light	now	1	1
+candidate	refuse-duplicate-both	1	Both both, maybe.	0	none	none	none	none	0	simply	light	now	1	1
+candidate	refuse-disjunction	1	Both, maybe, or light.	0	none	none	none	none	0	simply	light	now	1	1
+candidate	refuse-repeated-option	1	Light light and now, maybe.	0	none	none	none	none	0	simply	light	now	1	1
+candidate	refuse-late-ellipse	1	Both, maybe.	1	none	none	none	none	0	simply	light	now	2	1
+control	a141-exact	0	Both, maybe: the light is here now, and we can simply listen.	0	none	none	none	none	0	simply	light	now	1	1
+control	both-maybe	0	Both, maybe.	0	none	none	none	none	0	simply	light	now	1	1
+control	both-perhaps	0	Both, perhaps.	0	none	none	none	none	0	simply	light	now	1	1
+control	lowercase	0	both, maybe.	0	none	none	none	none	0	simply	light	now	1	1
+control	joined-pair-maybe	0	Light and now, maybe.	0	none	none	none	none	0	simply	light	now	1	1
+control	separate-followup	0	Both, maybe. What do you remember?	0	none	none	none	none	0	simply	light	now	1	1
+control	emdash-explanation	0	Both, perhaps—the light remains and now stays.	0	none	none	none	none	0	simply	light	now	1	1
+control	colon-third-explanation	0	Both, maybe: water remains elsewhere.	0	none	none	none	none	0	simply	light	now	1	1
+control	legacy-bare-both	0	Both.	0	light	now	light	now	1	none	none	none	0	1
+control	legacy-single-light	0	Light.	0	light	none	light	none	1	none	none	none	0	1
+control	legacy-really-emdash	0	Both, really—the light remains and now stays.	0	light	now	light	now	1	none	none	none	0	1
+control	legacy-explicit-pair	0	Simply is light and now.	0	light	now	light	now	1	none	none	none	0	1
+control	refuse-question	0	Both, maybe?	0	none	none	none	none	0	simply	light	now	1	1
+control	refuse-negation	0	Both, maybe not.	0	none	none	none	none	0	simply	light	now	1	1
+control	refuse-preposed	0	Maybe both.	0	none	none	none	none	0	simply	light	now	1	1
+control	refuse-doubled	0	Both, maybe, perhaps.	0	none	none	none	none	0	simply	light	now	1	1
+control	refuse-third-before	0	Both water, maybe.	0	none	none	none	none	0	simply	light	now	1	1
+control	refuse-duplicate-both	0	Both both, maybe.	0	none	none	none	none	0	simply	light	now	1	1
+control	refuse-disjunction	0	Both, maybe, or light.	0	none	none	none	none	0	simply	light	now	1	1
+control	refuse-repeated-option	0	Light light and now, maybe.	0	none	none	none	none	0	simply	light	now	1	1
+control	refuse-late-ellipse	0	Both, maybe.	1	none	none	none	none	0	simply	light	now	2	1
+candidate	sleep	1	none	-1	light	now	light	now	1	none	none	none	0	1

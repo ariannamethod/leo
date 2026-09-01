@@ -1,0 +1,25 @@
+field	value
+phase	A.142
+question	can-Leo-hear-a-paired-answer-without-erasing-its-bounded-hesitation
+source_body	exact A.141 ordinary synchronous body after turn 5
+source_prompts_sha256	0cf66e6098d83bf28e8d099bacd09b6824014de2bd0d1f01074725211b4dd1d1
+pending	simply
+offered_primary	light
+offered_alternate	now
+natural_answer	Both, maybe: the light is here now, and we can simply listen.
+cautious_modifiers	maybe,perhaps
+cautious_position	one postposed hedge after both or after a complete offered-X-and-Y pair
+candidate_law	a bounded postposed hedge preserves the paired selection; existing statement boundaries keep later explanation outside the lesson
+admitted	A.141 exact, maybe, perhaps, joined offered pair, completed-answer follow-up, em-dash explanation, colon explanation
+refused	question-shaped hedge, negation, preposed hedge, doubled hedge, pre-boundary third glyph, duplicate both, disjunction, repeated offered option, late ellipse
+legacy_controls	bare Both, one offered choice, old really em-dash pair, explicit named pair
+direct_cases	21
+candidate_resolved_cases	12
+ablation_resolved_cases	4
+named_ablation	--no-school-cautious-pair
+sleep	resolved paired meaning must survive exact save/load
+natural_control	full A.141 replay under named ablation must remain byte-exact
+natural_candidate	replay the same 24 frozen human prompts from an empty body and report the changed life without quality claims
+api_turns	0
+state_format_change	forbidden
+decision	admit only if every refusal stays open and no explanation contributes a third meaning
