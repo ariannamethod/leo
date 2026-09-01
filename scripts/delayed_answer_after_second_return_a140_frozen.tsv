@@ -1,0 +1,2 @@
+phase	plan_sha256	expected_sha256	cases	second_return	return_count	learned	answer	resolved	pending	sleep_before_answer	sleep_after_answer	following_question_preserved	question_shaped_refused	reference_only_refused	natural_difficult_mutation
+A.140	46ccdf73df081e5f90b06c3ca228599a2d02f723933dfc111c68aea65878f84a	13f17bbd685f9971b7cf8c7fb28e4ee04ce8d3bfaf15e383deb41427ee942595	7	Zorble?	2	animal	animal	1	none	true	true	true	true	true	none

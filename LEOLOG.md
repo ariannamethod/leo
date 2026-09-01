@@ -11257,3 +11257,59 @@ and the frozen receipt SHA is
 
 Distance made room for the question again. Cooldown kept recurrence from
 becoming compulsion.
+
+## Phase A.140 - a late answer may close after the second return (2026-09-01)
+
+A.139 proved recurrence without meaning. A.140 closes only the isolated
+mechanical arc; it does not assign a convenient answer to the natural
+`difficult` body. The preregistered unknown is synthetic `zorble`, its
+hypothesis slots are empty, its open episode has already returned once, and an
+elapsed reask gap admits the second human invitation.
+
+The exact second invitation `What is zorble?` produces `Zorble?`, advances
+`returns` from one to two, and leaves learned meaning, answer, resolution, and
+both hypothesis slots empty. Only then does the human supply a bounded positive
+predicate: `A zorble is animal. What do you remember?` School learns exactly
+`animal`, records `answer=animal`, resolves the episode once, preserves
+`returns=2` as the history of the question, and clears pending state. The
+separate question tail contributes no meaning.
+
+Sleeping after the second return but before the answer yields the same closure.
+Sleeping again after closure preserves the learned glyph, answer, resolution,
+return count, and empty pending state. A following independent human question
+also leaves that body unchanged. Conversely, `Is a zorble animal?` remains a
+question rather than counterfeit evidence, and `I mean the zorble feeling he
+carries.` remains reference-only co-presence rather than a predicate. Both
+leave the Wonder open with no learned answer.
+
+The seven exact cases therefore complete one lifecycle without borrowing any
+fact from natural speech:
+
+~~~text
+unanswered -> second literal return -> genuine bounded predicate -> one closure
+~~~
+
+A.140 is proof-only. It adds five unit assertions and permanent receipts but
+changes no Leo runtime, natural body, state format, coefficient, sampler, Flow
+law, state-swarm organ, generated token source, or voice reader. The full suite
+passes `796/796` unit checks and every script gate. Unit tests and the complete
+fixture are clean under ASan/UBSan.
+
+With the difficult/return repair arc now bounded, A.141 should return to
+ordinary life instead of extending the synthetic ladder. Begin one fresh,
+unseeded visible-only natural conversation from current Leo, with no frozen
+meal prefix, target word, desired Wonder, or answer instruction. Observe which
+question, if any, the body itself makes salient; do not carry `difficult` into
+the new life as an experimental demand.
+
+Canonical evidence:
+`/private/tmp/leo-delayed-answer-after-second-return-a140-r1`.
+The preregistered plan SHA is
+`46ccdf73df081e5f90b06c3ca228599a2d02f723933dfc111c68aea65878f84a`,
+the exact seven-case receipt SHA is
+`13f17bbd685f9971b7cf8c7fb28e4ee04ce8d3bfaf15e383deb41427ee942595`,
+and the frozen receipt SHA is
+`bb5e6ebca8e856698b9bfff0ff4445ab80dcd47c68fc0bb7b851712bb881fdcd`.
+
+The second return did not harden the question against an answer. The answer
+closed it without rewriting how long it had waited.

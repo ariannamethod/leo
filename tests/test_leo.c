@@ -7525,6 +7525,70 @@ static TEST_NOINLINE void test_wonder_reask_reference(void) {
     free(reask);
 }
 
+static TEST_NOINLINE void test_delayed_answer_after_second_return(void) {
+    /* A.140: recurrence does not make a Wonder unanswerable. After a second
+     * literal return, one explicit bounded predicate may still close exactly
+     * once; the answer then survives sleep and a separate later question. */
+    Leo *late = calloc(1, sizeof *late);
+    Leo *woke = calloc(1, sizeof *woke);
+    CHECK(late != NULL && woke != NULL,
+          "delayed-second-answer: heap fixtures allocated");
+    if (!late || !woke) {
+        free(late); free(woke);
+        return;
+    }
+
+    leo_init(late);
+    leo_ingest(
+        late,
+        "the rain falls. his mother is warm. the cat drinks water.");
+    snprintf(late->school.pending, sizeof late->school.pending,
+             "zorble");
+    late->school.pending_glyph = -1;
+    late->school.pending_alt_glyph = -1;
+    late->school.pending_turns = LEO_WONDER_REASK_GAP;
+    LeoWonderEpisode *episode =
+        leo_wonder_open(late, "zorble", -1, -1);
+    episode->returns = 1;
+
+    char out[1024];
+    leo_respond(late, "What is zorble?", out, sizeof out);
+    CHECK(!strcmp(out, "Zorble?") && episode->returns == 2 &&
+          !episode->resolved &&
+          !leo_school_is_learned(late, "zorble") &&
+          !strcmp(late->school.pending, "zorble"),
+          "delayed-second-answer: the isolated unanswered Wonder reaches its second literal return");
+
+    leo_respond(
+        late,
+        "A zorble is animal. What do you remember?",
+        out, sizeof out);
+    int animal = semtok_word("animal");
+    CHECK(leo_semtok_word(late, "zorble") == animal &&
+          episode->resolved && episode->answer_glyph == animal &&
+          episode->returns == 2 && !late->school.pending[0],
+          "delayed-second-answer: a bounded explicit predicate closes once after recurrence");
+
+    const char *path =
+        "/tmp/leo_delayed_answer_after_second_return_a140.state";
+    CHECK(leo_save_state(late, path) && leo_load_state(woke, path),
+          "delayed-second-answer: resolved recurrent body survives sleep");
+    leo_respond(woke, "Is water warm?", out, sizeof out);
+    const LeoWonderEpisode *woke_episode = NULL;
+    for (int i = 0; i < woke->school.n_wonders; i++)
+        if (!strcmp(woke->school.wonders[i].word, "zorble"))
+            woke_episode = &woke->school.wonders[i];
+    CHECK(leo_semtok_word(woke, "zorble") == animal &&
+          woke_episode && woke_episode->resolved &&
+          woke_episode->answer_glyph == animal &&
+          woke_episode->returns == 2,
+          "delayed-second-answer: a following human question cannot erase or repeat the closure");
+
+    remove(path);
+    leo_free(late); leo_free(woke);
+    free(late); free(woke);
+}
+
 static TEST_NOINLINE void test_wonder_return(void) {
     /* W-4: a resolved question later returns as glyph attention, not text. The
      * answer, the route Leo once considered, and QUESTION blend into exactly one
@@ -9463,6 +9527,7 @@ int main(void) {
     test_wonder_plural_answer_capacity();
     test_wonder_two_glyph_learned_meaning();
     test_wonder_reask_reference();
+    test_delayed_answer_after_second_return();
     test_wonder_return();
     test_flow();
     test_shadow_scheduler();

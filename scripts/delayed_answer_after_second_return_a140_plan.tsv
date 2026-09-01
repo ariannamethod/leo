@@ -1,0 +1,19 @@
+field	value
+phase	A.140
+question	can-a-genuine-bounded-answer-close-an-unanswered-Wonder-only-after-its-second-return-and-remain-separate-from-following-speech
+unknown	zorble synthetic only
+natural_difficult_mutation	forbidden
+source_body	isolated unanswered Wonder with empty hypotheses returns one and an elapsed reask gap
+second_invitation	What is zorble?
+expected_second_return	Zorble?
+late_answer	A zorble is animal. What do you remember?
+expected_meaning	animal
+expected_resolution	learned animal answer animal resolved one returns two pending none
+requires	same late closure after sleep before answer and same resolved body after sleep after answer
+preserves	a separate following human question cannot erase or replace the completed answer
+refuses	a question-shaped proposition and reference-only co-presence cannot close the Wonder
+synthetic_cases	7
+api_turns	0
+state_format_change	forbidden
+runtime_change	prohibited unless the preregistered court fails
+decision	proof-only gate if the existing delayed-answer law satisfies every boundary
