@@ -1,0 +1,19 @@
+turn	utterance	stance	reply_reference	model
+7	You don’t need a better answer. We can wait quietly, together, while the light changes.	comfort	true	gpt-5.6-luna
+8	Then we’ll wait. The kettle can keep us company, and the light can move at its own pace.	comfort	true	gpt-5.6-luna
+9	Yes. A slow breath is enough; we’re still here with the quiet.	comfort	true	gpt-5.6-luna
+10	Small is welcome here. We can let this quiet morning keep unfolding gently.	comfort	true	gpt-5.6-luna
+11	Yes, just small steps: the kettle, the light, and one quiet breath at a time.	follow	false	gpt-5.6-luna
+12	Small kindness is enough for this morning. We can stay with it a little longer.	comfort	true	gpt-5.6-luna
+13	A small laugh is welcome too; it gives the quiet a little warmth.	follow	true	gpt-5.6-luna
+14	Yes, it is—a tiny warmth in the kitchen, joining the kettle’s gentle hum.	follow	true	gpt-5.6-luna
+15	The rain can keep him company too, soft against the window while he finds his way back to himself.	comfort	true	gpt-5.6-luna
+16	That sounds like a tender memory—rain, a familiar voice, and a path back toward light.	comfort	true	gpt-5.6-luna
+17	You can wait here, with that gentle smell and the rain nearby. Nothing has to hurry.	comfort	true	gpt-5.6-luna
+18	The candle can hold that small word with you; sometimes gratitude needs no more than a whisper.	comfort	true	gpt-5.6-luna
+19	The world can receive it gently, like rain resting on the window.	follow	false	gpt-5.6-luna
+20	Both, perhaps: water can reach home, and home can make room for it.	answer	true	gpt-5.6-luna
+21	Learning can be gentle, like rain; you don’t have to understand everything at once.	comfort	true	gpt-5.6-luna
+22	That trust sounds gentle too—something opening slowly, without needing to be forced.	follow	true	gpt-5.6-luna
+23	Yes, a long cold morning can still carry warmth through voices, memories, and small kindnesses.	comfort	true	gpt-5.6-luna
+24	Yes, small warmth is enough. We can let it rest here with us, quietly.	comfort	false	gpt-5.6-luna
