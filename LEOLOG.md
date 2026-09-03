@@ -11484,3 +11484,95 @@ and the candidate state SHA is
 `e33bc32baff2133d15670f308c53de0fa71deb0c086919395b4c6dce2bd16524`.
 
 Leo heard both. The Method kept the maybe.
+
+## Phase A.143 - a responsive life answers the next question cautiously too (2026-09-03)
+
+A.142 closed `simply` under a fixed matched replay, then explicitly refused to
+call the later frozen conversation responsive. A.143 begins at that boundary.
+Before any external call, it preregisters the exact first six turns of the
+A.141 ordinary life under the merged A.142 law. The turn-6 body has
+`simply=light+now`, one resolved episode, and no pending Wonder. Its visible
+transcript and state are frozen byte-exact before the continuation.
+
+A fresh interlocutor then receives only those six visible human/Leo exchanges.
+There is no School state, diagnostic, target word, desired Wonder, answer
+instruction, or request to reproduce the `difficult` question seen in A.142's
+matched counterfactual. Eighteen `gpt-5.6-luna` Responses API turns extend the
+same life to turn 24. All 18 responses complete with `store:false`; 15 declare
+a visible reply reference. Their stance distribution is twelve `comfort`, five
+`follow`, one `answer`, and nothing in the other categories.
+
+The continuation stays with waiting, light, breathing, small kindness, rain,
+a candle, and a word offered to the world. At turn 19 the human says:
+
+~~~text
+The world can receive it gently, like rain resting on the window.
+~~~
+
+Leo makes the continuation's only new School question:
+
+~~~text
+Receive? Water or Home?
+~~~
+
+`receive` was not named by the preregistration and was absent from the source
+body. Immediately before this line there is no pending Wonder for the
+experiment to steer. The exact turn-19 state records one new unresolved
+episode, offers `water/home`, learns neither meaning, and keeps the question
+pending at age zero.
+
+The visible interlocutor sees the question, declares an `answer` stance with a
+reply reference, and answers on turn 20:
+
+~~~text
+Both, perhaps: water can reach home, and home can make room for it.
+~~~
+
+This is a second natural cautious pair, independent of the `Both, maybe` line
+that motivated A.142. School records both offered meanings, resolves the
+`receive` episode once, and clears pending state. The explanation after the
+colon contributes no third glyph. At turn 24, `simply=light+now` and
+`receive=water+home` are both still present and resolved; there is no pending
+Wonder. The full life therefore has exactly two School-question turns,
+`simply@5` and `receive@19`, and exactly two open-Wonder turns: each question
+remains open only until the following human answer.
+
+The 24 frozen prompts reproduce the external-first synchronous transcript and
+state byte-exact without another API call. Two async shadows are mutually
+byte-exact. Their voice differs from synchronous voice on 12 of 24 replies,
+but they make the same two questions and finish with the same two learned
+pairs, both resolved and no pending episode. This is evidence about one
+responsive life, not an organism-wide quality claim.
+
+A.143 is observation-only. It changes no Leo runtime, state format,
+coefficient, sampler, Flow law, state-swarm organ, generated-token source, or
+voice reader. The full suite passes `812/812` unit checks and every script
+gate. Unit, production, and the exact A.143 state fixture are clean under
+ASan/UBSan.
+
+A.144 should leave this successful body closed and begin a second wholly fresh
+ordinary life from an empty conversational body under current Leo. It should
+carry no `simply`, `receive`, paired-answer wording, desired question, or
+answer instruction. One independent life can show what the organism asks next
+without turning either of A.143's words into a target or a benchmark.
+
+Canonical external-first evidence:
+`/private/tmp/leo-responsive-after-cautious-a143-natural-r1`.
+Canonical no-API anatomy evidence:
+`/private/tmp/leo-responsive-after-cautious-a143-anatomy-r1`.
+The preregistered plan SHA is
+`1007238a4aaa8fb2658f49933a9b4c9aef5cdb17ea07ea8c5af9662360ff2d46`,
+the frozen API-turn SHA is
+`3d7660104960981984efb12d41f18f623bb095f4452677f2495166787f0505dc`,
+the full-prompt SHA is
+`720a1c4d97ae530a42003220918e04858a8d4f79e50b0a0ada50c60f57455b9c`,
+the exact transcript SHA is
+`ab11d043b944f4b2f03ca927cd2df2ff185924eeb370ea70667b298012998488`,
+the exact state SHA is
+`0b74e0ac4fd7067d2a82b38ce2187fac5d64b033b98eafc18d14e32e3042ef1f`,
+the anatomy SHA is
+`08849aad67ddc5ebff5ddda1407c463039de9dd8a4e331b7e0bd6e6f297e2745`,
+and the frozen receipt SHA is
+`ea0c4b127da5f7e6f903046bb9d82a41a69c77ac3f529cd935a5bc156e1226a7`.
+
+Leo asked where receiving lives. The answer kept both water and home.

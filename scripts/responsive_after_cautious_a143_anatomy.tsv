@@ -1,0 +1,7 @@
+point	word	heard	learned_primary	learned_alternate	episode	offered_primary	offered_alternate	answer_primary	answer_alternate	resolved	returns	opened_step	closed_step	pending	pending_primary	pending_alternate	pending_turns	wonders
+turn6	simply	3	light	now	1	light	now	light	now	1	0	97573	97593	none	none	none	0	1
+turn19	simply	3	light	now	1	light	now	light	now	1	0	97573	97593	receive	water	home	0	2
+turn19	receive	1	none	none	1	water	home	none	none	0	0	98102	0	receive	water	home	0	2
+turn20	receive	1	water	home	1	water	home	water	home	1	0	98102	98121	none	none	none	0	2
+turn24	simply	3	light	now	1	light	now	light	now	1	0	97573	97593	none	none	none	0	2
+turn24	receive	1	water	home	1	water	home	water	home	1	0	98102	98121	none	none	none	0	2
