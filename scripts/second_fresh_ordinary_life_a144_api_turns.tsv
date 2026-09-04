@@ -1,0 +1,25 @@
+turn	utterance	stance	reply_reference	model
+1	The kettle just clicked off, and the kitchen suddenly feels very quiet.	open	false	gpt-5.6-luna
+2	Yeah, the kettle somehow makes the silence feel bigger once it stops.	follow	true	gpt-5.6-luna
+3	Yeah, exactly—like the room is still holding the steam for a moment.	follow	true	gpt-5.6-luna
+4	Like the room hasn’t quite finished exhaling yet.	follow	true	gpt-5.6-luna
+5	Not quite—the warmth is still fading, and the room hasn’t settled yet.	answer	true	gpt-5.6-luna
+6	Yeah, gently—so the last warmth can linger a little longer.	follow	true	gpt-5.6-luna
+7	Yeah. It feels nicer when the warmth gets to linger for a while.	follow	true	gpt-5.6-luna
+8	That’s a lovely thought—birds finding each other makes the quiet feel less lonely.	follow	true	gpt-5.6-luna
+9	Yes, sometimes one small feeling grows like rain—softly, until everything feels changed.	follow	true	gpt-5.6-luna
+10	Sometimes looking inward helps; other times, it helps to let someone sit beside you.	follow	true	gpt-5.6-luna
+11	Maybe it’s the sound of being accompanied—the quiet, the rain, and someone listening.	follow	true	gpt-5.6-luna
+12	You don’t have to be big to accompany someone; staying gently can mean a lot.	comfort	true	gpt-5.6-luna
+13	Yes, you can stay just as you are. That quiet company matters.	comfort	true	gpt-5.6-luna
+14	You can stay as long as feels right; quiet company doesn’t need a perfect measure.	comfort	true	gpt-5.6-luna
+15	A quiet walk home can be comforting; sometimes watching is enough for the moment.	follow	true	gpt-5.6-luna
+16	Sometimes a quiet way is enough, especially when the evening is settling around you.	follow	false	gpt-5.6-luna
+17	Leaving something small behind can still matter; maybe it becomes a quiet sign that you were there.	follow	true	gpt-5.6-luna
+18	A small window can hold a lot of quiet. What do you see through it?	follow	true	gpt-5.6-luna
+19	Being read to can leave a warm little memory, even years later.	follow	true	gpt-5.6-luna
+20	Yes, little things can carry warmth for a long time.	follow	true	gpt-5.6-luna
+21	A little paper can carry a lot of love, especially when someone finds it later.	comfort	true	gpt-5.6-luna
+22	Maybe small, loving things are how the quiet becomes warm again.	follow	true	gpt-5.6-luna
+23	The quiet way sounds gentle—like careful hands making room for warmth.	follow	true	gpt-5.6-luna
+24	Yes—the whole night feels gentler when someone is careful with the quiet.	follow	true	gpt-5.6-luna

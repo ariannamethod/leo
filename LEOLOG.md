@@ -11576,3 +11576,108 @@ and the frozen receipt SHA is
 `ea0c4b127da5f7e6f903046bb9d82a41a69c77ac3f529cd935a5bc156e1226a7`.
 
 Leo asked where receiving lives. The answer kept both water and home.
+
+## Phase A.144 - a second empty life leaves a discourse question open (2026-09-03)
+
+A.143 found a second cautious pair inside a responsive continuation, but that
+life inherited six turns from A.141. A.144 removes the inheritance entirely.
+It begins from current merged Leo plus `leo.txt` and an empty conversational
+body. There is no frozen prefix, prior state, target word, desired Wonder,
+answer instruction, or paired-answer demand. The neutral opening cue asks only
+for one ordinary concrete observation from daily life.
+
+The seed is fixed before the first external call by public history rather than
+chosen after a run. A.143 merged as
+`403ab1da57b7f65ccb8a5b9845631f3f886b8af8`; interpreting its first eight hex
+digits as unsigned and taking `100 + value mod 900` gives seed 542. The exact
+turn-1 request contains no prior dialogue, no `simply` or `receive`, and no
+School state or diagnostics.
+
+All 24 `gpt-5.6-luna` Responses API calls complete with `store:false`. Twenty-two
+declare a visible reply reference. The stance distribution is eighteen
+`follow`, four `comfort`, one `open`, and one `answer`. The life begins when a
+kettle clicks off and the kitchen becomes quiet. The next turns stay with the
+silence, steam, and a room that has not quite finished exhaling.
+
+On turn 4 Leo asks:
+
+~~~text
+Finished?
+~~~
+
+The exact state before that turn has no Wonder named `finished`. After the
+question, School has heard the word once, opens one unresolved episode, offers
+no glyph hypothesis, and sets `pending=finished`. The visible interlocutor
+answers on turn 5 with an `answer` stance and reply reference:
+
+~~~text
+Not quite—the warmth is still fading, and the room hasn’t settled yet.
+~~~
+
+This is an appropriate conversational response to the visible question, but it
+does not predicate a meaning for the word `finished`. School therefore learns
+nothing, records no answer glyph, and leaves the episode unresolved. The
+negative surface is not laundered into a convenient definition.
+
+On turn 6 the human begins with `Yeah, gently...`. This is the third occurrence
+of `yeah` in the life, after turns 2 and 3. Leo asks:
+
+~~~text
+Yeah?
+~~~
+
+School preserves the unresolved `finished` episode and opens a second episode
+for `yeah`. Neither episode has an offered glyph. The active pending identity
+becomes `yeah`; it has no learned or recorded answer. The remaining eighteen
+human turns follow warmth, birds, rain, companionship, a walk, a small window,
+paper, love, and careful hands. None supplies a bounded meaning for either
+word, and School does not manufacture one.
+
+At turn 24, `finished` has been heard once and `yeah` four times. Both episodes
+remain unresolved with no learned meaning, answer, or hypotheses.
+`pending=yeah`, its age is eighteen turns, and the first episode still exists
+beside it. The life consequently contains two School questions,
+`finished@4,yeah@6`, and 21 open-Wonder turns.
+
+The 24 frozen prompts reproduce the external-first synchronous transcript and
+state byte-exact without another API call. Two async shadows are mutually
+byte-exact. Their generated voice differs from synchronous voice on 14 of 24
+replies, yet both make the same two questions and end with the exact same
+School anatomy: two unresolved episodes, no learned meanings, and `yeah`
+pending for eighteen turns.
+
+A.144 is observation-only. It changes no Leo runtime, state format,
+coefficient, sampler, Flow law, state-swarm organ, generated-token source, or
+voice reader. The full suite passes `812/812` unit checks and every script
+gate. Unit, production, and the complete turn-3/4/5/6/24 state fixture are
+clean under ASan/UBSan.
+
+A.145 should put discourse-word curiosity into a narrow court before deciding
+whether A.144 found a bug. Starting from the exact pre-turn-6 body, it should
+test whether words already recognized by Leo's answer grammar as affirmations
+or conversational particles may open a new long-lived Wonder. Controls must
+preserve true unknowns such as `zorble`, ordinary content-word curiosity, the
+existing unresolved `finished` episode, heard counts, save/load, and a named
+ablation. The court must distinguish suppressing a new discourse-token Wonder
+from falsely resolving or deleting an older semantic question.
+
+Canonical external-first evidence:
+`/private/tmp/leo-second-fresh-ordinary-life-a144-natural-r1`.
+Canonical no-API anatomy evidence:
+`/private/tmp/leo-second-fresh-ordinary-life-a144-anatomy-r1`.
+The preregistered plan SHA is
+`45d4b51ebc8e2f54b6a2c52bd8ab11c16cb10b7774d3e2284e3ae082be84b684`,
+the frozen API-turn SHA is
+`c1e41c9a741921d60e8dcaac1537f29c669bea2c56873f26c542a7c9358abb36`,
+the full-prompt SHA is
+`85b47e945635c31727276f79248adb9ef5abd8e88bae5c4d9e63d4eeaf5b7114`,
+the exact transcript SHA is
+`296d74950e43c47b9800417295330c80c066a9e777210bb9b8f8eada58791e9a`,
+the exact state SHA is
+`08fb07209bb9f59afb50a171e4fc7607100b75d8d594fd852953b0c338e25a1c`,
+the anatomy SHA is
+`5ffc68c86522ab5c06c4a902169229166d1e05dbfcd6bddd73b997030d0383af`,
+and the frozen receipt SHA is
+`a3a8b2d3b46e528437aead092dacbd63eb340bd853d34f738693f783e67d9660`.
+
+The human answered the moment. Leo kept asking what the word meant.
