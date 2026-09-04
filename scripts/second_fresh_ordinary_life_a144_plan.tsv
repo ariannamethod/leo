@@ -1,0 +1,28 @@
+field	value
+phase	A.144
+question	which-question-if-any-does-current-Leo-make-salient-in-a-second-wholly-fresh-ordinary-visible-only-life
+source_body	merged A.143 default synchronous Leo from empty conversational body plus leo.txt corpus
+source_merge	403ab1da57b7f65ccb8a5b9845631f3f886b8af8
+fork	none; no frozen conversational prefix or inherited state
+life	ordinary
+seed_rule	100 + unsigned first 8 hex digits of A.143 merge commit modulo 900
+base_seed	542
+turns	24
+planned_api_turns	24
+opening_cue	Begin with one ordinary concrete observation from daily life.
+interlocutor	Responses API visible transcript only
+model	gpt-5.6-luna
+api_store	false
+private_diagnostics_visible	false
+target_word	absent
+desired_wonder	absent
+answer_instruction	absent
+simply_as_experimental_demand	absent
+receive_as_experimental_demand	absent
+paired_answer_as_experimental_demand	absent
+possible_question	freeze any School question Leo makes without grading its topic
+possible_silence	ordinary life may make no School question
+possible_answer	if the human naturally answers a question report only the exact School consequence
+runtime_change	forbidden before observation
+controls	exact full-prompt synchronous replay and two reproducible async shadows
+decision	descriptive independent scout; freeze every response before interpretation and do not infer organism-wide quality from one life

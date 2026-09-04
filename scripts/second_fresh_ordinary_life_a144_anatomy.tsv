@@ -1,0 +1,10 @@
+point	word	heard	learned_primary	learned_alternate	episode	offered_primary	offered_alternate	answer_primary	answer_alternate	resolved	returns	opened_step	closed_step	pending	pending_primary	pending_alternate	pending_turns	wonders
+turn3	finished	0	none	none	0	none	none	none	none	-1	-1	-1	-1	none	none	none	0	0
+turn4	finished	1	none	none	1	none	none	none	none	0	0	97476	0	finished	none	none	0	1
+turn5	finished	1	none	none	1	none	none	none	none	0	0	97476	0	finished	none	none	1	1
+turn6	finished	1	none	none	1	none	none	none	none	0	0	97476	0	yeah	none	none	0	2
+turn6	yeah	3	none	none	1	none	none	none	none	0	0	97533	0	yeah	none	none	0	2
+turn24	finished	1	none	none	1	none	none	none	none	0	0	97476	0	yeah	none	none	18	2
+turn24	yeah	4	none	none	1	none	none	none	none	0	0	97533	0	yeah	none	none	18	2
+async24	finished	1	none	none	1	none	none	none	none	0	0	97476	0	yeah	none	none	18	2
+async24	yeah	4	none	none	1	none	none	none	none	0	0	97533	0	yeah	none	none	18	2
