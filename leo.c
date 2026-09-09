@@ -2950,7 +2950,8 @@ static int g_leo_school_natural_word_boundary_on = 1; /* A.119: curly apostrophe
 static int g_leo_school_lexical_family_on = 1; /* A.120: a high-confidence known family cannot masquerade as a novel School word. */
 static int g_leo_school_family_heard_threshold_on = 1; /* A.131: two witnessed ends of one admitted A.120 edge share the existing novelty threshold. */
 static int g_leo_school_two_layer_family_composition_on = 1; /* A.133: exactly two admitted A.120 edges may carry one whole-word witness. */
-static int g_leo_school_lexical_role_on = 1; /* A.121: exact relational/polarity grammar cannot masquerade as a teachable thing. */
+static int g_leo_school_lexical_role_on = 1; /* A.121/A.145: exact relational, polarity, and already-consumed dialogue grammar cannot masquerade as a teachable thing. */
+static int g_leo_school_affirmation_role_on = 1; /* A.145: School's own exact affirmation grammar is positive discourse-role evidence, never a stoplist. */
 static int g_leo_school_answer_followup_on = 1; /* A.122: a bounded answer may precede a separate human follow-up question. */
 static int g_leo_school_reference_predication_on = 1; /* A.137: naming a Wonder supplies reference; only its copular predicate supplies meaning. */
 static int g_leo_wonder_reask_reference_on = 1; /* A.123: one guessed glyph cannot recall an unnamed Wonder without an anaphoric hypothesis question. */
@@ -7300,6 +7301,16 @@ static LeoSchoolLexicalRole leo_school_lexical_role(
         const char *word, const char **witness) {
     if (witness) *witness = NULL;
     if (!word || !word[0]) return LEO_SCHOOL_ROLE_NONE;
+    /* A.145: School already consumes these exact surfaces as affirmation
+     * grammar when judging a human answer. Reuse that positive role evidence
+     * here rather than adding a novelty blacklist. The prompt itself remains
+     * untouched: hearing, feeling, Flow, and generated voice still receive the
+     * word, and --no-school-affirmation-role restores the prior candidate path. */
+    if (g_leo_school_affirmation_role_on &&
+        leo_school_word_is_affirmation(word)) {
+        if (witness) *witness = "yes";
+        return LEO_SCHOOL_ROLE_DISCOURSE;
+    }
     if (leo_school_word_negates(word)) {
         if (witness) *witness = "not";
         return LEO_SCHOOL_ROLE_POLARITY;
@@ -16034,6 +16045,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--no-school-two-layer-family-composition")) g_leo_school_two_layer_family_composition_on = 0;
         else if (!strcmp(argv[i], "--school-lexical-role")) g_leo_school_lexical_role_on = 1;
         else if (!strcmp(argv[i], "--no-school-lexical-role")) g_leo_school_lexical_role_on = 0;
+        else if (!strcmp(argv[i], "--school-affirmation-role")) g_leo_school_affirmation_role_on = 1;
+        else if (!strcmp(argv[i], "--no-school-affirmation-role")) g_leo_school_affirmation_role_on = 0;
         else if (!strcmp(argv[i], "--school-answer-followup")) g_leo_school_answer_followup_on = 1;
         else if (!strcmp(argv[i], "--no-school-answer-followup")) g_leo_school_answer_followup_on = 0;
         else if (!strcmp(argv[i], "--school-reference-predication")) g_leo_school_reference_predication_on = 1;

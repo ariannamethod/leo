@@ -6250,7 +6250,9 @@ static TEST_NOINLINE void test_school_lexical_role(void) {
     Leo *role = test_leo_alloc();
     leo_init(role);
     int previous = g_leo_school_lexical_role_on;
+    int previous_affirmation = g_leo_school_affirmation_role_on;
     g_leo_school_lexical_role_on = 1;
+    g_leo_school_affirmation_role_on = 1;
 
     struct RoleCase {
         const char *surface;
@@ -6281,6 +6283,11 @@ static TEST_NOINLINE void test_school_lexical_role(void) {
         {"however", LEO_SCHOOL_ROLE_DISCOURSE, "but"},
         {"instead", LEO_SCHOOL_ROLE_DISCOURSE, "but"},
         {"rather", LEO_SCHOOL_ROLE_DISCOURSE, "but"},
+        {"yes", LEO_SCHOOL_ROLE_DISCOURSE, "yes"},
+        {"yeah", LEO_SCHOOL_ROLE_DISCOURSE, "yes"},
+        {"yep", LEO_SCHOOL_ROLE_DISCOURSE, "yes"},
+        {"okay", LEO_SCHOOL_ROLE_DISCOURSE, "yes"},
+        {"ok", LEO_SCHOOL_ROLE_DISCOURSE, "yes"},
         {NULL, LEO_SCHOOL_ROLE_NONE, NULL}
     };
     for (int i = 0; cases[i].surface; i++) {
@@ -6297,7 +6304,8 @@ static TEST_NOINLINE void test_school_lexical_role(void) {
 
     static const char *const refusals[] = {
         "underworld", "beneathness", "nearness", "surround",
-        "withinness", "nothing", "toy", "smooth", "fragile", NULL
+        "withinness", "yeahness", "okayish", "sure",
+        "nothing", "toy", "smooth", "fragile", NULL
     };
     for (int i = 0; refusals[i]; i++) {
         const char *witness = NULL;
@@ -6314,6 +6322,8 @@ static TEST_NOINLINE void test_school_lexical_role(void) {
     CHECK(!leo_school_find_unknown(role, "beneath nearby nor without however",
                                    unknown),
           "lexical-role: exact grammar cannot masquerade as School novelty");
+    CHECK(!leo_school_find_unknown(role, "yes yeah yep okay ok", unknown),
+          "lexical-role: answer grammar cannot masquerade as School novelty");
     CHECK(leo_school_find_unknown(role, "underworld", unknown) &&
               !strcmp(unknown, "underworld") &&
               leo_school_find_unknown(role, "toy", unknown) &&
@@ -6323,6 +6333,13 @@ static TEST_NOINLINE void test_school_lexical_role(void) {
               leo_school_find_unknown(role, "fragile", unknown) &&
               !strcmp(unknown, "fragile"),
           "lexical-role: exact-word controls remain honest questions");
+    CHECK(leo_school_find_unknown(role, "yeahness", unknown) &&
+              !strcmp(unknown, "yeahness") &&
+              leo_school_find_unknown(role, "okayish", unknown) &&
+              !strcmp(unknown, "okayish") &&
+              leo_school_find_unknown(role, "sure", unknown) &&
+              !strcmp(unknown, "sure"),
+          "lexical-role: affirmation evidence neither searches substrings nor invents synonyms");
     CHECK(leo_semtok_word(role, "beneath") < 0 &&
               !leo_school_is_learned(role, "beneath"),
           "lexical-role: refusing grammar invents no concept or lesson");
@@ -6333,10 +6350,15 @@ static TEST_NOINLINE void test_school_lexical_role(void) {
               leo_school_find_unknown(role, "nearby", unknown) &&
               !strcmp(unknown, "nearby") &&
               leo_school_find_unknown(role, "nor", unknown) &&
-              !strcmp(unknown, "nor"),
+              !strcmp(unknown, "nor") &&
+              leo_school_find_unknown(role, "yeah", unknown) &&
+              !strcmp(unknown, "yeah") &&
+              leo_school_find_unknown(role, "okay", unknown) &&
+              !strcmp(unknown, "okay"),
           "lexical-role: explicit ablation restores A.120 questions");
 
     g_leo_school_lexical_role_on = previous;
+    g_leo_school_affirmation_role_on = previous_affirmation;
     test_leo_delete(role);
 }
 
