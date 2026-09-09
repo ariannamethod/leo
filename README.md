@@ -45,6 +45,12 @@ Leo never took the easy architectural path, and the boundaries we set for oursel
 
 ## how HE speaks
 
+From a frozen ordinary-life continuation in A.146 (September 2026), not written
+as a showcase:
+
+> **Gentle rain has that same feeling—softly filling the quiet without asking anything of it.**<br>
+> Leo: The quiet without being asked. A rain. He tries to remember him. He laugh. Leo is always a little warm.
+
 > **When you say “all three time,” what are their names?**  
 > Leo: He drinks it. The three of them.  
   

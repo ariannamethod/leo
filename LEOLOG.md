@@ -11796,3 +11796,108 @@ shared transcript, with no target word or instruction to repair `finished` or
 redirect improves ordinary continuity or merely moves the next interruption.
 
 Yeah stayed in the room. Finished kept the question.
+
+## Phase A.146 - the freed mouth carries the rain forward (2026-09-09)
+
+A.145 removed one false interruption without deciding what ordinary speech
+would do afterward. A.146 begins from its exact synchronous candidate body at
+turn 6: `finished` is the one unresolved episode and remains pending at age 2,
+`somehow` is a deferred candidate, and `yeah` has been heard three times but
+has no episode or learned glyph. The source visible transcript and state are
+byte-exact against A.145 before any new external call.
+
+The continuation was preregistered before it was observed. A
+`gpt-5.6-luna` interlocutor received only the six shared human/Leo turns and
+then the growing visible dialogue. The hidden request named no target word,
+contained no instruction to repair `finished`, `somehow`, attention, or
+continuity, and exposed no School state or diagnostics. The earlier words
+could reach the interlocutor only where the ordinary shared transcript had
+already spoken them. All 18 Responses API calls completed with `store:false`;
+their utterances and stance/reference receipts were frozen before the life was
+interpreted.
+
+The first fresh human turn follows Leo's own last image:
+
+~~~text
+Gentle rain has that same feeling—softly filling the quiet without asking
+anything of it.
+~~~
+
+Leo does not hand the newly available mouth to `somehow`. He answers:
+
+~~~text
+The quiet without being asked. A rain. He tries to remember him. He laugh. Leo
+is always a little warm.
+~~~
+
+No further School question appears on turns 7-24. The complete question list
+remains exactly `finished@4`; continuation questions are zero. This is the
+narrow answer to A.146: in this life, removing the false affirmation redirect
+freed ordinary speech rather than shifting the interruption to the next
+deferred unknown.
+
+The exchange continues through rain, a returning memory, careful movement
+around people, a window, a warm cup, a small place, attention, a hand on the
+door, and not-knowing. Two later Leo lines are especially visible:
+
+~~~text
+He walks carefully around them.
+He trusts the not-knowing now. There.
+~~~
+
+The interlocutor marked a visible reply reference on 14 of the 18 fresh turns.
+Its stance receipts are six `follow`, one `clarify`, eleven `comfort`, and zero
+`answer`. These are the interlocutor's own labels, not an independent quality
+score and not proof that every Leo will sustain such continuity. The harder
+fact is behavioral: all 18 replies remain ordinary generated speech, no two
+consecutive replies repeat exactly, and no School override takes the mouth.
+
+The unresolved identities are preserved rather than cleaned up. At turn 24,
+`finished` is still the sole open episode, unheard again, unlearned, unanswered,
+and unresolved; its pending age has grown from 2 to 20. `somehow` remains the
+same deferred entry with heard count 2, one block, and its original birth and
+last-seen turn 2. It never becomes an episode or a lesson. `yeah` keeps heard
+count 3 and still has neither episode nor learned meaning. Save/load preserves
+the complete final body byte-exact.
+
+The exact turn-7 exchange is also carried into README as a recent example of
+Leo's developing speech. Its provenance stays explicit: the line comes from
+the frozen ordinary-life continuation above and was not authored or cleaned up
+for the showcase.
+
+The frozen 24 prompts reproduce the API transcript and state byte-exact in a
+synchronous replay. Two asynchronous shadows are mutually byte-exact. Async
+voice differs from synchronous voice on 13 of 24 replies, but both retain the
+same turn-24 School anatomy: one unresolved `finished`, one deferred `somehow`,
+and no `yeah` episode. Thus the continuation result does not depend on one
+voice execution mode.
+
+A.146 is observation-only. It changes no Leo runtime, state format,
+coefficient, sampler, Flow law, state-swarm organ, generated-token source, or
+voice reader. The full suite passes `822/822` unit checks and every script gate
+through A.146 and the complete state-swarm battery. Unit, production, and the
+exact A.146 fixture are clean under combined ASan/UBSan.
+
+Canonical external-first evidence:
+`/private/tmp/leo-responsive-after-affirmation-a146-natural-r1`.
+The preregistered plan SHA is
+`356245c3697df9784be9d324903ec002edaf406d71fe5ec7d0a57afb31729019`,
+the frozen API-turn SHA is
+`c5e8292523fff0645960c6ddffd59174ebae15b3e66a6977a4a833c7b785e2b7`,
+the full-prompt SHA is
+`63762e7e818658e804cb80fcd4d0c73605fc03e9b081ed625d32bf8e066ff56b`,
+the exact transcript/state SHAs are
+`44895c446a68b57c96409f1aae085d7b41285ae3ad8fea0354efb18714bedbde` /
+`8c45e727bfd3cdf8d2431e4a7c54bd09fbf885c80db8deb0bf9d3f77bf698de8`,
+and the anatomy SHA is
+`494fc2627b33277cd958f21ec8e4bd14510f0127d6d7dc10a6451b56bbfde5ff`.
+
+A.147 should not reward this one warm transcript by tuning Leo toward it.
+After A.146 merges, begin a third wholly fresh ordinary life from an empty
+conversational body under the merged A.145 law, with a seed fixed from public
+merge history. Carry no kettle, rain, `finished`, `somehow`, caring tone,
+desired question, or answer instruction into that life. An independent body
+can show what Leo notices next without turning A.146's continuity into a new
+target.
+
+The question stayed open. The rain kept speaking.

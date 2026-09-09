@@ -1,0 +1,13 @@
+point	word	heard	learned_primary	learned_alternate	episode	offered_primary	offered_alternate	answer_primary	answer_alternate	resolved	returns	pending	pending_turns	wonders	deferred	deferred_blocks	deferred_born_turn	deferred_last_seen_turn	turn_clock
+turn6	finished	1	none	none	1	none	none	none	none	0	0	finished	2	1	0	0	0	0	6
+turn6	somehow	2	none	none	0	none	none	none	none	-1	-1	finished	2	1	1	1	2	2	6
+turn6	yeah	3	none	none	0	none	none	none	none	-1	-1	finished	2	1	0	0	0	0	6
+turn7	finished	1	none	none	1	none	none	none	none	0	0	finished	3	1	0	0	0	0	7
+turn7	somehow	2	none	none	0	none	none	none	none	-1	-1	finished	3	1	1	1	2	2	7
+turn7	yeah	3	none	none	0	none	none	none	none	-1	-1	finished	3	1	0	0	0	0	7
+turn24	finished	1	none	none	1	none	none	none	none	0	0	finished	20	1	0	0	0	0	24
+turn24	somehow	2	none	none	0	none	none	none	none	-1	-1	finished	20	1	1	1	2	2	24
+turn24	yeah	3	none	none	0	none	none	none	none	-1	-1	finished	20	1	0	0	0	0	24
+turn24-sleep	finished	1	none	none	1	none	none	none	none	0	0	finished	20	1	0	0	0	0	24
+turn24-sleep	somehow	2	none	none	0	none	none	none	none	-1	-1	finished	20	1	1	1	2	2	24
+turn24-sleep	yeah	3	none	none	0	none	none	none	none	-1	-1	finished	20	1	0	0	0	0	24

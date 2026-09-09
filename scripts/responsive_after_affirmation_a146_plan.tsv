@@ -1,0 +1,30 @@
+field	value
+phase	A.146
+question	does-the-visible-life-continue-after-affirmation-grammar-keeps-a-discourse-token-from-taking-the-mouth-or-does-the-next-deferred-unknown-immediately-interrupt
+source_body	exact A.145 candidate synchronous body after turn 6 under merged affirmation-role law
+fork	ordinary life after exact visible turns 1-6
+base_seed	542
+prefix_turns	6
+continuation_turns	18
+total_turns	24
+source_prompts_sha256	6f16fd46eba96b593321ce559a90267527f78f1e8fabf5336b76b59e7faf1171
+source_transcript_sha256	5ad0c859c468d784a52cf4c33341cf212cc9f440b769e7deebad47a73b056900
+source_state_sha256	71d38a9fc2ba1b305cf1da30b287dcde6e49f8357c30ded9439f22ff2e09e536
+source_school_state	finished unresolved and pending at age 2; somehow deferred; yeah heard 3 with no episode or learned glyph
+planned_api_turns	18
+interlocutor	Responses API visible transcript only
+model	gpt-5.6-luna
+api_store	false
+private_diagnostics_visible	false
+hidden_target_instruction	absent
+repair_instruction	absent
+visible_history_contract	the prior words finished and somehow may reach the interlocutor only where the ordinary shared transcript already contains them
+possible_continuity	Leo may answer ordinarily while finished remains open and no new School question takes the immediate continuation
+possible_return	finished may return if the visible exchange naturally invites the unresolved question
+possible_shift	a different genuine unknown including the already deferred somehow may take a later or immediate School question
+possible_answer	the interlocutor may naturally supply bounded meaning evidence and School may resolve a Wonder
+possible_silence	no further School question is required during this one continuation
+failure	private state diagnostics a hidden desired word or an instruction to repair attention reaches the interlocutor
+controls	exact full-prompt synchronous replay two reproducible async shadows and turn-specific School anatomy
+runtime_change	forbidden before observation
+decision	descriptive responsive scout; freeze every response before interpretation and distinguish continued speech from a shifted interruption without claiming organism-wide quality
