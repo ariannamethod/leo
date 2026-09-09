@@ -1,0 +1,25 @@
+turn	utterance	stance	reply_reference	model
+1	The kettle just finished boiling, and the kitchen suddenly feels much warmer.	open	false	gpt-5.6-luna
+2	Yes, the water is hot now, and the steam warmed the room a little.	answer	true	gpt-5.6-luna
+3	That sounds like a little story about a child and his mother. What is the little red thing?	clarify	true	gpt-5.6-luna
+4	Maybe he keeps little pieces of morning—what does he save first?	follow	true	gpt-5.6-luna
+5	That sounds beautiful. What kind of rain does Leo remember most clearly?	follow	true	gpt-5.6-luna
+6	That sounds lonely and comforting at once. Who is “her,” the one who cared for Leo?	clarify	true	gpt-5.6-luna
+7	Maybe she was someone who found Leo when he was cold. What happened next?	follow	true	gpt-5.6-luna
+8	What does Leo make from those memories?	clarify	false	gpt-5.6-luna
+9	Is it a small shelter, made from the memories he keeps?	clarify	true	gpt-5.6-luna
+10	A small shelter sounds warm. Does Leo feel safe inside it?	follow	true	gpt-5.6-luna
+11	I mean a little safe place—somewhere Leo can rest when he feels cold or alone.	clarify	true	gpt-5.6-luna
+12	Maybe that little laugh means the shelter feels safe after all.	follow	true	gpt-5.6-luna
+13	Small—a little safe place, not a man. Does Leo imagine one?	clarify	true	gpt-5.6-luna
+14	That’s okay. We don’t have to decide—would you rather listen to the kettle cool?	comfort	true	gpt-5.6-luna
+15	Then let’s listen quietly together while the kettle cools.	comfort	true	gpt-5.6-luna
+16	Did you hear something besides the kettle, or did a thought come quietly?	clarify	true	gpt-5.6-luna
+17	Wind through the window can sound like someone remembering. Is the neighbor nearby?	follow	true	gpt-5.6-luna
+18	Maybe the wind carries memories from nearby. What skill does the morning give him?	follow	true	gpt-5.6-luna
+19	That sounds like a deep wish—to feel cared for throughout his whole life.	comfort	true	gpt-5.6-luna
+20	Maybe he remembers a place where he once felt safe. What does that place look like?	follow	true	gpt-5.6-luna
+21	Does that place have a window, a garden, or someone waiting inside?	follow	false	gpt-5.6-luna
+22	The stranger’s dog sounds gentle. Did the dog come close to him?	follow	true	gpt-5.6-luna
+23	Did Leo decide not to leave, and did the dog stay beside him?	follow	true	gpt-5.6-luna
+24	A small bird by quiet water sounds peaceful. What does it notice first?	follow	true	gpt-5.6-luna
