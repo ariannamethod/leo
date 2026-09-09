@@ -59,7 +59,7 @@ wonder-reask-reference:
 natural-answer-form:
 	./scripts/natural_answer_form_matrix.sh
 
-.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition reciprocal-s-family presence-surface-boundary family-heard-threshold responsive-honest-wonder-life two-layer-family-composition responsive-a133-continuation single-hypothesis-rejection-return responsive-difficult-return reference-predication-boundary responsive-difficult-after-repair second-unanswered-wonder-return delayed-answer-after-second-return fresh-ordinary-life cautious-paired-answer responsive-after-cautious second-fresh-ordinary-life
+.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition reciprocal-s-family presence-surface-boundary family-heard-threshold responsive-honest-wonder-life two-layer-family-composition responsive-a133-continuation single-hypothesis-rejection-return responsive-difficult-return reference-predication-boundary responsive-difficult-after-repair second-unanswered-wonder-return delayed-answer-after-second-return fresh-ordinary-life cautious-paired-answer responsive-after-cautious second-fresh-ordinary-life affirmation-role
 plural-answer-capacity:
 	./scripts/plural_answer_capacity_matrix.sh
 
@@ -116,6 +116,9 @@ responsive-after-cautious:
 
 second-fresh-ordinary-life:
 	./scripts/second_fresh_ordinary_life_a144_replay.sh
+
+affirmation-role:
+	./scripts/affirmation_role_a145_anatomy.sh
 
 state-swarm-ecology: leo
 	./scripts/state_swarm_ecology_matrix.sh
@@ -453,6 +456,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_cautious_paired_answer_a142.sh
 	./scripts/test_responsive_after_cautious_a143.sh
 	./scripts/test_second_fresh_ordinary_life_a144.sh
+	./scripts/test_affirmation_role_a145.sh
 	./scripts/test_state_swarm_liminal_confirmation_select.sh
 	./scripts/test_state_swarm_liminal_confirmation_report.sh
 	./scripts/test_state_swarm_liminal_trajectory_fixture.sh

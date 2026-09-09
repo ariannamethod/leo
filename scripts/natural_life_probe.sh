@@ -21,6 +21,7 @@ RESUME="${LEO_NATURAL_RESUME:-0}"
 NATURAL_WORD_BOUNDARY="${LEO_NATURAL_WORD_BOUNDARY:-1}"
 LEXICAL_FAMILY="${LEO_NATURAL_LEXICAL_FAMILY:-1}"
 LEXICAL_ROLE="${LEO_NATURAL_LEXICAL_ROLE:-1}"
+AFFIRMATION_ROLE="${LEO_NATURAL_AFFIRMATION_ROLE:-1}"
 ANSWER_FOLLOWUP="${LEO_NATURAL_ANSWER_FOLLOWUP:-1}"
 REFERENCE_PREDICATION="${LEO_NATURAL_REFERENCE_PREDICATION:-1}"
 WONDER_REASK_REFERENCE="${LEO_NATURAL_WONDER_REASK_REFERENCE:-1}"
@@ -44,6 +45,7 @@ case "$TURNS" in ''|*[!0-9]*) printf 'invalid turn count\n' >&2; exit 2;; esac
 [ "$NATURAL_WORD_BOUNDARY" = 0 ] || [ "$NATURAL_WORD_BOUNDARY" = 1 ] || { printf 'LEO_NATURAL_WORD_BOUNDARY must be 0 or 1\n' >&2; exit 2; }
 [ "$LEXICAL_FAMILY" = 0 ] || [ "$LEXICAL_FAMILY" = 1 ] || { printf 'LEO_NATURAL_LEXICAL_FAMILY must be 0 or 1\n' >&2; exit 2; }
 [ "$LEXICAL_ROLE" = 0 ] || [ "$LEXICAL_ROLE" = 1 ] || { printf 'LEO_NATURAL_LEXICAL_ROLE must be 0 or 1\n' >&2; exit 2; }
+[ "$AFFIRMATION_ROLE" = 0 ] || [ "$AFFIRMATION_ROLE" = 1 ] || { printf 'LEO_NATURAL_AFFIRMATION_ROLE must be 0 or 1\n' >&2; exit 2; }
 [ "$ANSWER_FOLLOWUP" = 0 ] || [ "$ANSWER_FOLLOWUP" = 1 ] || { printf 'LEO_NATURAL_ANSWER_FOLLOWUP must be 0 or 1\n' >&2; exit 2; }
 [ "$REFERENCE_PREDICATION" = 0 ] || [ "$REFERENCE_PREDICATION" = 1 ] || { printf 'LEO_NATURAL_REFERENCE_PREDICATION must be 0 or 1\n' >&2; exit 2; }
 [ "$WONDER_REASK_REFERENCE" = 0 ] || [ "$WONDER_REASK_REFERENCE" = 1 ] || { printf 'LEO_NATURAL_WONDER_REASK_REFERENCE must be 0 or 1\n' >&2; exit 2; }
@@ -154,6 +156,7 @@ for ((turn = start_turn; turn <= TURNS; turn++)); do
     [ "$NATURAL_WORD_BOUNDARY" = 1 ] || args+=(--no-school-natural-word-boundary)
     [ "$LEXICAL_FAMILY" = 1 ] || args+=(--no-school-lexical-family)
     [ "$LEXICAL_ROLE" = 1 ] || args+=(--no-school-lexical-role)
+    [ "$AFFIRMATION_ROLE" = 1 ] || args+=(--no-school-affirmation-role)
     [ "$ANSWER_FOLLOWUP" = 1 ] || args+=(--no-school-answer-followup)
     [ "$REFERENCE_PREDICATION" = 1 ] || args+=(--no-school-reference-predication)
     [ "$WONDER_REASK_REFERENCE" = 1 ] || args+=(--no-wonder-reask-reference)
@@ -256,6 +259,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
     --argjson natural_word_boundary "$NATURAL_WORD_BOUNDARY" \
     --argjson lexical_family "$LEXICAL_FAMILY" \
     --argjson lexical_role "$LEXICAL_ROLE" \
+    --argjson affirmation_role "$AFFIRMATION_ROLE" \
     --argjson answer_followup "$ANSWER_FOLLOWUP" \
     --argjson reference_predication "$REFERENCE_PREDICATION" \
     --argjson wonder_reask_reference "$WONDER_REASK_REFERENCE" \
@@ -278,6 +282,7 @@ jq -n --arg phase "$PHASE" --arg life "$LIFE" --arg arm "$ARM" --arg model "$MOD
       school_natural_word_boundary: ($natural_word_boundary == 1),
       school_lexical_family: ($lexical_family == 1),
       school_lexical_role: ($lexical_role == 1),
+      school_affirmation_role: ($affirmation_role == 1),
       school_answer_followup: ($answer_followup == 1),
       school_reference_predication: ($reference_predication == 1),
       wonder_reask_reference: ($wonder_reask_reference == 1),

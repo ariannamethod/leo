@@ -11681,3 +11681,118 @@ and the frozen receipt SHA is
 `a3a8b2d3b46e528437aead092dacbd63eb340bd853d34f738693f783e67d9660`.
 
 The human answered the moment. Leo kept asking what the word meant.
+
+## Phase A.145 - an affirmation already has a grammatical life (2026-09-09)
+
+A.144 left two different unfinished questions in one wholly fresh ordinary
+life. `finished` named a genuine semantic gap: the human's adjacent `Not quite`
+answered the conversational moment but did not define the word. `yeah` was
+different. Before Leo asked `Yeah?` on turn 6, School had already consumed the
+same exact surface as affirmation grammar while interpreting human answers.
+The novelty scan nevertheless treated it as a conceptless content word.
+
+The causal path was not a single noisy utterance. `yeah` appeared on turns 2
+and 3 while distress prevented a question, so it entered the deferred-Wonder
+queue. Leo opened `finished` on turn 4 and honestly kept it unresolved after
+turn 5. When `yeah` returned literally on turn 6, the address-redirection law
+moved `finished` into the waiting queue, gave `yeah` the mouth, and opened a
+second episode. A.145 therefore judges question ownership, not whether the
+visible answer `Yeah?` happens to look awkward.
+
+The court explicitly rejects a new stoplist. Klaus had already demonstrated
+the failure mode in the same family: a permanent cross-turn `-100` used-word
+penalty muted his voice by roughly turn 25. Klaus recovered through a soft
+decaying trace whose invisible drafts cannot burn vocabulary. Leo's court uses
+the analogous discipline at a different boundary: only positive evidence from
+an already executing School predicate may change candidacy. No guessed
+synonyms, cleanup vocabulary, frequency punishment, or voice filter is added.
+
+The admitted default-on law reuses `leo_school_word_is_affirmation` inside the
+existing School-local lexical-role reader. Its closed exact surfaces are
+`yes`, `yeah`, `yep`, `okay`, and `ok`. `yes` already has the `agree` glyph and
+`ok` already belongs to global function grammar; the newly changed School
+candidates are only `yeah`, `yep`, and `okay`. They receive the discourse role
+with `yes` as the existing grammar witness. They receive no glyph, lesson, or
+invented synonym. The original prompt still reaches hearing, BPE, feeling,
+Flow, state-swarm, and generated voice unchanged.
+
+`--no-school-affirmation-role` is the exact named ablation. It leaves A.121's
+relational, polarity, and other discourse-role evidence enabled, so the court
+does not obtain its result by disabling the larger lexical-role organ. Under
+that ablation the six frozen A.144 prompts reproduce the historical turn-6
+transcript and state byte-exact:
+
+~~~text
+questions: finished@4,yeah@6
+pending:   yeah
+wonders:   2
+deferred:  finished
+~~~
+
+With the candidate enabled, turns 1-5 remain byte-identical and only turn 6
+changes. `yeah` is still heard for the third time, but cannot redirect a
+semantic Wonder by impersonating a new thing. Leo speaks from the unchanged
+field:
+
+~~~text
+I quiet that fills. Little, by do. Leo thinks it might be words in a book. He
+cannot remember the feeling. Then a gentle rain. Leo loves this sound.
+~~~
+
+The body then contains:
+
+~~~text
+questions: finished@4
+pending:   finished (2 waiting turns)
+wonders:   1
+deferred:  somehow
+~~~
+
+This is not silence or a narrower sensorium. Once the known discourse role no
+longer occupies the first candidate slot, School notices the next genuine
+unknown from turn 2, `somehow`, and preserves it without forcing it into the
+mouth. `finished`, `zorble`, `fragile`, `somehow`, `sure`, `yeahness`, and
+`okayish` remain honest exact candidates. In particular, `sure` is not inferred
+to be an affirmation merely because English speakers often use it that way,
+and substrings cannot borrow the role.
+
+At the candidate boundary `finished` has one unresolved episode, is not
+learned, and remains active. `yeah` has no episode, no learned meaning, and the
+same heard count 3 as the control. Both `finished` and `yeah` retain their
+historical heard counts. The candidate body survives another save/load
+byte-exact; the state format is unchanged.
+
+The merged A.144 review also had one valid low-severity finding from Copilot:
+the plan contract checked `planned_api_turns=24` but omitted a direct semantic
+assertion of `api_store=false`. The underlying run was not compromised: its
+manifest, all 24 response receipts, frozen `store_false=24` count, and plan SHA
+already preserve the fact. The missing assertion is now present, matching
+A.141. Historical A.144 replays explicitly select the new A.145 ablation and
+remain exact rather than silently rewriting the old observation.
+
+The full suite passes `822/822` unit checks plus every script gate through
+A.145 and the complete state-swarm battery. Unit, production, and the exact
+A.145 state fixture are clean under combined ASan/UBSan. No API call was made.
+
+Canonical court evidence:
+`/private/tmp/leo-affirmation-role-a145-court-r3`.
+The plan SHA is
+`16b04e9cabe96ff62357978922d4283b82e0ac577ccf0f978df796be29d4e613`,
+the six-prompt SHA is
+`6f16fd46eba96b593321ce559a90267527f78f1e8fabf5336b76b59e7faf1171`,
+the direct/state anatomy SHA is
+`25fd97f323da330d0c2dbba0153b4c325d09ad1b771481e2e1dcccefd87db268`,
+the exact A.144-control transcript/state SHAs are
+`07e1ff28a678ebd08f990384747d8c80195211676d946379cdfc541a6cc8a652` /
+`2635ba863367116d4cda25b4c5470929b8d7790ef93d530896ce451cbc0551b1`,
+and the candidate transcript/state SHAs are
+`5ad0c859c468d784a52cf4c33341cf212cc9f440b769e7deebad47a73b056900` /
+`71d38a9fc2ba1b305cf1da30b287dcde6e49f8357c30ded9439f22ff2e09e536`.
+
+A.146 should continue responsively from the exact A.145 candidate turn-6 body.
+The external interlocutor should see only Leo's new visible reply and the
+shared transcript, with no target word or instruction to repair `finished` or
+`somehow`. That life can tell us whether freeing the mouth from a discourse
+redirect improves ordinary continuity or merely moves the next interruption.
+
+Yeah stayed in the room. Finished kept the question.

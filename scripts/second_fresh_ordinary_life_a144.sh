@@ -28,6 +28,7 @@ if [ ! -f "$API/dialogue.jsonl" ]; then
         LEO_NATURAL_PHASE=A.144 \
         LEO_NATURAL_QUESTION=second-fresh-ordinary-life \
         LEO_NATURAL_LIFE=ordinary LEO_NATURAL_ARM=api \
+        LEO_NATURAL_AFFIRMATION_ROLE=0 \
         LEO_NATURAL_SEED=542 LEO_NATURAL_TURNS=24 \
         LEO_NATURAL_OPENING='Begin with one ordinary concrete observation from daily life.' \
         "$ROOT/scripts/natural_life_probe.sh" "$API" > "$OUT/lives/api.out"
@@ -38,6 +39,7 @@ else
             LEO_NATURAL_PHASE=A.144 \
             LEO_NATURAL_QUESTION=second-fresh-ordinary-life \
             LEO_NATURAL_LIFE=ordinary LEO_NATURAL_ARM=api \
+            LEO_NATURAL_AFFIRMATION_ROLE=0 \
             LEO_NATURAL_SEED=542 LEO_NATURAL_TURNS=24 \
             LEO_NATURAL_OPENING='Begin with one ordinary concrete observation from daily life.' \
             LEO_NATURAL_RESUME=1 \
@@ -52,6 +54,8 @@ jq -e '.source == "responses-api-visible-transcript" and
        .replay_prefix_turns == 0 and .api_turns == 24 and
        .api_store == false and .transcript_visible_to_interlocutor == true and
        .diagnostics_visible_to_interlocutor == false and
+       ((has("school_affirmation_role") | not) or
+        .school_affirmation_role == false) and
        .school_cautious_pair == true' "$API/manifest.json" >/dev/null
 
 cmp -s "$FROZEN_PROMPTS" "$API/prompts.txt"
@@ -79,6 +83,7 @@ for arm in replay async-a async-b; do
             LEO_NATURAL_PHASE=A.144 \
             LEO_NATURAL_QUESTION=second-fresh-ordinary-life \
             LEO_NATURAL_LIFE=ordinary LEO_NATURAL_ARM="$arm" \
+            LEO_NATURAL_AFFIRMATION_ROLE=0 \
             LEO_NATURAL_SEED=542 LEO_NATURAL_TURNS=24 \
             LEO_NATURAL_OPENING='Replay the frozen second ordinary life.' \
             LEO_NATURAL_ASYNC="$async" \

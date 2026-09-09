@@ -15,13 +15,14 @@ awk -F '\t' '
     $1 == "base_seed" { if ($2 != 542) exit 2; seed++ }
     $1 == "turns" { if ($2 != 24) exit 2; turns++ }
     $1 == "planned_api_turns" { if ($2 != 24) exit 2; api++ }
+    $1 == "api_store" { if ($2 != "false") exit 2; store++ }
     $1 == "target_word" { if ($2 != "absent") exit 2; target++ }
     $1 == "desired_wonder" { if ($2 != "absent") exit 2; wonder++ }
     $1 == "answer_instruction" { if ($2 != "absent") exit 2; answer++ }
     $1 == "runtime_change" { if ($2 != "forbidden before observation") exit 2; runtime++ }
     END {
         if (phase != 1 || source != 1 || fork != 1 || seed != 1 ||
-            turns != 1 || api != 1 || target != 1 || wonder != 1 ||
+            turns != 1 || api != 1 || store != 1 || target != 1 || wonder != 1 ||
             answer != 1 || runtime != 1) exit 2
     }
 ' "$plan"
@@ -52,6 +53,8 @@ awk -F '\t' '
 
 "$ROOT/scripts/second_fresh_ordinary_life_a144_replay.sh" \
     "$TMP/replay" > "$TMP/replay.out"
+jq -e '.school_affirmation_role == false' \
+    "$TMP/replay/lives/replay/manifest.json" >/dev/null
 cmp -s "$ROOT/scripts/second_fresh_ordinary_life_a144_anatomy.tsv" \
     "$TMP/replay/anatomy.tsv"
 grep -q $'^result\tsecond-fresh-ordinary-life-exposes-discourse-wonder$' \
