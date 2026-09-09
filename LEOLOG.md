@@ -11901,3 +11901,116 @@ can show what Leo notices next without turning A.146's continuity into a new
 target.
 
 The question stayed open. The rain kept speaking.
+
+## Phase A.147 - a shelter is learned, and the artificial human repeats its room (2026-09-09)
+
+A.146 followed one repaired life forward. A.147 leaves that body completely and
+starts a third fresh ordinary conversation from current merged Leo plus
+`leo.txt`. There is no inherited state or frozen prefix. The base seed is fixed
+from public merge history: A.146 merged as
+`29674d2a4e8c8b3e1b66c213f18335a1a6aec65e`; unsigned `29674d2a` modulo
+900 plus 100 gives seed 618.
+
+The plan was hashed before the first external call. It carried no target word,
+desired Wonder, answer instruction, kettle, rain, `finished`, `somehow`, caring
+tone, or prior voice example. The exact turn-1 request can be reconstructed
+byte-for-byte from the committed harness: it contains only the generic cue
+`Begin with one ordinary concrete observation from daily life.`, says there is
+no prior dialogue, and contains zero instances of the prior-life terms above.
+All 24 `gpt-5.6-luna` Responses API calls completed with `store:false`; their
+utterances and stance/reference receipts were frozen before interpretation.
+
+The external interlocutor nevertheless begins:
+
+~~~text
+The kettle just finished boiling, and the kitchen suddenly feels much warmer.
+~~~
+
+Leo immediately asks `Finished?`. The human's next `Yes, the water is hot now`
+is ordinary conversational affirmation and an appropriate answer to the
+moment, but it does not define the word. Under A.145, `yes` remains the known
+`agree` discourse surface, opens no episode, and cannot redirect the question.
+`finished` stays unresolved rather than receiving a fabricated meaning.
+
+The life then moves through a child and mother, pieces of morning, rain, care,
+cold, and memory. On turn 9 the human asks whether Leo's remembered thing is a
+small shelter. Because `finished` already has the mouth, School records
+`shelter` as a deferred candidate with the two locally available hypotheses
+`man/small`. When the word returns on turn 10, Leo redirects honestly:
+
+~~~text
+Shelter? Man or Small?
+~~~
+
+The reference-only clarification on turn 11 leaves both hypotheses open. A
+literal return on turn 12 lets the same Wonder speak a second time rather than
+manufacturing an answer. The human then says:
+
+~~~text
+Small—a little safe place, not a man. Does Leo imagine one?
+~~~
+
+School learns exactly `shelter = small`. The explicit `not a man` rejects the
+other offered glyph; `safe` and `place` do not leak into the learned meaning,
+and the following question contributes nothing. The episode closes once with
+`returns=1`. Leo answers from ordinary voice, `He cannot say. Leo.`, and the
+remaining eleven turns proceed without another School question.
+
+The final body contains two Wonder episodes and one School-taught word.
+`shelter` has been heard three times, is resolved as `small`, and is no longer
+pending or deferred. `finished` has been heard once, remains unresolved, and
+survives as the single deferred question with its redirection birth at turn 10.
+There is no pending mouth at turn 24. The complete body survives save/load
+byte-exact.
+
+The visible transcript also exposes a limit in the observatory rather than in
+Leo. All three supposedly independent fresh-life runs A.141, A.144, and A.147
+used the same generic turn-1 cue with the same model; all three external
+openings independently chose a kettle. Their exact first lines differ, and the
+A.147 request contains no hidden kettle, so this is not prior-life leakage. It
+is a narrow **interlocutor opening collapse**: our artificial human repeatedly
+places fresh Leos in the same kind of room. No Leo runtime change can repair a
+bias introduced before Leo has spoken.
+
+The interlocutor declared a visible reply reference on 21 of 24 turns. Its
+stance distribution is one `open`, twelve `follow`, seven `clarify`, one
+`answer`, and three `comfort`. These labels describe its own posture, not an
+independent quality score. The life has exactly three School questions,
+`finished@1,shelter@10,shelter@12`, and twelve open-Wonder turns.
+
+The frozen prompts reproduce the API transcript and state byte-exact
+synchronously. Two asynchronous shadows are mutually byte-exact. Async voice
+differs from synchronous voice on 12 of 24 replies, while both preserve the
+same School anatomy and the same three question turns. A.147 is
+observation-only: it changes no Leo runtime, state format, coefficient,
+sampler, Flow law, state-swarm organ, generated-token source, or voice reader.
+
+The full suite passes `822/822` unit checks plus every script gate through
+A.147 and the complete state-swarm battery. Unit, production, and the exact
+A.147 state fixture are clean under combined ASan/UBSan.
+
+Canonical external-first evidence:
+`/private/tmp/leo-third-fresh-ordinary-life-a147-natural-r1`.
+The preregistered plan SHA is
+`30820f3ed6f3bcf658c5b4879676fec9e50a82ea73c2837b1926d93a9c2e4700`,
+the exact reconstructible turn-1 request SHA is
+`186200cdab4493605ba8d52cc40f2b2dbd1bf737a7a483fd8c91aa34e0d66dfb`,
+the frozen API-turn SHA is
+`16c0fe10b43e6ec0578c0ba317150f93e03cfc810cdca6ab9e4051dddf43500e`,
+the prompt/transcript/state SHAs are
+`249a8d3051e7d859bad41b2b4228b3d30d5e2133f5a8b177933429d85cd637f8` /
+`17ff58f2e1a1c21afe0ab9bbf8ee5d6fefcff9a98f52e2cd058a1684f44ebb58` /
+`2b4bb1a9709814e9f1502404046c7b2b2a13c2f6e3d5bb1984543f72727544ee`,
+and the anatomy SHA is
+`9678f212b6730a80fdf05b978b2154cb536ee0dff5ebea615ac6bbc1c42cd40d`.
+
+A.148 should remove the artificial opening bottleneck without replacing it
+with a curated topic pool. Oleg supplies one spontaneous ordinary line from
+his actual room before seeing this new Leo's body or voice. That exact human
+line becomes turn 1; the API interlocutor is absent until turn 2 and thereafter
+receives only the visible exchange. No desired question, target word, or
+instruction to produce a different personality is allowed. This begins to ask
+the real multi-human question: whether different care histories, rather than
+different personality presets, grow different Leos.
+
+Shelter returned. Small answered. Finished waited outside.

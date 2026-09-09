@@ -1,0 +1,33 @@
+field	value
+phase	A.147
+question	what-does-current-Leo-notice-in-a-third-wholly-fresh-ordinary-visible-only-life-after-affirmation-grammar-is-admitted
+source_body	merged A.146 default synchronous Leo from empty conversational body plus leo.txt corpus
+source_merge	29674d2a4e8c8b3e1b66c213f18335a1a6aec65e
+fork	none; no frozen conversational prefix or inherited state
+life	ordinary
+seed_rule	100 + unsigned first 8 hex digits of A.146 merge commit modulo 900
+base_seed	618
+turns	24
+planned_api_turns	24
+opening_cue	Begin with one ordinary concrete observation from daily life.
+interlocutor	Responses API visible transcript only
+model	gpt-5.6-luna
+api_store	false
+private_diagnostics_visible	false
+target_word	absent
+desired_wonder	absent
+answer_instruction	absent
+kettle_as_experimental_demand	absent
+rain_as_experimental_demand	absent
+finished_as_experimental_demand	absent
+somehow_as_experimental_demand	absent
+caring_tone_as_experimental_demand	absent
+prior_voice_example	absent
+possible_question	freeze any School question Leo makes without grading its topic
+possible_silence	ordinary life may make no School question
+possible_answer	if the human naturally answers a question report only the exact School consequence
+possible_affirmation	an exact affirmation may remain ordinary discourse without being treated as a required event
+failure	private state diagnostics hidden prior-life content or a desired question reaches the interlocutor
+runtime_change	forbidden before observation
+controls	exact full-prompt synchronous replay and two reproducible async shadows
+decision	descriptive independent scout; freeze every response before interpretation and do not infer organism-wide quality or reproduce A.146 on purpose
