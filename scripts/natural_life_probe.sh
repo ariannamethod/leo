@@ -39,7 +39,7 @@ TWO_LAYER_FAMILY_COMPOSITION="${LEO_NATURAL_TWO_LAYER_FAMILY_COMPOSITION:-1}"
 case "$ARM" in api|replay|async-a|async-b) ;; *) printf 'invalid arm: %s\n' "$ARM" >&2; exit 2;; esac
 case "$BASE_SEED" in ''|*[!0-9]*) printf 'invalid seed\n' >&2; exit 2;; esac
 case "$TURNS" in ''|*[!0-9]*) printf 'invalid turn count\n' >&2; exit 2;; esac
-[ "$TURNS" -ge 2 ] && [ "$TURNS" -le 64 ] || { printf 'turn count must be 2..64\n' >&2; exit 2; }
+[ "$TURNS" -ge 1 ] && [ "$TURNS" -le 64 ] || { printf 'turn count must be 1..64\n' >&2; exit 2; }
 [ "$ASYNC" = 0 ] || [ "$ASYNC" = 1 ] || { printf 'LEO_NATURAL_ASYNC must be 0 or 1\n' >&2; exit 2; }
 [ "$RESUME" = 0 ] || [ "$RESUME" = 1 ] || { printf 'LEO_NATURAL_RESUME must be 0 or 1\n' >&2; exit 2; }
 [ "$NATURAL_WORD_BOUNDARY" = 0 ] || [ "$NATURAL_WORD_BOUNDARY" = 1 ] || { printf 'LEO_NATURAL_WORD_BOUNDARY must be 0 or 1\n' >&2; exit 2; }

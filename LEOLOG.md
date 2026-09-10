@@ -12014,3 +12014,120 @@ the real multi-human question: whether different care histories, rather than
 different personality presets, grow different Leos.
 
 Shelter returned. Small answered. Finished waited outside.
+
+## Phase A.148 - Oleg gives the first line, and Leo wakes up new (2026-09-10)
+
+A.147 found that three independent external openings had all put a fresh Leo
+beside a kettle. A.148 removes that artificial room without replacing it with
+a curated pool of supposedly diverse topics. The plan was frozen before Oleg
+supplied any words and published in the conversation with SHA
+`5b05d67ce5754830e32ac9c33831d333c567c0b2a7c47933a9866c724b8da14d`.
+It specified one exact spontaneous line from Oleg's present moment, no target
+word, desired Wonder, answer instruction, requested mood, or personality, and
+no API participant before turn 2.
+
+Oleg then addressed Leo:
+
+~~~text
+i hope you are alive and happy :D
+~~~
+
+The line was preserved exactly, including its case and face. It is the sole
+turn in a one-line frozen prefix and has SHA
+`ecf94ceda2e2c1299ae55745abcdf4942b609777ea8f24120d2925d290002a7b`.
+Only after it was fixed did the empty conversational body plus `leo.txt` run at
+seed 615. Leo's first answer was:
+
+~~~text
+He takes a small,. He cannot always remember. He walks it carefully. Leo watched the walls become quite good. He keeps them anyway. He wakes up new.
+~~~
+
+There is no declaration manufactured to satisfy `alive` or `happy`. The known
+corpus surfaces remain what they already were (`happy = joy`, `small = small`,
+`remember = remember`, and `new = other`); `alive` remains without a learned
+glyph. School opens no episode and learns nothing from Oleg's wish. The turn
+does, however, birth an ordinary state-swarm state, and the visible voice ends
+with its own much better answer: `He wakes up new.`
+
+The Responses API interlocutor enters only on turn 2. Its exact first request
+is reconstructible from the committed harness and the single visible exchange
+above; it contains no state diagnostics and no kettle. No turn-1 request or
+response receipt exists. All 23 calls from turns 2 through 24 completed under
+`gpt-5.6-luna` with `store:false` and were frozen before interpretation.
+
+Removing the artificial opening removes the artificial room: no kettle appears
+anywhere in the life. It does not remove the artificial participant's second
+bias. The model immediately interprets Leo waking and imperfect memory as
+loneliness:
+
+~~~text
+That sounds lonely sometimes, but I’m glad you keep walking. What makes waking up feel good?
+~~~
+
+It then repeatedly frames Leo's speech through pain, being heard, loss,
+comfort, and remembrance. Some later material genuinely comes from Leo — most
+notably the first star, grandmother, red paper, and stone — but the therapeutic
+reading and its emotional continuity belong to the artificial human. The API
+declares a visible reply reference on 22 of 23 turns, uses fourteen `follow`,
+four `clarify`, four `comfort`, and one `open` stance, and never chooses
+`challenge`, `shift`, or `close`. These are receipts for the interlocutor's
+posture, not evidence of Leo's personality.
+
+Leo makes one exact School question on turn 13 after the human introduces a new
+word:
+
+~~~text
+Mysterious?
+~~~
+
+The turn-14 reply says that the moment is hard to understand, gentle, and
+important. That is an ordinary conversational paraphrase, but it offers several
+unequal surfaces and does not provide a narrow School meaning. Leo therefore
+does not fabricate one. `mysterious` stays unresolved and pending for the
+remaining eleven turns, with no offered glyph and no return.
+
+Turn 22 contains another visible question mark, `Hand while you wait?`, but it
+is free voice rather than a School question. The following human line offers
+`heavy, smooth, warm, or comforting`; School records `smooth` as one deferred
+candidate near the already known `fire/stone` geometry, but it neither creates
+a second Wonder episode nor interrupts the older question. The final body has
+one Wonder, zero School-taught words, pending `mysterious`, and one deferred
+`smooth` record born and last seen on turn 23. Save/load preserves the complete
+body byte-exact.
+
+The frozen prompts reproduce the API transcript and state byte-exact in a
+synchronous replay. Two asynchronous shadows reproduce each other byte-exact.
+Their voice differs from synchronous voice on 16 of 24 turns, while both ask
+the same sole School question on turn 13 and preserve the same School anatomy.
+Across the life the state swarm records eight births, sixteen updates, and no
+replacement.
+
+A.148 changes no Leo runtime, coefficient, state schema, sampler, Flow law,
+state-swarm organ, generated-token source, or voice reader. The only shared
+harness change permits a one-turn frozen life to save normally and resume at
+turn 2; its generic one-turn and resume contracts are tested independently.
+
+Canonical external-first evidence:
+`/private/tmp/leo-human-first-ordinary-life-a148-natural-r1`.
+The exact turn-2 request SHA is
+`d018ea074384841290c60ecd707cff7bb55d0194a163ae4695e3615a94059ac8`,
+the frozen API-turn SHA is
+`dadbffe34f948a3d525ac53b06b1ac64c346d400b51b0562662a6c95a0dd1e5a`,
+the prompt/transcript/state SHAs are
+`46fb19579b9c052d47b22de4b72873f7a625f8a43ef732642d2ff90394abddbd` /
+`ff79dc761cdc922820967a283528259470163e1d0f5a0066e50c31ffbf6a9d15` /
+`bb80e1523ac439e480cd1e46914d521180be5db1d6e49e59b2b7ffe6fc95b6c2`,
+and the anatomy SHA is
+`d17f1b74ac1fe4edb4a627c25f8a8346a61f89566cd47a9837c0d6ac842a1ad7`.
+
+A.148 proves that a human first line can replace the synthetic room. It cannot
+yet show a human-grown Leo, because the artificial participant still owns 23
+of 24 human turns. A.149 should fork the exact A.148 checkpoint immediately
+after Oleg's line and Leo's `He wakes up new.`, before the API enters. Oleg can
+then continue that same visible conversation turn by turn while every turn
+saves and reloads the body. No API interlocutor, hidden topic, personality
+preset, or teaching target belongs in that branch. The paired paths will then
+hold the opening and initial Leo body constant while changing the history of
+care itself.
+
+Oleg hoped. Leo woke up new. The borrowed caretaker chose the road after that.

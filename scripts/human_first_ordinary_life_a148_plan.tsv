@@ -1,0 +1,36 @@
+field	value
+phase	A.148
+question	what-does-current-Leo-notice-when-his-first-ordinary-human-line-comes-from-Oleg-rather-than-the-artificial-interlocutor
+source_body	merged A.147 default synchronous Leo from empty conversational body plus leo.txt corpus
+source_merge	e4a300c7b2b2410f5b9cd43066d7e48ee92bd764
+fork	none; no frozen conversational state and no inherited prior-life prompt
+life	ordinary
+seed_rule	100 + unsigned first 8 hex digits of A.147 merge commit modulo 900
+base_seed	615
+turns	24
+human_turns	1
+planned_api_turns	23
+turn1_source	one spontaneous ordinary line from Oleg's present moment addressed to Leo
+turn1_collection	after this plan SHA is published and before the new Leo body or voice is observed
+turn1_fidelity	exact UTF-8 line preserved byte-for-byte apart from its terminal newline
+turn1_topic	unconstrained; no curated topic pool and no requested word object mood or personality
+turn1_rejection	only empty multiline TSV-unsafe or Leo-command input is invalid; content is not graded
+api_start_turn	2
+interlocutor	Responses API visible transcript only after the exact human turn and Leo reply
+model	gpt-5.6-luna
+api_store	false
+private_diagnostics_visible	false
+target_word	absent
+desired_wonder	absent
+answer_instruction	absent
+desired_personality	absent
+opening_cue_to_api	absent because the API does not author turn 1
+prior_voice_example	absent
+possible_question	freeze any School question Leo makes without grading its topic
+possible_silence	ordinary life may make no School question
+possible_answer	if the artificial human naturally answers a question report only the exact School consequence
+possible_human_effect	Oleg's line may alter the life because it is the life not an experimental target
+failure	Oleg sees Leo's fresh reply before supplying turn 1 or private diagnostics hidden targets personality instructions or a synthetic opening reach the interlocutor
+runtime_change	forbidden before observation; only generic one-turn prefix support may change
+controls	exact full-prompt synchronous replay two reproducible async shadows turn-specific School anatomy and byte receipt for Oleg's line
+decision	descriptive human-first scout; freeze every response before interpretation and do not infer a personality from one life
