@@ -59,7 +59,7 @@ wonder-reask-reference:
 natural-answer-form:
 	./scripts/natural_answer_form_matrix.sh
 
-.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition reciprocal-s-family presence-surface-boundary family-heard-threshold responsive-honest-wonder-life two-layer-family-composition responsive-a133-continuation single-hypothesis-rejection-return responsive-difficult-return reference-predication-boundary responsive-difficult-after-repair second-unanswered-wonder-return delayed-answer-after-second-return fresh-ordinary-life cautious-paired-answer responsive-after-cautious second-fresh-ordinary-life affirmation-role responsive-after-affirmation third-fresh-ordinary-life
+.PHONY: plural-answer-capacity two-glyph-learned-meaning negative-family-composition reciprocal-s-family presence-surface-boundary family-heard-threshold responsive-honest-wonder-life two-layer-family-composition responsive-a133-continuation single-hypothesis-rejection-return responsive-difficult-return reference-predication-boundary responsive-difficult-after-repair second-unanswered-wonder-return delayed-answer-after-second-return fresh-ordinary-life cautious-paired-answer responsive-after-cautious second-fresh-ordinary-life affirmation-role responsive-after-affirmation third-fresh-ordinary-life human-first-ordinary-life
 plural-answer-capacity:
 	./scripts/plural_answer_capacity_matrix.sh
 
@@ -125,6 +125,9 @@ responsive-after-affirmation:
 
 third-fresh-ordinary-life:
 	./scripts/third_fresh_ordinary_life_a147_replay.sh
+
+human-first-ordinary-life:
+	./scripts/human_first_ordinary_life_a148_replay.sh
 
 state-swarm-ecology: leo
 	./scripts/state_swarm_ecology_matrix.sh
@@ -465,6 +468,7 @@ test: tests/test_leo.c leo.c
 	./scripts/test_affirmation_role_a145.sh
 	./scripts/test_responsive_after_affirmation_a146.sh
 	./scripts/test_third_fresh_ordinary_life_a147.sh
+	./scripts/test_human_first_ordinary_life_a148.sh
 	./scripts/test_state_swarm_liminal_confirmation_select.sh
 	./scripts/test_state_swarm_liminal_confirmation_report.sh
 	./scripts/test_state_swarm_liminal_trajectory_fixture.sh

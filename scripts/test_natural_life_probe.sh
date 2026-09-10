@@ -56,7 +56,27 @@ jq -e '.source == "frozen-visible-replay" and .api_store == null and
        .school_family_heard_threshold == true and
        .school_two_layer_family_composition == true' "$TMP/first/manifest.json" >/dev/null
 
+sed -n '1p' "$TMP/prompts.txt" > "$TMP/prompt-first-one.txt"
 sed -n '1,2p' "$TMP/prompts.txt" > "$TMP/prompts-first-two.txt"
+LEO_NATURAL_REPLAY_FILE="$TMP/prompt-first-one.txt" \
+    LEO_NATURAL_LIFE=test LEO_NATURAL_ARM=replay \
+    LEO_NATURAL_SEED=911 LEO_NATURAL_TURNS=1 \
+    "$ROOT/scripts/natural_life_probe.sh" "$TMP/one-turn" >/dev/null
+[ "$(wc -l < "$TMP/one-turn/dialogue.jsonl" | tr -d ' ')" -eq 1 ]
+[ "$(sed -n '1p' "$TMP/one-turn/prompts.txt")" = \
+    "$(sed -n '1p' "$TMP/prompts.txt")" ]
+jq -e '.source == "frozen-visible-replay" and
+       .turns == 1 and .replay_prefix_turns == 1 and .api_turns == 0 and
+       .process_resumed == false and .api_store == null' \
+    "$TMP/one-turn/manifest.json" >/dev/null
+LEO_NATURAL_REPLAY_FILE="$TMP/prompts-first-two.txt" \
+    LEO_NATURAL_RESUME=1 LEO_NATURAL_LIFE=test LEO_NATURAL_ARM=replay \
+    LEO_NATURAL_SEED=911 LEO_NATURAL_TURNS=2 \
+    "$ROOT/scripts/natural_life_probe.sh" "$TMP/one-turn" >/dev/null
+[ "$(wc -l < "$TMP/one-turn/dialogue.jsonl" | tr -d ' ')" -eq 2 ]
+jq -e '.process_resumed == true and .resumed_at_turn == 2 and
+       .replay_prefix_turns == 2' "$TMP/one-turn/manifest.json" >/dev/null
+
 LEO_NATURAL_REPLAY_FILE="$TMP/prompts-first-two.txt" \
     LEO_NATURAL_LIFE=test LEO_NATURAL_ARM=replay \
     LEO_NATURAL_SEED=911 LEO_NATURAL_TURNS=2 \
