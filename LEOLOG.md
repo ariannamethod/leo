@@ -12042,6 +12042,10 @@ seed 615. Leo's first answer was:
 He takes a small,. He cannot always remember. He walks it carefully. Leo watched the walls become quite good. He keeps them anyway. He wakes up new.
 ~~~
 
+After A.148 merged, Oleg asked to place this exact first exchange at the head of
+README's real speech examples. The raw `small,.` punctuation remains there too:
+the public example is Leo's observed voice, not edited showcase prose.
+
 There is no declaration manufactured to satisfy `alive` or `happy`. The known
 corpus surfaces remain what they already were (`happy = joy`, `small = small`,
 `remember = remember`, and `new = other`); `alive` remains without a learned
