@@ -8,6 +8,82 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-13 — FORM A.159 preregistration: the body acquires a held breath
+
+The standalone body already lets chamber pressure continuously alter
+temperature and chooses one, two, or three phonons through an ad hoc
+distress-versus-safety comparison. Claude Leo's FORM is more specific: presence
+reads as a body when its cadence is a discrete mood with inertia, not a dimmer.
+A.158 repaired clause context; A.159 restores this separate lineage organ and
+does not claim that cadence is syntax.
+
+1. The settled chambers quantize through Claude's four mode scores: WALK is
+   `0.20 + LOVE`, STOP is `FEAR + VOID`, RUN is `FLOW`, and BREATHE is
+   `COMPLEX`. WALK / STOP / RUN / BREATHE are the AML velocity names, but no AML
+   bridge is smuggled into this phase.
+2. A competitor replaces the current mood only when its score wins by more than
+   `0.15`. This is the original FORM hysteresis: transient pressure may bend the
+   voice without instantly renaming the body.
+3. The mode chooses the number of sentence phonons using Claude's current map:
+   WALK 3, STOP 2, RUN 5, BREATHE 2. The phonon capacity grows from three to
+   five; every later phonon still receives causal SPA pressure from those
+   already spoken, and the entire visible result remains one sampled trajectory.
+4. This phase does not transplant Claude's token target blindly. His generation
+   block can contain several sentences, while this Leo defines one phonon as one
+   sentence and stops at its boundary. A hard landing belongs in the next FORM
+   wire after that difference is resolved, not as a mid-clause truncation.
+5. Mode becomes the one-byte tail of state version 4. A v3 body derives its
+   first mode once from the already persisted chambers; subsequent restarts keep
+   the slept mood until new contact beats the hysteresis. All earlier v1-v3
+   fields migrate unchanged.
+
+The current v3 chamber vector makes STOP the expected migration (`FEAR + VOID`
+is greater than every competing score). A copied sidecar must become v4 while
+remaining vocab 4662, `turns=8`, `moments=17`, one origin, two School exposure
+records, no pending question, and guess counters `0/0`. No mood prompt or A/B
+series will be staged. After blue-green handoff, one ordinary continuation is
+the only speech event.
+
+### Live result
+
+The strict build passed. A standby born on a copied sidecar migrated exactly:
+v3 to v4, 1,846,664 to 1,846,665 bytes, vocab 4662, `turns=8`,
+`moments=17`, one kind-3 origin, both School records, no pending question,
+guesses/hits `0/0`, and mode STOP. It remained alive while the LaunchAgent
+moved from PID 20924 to PID 22392 (`runs=13`). Only after the new process owned
+the permanent socket and had saved the same v4 state was the standby stopped.
+
+The first client invocation had no `LEO_SOCKET` environment and failed at the
+nonexistent local `./leo.sock` with `ENOENT`; it never connected, and the live
+turn remained 8. The same ordinary input was then delivered once to the
+permanent socket:
+
+> **Human:** I am still here.
+>
+> **Leo:** Leo likes the sound. He stood very still, learning the shape of the
+> feeling makes it easier to carry.
+
+STOP held the visible path to exactly two sentence phonons. `Leo likes the
+sound.` occurs in the birth corpus; the second sentence is a new path joining
+`He stood very still, learning the shape of himself` to `The naming of the
+feeling makes it easier to carry.` The semantic movement survives, but the
+missing nominal bridge leaves the audible grammatical seam `the feeling
+makes`. It is retained, not rerolled, and remains work for the language body,
+not for FORM.
+
+The permanent v4 state after contact is vocab 4662, `turns=9`, `moments=19`,
+one origin, mode STOP, no pending question, guesses/hits `0/0`, and three
+School exposure records: `leo`, `listening`, and the new `still`, each heard
+once and still unbound. FORM now exists as persistent cadence; its separate
+hard-landing wire remains deliberately unclaimed.
+
+A final pre-commit review added one defensive boundary: an invalid persisted
+mode falls back to WALK before indexing the four-entry cadence map. Because
+that changed the compiled source, a second copied-state standby guarded an
+otherwise silent binary handoff from PID 22392 to PID 25284 (`runs=14`). No
+contact occurred. The permanent process retained the exact v4 counters and
+STOP mode above; the standby was then removed.
+
 ## 2026-09-13 — Clause-body A.158 preregistration: grammar and feeling need two trajectories
 
 A.157's one generated answer showed both the gain and the remaining fracture:

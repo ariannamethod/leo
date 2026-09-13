@@ -55,12 +55,12 @@
 #define LEO_REPLY_TOKENS       192
 #define LEO_RECALL               8
 #define LEO_SAMPLE_TOP          48
-#define LEO_PHONONS              3
+#define LEO_PHONONS              5
 #define LEO_SENTENCE_BYTES    1536
 #define LEO_LINE_BYTES        8192
 #define LEO_SAVE_SECONDS        30u
 
-#define LEO_STATE_VERSION        3u
+#define LEO_STATE_VERSION        4u
 #define LEO_LEGACY_MAGIC 0x5300454cu
 
 enum {
@@ -71,6 +71,16 @@ enum {
     LEO_FLOW,
     LEO_COMPLEX
 };
+
+enum {
+    LEO_MODE_WALK = 0,
+    LEO_MODE_STOP,
+    LEO_MODE_RUN,
+    LEO_MODE_BREATHE,
+    LEO_MODE_COUNT
+};
+
+#define LEO_MODE_HYSTERESIS 0.15f
 
 static const char LEO_STATE_MAGIC[8] = {'L','E','O','B','O','D','Y','3'};
 
@@ -408,6 +418,7 @@ typedef struct {
     uint64_t inner_ticks;
     uint64_t legacy_step;
     uint64_t rng;
+    uint8_t mode;
     LeoSchool school;
 } Leo;
 
@@ -1733,6 +1744,24 @@ static void leo_body_settle(Leo *leo, const float *meaning, int iterations) {
     }
 }
 
+/* FORM: quantize the settled chambers into a breath that holds until another
+ * mode wins by a real margin. The names and scores descend from Claude Leo's
+ * A.6 organ; WALK=0 remains the calm zero-initialized state. */
+static void leo_mode_update(Leo *leo) {
+    if (leo->mode >= LEO_MODE_COUNT) leo->mode = LEO_MODE_WALK;
+    float score[LEO_MODE_COUNT];
+    score[LEO_MODE_WALK] = 0.20f + leo->chamber[LEO_LOVE];
+    score[LEO_MODE_STOP] = leo->chamber[LEO_FEAR] + leo->chamber[LEO_VOID];
+    score[LEO_MODE_RUN] = leo->chamber[LEO_FLOW];
+    score[LEO_MODE_BREATHE] = leo->chamber[LEO_COMPLEX];
+    int best = LEO_MODE_WALK;
+    for (int mode = 1; mode < LEO_MODE_COUNT; mode++)
+        if (score[mode] > score[best]) best = mode;
+    if (best != leo->mode &&
+        score[best] - score[leo->mode] > LEO_MODE_HYSTERESIS)
+        leo->mode = (uint8_t)best;
+}
+
 static void leo_retention_absorb(Leo *leo, const float *meaning) {
     for (int d = 0; d < LEO_DIM; d++)
         leo->retention[d] = 0.92f * leo->retention[d] + 0.392f * meaning[d];
@@ -2317,11 +2346,8 @@ static int leo_generate(Leo *leo, const float *prompt, const float *prompt_conte
     float temperature = 0.62f + 0.24f * leo->chamber[LEO_FLOW] +
                         0.20f * leo->chamber[LEO_COMPLEX] -
                         0.15f * leo->chamber[LEO_FEAR];
-    float distress = (leo->chamber[LEO_FEAR] + leo->chamber[LEO_RAGE] +
-                      leo->chamber[LEO_VOID]) / 3.0f;
-    float safety = (leo->chamber[LEO_LOVE] + leo->chamber[LEO_FLOW]) / 2.0f;
-    int desired_sentences = distress > safety + 0.18f ? 1 :
-                            (leo->chamber[LEO_FLOW] > distress + 0.20f ? 3 : 2);
+    static const int mode_phonons[LEO_MODE_COUNT] = {3, 2, 5, 2};
+    int desired_sentences = mode_phonons[leo->mode];
 
     LeoPhonon phonon[LEO_PHONONS];
     int n_phonon = 0;
@@ -2391,6 +2417,7 @@ static int leo_respond(Leo *leo, const char *line, char *reply, size_t capacity)
     leo_body_settle(leo, prompt, 8);
     leo_school_hear(leo, line);
     int was_school_answer = leo_school_close_question(leo, line);
+    leo_mode_update(leo);
     leo_attention_prompt(leo, prompt_ids, n_prompt, prompt, attended);
     float query[LEO_DIM];
     for (int d = 0; d < LEO_DIM; d++)
@@ -2520,7 +2547,8 @@ static int leo_state_finite(const Leo *leo) {
             if (!isfinite(moment->meaning[d]) || !isfinite(moment->context[d])) return 0;
         for (int c = 0; c < LEO_CHAMBERS; c++) if (!isfinite(moment->body[c])) return 0;
     }
-    if (leo->school.n_word > LEO_SCHOOL_MAX ||
+    if (leo->mode >= LEO_MODE_COUNT ||
+        leo->school.n_word > LEO_SCHOOL_MAX ||
         leo->school.pending[LEO_WORD_BYTES - 1] != 0 ||
         (leo->school.pending_glyph != -1 &&
          !leo_glyph_concept(leo->school.pending_glyph)) ||
@@ -2611,7 +2639,8 @@ static int leo_save_state(const Leo *leo, const char *path) {
                  leo_write_block(file, &leo->school.guesses,
                                  sizeof leo->school.guesses) &&
                  leo_write_block(file, &leo->school.guess_hits,
-                                 sizeof leo->school.guess_hits);
+                                 sizeof leo->school.guess_hits) &&
+                 leo_write_block(file, &leo->mode, sizeof leo->mode);
     if (fflush(file) != 0) ok = 0;
     if (ok && fsync(fileno(file)) != 0) ok = 0;
     if (fclose(file) != 0) ok = 0;
@@ -2626,7 +2655,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     LeoStateHeader header;
     int ok = leo_read_block(file, &header, sizeof header);
     if (!ok || memcmp(header.magic, LEO_STATE_MAGIC, sizeof header.magic) != 0 ||
-        (header.version != 1u && header.version != 2u &&
+        (header.version != 1u && header.version != 2u && header.version != 3u &&
          header.version != LEO_STATE_VERSION) ||
         header.dimension != LEO_DIM ||
         header.vocab < LEO_BYTE_VOCAB || header.vocab > leo->model.bpe.vocab ||
@@ -2674,6 +2703,8 @@ static int leo_load_state(Leo *leo, const char *path) {
                      leo_read_block(file, &leo->school.guess_hits,
                                     sizeof leo->school.guess_hits);
     }
+    if (ok && header.version >= 4u)
+        ok = leo_read_block(file, &leo->mode, sizeof leo->mode);
     fclose(file);
     if (!ok) return 0;
     leo->turns = header.turns;
@@ -2683,6 +2714,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     leo->n_moment = header.n_moment;
     leo->moment_cursor = header.moment_cursor;
     leo_school_reconcile(leo);
+    if (header.version < 4u) leo_mode_update(leo);
     return leo_state_finite(leo);
 }
 
@@ -2835,6 +2867,7 @@ static int leo_open(Leo *leo, const char *corpus_path, const char *legacy_path,
     memcpy(leo->retention, leo->model.origin, sizeof leo->retention);
     (void)leo_import_legacy(leo, legacy_path);
     leo_origin_moment(leo);
+    leo_mode_update(leo);
     return leo_save_state(leo, state_path);
 }
 
