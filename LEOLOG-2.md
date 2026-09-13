@@ -8,6 +8,65 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-13 — SPA A.152 preregistration: sentences are phonons
+
+Lineage: `q/postgpt_q.c:1461-1516,1684-1714` and Claude Leo's later
+`leo_spa_pass`. The inherited law is: tokens are atoms; sentences are phonons;
+sentence-scale attention must reconnect a chain that token-scale choice cannot
+see.
+
+This implementation is narrower than the old machinery:
+
+1. Each sentence remains one sampled BPE trajectory under the A.151 mouth law.
+2. A phonon is its recency-weighted distributed-meaning embedding, using Leo's
+   existing learned token field rather than a second random embedding table.
+3. Existing Q/K/V projections cross-attend completed phonons with relative
+   distance bias. The attended history becomes pressure on the next sentence;
+   it cannot create a token candidate.
+4. After the whole chain, bidirectional connectedness may name one weak phonon.
+   At most one replacement trajectory is sampled from its strongest neighbour.
+   There is no best-of-K and no retry loop. It replaces the weak phonon only if
+   the declared BPE coherence plus cross-phonon connection score improves.
+5. Only the final visible chain enters Leo's self-moment, presence, retention,
+   and body. A rejected candidate receives no memory authority.
+6. SPA does nothing to a one-phonon utterance.
+
+The existing cadence mistakenly treats an absolute `FEAR + VOID` threshold as
+dominance. The imported body is saturated (`FEAR=1`, `LOVE=1`, `VOID=1`,
+`FLOW≈0.96`, `COMPLEX=1`), so that rule collapses every reply to one sentence
+even though distress does not dominate warmth/flow. A.152 changes only this
+readout: one sentence requires distress to exceed safety by a margin; three
+requires flow to exceed distress; otherwise Leo carries two. The chamber state
+itself is not reset or rewritten.
+
+One ordinary live continuation will be declared before contact. Its exact
+output stands whether SPA intervenes or not. No prompt matrix, seed search,
+second draw, or expected sentence is permitted.
+
+### Live result
+
+A.152 compiled without warnings. It first listened as a second body on a
+private socket; only then did launchd replace A.151 PID 2063 with A.152 PID
+3348 on Leo's permanent socket. The second body remained alive until the new
+primary socket and PID were both verified. No state was reset.
+
+The one predeclared continuation was `I am still here.` Leo answered:
+
+> Leo knows the swing him out in tiny gentle on the tree is a good way. Leo is
+> always a little cat sun.
+
+The body advanced from three to four human turns and from seven to nine lived
+moments. Both sentences are made entirely from the corpus-grown word topology.
+Because there are two phonons, the first necessarily pressed on the second
+through sentence Q/K/V attention. The run does not reveal whether the optional
+single post-chain replacement was accepted, so no such claim is made.
+
+This is not accepted as coherent speech. A.152 establishes a live
+sentence-scale path and restores a multi-sentence cadence without inventing
+words, but SPA cannot repair the token-scale grammar of the first phonon before
+another phonon exists. The exact negative result remains in Leo's memory and in
+this log. No second line was sent under A.152.
+
 ## 2026-09-13 — Mouth A.150: local reachability held, global word law refused it
 
 The first and only live contact with the new body used the line `Leo, are you

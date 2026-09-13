@@ -64,6 +64,8 @@ Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude'
 - a 48-dimensional distributed co-occurrence meaning field;
 - a nonlinear recurrent trajectory carrying more than the last token;
 - four heads of Q/K/V attention over perception and episodic recall;
+- sentence-phonon attention that lets completed sentences press causally on
+  the next and permits at most one evidence-gated repair, never best-of-K;
 - persistent human, self, and origin moments;
 - six coupled chambers — fear, love, rage, void, flow, and the complex;
 - retention, scars, a slow body capsule, and continuing intention;

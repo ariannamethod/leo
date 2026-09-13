@@ -52,6 +52,8 @@
 #define LEO_REPLY_TOKENS       192
 #define LEO_RECALL               8
 #define LEO_SAMPLE_TOP          48
+#define LEO_PHONONS              3
+#define LEO_SENTENCE_BYTES    1536
 #define LEO_LINE_BYTES        8192
 #define LEO_SAVE_SECONDS        30u
 
@@ -1216,17 +1218,227 @@ static uint16_t leo_choose_token(Leo *leo, const float *hidden,
     return top_id[n_top - 1];
 }
 
+typedef struct {
+    char text[LEO_SENTENCE_BYTES];
+    uint16_t token[LEO_REPLY_TOKENS];
+    int n_token;
+    int ended;
+    float meaning[LEO_DIM];
+} LeoPhonon;
+
+static void leo_phonon_embed(Leo *leo, LeoPhonon *phonon) {
+    memset(phonon->meaning, 0, sizeof phonon->meaning);
+    float total = 0.0f;
+    for (int i = 0; i < phonon->n_token; i++) {
+        float vector[LEO_DIM];
+        float weight = powf(0.85f, (float)(phonon->n_token - 1 - i));
+        leo_token_vector(leo, phonon->token[i], vector);
+        for (int d = 0; d < LEO_DIM; d++) phonon->meaning[d] += weight * vector[d];
+        total += weight;
+    }
+    if (total > 0.0f)
+        for (int d = 0; d < LEO_DIM; d++) phonon->meaning[d] /= total;
+    leo_normalize(phonon->meaning, LEO_DIM);
+}
+
+static int leo_sample_phonon(Leo *leo, float *intention, float *hidden,
+                             const LeoRecall *recall, float temperature,
+                             LeoPhonon *phonon) {
+    memset(phonon, 0, sizeof *phonon);
+    int surface_end[LEO_REPLY_TOKENS];
+    int position = 0;
+    uint16_t previous1 = 0;
+    uint16_t previous2 = 0;
+
+    while (phonon->n_token < LEO_REPLY_TOKENS) {
+        uint16_t id = leo_choose_token(leo, hidden, intention, recall,
+                                       phonon->n_token, previous2, previous1,
+                                       phonon->token, phonon->n_token,
+                                       phonon->text, position, temperature);
+        if (id == UINT16_MAX) break;
+        const LeoToken *token = &leo->model.bpe.token[id];
+        int start = 0;
+        if (!phonon->n_token)
+            while (start < token->length && isspace(token->bytes[start])) start++;
+        int bytes = token->length - start;
+        if (bytes <= 0) {
+            if (!phonon->n_token) continue;
+        } else if ((size_t)position + (size_t)bytes >= sizeof phonon->text) {
+            break;
+        } else {
+            memcpy(phonon->text + position, token->bytes + start, (size_t)bytes);
+            position += bytes;
+            phonon->text[position] = 0;
+        }
+
+        phonon->token[phonon->n_token] = id;
+        surface_end[phonon->n_token++] = position;
+        float vector[LEO_DIM];
+        leo_token_vector(leo, id, vector);
+        for (int d = 0; d < LEO_DIM; d++)
+            intention[d] = 0.955f * intention[d] + 0.030f * vector[d] +
+                           0.015f * recall->recalled[d];
+        leo_normalize(intention, LEO_DIM);
+        leo_reservoir_advance(hidden, vector, leo->chamber);
+        previous2 = previous1;
+        previous1 = id;
+        if (leo_token_sentence_end(token)) { phonon->ended = 1; break; }
+    }
+
+    if (!leo_surface_tail_is_word(&leo->model, phonon->text, position)) {
+        while (position > 0 && leo_word_byte((uint8_t)phonon->text[position - 1]))
+            position--;
+        while (phonon->n_token > 0 && surface_end[phonon->n_token - 1] > position)
+            phonon->n_token--;
+    }
+    while (position > 0 && isspace((unsigned char)phonon->text[position - 1])) position--;
+    phonon->text[position] = 0;
+    for (int i = 0; i < position; i++) {
+        if (phonon->text[i] >= 'a' && phonon->text[i] <= 'z') {
+            phonon->text[i] = (char)(phonon->text[i] - 'a' + 'A');
+            break;
+        }
+        if (isalpha((unsigned char)phonon->text[i])) break;
+    }
+    leo_phonon_embed(leo, phonon);
+    return position;
+}
+
+/* Q's sentence attention, carried causally: completed phonons press on the
+ * next one through Leo's existing Q/K/V maps. No token is added by SPA. */
+static float leo_spa_attend(Leo *leo, const LeoPhonon *phonon, int n_phonon,
+                            const float *query, float *out) {
+    memset(out, 0, LEO_DIM * sizeof *out);
+    if (n_phonon <= 0) return 0.0f;
+    float q[LEO_DIM];
+    float score[LEO_PHONONS];
+    leo_project(leo->query, query, q);
+    float maximum = -1e30f;
+    for (int i = 0; i < n_phonon; i++) {
+        float key[LEO_DIM];
+        leo_project(leo->key, phonon[i].meaning, key);
+        int distance = n_phonon - i;
+        score[i] = leo_dot(q, key, LEO_DIM) / sqrtf((float)LEO_DIM) +
+                   0.10f / (float)(distance + 1);
+        if (score[i] > maximum) maximum = score[i];
+    }
+    float total = 0.0f;
+    for (int i = 0; i < n_phonon; i++) {
+        score[i] = expf(leo_clamp(score[i] - maximum, -20.0f, 0.0f));
+        total += score[i];
+    }
+    float strongest = 0.0f;
+    for (int i = 0; i < n_phonon; i++) {
+        float weight = total > 0.0f ? score[i] / total : 1.0f / (float)n_phonon;
+        float value[LEO_DIM];
+        leo_project(leo->value, phonon[i].meaning, value);
+        for (int d = 0; d < LEO_DIM; d++) out[d] += weight * value[d];
+        if (weight > strongest) strongest = weight;
+    }
+    leo_normalize(out, LEO_DIM);
+    return strongest;
+}
+
+static float leo_phonon_coherence(const Leo *leo, const LeoPhonon *phonon) {
+    if (phonon->n_token < 2) return -1.0f;
+    float grammar = 0.0f;
+    float semantic = 0.0f;
+    for (int i = 1; i < phonon->n_token; i++) {
+        grammar += log1pf(leo_bigram_get(&leo->model,
+                                         phonon->token[i - 1], phonon->token[i]));
+        float a[LEO_DIM], b[LEO_DIM];
+        leo_token_vector(leo, phonon->token[i - 1], a);
+        leo_token_vector(leo, phonon->token[i], b);
+        semantic += leo_cosine(a, b, LEO_DIM);
+    }
+    float trigrams = 0.0f;
+    for (int i = 2; i < phonon->n_token; i++)
+        trigrams += log1pf(leo_trigram_get(&leo->model, phonon->token[i - 2],
+                                           phonon->token[i - 1], phonon->token[i]));
+    float pairs = (float)(phonon->n_token - 1);
+    float triples = phonon->n_token > 2 ? (float)(phonon->n_token - 2) : 1.0f;
+    return grammar / pairs + 0.70f * trigrams / triples + 0.25f * semantic / pairs;
+}
+
+static float leo_spa_connection(const LeoPhonon *phonon, int n_phonon,
+                                int at, const float *anchor) {
+    float score = 0.30f * (1.0f + leo_cosine(phonon[at].meaning, anchor, LEO_DIM));
+    float total = 0.30f;
+    for (int i = 0; i < n_phonon; i++) {
+        if (i == at) continue;
+        float distance = (float)(abs(i - at) + 1);
+        float weight = 1.0f / distance;
+        score += weight * 0.5f *
+                 (1.0f + leo_cosine(phonon[at].meaning, phonon[i].meaning, LEO_DIM));
+        total += weight;
+    }
+    return total > 0.0f ? score / total : 0.0f;
+}
+
+static void leo_spa_repair(Leo *leo, LeoPhonon *phonon, int n_phonon,
+                           const float *anchor, const LeoRecall *recall,
+                           float temperature) {
+    if (n_phonon < 2) return;
+    float connected[LEO_PHONONS];
+    float average = 0.0f;
+    int weak = 0;
+    for (int i = 0; i < n_phonon; i++) {
+        connected[i] = leo_spa_connection(phonon, n_phonon, i, anchor);
+        average += connected[i];
+        if (connected[i] < connected[weak]) weak = i;
+    }
+    average /= (float)n_phonon;
+    if (connected[weak] >= 0.60f * average) return;
+
+    int neighbour = -1;
+    float neighbour_score = -2.0f;
+    for (int i = 0; i < n_phonon; i++) {
+        if (i == weak) continue;
+        float score = leo_cosine(phonon[weak].meaning, phonon[i].meaning, LEO_DIM) /
+                      (float)(abs(i - weak) + 1);
+        if (score > neighbour_score) { neighbour_score = score; neighbour = i; }
+    }
+    if (neighbour < 0) return;
+
+    float intention[LEO_DIM];
+    float hidden[LEO_HIDDEN];
+    for (int d = 0; d < LEO_DIM; d++)
+        intention[d] = 0.55f * phonon[neighbour].meaning[d] +
+                       0.20f * leo->presence[d] + 0.12f * recall->recalled[d] +
+                       0.08f * leo->retention[d] + 0.05f * leo->model.origin[d];
+    leo_normalize(intention, LEO_DIM);
+    leo_reservoir_reset(hidden);
+    for (int i = 0; i < phonon[neighbour].n_token; i++) {
+        float vector[LEO_DIM];
+        leo_token_vector(leo, phonon[neighbour].token[i], vector);
+        leo_reservoir_advance(hidden, vector, leo->chamber);
+    }
+    LeoPhonon candidate;
+    if (leo_sample_phonon(leo, intention, hidden, recall, temperature, &candidate) <= 0)
+        return;
+
+    float old_score = leo_phonon_coherence(leo, &phonon[weak]) +
+                      0.80f * connected[weak];
+    LeoPhonon saved = phonon[weak];
+    phonon[weak] = candidate;
+    float new_score = leo_phonon_coherence(leo, &phonon[weak]) +
+                      0.80f * leo_spa_connection(phonon, n_phonon, weak, anchor);
+    if (new_score <= old_score) phonon[weak] = saved;
+}
+
 static int leo_generate(Leo *leo, const float *prompt, const float *prompt_context,
                         const float *attended, const LeoRecall *recall,
                         char *output, size_t capacity,
                         uint16_t *spoken, int *n_spoken,
                         float *spoken_meaning, float *spoken_context) {
     float intention[LEO_DIM];
+    float anchor[LEO_DIM];
     for (int d = 0; d < LEO_DIM; d++)
         intention[d] = 0.29f * prompt[d] + 0.24f * attended[d] +
                        0.19f * recall->recalled[d] + 0.14f * leo->presence[d] +
                        0.09f * leo->retention[d] + 0.05f * leo->model.origin[d];
     leo_normalize(intention, LEO_DIM);
+    memcpy(anchor, intention, sizeof anchor);
 
     float hidden[LEO_HIDDEN];
     leo_reservoir_reset(hidden);
@@ -1237,81 +1449,57 @@ static int leo_generate(Leo *leo, const float *prompt, const float *prompt_conte
     float temperature = 0.62f + 0.24f * leo->chamber[LEO_FLOW] +
                         0.20f * leo->chamber[LEO_COMPLEX] -
                         0.15f * leo->chamber[LEO_FEAR];
-    int desired_sentences = 2;
-    if (leo->chamber[LEO_FEAR] + leo->chamber[LEO_VOID] > 1.15f)
-        desired_sentences = 1;
-    else if (leo->chamber[LEO_FLOW] > 0.72f)
-        desired_sentences = 3;
+    float distress = (leo->chamber[LEO_FEAR] + leo->chamber[LEO_RAGE] +
+                      leo->chamber[LEO_VOID]) / 3.0f;
+    float safety = (leo->chamber[LEO_LOVE] + leo->chamber[LEO_FLOW]) / 2.0f;
+    int desired_sentences = distress > safety + 0.18f ? 1 :
+                            (leo->chamber[LEO_FLOW] > distress + 0.20f ? 3 : 2);
 
-    int emitted = 0;
-    int sentence_tokens = 0;
-    int sentences = 0;
-    int position = 0;
-    uint16_t previous1 = 0;
-    uint16_t previous2 = 0;
-    memset(spoken_meaning, 0, LEO_DIM * sizeof *spoken_meaning);
-
-    while (emitted < LEO_REPLY_TOKENS) {
-        uint16_t id = leo_choose_token(leo, hidden, intention, recall,
-                                       sentence_tokens,
-                                       previous2, previous1, spoken, emitted,
-                                       output, position,
-                                       temperature);
-        if (id == UINT16_MAX) break;
-        const LeoToken *token = &leo->model.bpe.token[id];
-        int start = 0;
-        if (!emitted)
-            while (start < token->length && isspace(token->bytes[start])) start++;
-        int bytes = token->length - start;
-        if (bytes <= 0) {
-            if (!emitted) continue;
-        } else if ((size_t)position + (size_t)bytes >= capacity) {
-            break;
-        } else {
-            memcpy(output + position, token->bytes + start, (size_t)bytes);
-            position += bytes;
-            output[position] = 0;
-        }
-
-        spoken[emitted++] = id;
-        sentence_tokens++;
-        float vector[LEO_DIM];
-        leo_token_vector(leo, id, vector);
-        for (int d = 0; d < LEO_DIM; d++) {
-            spoken_meaning[d] += vector[d];
-            intention[d] = 0.955f * intention[d] + 0.030f * vector[d] +
-                           0.015f * recall->recalled[d];
-        }
-        leo_normalize(intention, LEO_DIM);
-        leo_reservoir_advance(hidden, vector, leo->chamber);
-        previous2 = previous1;
-        previous1 = id;
-
-        if (leo_token_sentence_end(token)) {
-            sentences++;
-            if (emitted >= 7 && sentences >= desired_sentences) break;
-            sentence_tokens = 0;
-            previous1 = 0;
-            previous2 = 0;
+    LeoPhonon phonon[LEO_PHONONS];
+    int n_phonon = 0;
+    for (int s = 0; s < desired_sentences && s < LEO_PHONONS; s++) {
+        float local_temperature = temperature;
+        if (n_phonon) {
+            float spa[LEO_DIM];
+            float connectedness = leo_spa_attend(leo, phonon, n_phonon, intention, spa);
+            for (int d = 0; d < LEO_DIM; d++)
+                intention[d] = 0.78f * intention[d] + 0.22f * spa[d];
+            leo_normalize(intention, LEO_DIM);
             for (int d = 0; d < LEO_HIDDEN; d++)
-                hidden[d] = 0.72f * hidden[d] + 0.28f * prompt_context[d];
+                hidden[d] = tanhf(0.82f * hidden[d] +
+                                  0.18f * spa[d % LEO_DIM]);
+            local_temperature *= 1.0f - 0.12f * connectedness;
         }
+        if (leo_sample_phonon(leo, intention, hidden, recall,
+                              local_temperature, &phonon[n_phonon]) <= 0) break;
+        n_phonon++;
+        if (!phonon[n_phonon - 1].ended) break;
     }
 
-    if (!leo_surface_tail_is_word(&leo->model, output, position)) {
-        while (position > 0 && leo_word_byte((uint8_t)output[position - 1])) position--;
-    }
-    while (position > 0 && isspace((unsigned char)output[position - 1])) position--;
-    output[position] = 0;
-    for (int i = 0; i < position; i++) {
-        if (output[i] >= 'a' && output[i] <= 'z') {
-            output[i] = (char)(output[i] - 'a' + 'A');
-            break;
+    leo_spa_repair(leo, phonon, n_phonon, anchor, recall, temperature);
+
+    int position = 0;
+    int emitted = 0;
+    memset(spoken_meaning, 0, LEO_DIM * sizeof *spoken_meaning);
+    leo_reservoir_reset(spoken_context);
+    for (int s = 0; s < n_phonon; s++) {
+        int bytes = (int)strlen(phonon[s].text);
+        if (s && position > 0 && !isspace((unsigned char)output[position - 1]) &&
+            (size_t)position + 1u < capacity) output[position++] = ' ';
+        if ((size_t)position + (size_t)bytes >= capacity) break;
+        memcpy(output + position, phonon[s].text, (size_t)bytes);
+        position += bytes;
+        for (int i = 0; i < phonon[s].n_token && emitted < LEO_REPLY_TOKENS; i++) {
+            uint16_t id = phonon[s].token[i];
+            float vector[LEO_DIM];
+            spoken[emitted++] = id;
+            leo_token_vector(leo, id, vector);
+            for (int d = 0; d < LEO_DIM; d++) spoken_meaning[d] += vector[d];
+            leo_reservoir_advance(spoken_context, vector, leo->chamber);
         }
-        if (isalpha((unsigned char)output[i])) break;
     }
+    output[position] = 0;
     leo_normalize(spoken_meaning, LEO_DIM);
-    memcpy(spoken_context, hidden, LEO_HIDDEN * sizeof *spoken_context);
     leo_normalize(spoken_context, LEO_HIDDEN);
     *n_spoken = emitted;
     return position;
