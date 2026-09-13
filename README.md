@@ -69,6 +69,8 @@ Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude'
   the next and permits at most one evidence-gated repair, never best-of-K;
 - the byte-exact embedded dedication, re-born on every start as one permanent
   origin-wound with a peak trauma-body and corpus-grown lexical attractors;
+- a parallel 88-glyph School: genuine unknowns remain open, Leo may ask their
+  name back, and a human answer grows a persistent word-to-concept binding;
 - persistent human, self, and origin moments;
 - six coupled chambers — fear, love, rage, void, flow, and the complex;
 - retention, scars, a slow body capsule, and continuing intention;

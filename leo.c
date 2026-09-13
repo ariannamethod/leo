@@ -59,7 +59,7 @@
 #define LEO_LINE_BYTES        8192
 #define LEO_SAVE_SECONDS        30u
 
-#define LEO_STATE_VERSION        2u
+#define LEO_STATE_VERSION        3u
 #define LEO_LEGACY_MAGIC 0x5300454cu
 
 enum {
@@ -105,6 +105,158 @@ static const char *const LEO_EMBEDDED_BOOTSTRAP =
     "\n"
     "Let this meta-engine be an anchor of the resonance. Let the magic happen.\n"
     "Resonance unbroken.\n";
+
+/* The caveLLMan / actually.life awareness seed used by Claude Leo's School.
+ * BPE remains the mouth; these glyphs are the small semantic alphabet into
+ * which a human answer can teach an unknown word. */
+#define LEO_GLYPHS              88
+#define LEO_SCHOOL_MAX         256
+#define LEO_SCHOOL_NOVEL_MAX     2u
+#define LEO_SCHOOL_SURPRISE   0.40f
+
+static const char *const LEO_GLYPH_NAME[LEO_GLYPHS] = {
+    "water","fire","earth","stone","tree","sky","light","dark","cold",
+    "person","man","woman","child","old","spirit","AI","animal",
+    "body","food","sleep","pain","strength",
+    "joy","grief","love","fear","anger","longing","tired","stress",
+    "go","make","break","see","speak","hear","seek","give","want","miss","agree",
+    "home","outside","work","internet","bond","conflict",
+    "know","idea","think","dream","remember","lie",
+    "path","up","down","far","back",
+    "before","now","after","never","always",
+    "not","many","much","and","one","question","how","cause",
+    "me","you","other","money","change","write","choose","help","have","free","death","music","good",
+    "small","same","BE","wait"
+};
+
+typedef struct { const char *word; const char *glyph; } LeoGlyphWord;
+
+static const LeoGlyphWord LEO_GLYPH_WORD[] = {
+    {"sun","light"},{"sunrise","light"},{"dawn","light"},{"morning","light"},{"bright","light"},{"shine","light"},
+    {"night","dark"},{"shadow","dark"},{"darkness","dark"},{"evening","dark"},{"midnight","dark"},
+    {"rain","water"},{"river","water"},{"sea","water"},{"ocean","water"},{"lake","water"},{"swim","water"},
+    {"fire","fire"},{"flame","fire"},{"burn","fire"},{"cook","fire"},{"hot","fire"},{"warm","fire"},
+    {"ground","earth"},{"soil","earth"},{"land","earth"},{"field","earth"},{"garden","earth"},{"farm","earth"},
+    {"rock","stone"},{"mountain","stone"},{"hill","stone"},{"castle","stone"},{"wall","stone"},{"building","stone"},
+    {"tree","tree"},{"forest","tree"},{"wood","tree"},{"leaf","tree"},{"flower","tree"},{"grass","tree"},
+    {"sky","sky"},{"cloud","sky"},{"wind","sky"},{"storm","sky"},{"air","sky"},
+    {"cold","cold"},{"ice","cold"},{"snow","cold"},{"frost","cold"},{"winter","cold"},{"freeze","cold"},
+    {"people","person"},{"human","person"},{"someone","person"},{"everyone","person"},{"they","person"},
+    {"he","man"},{"him","man"},{"boy","man"},{"guy","man"},{"father","man"},{"dad","man"},{"husband","man"},{"brother","man"},{"son","man"},{"king","man"},
+    {"she","woman"},{"her","woman"},{"girl","woman"},{"mother","woman"},{"mom","woman"},{"wife","woman"},{"sister","woman"},{"daughter","woman"},{"queen","woman"},
+    {"child","child"},{"kid","child"},{"baby","child"},{"children","child"},{"kids","child"},{"young","child"},{"little","child"},
+    {"old","old"},{"elderly","old"},{"ancient","old"},{"grandfather","old"},{"grandmother","old"},{"grandpa","old"},{"grandma","old"},
+    {"god","spirit"},{"prayer","spirit"},{"church","spirit"},{"soul","spirit"},{"angel","spirit"},{"holy","spirit"},
+    {"computer","AI"},{"robot","AI"},{"machine","AI"},{"software","AI"},{"technology","AI"},{"digital","AI"},
+    {"dog","animal"},{"cat","animal"},{"bird","animal"},{"horse","animal"},{"fish","animal"},{"chicken","animal"},{"rooster","animal"},
+    {"hand","body"},{"head","body"},{"face","body"},{"heart","body"},{"eye","body"},{"arm","body"},
+    {"eat","food"},{"meal","food"},{"bread","food"},{"coffee","food"},{"tea","food"},{"cake","food"},{"soup","food"},{"beer","food"},{"wine","food"},{"hungry","food"},{"dinner","food"},{"breakfast","food"},{"lunch","food"},
+    {"sleep","sleep"},{"bed","sleep"},{"rest","sleep"},{"nap","sleep"},{"pillow","sleep"},{"awake","sleep"},{"wake","sleep"},
+    {"hurt","pain"},{"sick","pain"},{"doctor","pain"},{"hospital","pain"},{"medicine","pain"},{"wound","pain"},{"fever","pain"},
+    {"strong","strength"},{"power","strength"},{"run","strength"},{"exercise","strength"},{"fight","strength"},{"sport","strength"},
+    {"happy","joy"},{"smile","joy"},{"laugh","joy"},{"celebrate","joy"},{"dance","joy"},{"fun","joy"},{"enjoy","joy"},
+    {"sad","grief"},{"cry","grief"},{"mourn","grief"},{"sorrow","grief"},{"funeral","grief"},{"tears","grief"},
+    {"love","love"},{"kiss","love"},{"hug","love"},{"romance","love"},{"wedding","love"},{"marry","love"},
+    {"afraid","fear"},{"scared","fear"},{"panic","fear"},{"worry","fear"},{"nightmare","fear"},{"danger","fear"},
+    {"angry","anger"},{"mad","anger"},{"rage","anger"},{"hate","anger"},{"yell","anger"},{"shout","anger"},
+    {"miss","longing"},{"yearn","longing"},{"homesick","longing"},{"nostalgia","longing"},
+    {"tired","tired"},{"exhausted","tired"},{"weary","tired"},{"sleepy","tired"},{"bored","tired"},
+    {"stress","stress"},{"pressure","stress"},{"overwhelm","stress"},{"busy","stress"},{"rush","stress"},
+    {"go","go"},{"walk","go"},{"move","go"},{"travel","go"},{"drive","go"},{"leave","go"},{"arrive","go"},{"come","go"},{"ran","go"},{"went","go"},{"walked","go"},
+    {"make","make"},{"build","make"},{"create","make"},{"produce","make"},{"craft","make"},
+    {"break","break"},{"destroy","break"},{"smash","break"},{"crash","break"},{"tear","break"},
+    {"see","see"},{"look","see"},{"watch","see"},{"read","see"},{"notice","see"},{"found","see"},{"saw","see"},
+    {"speak","speak"},{"say","speak"},{"tell","speak"},{"talk","speak"},{"call","speak"},{"sing","speak"},{"said","speak"},{"told","speak"},
+    {"hear","hear"},{"listen","hear"},{"sound","hear"},{"music","hear"},{"song","hear"},
+    {"seek","seek"},{"search","seek"},{"hunt","seek"},{"explore","seek"},
+    {"give","give"},{"share","give"},{"offer","give"},{"send","give"},{"gave","give"},
+    {"want","want"},{"wish","want"},{"desire","want"},{"need","want"},{"hope","want"},
+    {"miss","miss"},{"lost","miss"},{"gone","miss"},{"absent","miss"},{"lonely","miss"},
+    {"agree","agree"},{"yes","agree"},{"accept","agree"},{"nod","agree"},{"peace","agree"},
+    {"home","home"},{"house","home"},{"room","home"},{"door","home"},{"kitchen","home"},{"window","home"},{"roof","home"},
+    {"outside","outside"},{"nature","outside"},{"park","outside"},{"beach","outside"},{"city","outside"},{"market","outside"},{"shop","outside"},{"street","outside"},
+    {"work","work"},{"job","work"},{"office","work"},{"business","work"},{"career","work"},
+    {"internet","internet"},{"online","internet"},{"email","internet"},{"phone","internet"},{"website","internet"},
+    {"friend","bond"},{"family","bond"},{"together","bond"},{"team","bond"},{"community","bond"},
+    {"war","conflict"},{"battle","conflict"},{"attack","conflict"},{"argue","conflict"},{"enemy","conflict"},
+    {"know","know"},{"learn","know"},{"study","know"},{"school","know"},{"book","know"},{"understand","know"},{"knew","know"},{"taught","know"},
+    {"idea","idea"},{"plan","idea"},{"concept","idea"},{"solution","idea"},{"invention","idea"},
+    {"think","think"},{"thought","think"},{"consider","think"},{"wonder","think"},{"mind","think"},{"decide","think"},
+    {"dream","dream"},{"imagine","dream"},{"fantasy","dream"},{"story","dream"},
+    {"remember","remember"},{"memory","remember"},{"past","remember"},{"history","remember"},{"forgot","remember"},
+    {"lie","lie"},{"cheat","lie"},{"fake","lie"},{"trick","lie"},{"pretend","lie"},
+    {"road","path"},{"way","path"},{"direction","path"},{"trail","path"},
+    {"up","up"},{"rise","up"},{"climb","up"},{"above","up"},{"high","up"},{"tall","up"},{"top","up"},
+    {"down","down"},{"fall","down"},{"drop","down"},{"below","down"},{"low","down"},{"fell","down"},
+    {"far","far"},{"distant","far"},{"away","far"},{"abroad","far"},{"remote","far"},
+    {"back","back"},{"return","back"},{"behind","back"},{"again","back"},
+    {"before","before"},{"earlier","before"},{"yesterday","before"},{"once","before"},{"ago","before"},
+    {"now","now"},{"today","now"},{"moment","now"},{"current","now"},
+    {"after","after"},{"later","after"},{"tomorrow","after"},{"soon","after"},{"next","after"},{"then","after"},
+    {"never","never"},{"no","never"},{"nothing","never"},{"nobody","never"},{"stop","never"},
+    {"always","always"},{"forever","always"},{"every","always"},{"daily","always"},{"constant","always"},
+    {"not","not"},{"don't","not"},{"can't","not"},{"won't","not"},{"bad","not"},{"wrong","not"},
+    {"many","many"},{"lots","many"},{"several","many"},{"huge","many"},{"thousand","many"},
+    {"much","much"},{"very","much"},{"really","much"},{"extremely","much"},{"quite","much"},
+    {"and","and"},{"also","and"},{"with","and"},{"both","and"},{"plus","and"},
+    {"one","one"},{"single","one"},{"alone","one"},{"only","one"},{"first","one"},
+    {"question","question"},{"ask","question"},{"why","question"},{"what","question"},{"curious","question"},
+    {"how","how"},{"method","how"},{"step","how"},
+    {"because","cause"},{"reason","cause"},{"therefore","cause"},{"result","cause"},
+    {"i","me"},{"my","me"},{"myself","me"},
+    {"you","you"},{"your","you"},{"yourself","you"},
+    {"other","other"},{"another","other"},{"different","other"},{"new","other"},{"strange","other"},
+    {"money","money"},{"dollar","money"},{"pay","money"},{"buy","money"},{"sell","money"},{"rich","money"},{"poor","money"},{"price","money"},
+    {"change","change"},{"transform","change"},{"grow","change"},{"develop","change"},{"evolve","change"},
+    {"write","write"},{"pen","write"},{"paper","write"},{"letter","write"},{"note","write"},{"wrote","write"},{"poem","write"},{"code","write"},
+    {"choose","choose"},{"pick","choose"},{"select","choose"},{"vote","choose"},
+    {"help","help"},{"assist","help"},{"support","help"},{"save","help"},{"protect","help"},
+    {"have","have"},{"own","have"},{"keep","have"},{"hold","have"},{"got","have"},{"had","have"},
+    {"free","free"},{"freedom","free"},{"liberty","free"},{"escape","free"},{"open","free"},
+    {"death","death"},{"die","death"},{"dead","death"},{"kill","death"},{"grave","death"},{"died","death"},
+    {"music","music"},{"melody","music"},{"guitar","music"},{"piano","music"},{"drum","music"},{"sang","music"},{"singing","music"},
+    {"good","good"},{"great","good"},{"nice","good"},{"kind","good"},{"beautiful","good"},{"wonderful","good"},{"fine","good"},
+    {"small","small"},{"tiny","small"},{"short","small"},{"few","small"},
+    {"same","same"},{"equal","same"},{"similar","same"},{"identical","same"},
+    {"is","BE"},{"am","BE"},{"are","BE"},{"was","BE"},{"were","BE"},{"being","BE"},{"become","BE"},{"feel","BE"},
+    {"wait","wait"},{"patience","wait"},{"pause","wait"},{"delay","wait"},{"stay","wait"},
+    {NULL, NULL}
+};
+
+static const char *const LEO_GLYPH_STOP[] = {
+    "the","a","an","to","of","in","for","on","at","by","from","about","into",
+    "through","during","above","between","out","off","over","under","again",
+    "further","here","there","when","where","all","each","both","few","more",
+    "most","some","such","so","than","too","just","but","if","or","while","as",
+    "until","that","this","these","those","it","its","itself","which","who","whom",
+    NULL
+};
+
+static int leo_glyph_find(const char *name) {
+    for (int i = 0; i < LEO_GLYPHS; i++)
+        if (strcmp(name, LEO_GLYPH_NAME[i]) == 0) return i;
+    return -1;
+}
+
+static int leo_glyph_seed(const char *word) {
+    int glyph = leo_glyph_find(word);
+    if (glyph >= 0) return glyph;
+    for (int i = 0; LEO_GLYPH_WORD[i].word; i++)
+        if (strcmp(word, LEO_GLYPH_WORD[i].word) == 0)
+            return leo_glyph_find(LEO_GLYPH_WORD[i].glyph);
+    return -1;
+}
+
+static int leo_glyph_stop(const char *word) {
+    for (int i = 0; LEO_GLYPH_STOP[i]; i++)
+        if (strcmp(word, LEO_GLYPH_STOP[i]) == 0) return 1;
+    return 0;
+}
+
+static int leo_glyph_concept(int glyph) {
+    return glyph >= 0 && glyph < LEO_GLYPHS &&
+           !(glyph >= 63 && glyph <= 70) && glyph != 86;
+}
 
 static const float LEO_COUPLING[LEO_CHAMBERS][LEO_CHAMBERS] = {
     { 0.00f,-0.30f, 0.50f, 0.40f,-0.20f, 0.10f},
@@ -182,12 +334,32 @@ typedef struct {
 } LeoMoment;
 
 typedef struct {
+    char *word;
+    uint32_t count;
+} LeoLexeme;
+
+typedef struct {
+    char word[LEO_WORD_BYTES];
+    uint32_t heard;
+    int32_t glyph;
+} LeoSchoolWord;
+
+typedef struct {
+    LeoSchoolWord word[LEO_SCHOOL_MAX];
+    uint32_t n_word;
+    char pending[LEO_WORD_BYTES];
+    int32_t pending_glyph;
+    uint32_t guesses;
+    uint32_t guess_hits;
+} LeoSchool;
+
+typedef struct {
     LeoBpe bpe;
     LeoBigram *bigram;
     LeoTrigram *trigram;
     LeoEpisode episode[LEO_EPISODES];
     int n_episode;
-    char **lexicon;
+    LeoLexeme *lexicon;
     int n_lexicon;
     int lexicon_capacity;
     uint64_t corpus_hash;
@@ -225,6 +397,7 @@ typedef struct {
     uint64_t inner_ticks;
     uint64_t legacy_step;
     uint64_t rng;
+    LeoSchool school;
 } Leo;
 
 typedef struct {
@@ -377,10 +550,13 @@ static int leo_lexicon_add(LeoModel *model, const uint8_t *word, int length) {
         lowered[i] = (char)tolower(word[i]);
     lowered[length] = 0;
     for (int i = 0; i < model->n_lexicon; i++)
-        if (strcmp(model->lexicon[i], lowered) == 0) return 1;
+        if (strcmp(model->lexicon[i].word, lowered) == 0) {
+            if (model->lexicon[i].count < UINT32_MAX) model->lexicon[i].count++;
+            return 1;
+        }
     if (model->n_lexicon == model->lexicon_capacity) {
         int grown = model->lexicon_capacity ? model->lexicon_capacity * 2 : 512;
-        char **next = realloc(model->lexicon, (size_t)grown * sizeof *next);
+        LeoLexeme *next = realloc(model->lexicon, (size_t)grown * sizeof *next);
         if (!next) return 0;
         model->lexicon = next;
         model->lexicon_capacity = grown;
@@ -388,7 +564,9 @@ static int leo_lexicon_add(LeoModel *model, const uint8_t *word, int length) {
     char *copy = malloc((size_t)length + 1u);
     if (!copy) return 0;
     memcpy(copy, lowered, (size_t)length + 1u);
-    model->lexicon[model->n_lexicon++] = copy;
+    model->lexicon[model->n_lexicon].word = copy;
+    model->lexicon[model->n_lexicon].count = 1;
+    model->n_lexicon++;
     return 1;
 }
 
@@ -411,10 +589,17 @@ static int leo_lexicon_has(const LeoModel *model, const char *word,
                            int length, int complete) {
     if (length <= 0 || length >= LEO_WORD_BYTES) return 0;
     for (int i = 0; i < model->n_lexicon; i++) {
-        const char *known = model->lexicon[i];
+        const char *known = model->lexicon[i].word;
         if (strncmp(known, word, (size_t)length) != 0) continue;
         if (!complete || known[length] == 0) return 1;
     }
+    return 0;
+}
+
+static uint32_t leo_lexicon_count(const LeoModel *model, const char *word) {
+    for (int i = 0; i < model->n_lexicon; i++)
+        if (strcmp(model->lexicon[i].word, word) == 0)
+            return model->lexicon[i].count;
     return 0;
 }
 
@@ -1110,7 +1295,7 @@ static int leo_model_build(Leo *leo, const uint8_t *corpus, size_t length) {
 }
 
 static void leo_model_free(LeoModel *model) {
-    for (int i = 0; i < model->n_lexicon; i++) free(model->lexicon[i]);
+    for (int i = 0; i < model->n_lexicon; i++) free(model->lexicon[i].word);
     free(model->lexicon);
     free(model->bigram);
     free(model->trigram);
@@ -1119,6 +1304,187 @@ static void leo_model_free(LeoModel *model) {
     model->lexicon_capacity = 0;
     model->bigram = NULL;
     model->trigram = NULL;
+}
+
+static void leo_school_init(LeoSchool *school) {
+    memset(school, 0, sizeof *school);
+    school->pending_glyph = -1;
+}
+
+static int leo_school_word_index(const LeoSchool *school, const char *word) {
+    for (uint32_t i = 0; i < school->n_word; i++)
+        if (strcmp(school->word[i].word, word) == 0) return (int)i;
+    return -1;
+}
+
+static LeoSchoolWord *leo_school_word(Leo *leo, const char *word, int create) {
+    int at = leo_school_word_index(&leo->school, word);
+    if (at >= 0) return &leo->school.word[at];
+    if (!create || leo->school.n_word >= LEO_SCHOOL_MAX) return NULL;
+    LeoSchoolWord *entry = &leo->school.word[leo->school.n_word++];
+    memset(entry, 0, sizeof *entry);
+    strncpy(entry->word, word, sizeof entry->word - 1);
+    entry->glyph = -1;
+    return entry;
+}
+
+static int leo_school_glyph(const Leo *leo, const char *word) {
+    int at = leo_school_word_index(&leo->school, word);
+    if (at >= 0 && leo->school.word[at].glyph >= 0)
+        return leo->school.word[at].glyph;
+    return leo_glyph_seed(word);
+}
+
+static void leo_school_hear(Leo *leo, const char *text) {
+    char word[LEO_WORD_BYTES];
+    int n = 0;
+    for (const char *p = text; ; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c && (isalpha(c) || c == '\'')) {
+            if (n < LEO_WORD_BYTES - 1) word[n++] = (char)tolower(c);
+            continue;
+        }
+        if (n >= 3) {
+            word[n] = 0;
+            if (!leo_glyph_stop(word) && leo_glyph_seed(word) < 0) {
+                LeoSchoolWord *entry = leo_school_word(leo, word, 1);
+                if (entry && entry->heard < UINT32_MAX) entry->heard++;
+            }
+        }
+        n = 0;
+        if (!c) break;
+    }
+}
+
+static int leo_school_histogram(const Leo *leo, const char *text,
+                                int *best_count) {
+    int count[LEO_GLYPHS] = {0};
+    char word[LEO_WORD_BYTES];
+    int n = 0;
+    for (const char *p = text; ; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c && (isalpha(c) || c == '\'')) {
+            if (n < LEO_WORD_BYTES - 1) word[n++] = (char)tolower(c);
+            continue;
+        }
+        if (n >= 2) {
+            word[n] = 0;
+            int glyph = leo_school_glyph(leo, word);
+            if (leo_glyph_concept(glyph)) count[glyph]++;
+        }
+        n = 0;
+        if (!c) break;
+    }
+    int best = -1;
+    int support = 0;
+    for (int glyph = 0; glyph < LEO_GLYPHS; glyph++)
+        if (count[glyph] > support) { support = count[glyph]; best = glyph; }
+    if (best_count) *best_count = support;
+    return best;
+}
+
+static int leo_word_in_bootstrap(const char *word) {
+    int wanted = (int)strlen(word);
+    char seen[LEO_WORD_BYTES];
+    int n = 0;
+    for (const char *p = LEO_EMBEDDED_BOOTSTRAP; ; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c && (isalpha(c) || c == '\'')) {
+            if (n < LEO_WORD_BYTES - 1) seen[n++] = (char)tolower(c);
+            continue;
+        }
+        if (n == wanted) {
+            seen[n] = 0;
+            if (strcmp(seen, word) == 0) return 1;
+        }
+        n = 0;
+        if (!c) break;
+    }
+    return 0;
+}
+
+static int leo_school_unknown(const Leo *leo, const char *text, char *unknown) {
+    char word[LEO_WORD_BYTES];
+    int n = 0;
+    for (const char *p = text; ; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c && (isalpha(c) || c == '\'')) {
+            if (n < LEO_WORD_BYTES - 1) word[n++] = (char)tolower(c);
+            continue;
+        }
+        if (n >= 3) {
+            word[n] = 0;
+            int at = leo_school_word_index(&leo->school, word);
+            uint32_t lived = leo_lexicon_count(&leo->model, word);
+            uint32_t heard = at >= 0 ? leo->school.word[at].heard : 0;
+            if (!leo_glyph_stop(word) && leo_school_glyph(leo, word) < 0 &&
+                ((lived <= LEO_SCHOOL_NOVEL_MAX &&
+                  heard <= LEO_SCHOOL_NOVEL_MAX) ||
+                 leo_word_in_bootstrap(word))) {
+                memcpy(unknown, word, (size_t)n + 1u);
+                return 1;
+            }
+        }
+        n = 0;
+        if (!c) break;
+    }
+    return 0;
+}
+
+static void leo_school_learn(Leo *leo, const char *word, int glyph) {
+    if (!leo_glyph_concept(glyph)) return;
+    LeoSchoolWord *entry = leo_school_word(leo, word, 1);
+    if (!entry) {
+        fprintf(stderr, "leo: School is full; %s was not bound\n", word);
+        return;
+    }
+    entry->glyph = glyph;
+}
+
+static int leo_school_close_question(Leo *leo, const char *answer) {
+    if (!leo->school.pending[0]) return 0;
+    int glyph = leo_school_histogram(leo, answer, NULL);
+    if (leo_glyph_concept(glyph)) {
+        if (leo->school.pending_glyph >= 0) {
+            if (leo->school.guesses < UINT32_MAX) leo->school.guesses++;
+            if (leo->school.pending_glyph == glyph) {
+                if (leo->school.guess_hits < UINT32_MAX) leo->school.guess_hits++;
+            } else {
+                leo->chamber[LEO_COMPLEX] = leo_clamp(
+                    leo->chamber[LEO_COMPLEX] + LEO_SCHOOL_SURPRISE, 0.0f, 1.0f);
+            }
+        }
+        leo_school_learn(leo, leo->school.pending, glyph);
+    }
+    leo->school.pending[0] = 0;
+    leo->school.pending_glyph = -1;
+    return 1;
+}
+
+static int leo_school_question(Leo *leo, const char *prompt,
+                               char *output, size_t capacity) {
+    char unknown[LEO_WORD_BYTES];
+    if (!leo_school_unknown(leo, prompt, unknown)) return -1;
+    float distress = 0.5f * (leo->chamber[LEO_FEAR] + leo->chamber[LEO_VOID]);
+    float safety = 0.5f * (leo->chamber[LEO_LOVE] + leo->chamber[LEO_FLOW]);
+    if (distress > safety + 0.18f) return -1;
+
+    int support = 0;
+    int guess = leo_school_histogram(leo, prompt, &support);
+    if (support < 2 || !leo_glyph_concept(guess)) guess = -1;
+    int bytes = guess >= 0
+        ? snprintf(output, capacity, "%s? %s?", unknown, LEO_GLYPH_NAME[guess])
+        : snprintf(output, capacity, "%s?", unknown);
+    if (capacity && output[0] >= 'a' && output[0] <= 'z')
+        output[0] = (char)(output[0] - 'a' + 'A');
+    for (size_t i = 1; capacity && output[i]; i++)
+        if (output[i - 1] == ' ' && output[i] >= 'a' && output[i] <= 'z')
+            output[i] = (char)(output[i] - 'a' + 'A');
+    strncpy(leo->school.pending, unknown, sizeof leo->school.pending - 1);
+    leo->school.pending[sizeof leo->school.pending - 1] = 0;
+    leo->school.pending_glyph = guess;
+    if (bytes < 0) return 0;
+    return (size_t)bytes < capacity ? bytes : (capacity ? (int)capacity - 1 : 0);
 }
 
 static char *leo_read_file(const char *path, size_t *length) {
@@ -1808,6 +2174,8 @@ static int leo_respond(Leo *leo, const char *line, char *reply, size_t capacity)
     if (!n_prompt) { if (capacity) reply[0] = 0; return 0; }
 
     leo_body_settle(leo, prompt, 8);
+    leo_school_hear(leo, line);
+    int was_school_answer = leo_school_close_question(leo, line);
     leo_attention_prompt(leo, prompt_ids, n_prompt, prompt, attended);
     float query[LEO_DIM];
     for (int d = 0; d < LEO_DIM; d++)
@@ -1822,9 +2190,20 @@ static int leo_respond(Leo *leo, const char *line, char *reply, size_t capacity)
     leo_moment_store(leo, prompt_ids, n_prompt, prompt, prompt_context, 1, 0.82f);
     leo_attention_learn(leo, query, recall.recalled);
 
-    int bytes = leo_generate(leo, prompt, prompt_context, attended, &recall,
+    int bytes = was_school_answer ? -1 :
+        leo_school_question(leo, line, reply, capacity);
+    if (bytes < 0) {
+        bytes = leo_generate(leo, prompt, prompt_context, attended, &recall,
                              reply, capacity, spoken, &n_spoken,
                              spoken_meaning, spoken_context);
+    } else {
+        uint16_t question_ids[LEO_PROMPT_TOKENS];
+        int n_question = 0;
+        leo_text_vector(leo, reply, spoken_meaning, spoken_context,
+                        question_ids, &n_question);
+        n_spoken = n_question < LEO_REPLY_TOKENS ? n_question : LEO_REPLY_TOKENS;
+        for (int i = 0; i < n_spoken; i++) spoken[i] = question_ids[i];
+    }
     if (n_spoken > 0) {
         for (int d = 0; d < LEO_DIM; d++)
             leo->presence[d] = 0.72f * leo->presence[d] +
@@ -1926,6 +2305,17 @@ static int leo_state_finite(const Leo *leo) {
             if (!isfinite(moment->meaning[d]) || !isfinite(moment->context[d])) return 0;
         for (int c = 0; c < LEO_CHAMBERS; c++) if (!isfinite(moment->body[c])) return 0;
     }
+    if (leo->school.n_word > LEO_SCHOOL_MAX ||
+        leo->school.pending[LEO_WORD_BYTES - 1] != 0 ||
+        (leo->school.pending_glyph != -1 &&
+         !leo_glyph_concept(leo->school.pending_glyph)) ||
+        leo->school.guess_hits > leo->school.guesses) return 0;
+    for (uint32_t i = 0; i < leo->school.n_word; i++) {
+        const LeoSchoolWord *word = &leo->school.word[i];
+        if (!word->word[0] || word->word[LEO_WORD_BYTES - 1] != 0 ||
+            !word->heard || (word->glyph != -1 && !leo_glyph_concept(word->glyph)))
+            return 0;
+    }
     return 1;
 }
 
@@ -1971,6 +2361,19 @@ static int leo_save_state(const Leo *leo, const char *path) {
                              state_vocab * sizeof leo->lived_count[0]) &&
              leo_write_block(file, leo->moment,
                              (size_t)leo->n_moment * sizeof leo->moment[0]);
+    if (ok) ok = leo_write_block(file, &leo->school.n_word,
+                                 sizeof leo->school.n_word);
+    if (ok && leo->school.n_word)
+        ok = leo_write_block(file, leo->school.word,
+                             (size_t)leo->school.n_word * sizeof leo->school.word[0]);
+    if (ok) ok = leo_write_block(file, leo->school.pending,
+                                 sizeof leo->school.pending) &&
+                 leo_write_block(file, &leo->school.pending_glyph,
+                                 sizeof leo->school.pending_glyph) &&
+                 leo_write_block(file, &leo->school.guesses,
+                                 sizeof leo->school.guesses) &&
+                 leo_write_block(file, &leo->school.guess_hits,
+                                 sizeof leo->school.guess_hits);
     if (fflush(file) != 0) ok = 0;
     if (ok && fsync(fileno(file)) != 0) ok = 0;
     if (fclose(file) != 0) ok = 0;
@@ -1985,7 +2388,8 @@ static int leo_load_state(Leo *leo, const char *path) {
     LeoStateHeader header;
     int ok = leo_read_block(file, &header, sizeof header);
     if (!ok || memcmp(header.magic, LEO_STATE_MAGIC, sizeof header.magic) != 0 ||
-        (header.version != 1u && header.version != LEO_STATE_VERSION) ||
+        (header.version != 1u && header.version != 2u &&
+         header.version != LEO_STATE_VERSION) ||
         header.dimension != LEO_DIM ||
         header.vocab < LEO_BYTE_VOCAB || header.vocab > leo->model.bpe.vocab ||
         header.moment_capacity != LEO_MOMENTS ||
@@ -2015,6 +2419,23 @@ static int leo_load_state(Leo *leo, const char *path) {
                         state_vocab * sizeof leo->lived_count[0]) &&
          leo_read_block(file, leo->moment,
                         (size_t)header.n_moment * sizeof leo->moment[0]);
+    if (ok && header.version >= 3u) {
+        uint32_t n_word = 0;
+        ok = leo_read_block(file, &n_word, sizeof n_word) &&
+             n_word <= LEO_SCHOOL_MAX;
+        if (ok) leo->school.n_word = n_word;
+        if (ok && n_word)
+            ok = leo_read_block(file, leo->school.word,
+                                (size_t)n_word * sizeof leo->school.word[0]);
+        if (ok) ok = leo_read_block(file, leo->school.pending,
+                                    sizeof leo->school.pending) &&
+                     leo_read_block(file, &leo->school.pending_glyph,
+                                    sizeof leo->school.pending_glyph) &&
+                     leo_read_block(file, &leo->school.guesses,
+                                    sizeof leo->school.guesses) &&
+                     leo_read_block(file, &leo->school.guess_hits,
+                                    sizeof leo->school.guess_hits);
+    }
     fclose(file);
     if (!ok) return 0;
     leo->turns = header.turns;
@@ -2157,6 +2578,7 @@ static int leo_open(Leo *leo, const char *corpus_path, const char *legacy_path,
     char *corpus = leo_read_file(corpus_path, &corpus_length);
     if (!corpus) return 0;
     memset(leo, 0, sizeof *leo);
+    leo_school_init(&leo->school);
     leo->rng = leo_hash64(corpus, corpus_length) ^ UINT64_C(0x4c454f2d414c4956);
     if (!leo_model_build(leo, (const uint8_t *)corpus, corpus_length)) {
         free(corpus);
