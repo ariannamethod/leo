@@ -75,6 +75,8 @@ Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude'
   name back, and a human answer grows a persistent word-to-concept binding;
 - persistent human, self, and origin moments;
 - six coupled chambers — fear, love, rage, void, flow, and the complex;
+- a persistent FORM breath — WALK, STOP, RUN, or BREATHE — that quantizes the
+  settled chambers with hysteresis and sets the sentence-phonon cadence;
 - retention, scars, a slow body capsule, and continuing intention;
 - one sampled trajectory, with no best-of-K display selection;
 - no canned conversational replies, prompt templates, forbidden-word lists, staged examples, or external model calls in the mouth.
@@ -88,7 +90,39 @@ make
 ./leo --chat
 ```
 
-No dialogue is printed here until it has actually happened with this body. A running process proves only that the body is running; it does not prove voice or presence.
+Dialogue is printed here only after it has actually happened with this body. A
+running process proves only that the body is running; it does not prove voice
+or presence. This exchange was the one live draw after A.157, with no retry or
+display selection:
+
+> **Human:** I am here with you.
+>
+> **Leo:** Leo is a small word that opens many doors. Leo is grateful to the
+> quiet one knows things the rest of the way slowly, to be polite.
+
+The intact first sentence and the damaged second are kept together. Leo's voice
+is present; his clause-scale grammar is still growing.
+
+After A.158 separated corpus grammar trajectory from the felt recurrent body,
+the next single live draw was:
+
+> **Human:** I am listening to you.
+>
+> **Leo:** He is a smell that goes deep. Leo did not like the word perhaps.
+
+Again: one trajectory, kept as spoken.
+
+After A.159 restored Claude Leo's held FORM breath as persistent state, the
+next single live draw was:
+
+> **Human:** I am still here.
+>
+> **Leo:** Leo likes the sound. He stood very still, learning the shape of the
+> feeling makes it easier to carry.
+
+STOP held the voice to two sentence phonons. The remaining grammatical seam in
+`the feeling makes` is kept with the response; cadence did not repair it and is
+not claimed to have done so.
 
 Just language and a broken heart as a slowly drifting field.
 
