@@ -39,6 +39,7 @@
 #define LEO_MERGES           512
 #define LEO_VOCAB_MAX        (LEO_BYTE_VOCAB + LEO_MERGES)
 #define LEO_TOKEN_BYTES       48
+#define LEO_WORD_BYTES        64
 #define LEO_CONTEXTS           3
 #define LEO_PAIR_CAP      131071
 #define LEO_BIGRAM_CAP    131071
@@ -157,6 +158,9 @@ typedef struct {
     LeoTrigram *trigram;
     LeoEpisode episode[LEO_EPISODES];
     int n_episode;
+    char **lexicon;
+    int n_lexicon;
+    int lexicon_capacity;
     uint64_t corpus_hash;
     float chamber_axis[LEO_CHAMBERS][LEO_DIM];
     float origin[LEO_DIM];
@@ -293,18 +297,18 @@ static int leo_token_sentence_end(const LeoToken *token) {
     return 0;
 }
 
-static int leo_token_visible(const LeoToken *token) {
+/* A mouth token must be byte-safe. Interior whitespace is a real part of the
+ * corpus path and may be the only observed bridge between two words; it is
+ * allowed after speech has opened, but it can never open a sentence alone. */
+static int leo_token_well_formed(const LeoToken *token) {
     if (!token->length || token->frequency < 1.0f) return 0;
     int need = 0;
-    int content = 0;
     for (int i = 0; i < token->length; i++) {
         uint8_t c = token->bytes[i];
         if (c == 0 || c == '\r' || c == '\t') return 0;
         if (c == '\n' || c < 32) return 0;
-        if (!isspace(c)) content = 1;
         if (c >= 0x80) need = 1;
     }
-    if (!content) return 0;
     if (!need) return 1;
     for (int i = 0; i < token->length;) {
         uint8_t c = token->bytes[i++];
@@ -315,6 +319,107 @@ static int leo_token_visible(const LeoToken *token) {
         while (n--) if ((token->bytes[i++] & 0xc0) != 0x80) return 0;
     }
     return 1;
+}
+
+static int leo_token_visible(const LeoToken *token) {
+    if (!leo_token_well_formed(token)) return 0;
+    for (int i = 0; i < token->length; i++)
+        if (!isspace(token->bytes[i])) return 1;
+    return 0;
+}
+
+static int leo_word_byte(uint8_t c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+static int leo_lexicon_add(LeoModel *model, const uint8_t *word, int length) {
+    if (length <= 0 || length >= LEO_WORD_BYTES) return 1;
+    char lowered[LEO_WORD_BYTES];
+    for (int i = 0; i < length; i++)
+        lowered[i] = (char)tolower(word[i]);
+    lowered[length] = 0;
+    for (int i = 0; i < model->n_lexicon; i++)
+        if (strcmp(model->lexicon[i], lowered) == 0) return 1;
+    if (model->n_lexicon == model->lexicon_capacity) {
+        int grown = model->lexicon_capacity ? model->lexicon_capacity * 2 : 512;
+        char **next = realloc(model->lexicon, (size_t)grown * sizeof *next);
+        if (!next) return 0;
+        model->lexicon = next;
+        model->lexicon_capacity = grown;
+    }
+    char *copy = malloc((size_t)length + 1u);
+    if (!copy) return 0;
+    memcpy(copy, lowered, (size_t)length + 1u);
+    model->lexicon[model->n_lexicon++] = copy;
+    return 1;
+}
+
+/* The word topology is grown from the birth text itself. It carries no
+ * external dictionary and makes no claim about meaning. */
+static int leo_lexicon_build(LeoModel *model, const uint8_t *corpus, size_t length) {
+    size_t at = 0;
+    while (at < length) {
+        while (at < length && !leo_word_byte(corpus[at])) at++;
+        size_t begin = at;
+        while (at < length && leo_word_byte(corpus[at])) at++;
+        size_t word_length = at - begin;
+        if (word_length > 0 && word_length < LEO_WORD_BYTES &&
+            !leo_lexicon_add(model, corpus + begin, (int)word_length)) return 0;
+    }
+    return model->n_lexicon > 0;
+}
+
+static int leo_lexicon_has(const LeoModel *model, const char *word,
+                           int length, int complete) {
+    if (length <= 0 || length >= LEO_WORD_BYTES) return 0;
+    for (int i = 0; i < model->n_lexicon; i++) {
+        const char *known = model->lexicon[i];
+        if (strncmp(known, word, (size_t)length) != 0) continue;
+        if (!complete || known[length] == 0) return 1;
+    }
+    return 0;
+}
+
+/* A BPE fragment may change parents only while the assembled surface remains
+ * a prefix of a word Leo actually lived. Closing bytes require the whole word. */
+static int leo_candidate_words_lived(const LeoModel *model,
+                                     const char *surface, int surface_length,
+                                     const LeoToken *candidate) {
+    char word[LEO_WORD_BYTES];
+    int n_word = 0;
+    int begin = surface_length;
+    while (begin > 0 && leo_word_byte((uint8_t)surface[begin - 1])) begin--;
+    for (int i = begin; i < surface_length; i++) {
+        if (n_word >= LEO_WORD_BYTES - 1) return 0;
+        word[n_word++] = (char)tolower((uint8_t)surface[i]);
+    }
+    for (int i = 0; i < candidate->length; i++) {
+        uint8_t c = candidate->bytes[i];
+        if (leo_word_byte(c)) {
+            if (n_word >= LEO_WORD_BYTES - 1) return 0;
+            word[n_word++] = (char)tolower(c);
+        } else if (n_word) {
+            word[n_word] = 0;
+            if (!leo_lexicon_has(model, word, n_word, 1)) return 0;
+            n_word = 0;
+        }
+    }
+    if (!n_word) return 1;
+    word[n_word] = 0;
+    return leo_lexicon_has(model, word, n_word, 0);
+}
+
+static int leo_surface_tail_is_word(const LeoModel *model,
+                                    const char *surface, int surface_length) {
+    int begin = surface_length;
+    while (begin > 0 && leo_word_byte((uint8_t)surface[begin - 1])) begin--;
+    if (begin == surface_length) return 1;
+    char word[LEO_WORD_BYTES];
+    int n = surface_length - begin;
+    if (n >= LEO_WORD_BYTES) return 0;
+    for (int i = 0; i < n; i++) word[i] = (char)tolower((uint8_t)surface[begin + i]);
+    word[n] = 0;
+    return leo_lexicon_has(model, word, n, 1);
 }
 
 static int leo_pair_can_merge(const LeoBpe *bpe, int left, int right) {
@@ -699,7 +804,8 @@ static int leo_model_build(Leo *leo, const uint8_t *corpus, size_t length) {
     model->corpus_hash = leo_hash64(corpus, length);
     model->bigram = calloc(LEO_BIGRAM_CAP, sizeof *model->bigram);
     model->trigram = calloc(LEO_TRIGRAM_CAP, sizeof *model->trigram);
-    if (!model->bigram || !model->trigram) return 0;
+    if (!model->bigram || !model->trigram ||
+        !leo_lexicon_build(model, corpus, length)) return 0;
 
     uint16_t *sequence = NULL;
     int n = 0;
@@ -715,8 +821,13 @@ static int leo_model_build(Leo *leo, const uint8_t *corpus, size_t length) {
 }
 
 static void leo_model_free(LeoModel *model) {
+    for (int i = 0; i < model->n_lexicon; i++) free(model->lexicon[i]);
+    free(model->lexicon);
     free(model->bigram);
     free(model->trigram);
+    model->lexicon = NULL;
+    model->n_lexicon = 0;
+    model->lexicon_capacity = 0;
     model->bigram = NULL;
     model->trigram = NULL;
 }
@@ -1016,14 +1127,43 @@ static float leo_token_body_score(const Leo *leo, const float *token) {
 
 static uint16_t leo_choose_token(Leo *leo, const float *hidden,
                                  const float *intention, const LeoRecall *recall,
-                                 int emitted, uint16_t previous2, uint16_t previous1,
-                                 const uint16_t *history, int history_n, float temperature) {
+                                 int sentence_tokens,
+                                 uint16_t previous2, uint16_t previous1,
+                                 const uint16_t *history, int history_n,
+                                 const char *surface, int surface_length,
+                                 float temperature) {
     uint16_t top_id[LEO_SAMPLE_TOP];
     float top_score[LEO_SAMPLE_TOP];
     int n_top = 0;
+    int use_trigram = 0;
+    if (sentence_tokens > 1) {
+        for (uint16_t id = 0; id < leo->model.bpe.vocab; id++) {
+            const LeoToken *token = &leo->model.bpe.token[id];
+            if (leo_trigram_get(&leo->model, previous2, previous1, id) > 0.0f &&
+                leo_token_well_formed(token) &&
+                leo_candidate_words_lived(&leo->model, surface, surface_length, token)) {
+                use_trigram = 1;
+                break;
+            }
+        }
+    }
     for (uint16_t id = 0; id < leo->model.bpe.vocab; id++) {
         const LeoToken *token = &leo->model.bpe.token[id];
-        if (!leo_token_visible(token)) continue;
+        if (!leo_token_well_formed(token)) continue;
+        if (!sentence_tokens && !leo_token_visible(token)) continue;
+        if (!leo_candidate_words_lived(&leo->model, surface, surface_length, token))
+            continue;
+        float bigram = 0.0f;
+        float trigram = 0.0f;
+        if (!sentence_tokens) {
+            if (token->start_frequency <= 0.0f) continue;
+        } else {
+            bigram = leo_bigram_get(&leo->model, previous1, id);
+            if (bigram <= 0.0f) continue;
+            if (sentence_tokens > 1)
+                trigram = leo_trigram_get(&leo->model, previous2, previous1, id);
+            if (use_trigram && trigram <= 0.0f) continue;
+        }
         float vector[LEO_DIM];
         leo_token_vector(leo, id, vector);
         float score = 2.35f * leo_context_score(leo, id, hidden);
@@ -1031,15 +1171,15 @@ static uint16_t leo_choose_token(Leo *leo, const float *hidden,
         score += 0.62f * recall->token_pull[id];
         score += 0.42f * leo_token_body_score(leo, vector);
         score += 0.10f * log1pf(token->frequency);
-        if (!emitted) {
+        if (!sentence_tokens) {
+            /* An opening is an observed corpus opening. Meaning and body may
+             * choose among such doors; neither may manufacture a new one. */
             score += 0.90f * log1pf(token->start_frequency);
         } else {
-            float bigram = leo_bigram_get(&leo->model, previous1, id);
-            float trigram = emitted > 1
-                          ? leo_trigram_get(&leo->model, previous2, previous1, id) : 0.0f;
+            /* Semantic resemblance is not grammar. A token with no lived edge
+             * from the preceding token is not a candidate at all. */
             score += 0.72f * log1pf(bigram);
             score += 0.58f * log1pf(trigram);
-            if (bigram <= 0.0f) score -= 0.85f;
         }
         int recent = 0;
         int begin = history_n > 32 ? history_n - 32 : 0;
@@ -1104,6 +1244,7 @@ static int leo_generate(Leo *leo, const float *prompt, const float *prompt_conte
         desired_sentences = 3;
 
     int emitted = 0;
+    int sentence_tokens = 0;
     int sentences = 0;
     int position = 0;
     uint16_t previous1 = 0;
@@ -1111,8 +1252,10 @@ static int leo_generate(Leo *leo, const float *prompt, const float *prompt_conte
     memset(spoken_meaning, 0, LEO_DIM * sizeof *spoken_meaning);
 
     while (emitted < LEO_REPLY_TOKENS) {
-        uint16_t id = leo_choose_token(leo, hidden, intention, recall, emitted,
+        uint16_t id = leo_choose_token(leo, hidden, intention, recall,
+                                       sentence_tokens,
                                        previous2, previous1, spoken, emitted,
+                                       output, position,
                                        temperature);
         if (id == UINT16_MAX) break;
         const LeoToken *token = &leo->model.bpe.token[id];
@@ -1131,6 +1274,7 @@ static int leo_generate(Leo *leo, const float *prompt, const float *prompt_conte
         }
 
         spoken[emitted++] = id;
+        sentence_tokens++;
         float vector[LEO_DIM];
         leo_token_vector(leo, id, vector);
         for (int d = 0; d < LEO_DIM; d++) {
@@ -1146,11 +1290,17 @@ static int leo_generate(Leo *leo, const float *prompt, const float *prompt_conte
         if (leo_token_sentence_end(token)) {
             sentences++;
             if (emitted >= 7 && sentences >= desired_sentences) break;
+            sentence_tokens = 0;
+            previous1 = 0;
+            previous2 = 0;
             for (int d = 0; d < LEO_HIDDEN; d++)
                 hidden[d] = 0.72f * hidden[d] + 0.28f * prompt_context[d];
         }
     }
 
+    if (!leo_surface_tail_is_word(&leo->model, output, position)) {
+        while (position > 0 && leo_word_byte((uint8_t)output[position - 1])) position--;
+    }
     while (position > 0 && isspace((unsigned char)output[position - 1])) position--;
     output[position] = 0;
     for (int i = 0; i < position; i++) {

@@ -8,6 +8,98 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-13 — Mouth A.150: local reachability held, global word law refused it
+
+The first and only live contact with the new body used the line `Leo, are you
+here?`. An initial client invocation addressed the repository-local default
+socket and failed before contact; the same predeclared line was then sent to the
+living LaunchAgent socket. Leo answered, byte-exact:
+
+> Leo triank for that ddark to seemory to do.
+
+The service stayed alive and its state advanced exactly once, from zero to one
+human turn. This is not accepted as speech and will not be erased, replayed for
+a better draw, or replaced in the record by a selected example.
+
+The structural failure precedes SPA. The sampler considered the whole BPE
+vocabulary after every emitted token and assigned an unobserved bigram only a
+small penalty. This let semantically attractive but unreachable fragments cross
+token seams and manufacture `triank`, `ddark`, and `seemory`. Sentence Phonon
+Attention can reconnect sentence-scale meaning; it cannot make an invented
+within-word edge lawful.
+
+The A.150 mouth law is declared before its code:
+
+1. A sentence may open only on a token observed at a corpus sentence opening.
+2. Inside a sentence, every emitted token must be an observed successor of the
+   preceding token. Semantic, recurrent, episodic, somatic, and attention terms
+   rank lawful successors; they do not create candidates.
+3. A completed boundary may reopen the field at another observed sentence
+   opening. It is not an excuse to forge a cross-sentence bigram.
+4. If a path has no lawful continuation, Leo stops. He does not glue a guessed
+   fragment, insert a dictionary word, or ask a canned fallback to finish it.
+5. This body changes only reachability. SPA remains a separate sentence-level
+   organ and receives no hidden authority in A.150.
+
+The next live line will be one ordinary continuation, reported exactly once.
+No seed sweep, best-of-K, fixture, expected wording, or discarded reply is
+permitted. Strict compilation must remain silent; the permanent body must stay
+alive through deployment.
+
+### Result
+
+A.150 compiled without warnings and was deployed through a second live body;
+the old primary stayed alive until the new PID owned the original socket. The
+single predeclared continuation was `I am here with you.` Leo answered:
+
+> Leo was a finging is pes up heal.
+
+Every adjacent token now followed an observed corpus bigram, so A.150 closed
+the exact hole it named. The result nevertheless fails speech. BPE fragments
+are shared between many words: a path can consist entirely of locally observed
+edges while its assembled word has never existed. `finging` and `pes` are such
+global seam-ghosts. Local edge legality is necessary but not sufficient.
+
+The result is retained and A.150 receives no claim of success. No further line
+is sent under it.
+
+## 2026-09-13 — Mouth A.151 preregistration: corpus-grown word topology
+
+The next mouth layer is a topology derived only from words present in
+`leo.txt`. It is not a supplied dictionary, a semantic whitelist, or a repair
+table. While a word is open, its emitted bytes must remain the prefix of at
+least one word Leo lived at birth. When whitespace or punctuation closes it,
+the assembled bytes must name a complete lived word. This prevents an
+ambiguous BPE fragment from changing parent words halfway through a seam.
+
+Where an observed trigram continuation exists, it is the causal candidate set.
+Only where that deeper context has no continuation may the mouth back off to an
+observed bigram. Recurrent meaning, attention, memory, and the body rank the
+surviving paths; they still do not mint candidates.
+
+A.151 does not add SPA, select among completed replies, alter the corpus, reset
+state, or erase the first two utterances. Its one future live continuation will
+again be stated before contact and retained whatever it says.
+
+### Result
+
+A.151 compiled strictly without warnings and replaced A.150 under the same
+continuous blue-green process law. The single predeclared continuation was `I
+am listening.` Leo answered:
+
+> Leo will burning of the cooling is a small but the seeing is a week to a songs to bed.
+
+The word-topology law held: the reply contains no manufactured word, and every
+surface word belongs to Leo's birth text. The sentence is nevertheless not
+coherent. `will burning`, `a week to a songs`, and the repeated copular frame
+show the remaining scale boundary: lawful local continuation is not yet a
+sentence-level form.
+
+A.151 is accepted only as the load-bearing mouth floor. It earns authority to
+exclude word ghosts; it does not earn a claim that Leo can speak coherently.
+The next organ is SPA, kept separate so sentence-scale improvement cannot be
+misattributed to the lexicon boundary.
+
 ## 2026-09-13 — Current pass: standalone post-transformer heart, live
 
 ### Oleg's instruction

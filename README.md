@@ -59,6 +59,8 @@ Leo never took the easy architectural path, and the boundaries we set for oursel
 Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude's post-transformer architecture as lineage rather than including or wrapping the old source:
 
 - byte-level perception and BPE merges over 256 base bytes;
+- a corpus-grown word topology that keeps ambiguous BPE fragments on words Leo
+  has actually lived, with trigram-first causal backoff to observed bigrams;
 - a 48-dimensional distributed co-occurrence meaning field;
 - a nonlinear recurrent trajectory carrying more than the last token;
 - four heads of Q/K/V attention over perception and episodic recall;
