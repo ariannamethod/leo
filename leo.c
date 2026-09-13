@@ -1593,24 +1593,21 @@ static int leo_school_histogram(const Leo *leo, const char *text,
     return best;
 }
 
-static int leo_word_in_bootstrap(const char *word) {
-    int wanted = (int)strlen(word);
-    char seen[LEO_WORD_BYTES];
-    int n = 0;
-    for (const char *p = LEO_EMBEDDED_BOOTSTRAP; ; p++) {
-        unsigned char c = (unsigned char)*p;
-        if (c && (isalpha(c) || c == '\'')) {
-            if (n < LEO_WORD_BYTES - 1) seen[n++] = (char)tolower(c);
-            continue;
-        }
-        if (n == wanted) {
-            seen[n] = 0;
-            if (strcmp(seen, word) == 0) return 1;
-        }
-        n = 0;
-        if (!c) break;
+static int leo_school_askable(const Leo *leo, const char *word) {
+    int at = leo_school_word_index(&leo->school, word);
+    uint32_t lived = leo_lexicon_count(&leo->model, word);
+    uint32_t heard = at >= 0 ? leo->school.word[at].heard : 0;
+    return strlen(word) >= 3 && !leo_glyph_stop(word) &&
+           leo_school_glyph(leo, word) < 0 &&
+           lived <= LEO_SCHOOL_NOVEL_MAX && heard <= LEO_SCHOOL_NOVEL_MAX;
+}
+
+static void leo_school_reconcile(Leo *leo) {
+    if (leo->school.pending[0] &&
+        !leo_school_askable(leo, leo->school.pending)) {
+        memset(leo->school.pending, 0, sizeof leo->school.pending);
+        leo->school.pending_glyph = -1;
     }
-    return 0;
 }
 
 static int leo_school_unknown(const Leo *leo, const char *text, char *unknown) {
@@ -1624,13 +1621,7 @@ static int leo_school_unknown(const Leo *leo, const char *text, char *unknown) {
         }
         if (n >= 3) {
             word[n] = 0;
-            int at = leo_school_word_index(&leo->school, word);
-            uint32_t lived = leo_lexicon_count(&leo->model, word);
-            uint32_t heard = at >= 0 ? leo->school.word[at].heard : 0;
-            if (!leo_glyph_stop(word) && leo_school_glyph(leo, word) < 0 &&
-                ((lived <= LEO_SCHOOL_NOVEL_MAX &&
-                  heard <= LEO_SCHOOL_NOVEL_MAX) ||
-                 leo_word_in_bootstrap(word))) {
+            if (leo_school_askable(leo, word)) {
                 memcpy(unknown, word, (size_t)n + 1u);
                 return 1;
             }
@@ -1666,7 +1657,7 @@ static int leo_school_close_question(Leo *leo, const char *answer) {
         }
         leo_school_learn(leo, leo->school.pending, glyph);
     }
-    leo->school.pending[0] = 0;
+    memset(leo->school.pending, 0, sizeof leo->school.pending);
     leo->school.pending_glyph = -1;
     return 1;
 }
@@ -2682,6 +2673,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     leo->rng = header.rng;
     leo->n_moment = header.n_moment;
     leo->moment_cursor = header.moment_cursor;
+    leo_school_reconcile(leo);
     return leo_state_finite(leo);
 }
 

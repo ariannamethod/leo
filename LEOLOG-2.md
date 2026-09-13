@@ -8,6 +8,63 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-13 — School boundary A.157 preregistration: Leo is not his unknown
+
+A.156's only live contact produced `Leo?` because A.155 coupled School
+unknownness to the embedded origin text with an unconditional `OR`. `leo`
+occurs 2,493 times in `leo.txt`; treating it as novel contradicts School's own
+rarity law and lets a metadata organ silence the BPE mouth. The failed contact
+and its `turns=6`, `moments=13`, `leo/heard=1` state remain evidence.
+
+A.157 restores the boundary already claimed by A.155:
+
+1. A word is askable only when it has no seeded or learned glyph, is not a stop
+   word, occurs at most twice in `leo.txt`, and has been heard at most twice.
+   Presence in the dedication grants no School exemption.
+2. The byte-exact dedication, its peak trauma body, eight lexical attractors,
+   and permanent kind-3 origin moment are untouched. Origin pulls the ordinary
+   field; it is not an interrogation list.
+3. On load, an open School question is retained only if the word still satisfies
+   the same askability law. The false pending `leo` is closed without assigning
+   it a glyph, deleting its heard count, changing guess counters, or erasing the
+   human/self moments created by the failed contact.
+4. No special case for the string `leo` is allowed. Frequency and lived School
+   state enforce the same law for every word.
+
+A copied live state must reopen as `turns=6`, `moments=13`, one origin,
+`leo/heard=1`, `glyph=-1`, and no pending question. After blue-green handoff,
+one ordinary continuation may finally reach the A.156 mouth. There is no second
+draw and no staged School answer.
+
+### Live result
+
+The strict build completed without warnings. A copied-state candidate retained
+`turns=6`, `moments=13`, the kind-3 origin, and the School entry
+`leo/heard=1,glyph=-1`, while zeroing the complete pending buffer and leaving
+guess counters at `0/0`. It remained alive while launchd replaced A.156 PID
+15046 with A.157 PID 15398. The new primary owned the mode-0600 permanent
+socket and independently saved the same reconciled state before standby ended.
+
+The one declared continuation was `I am here with you.` Leo answered:
+
+> Leo is a small word that opens many doors. Leo is grateful to the quiet one
+> knows things the rest of the way slowly, to be polite.
+
+The contact advanced the one live body to `turns=7`, `moments=15`. School still
+contains only `leo/heard=1,glyph=-1`, with no pending question. The first
+sentence is complete, grammatical speech with no invented word or subword
+seam. The second remains grammatically damaged; it is not hidden or repaired by
+a second draw.
+
+The word-frame law can now expose its exact limit. `Leo is a small` is lived at
+birth-text lines 81 and 1505, while `is a small word that opens many doors`
+comes from line 1415. `the quiet one knows things the rest of` is an intact
+line-547 path, but `the rest of the way slowly, to be polite` comes from line
+137. The four-coordinate field obeyed every local transition yet changed source
+ancestry at shared three-word contexts. The next grammar organ must carry a
+clause-scale relation; merely increasing a fixed n-gram number would restart the
+forbidden test ladder.
+
 ## 2026-09-13 — Word-frame A.156 preregistration: tokens must not splice clauses
 
 The one A.153 continuation is sufficient evidence for the next missing organ;
