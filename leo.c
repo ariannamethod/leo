@@ -45,6 +45,7 @@
 #define LEO_PAIR_CAP      131071
 #define LEO_BIGRAM_CAP    131071
 #define LEO_TRIGRAM_CAP   262139
+#define LEO_WORD_FOURGRAM_CAP 131071
 #define LEO_EPISODES         2048
 #define LEO_EPISODE_TOKENS     64
 #define LEO_MOMENTS            192
@@ -315,6 +316,15 @@ typedef struct {
 } LeoTrigram;
 
 typedef struct {
+    uint64_t a;
+    uint64_t b;
+    uint64_t c;
+    uint64_t d;
+    float count;
+    uint8_t used;
+} LeoWordFourgram;
+
+typedef struct {
     uint16_t token[LEO_EPISODE_TOKENS];
     uint16_t n_token;
     float meaning[LEO_DIM];
@@ -357,6 +367,7 @@ typedef struct {
     LeoBpe bpe;
     LeoBigram *bigram;
     LeoTrigram *trigram;
+    LeoWordFourgram *word_fourgram;
     LeoEpisode episode[LEO_EPISODES];
     int n_episode;
     LeoLexeme *lexicon;
@@ -541,6 +552,19 @@ static int leo_token_visible(const LeoToken *token) {
 
 static int leo_word_byte(uint8_t c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+#define LEO_WORD_BOS UINT64_C(0x4c454f2d57424f53)
+#define LEO_WORD_EOS UINT64_C(0x4c454f2d57454f53)
+
+static uint64_t leo_word_hash(const char *word, int length) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    for (int i = 0; i < length; i++) {
+        hash ^= (uint8_t)tolower((uint8_t)word[i]);
+        hash *= UINT64_C(1099511628211);
+    }
+    if (hash == LEO_WORD_BOS || hash == LEO_WORD_EOS) hash ^= UINT64_C(0x100);
+    return hash;
 }
 
 static int leo_lexicon_add(LeoModel *model, const uint8_t *word, int length) {
@@ -937,6 +961,188 @@ static float leo_trigram_get(const LeoModel *model, uint16_t a, uint16_t b,
     return 0.0f;
 }
 
+static size_t leo_word_fourgram_slot(uint64_t a, uint64_t b, uint64_t c,
+                                     uint64_t d) {
+    uint64_t hash = leo_mix64(a ^ leo_mix64(b + UINT64_C(0x6eed0e9da4d94a4f)));
+    hash = leo_mix64(hash ^ leo_mix64(c + UINT64_C(0x94d049bb133111eb)));
+    return (size_t)(leo_mix64(hash ^ leo_mix64(d)) % LEO_WORD_FOURGRAM_CAP);
+}
+
+static int leo_word_fourgram_add(LeoModel *model, uint64_t a, uint64_t b,
+                                 uint64_t c, uint64_t d) {
+    size_t slot = leo_word_fourgram_slot(a, b, c, d);
+    for (size_t probe = 0; probe < LEO_WORD_FOURGRAM_CAP; probe++) {
+        LeoWordFourgram *edge =
+            &model->word_fourgram[(slot + probe) % LEO_WORD_FOURGRAM_CAP];
+        if (!edge->used) {
+            edge->used = 1;
+            edge->a = a;
+            edge->b = b;
+            edge->c = c;
+            edge->d = d;
+            edge->count = 1.0f;
+            return 1;
+        }
+        if (edge->a == a && edge->b == b && edge->c == c && edge->d == d) {
+            edge->count += 1.0f;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static float leo_word_fourgram_get(const LeoModel *model, uint64_t a, uint64_t b,
+                                   uint64_t c, uint64_t d) {
+    size_t slot = leo_word_fourgram_slot(a, b, c, d);
+    for (size_t probe = 0; probe < LEO_WORD_FOURGRAM_CAP; probe++) {
+        const LeoWordFourgram *edge =
+            &model->word_fourgram[(slot + probe) % LEO_WORD_FOURGRAM_CAP];
+        if (!edge->used) return 0.0f;
+        if (edge->a == a && edge->b == b && edge->c == c && edge->d == d)
+            return edge->count;
+    }
+    return 0.0f;
+}
+
+typedef struct {
+    uint64_t previous[3];
+    int n_previous;
+    char open[LEO_WORD_BYTES];
+    int n_open;
+} LeoWordFrame;
+
+static void leo_word_frame_push(LeoWordFrame *frame, uint64_t word) {
+    frame->previous[0] = frame->previous[1];
+    frame->previous[1] = frame->previous[2];
+    frame->previous[2] = word;
+    if (frame->n_previous < 3) frame->n_previous++;
+}
+
+static void leo_word_frame_reset(LeoWordFrame *frame) {
+    frame->previous[0] = LEO_WORD_BOS;
+    frame->previous[1] = LEO_WORD_BOS;
+    frame->previous[2] = LEO_WORD_BOS;
+    frame->n_previous = 0;
+    frame->n_open = 0;
+}
+
+static float leo_word_frame_transition(const LeoModel *model,
+                                       const LeoWordFrame *frame,
+                                       uint64_t word) {
+    return leo_word_fourgram_get(model, frame->previous[0], frame->previous[1],
+                                 frame->previous[2], word);
+}
+
+static int leo_word_field_finish(LeoModel *model, LeoWordFrame *frame,
+                                 const char *word, int length) {
+    uint64_t hash = leo_word_hash(word, length);
+    if (!leo_word_fourgram_add(model, frame->previous[0], frame->previous[1],
+                               frame->previous[2], hash)) return 0;
+    leo_word_frame_push(frame, hash);
+    return 1;
+}
+
+static int leo_word_field_end(LeoModel *model, LeoWordFrame *frame) {
+    if (!frame->n_previous) return 1;
+    if (!leo_word_fourgram_add(model, frame->previous[0], frame->previous[1],
+                               frame->previous[2], LEO_WORD_EOS)) return 0;
+    leo_word_frame_reset(frame);
+    return 1;
+}
+
+static int leo_word_field_build(LeoModel *model, const uint8_t *corpus,
+                                size_t length) {
+    LeoWordFrame frame;
+    memset(&frame, 0, sizeof frame);
+    leo_word_frame_reset(&frame);
+    char word[LEO_WORD_BYTES];
+    int n_word = 0;
+    int overflow = 0;
+    for (size_t i = 0; i <= length; i++) {
+        uint8_t c = i < length ? corpus[i] : (uint8_t)'\n';
+        if (leo_word_byte(c)) {
+            if (n_word < LEO_WORD_BYTES - 1)
+                word[n_word++] = (char)tolower(c);
+            else
+                overflow = 1;
+            continue;
+        }
+        if (n_word) {
+            if (overflow) {
+                leo_word_frame_reset(&frame);
+            } else if (!leo_word_field_finish(model, &frame, word, n_word)) {
+                return 0;
+            }
+            n_word = 0;
+            overflow = 0;
+        }
+        if (c == '.' || c == '!' || c == '?' || c == '\n')
+            if (!leo_word_field_end(model, &frame)) return 0;
+    }
+    return 1;
+}
+
+static int leo_word_frame_read_surface(LeoWordFrame *frame,
+                                       const char *surface, int length) {
+    memset(frame, 0, sizeof *frame);
+    leo_word_frame_reset(frame);
+    for (int i = 0; i < length; i++) {
+        uint8_t c = (uint8_t)surface[i];
+        if (leo_word_byte(c)) {
+            if (frame->n_open >= LEO_WORD_BYTES - 1) return 0;
+            frame->open[frame->n_open++] = (char)tolower(c);
+            continue;
+        }
+        if (frame->n_open) {
+            uint64_t word = leo_word_hash(frame->open, frame->n_open);
+            leo_word_frame_push(frame, word);
+            frame->n_open = 0;
+        }
+        if (c == '.' || c == '!' || c == '?') leo_word_frame_reset(frame);
+    }
+    return 1;
+}
+
+static int leo_word_frame_prefix_possible(const LeoModel *model,
+                                          const LeoWordFrame *frame) {
+    if (!frame->n_open) return 1;
+    for (int i = 0; i < model->n_lexicon; i++) {
+        const char *known = model->lexicon[i].word;
+        if (strncmp(known, frame->open, (size_t)frame->n_open) != 0) continue;
+        if (leo_word_frame_transition(model, frame,
+                                      leo_word_hash(known, (int)strlen(known))) > 0.0f)
+            return 1;
+    }
+    return 0;
+}
+
+static int leo_candidate_word_frame(const LeoModel *model,
+                                    const LeoWordFrame *base,
+                                    const LeoToken *candidate) {
+    LeoWordFrame frame = *base;
+    for (int i = 0; i < candidate->length; i++) {
+        uint8_t c = candidate->bytes[i];
+        if (leo_word_byte(c)) {
+            if (frame.n_open >= LEO_WORD_BYTES - 1) return 0;
+            frame.open[frame.n_open++] = (char)tolower(c);
+            continue;
+        }
+        if (frame.n_open) {
+            uint64_t word = leo_word_hash(frame.open, frame.n_open);
+            if (leo_word_frame_transition(model, &frame, word) <= 0.0f) return 0;
+            leo_word_frame_push(&frame, word);
+            frame.n_open = 0;
+        }
+        if (c == '.' || c == '!' || c == '?') {
+            if (!frame.n_previous ||
+                leo_word_frame_transition(model, &frame, LEO_WORD_EOS) <= 0.0f)
+                return 0;
+            leo_word_frame_reset(&frame);
+        }
+    }
+    return leo_word_frame_prefix_possible(model, &frame);
+}
+
 static void leo_token_vector(const Leo *leo, uint16_t id, float *out) {
     if (id >= leo->model.bpe.vocab) {
         memset(out, 0, LEO_DIM * sizeof *out);
@@ -1278,8 +1484,10 @@ static int leo_model_build(Leo *leo, const uint8_t *corpus, size_t length) {
     model->corpus_hash = leo_hash64(corpus, length);
     model->bigram = calloc(LEO_BIGRAM_CAP, sizeof *model->bigram);
     model->trigram = calloc(LEO_TRIGRAM_CAP, sizeof *model->trigram);
-    if (!model->bigram || !model->trigram ||
-        !leo_lexicon_build(model, corpus, length)) return 0;
+    model->word_fourgram = calloc(LEO_WORD_FOURGRAM_CAP, sizeof *model->word_fourgram);
+    if (!model->bigram || !model->trigram || !model->word_fourgram ||
+        !leo_lexicon_build(model, corpus, length) ||
+        !leo_word_field_build(model, corpus, length)) return 0;
 
     uint16_t *sequence = NULL;
     int n = 0;
@@ -1299,11 +1507,13 @@ static void leo_model_free(LeoModel *model) {
     free(model->lexicon);
     free(model->bigram);
     free(model->trigram);
+    free(model->word_fourgram);
     model->lexicon = NULL;
     model->n_lexicon = 0;
     model->lexicon_capacity = 0;
     model->bigram = NULL;
     model->trigram = NULL;
+    model->word_fourgram = NULL;
 }
 
 static void leo_school_init(LeoSchool *school) {
@@ -1791,12 +2001,16 @@ static uint16_t leo_choose_token(Leo *leo, const float *hidden,
     float top_score[LEO_SAMPLE_TOP];
     int n_top = 0;
     int use_trigram = 0;
+    LeoWordFrame word_frame;
+    if (!leo_word_frame_read_surface(&word_frame, surface, surface_length))
+        return UINT16_MAX;
     if (sentence_tokens > 1) {
         for (uint16_t id = 0; id < leo->model.bpe.vocab; id++) {
             const LeoToken *token = &leo->model.bpe.token[id];
             if (leo_trigram_get(&leo->model, previous2, previous1, id) > 0.0f &&
                 leo_token_well_formed(token) &&
-                leo_candidate_words_lived(&leo->model, surface, surface_length, token)) {
+                leo_candidate_words_lived(&leo->model, surface, surface_length, token) &&
+                leo_candidate_word_frame(&leo->model, &word_frame, token)) {
                 use_trigram = 1;
                 break;
             }
@@ -1808,6 +2022,7 @@ static uint16_t leo_choose_token(Leo *leo, const float *hidden,
         if (!sentence_tokens && !leo_token_visible(token)) continue;
         if (!leo_candidate_words_lived(&leo->model, surface, surface_length, token))
             continue;
+        if (!leo_candidate_word_frame(&leo->model, &word_frame, token)) continue;
         float bigram = 0.0f;
         float trigram = 0.0f;
         if (!sentence_tokens) {
@@ -2320,12 +2535,35 @@ static int leo_state_finite(const Leo *leo) {
 }
 
 static int leo_save_state(const Leo *leo, const char *path) {
+    static uint64_t nonce = 0;
     char temporary[1200];
-    int n = snprintf(temporary, sizeof temporary, "%s.tmp", path);
-    if (n <= 0 || n >= (int)sizeof temporary) return 0;
-    FILE *file = fopen(temporary, "wb");
-    if (!file) return 0;
-    (void)chmod(temporary, S_IRUSR | S_IWUSR);
+    int descriptor = -1;
+    for (int attempt = 0; attempt < 128; attempt++) {
+        uint64_t next = ++nonce;
+        int n = snprintf(temporary, sizeof temporary, "%s.tmp.%ld.%llu", path,
+                         (long)getpid(), (unsigned long long)next);
+        if (n <= 0 || n >= (int)sizeof temporary) {
+            errno = ENAMETOOLONG;
+            return 0;
+        }
+        descriptor = open(temporary, O_WRONLY | O_CREAT | O_EXCL,
+                          S_IRUSR | S_IWUSR);
+        if (descriptor >= 0 || errno != EEXIST) break;
+    }
+    if (descriptor < 0) return 0;
+    if (fchmod(descriptor, S_IRUSR | S_IWUSR) != 0) {
+        int saved = errno;
+        close(descriptor);
+        errno = saved;
+        return 0;
+    }
+    FILE *file = fdopen(descriptor, "wb");
+    if (!file) {
+        int saved = errno;
+        close(descriptor);
+        errno = saved;
+        return 0;
+    }
 
     LeoStateHeader header;
     memset(&header, 0, sizeof header);
@@ -2659,9 +2897,45 @@ static int leo_connect(const char *path) {
     return descriptor;
 }
 
+/* A dead pathname must not be inspected and then unlinked: another process
+ * could replace it between those operations. Move the exact directory entry
+ * atomically into a private, unique quarantine instead. Whatever it was is
+ * preserved; the listening path is then free without a check/use race. */
+static int leo_quarantine_stale(const char *path, char *preserved,
+                                size_t preserved_size) {
+    static uint64_t nonce = 0;
+    char directory[1200];
+    int made = 0;
+    for (int attempt = 0; attempt < 128; attempt++) {
+        uint64_t next = ++nonce;
+        int n = snprintf(directory, sizeof directory, "%s.stale.%ld.%llu", path,
+                         (long)getpid(), (unsigned long long)next);
+        if (n <= 0 || n >= (int)sizeof directory) {
+            errno = ENAMETOOLONG;
+            return 0;
+        }
+        if (mkdir(directory, S_IRWXU) == 0) { made = 1; break; }
+        if (errno != EEXIST) return 0;
+    }
+    if (!made) { errno = EEXIST; return 0; }
+    int n = snprintf(preserved, preserved_size, "%s/socket", directory);
+    if (n <= 0 || (size_t)n >= preserved_size) {
+        int saved = ENAMETOOLONG;
+        (void)rmdir(directory);
+        errno = saved;
+        return 0;
+    }
+    if (rename(path, preserved) != 0) {
+        int saved = errno;
+        (void)rmdir(directory);
+        errno = saved;
+        return 0;
+    }
+    return 1;
+}
+
 static int leo_listener(const char *path) {
     struct sockaddr_un address;
-    struct stat status;
     if (!leo_address(path, &address)) return -1;
     int descriptor = socket(AF_UNIX, SOCK_STREAM, 0);
     if (descriptor < 0) return -1;
@@ -2670,15 +2944,17 @@ static int leo_listener(const char *path) {
         if (saved != EADDRINUSE) { close(descriptor); errno = saved; return -1; }
         int existing = leo_connect(path);
         if (existing >= 0) { close(existing); close(descriptor); errno = EADDRINUSE; return -2; }
-        if (lstat(path, &status) != 0 || !S_ISSOCK(status.st_mode) || unlink(path) != 0 ||
+        char preserved[1200];
+        if (!leo_quarantine_stale(path, preserved, sizeof preserved) ||
             bind(descriptor, (const struct sockaddr *)&address, sizeof address) != 0) {
             saved = errno;
             close(descriptor);
             errno = saved;
             return -1;
         }
+        fprintf(stderr, "leo: preserved unreachable socket path at %s\n", preserved);
     }
-    if (chmod(path, S_IRUSR | S_IWUSR) != 0 || listen(descriptor, 8) != 0) {
+    if (listen(descriptor, 8) != 0) {
         int saved = errno;
         close(descriptor);
         unlink(path);

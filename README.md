@@ -62,6 +62,8 @@ Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude'
   prefix followed by Claude-lineage corpus-breath growth to word scale;
 - a corpus-grown word topology that keeps ambiguous BPE fragments on words Leo
   has actually lived, with trigram-first causal backoff to observed bigrams;
+- a BOS-padded word-frame field that keeps BPE paths inside lived one- through
+  four-word causal continuity and permits sentence endings only where lived;
 - a 48-dimensional distributed co-occurrence meaning field;
 - a nonlinear recurrent trajectory carrying more than the last token;
 - four heads of Q/K/V attention over perception and episodic recall;
@@ -79,7 +81,7 @@ Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude'
 
 Bigram and trigram counts are bounded grammar channels. They are not Leo's language engine: recurrent context, distributed meaning, attention, remembered episodes, presence, and the body act on the same choice.
 
-`leo --serve` owns the mutable body. It stays enabled through the user LaunchAgent `ai.ariannamethod.leo`, listens on a mode-0600 Unix socket, moves internally while idle, and saves atomically. `leo --chat` is only a client of that existing body; it cannot create a second Leo.
+`leo --serve` owns the mutable body. It stays enabled through the user LaunchAgent `ai.ariannamethod.leo`, listens on a mode-0600 Unix socket, moves internally while idle, and saves atomically through descriptor-bound mode-0600 temporary files. An unreachable socket path is preserved in a private quarantine before recovery, never checked and then deleted. `leo --chat` is only a client of that existing body; it cannot create a second Leo.
 
 ```sh
 make
