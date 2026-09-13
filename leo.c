@@ -36,7 +36,8 @@
 #define LEO_HEADS              4
 #define LEO_CHAMBERS           6
 #define LEO_BYTE_VOCAB       256
-#define LEO_MERGES           512
+#define LEO_FOUNDATION_MERGES 512
+#define LEO_MERGES          8192
 #define LEO_VOCAB_MAX        (LEO_BYTE_VOCAB + LEO_MERGES)
 #define LEO_TOKEN_BYTES       48
 #define LEO_WORD_BYTES        64
@@ -57,7 +58,7 @@
 #define LEO_LINE_BYTES        8192
 #define LEO_SAVE_SECONDS        30u
 
-#define LEO_STATE_VERSION        1u
+#define LEO_STATE_VERSION        2u
 #define LEO_LEGACY_MAGIC 0x5300454cu
 
 enum {
@@ -202,6 +203,11 @@ typedef struct {
     uint32_t count;
     uint8_t used;
 } LeoPairCount;
+
+typedef struct {
+    size_t slot;
+    uint32_t count;
+} LeoPairChoice;
 
 typedef struct {
     const uint16_t *token;
@@ -456,6 +462,87 @@ static size_t leo_pair_slot(uint32_t left, uint32_t right) {
     return (size_t)(leo_mix64(x) % LEO_PAIR_CAP);
 }
 
+static int leo_bpe_encode(const LeoBpe *bpe, const uint8_t *text, int length,
+                          uint16_t *output, int capacity);
+
+static int leo_pair_observe(LeoPairCount *pairs, uint32_t left, uint32_t right) {
+    size_t slot = leo_pair_slot(left, right);
+    for (size_t probe = 0; probe < LEO_PAIR_CAP; probe++) {
+        LeoPairCount *pair = &pairs[(slot + probe) % LEO_PAIR_CAP];
+        if (!pair->used) {
+            pair->used = 1;
+            pair->left = left;
+            pair->right = right;
+            pair->count = 1;
+            return 1;
+        }
+        if (pair->left == left && pair->right == right) {
+            if (pair->count < UINT32_MAX) pair->count++;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int leo_pair_choice_desc(const void *left, const void *right) {
+    const LeoPairChoice *a = left;
+    const LeoPairChoice *b = right;
+    if (a->count < b->count) return 1;
+    if (a->count > b->count) return -1;
+    return a->slot > b->slot ? 1 : (a->slot < b->slot ? -1 : 0);
+}
+
+static int leo_bpe_promote(LeoBpe *bpe, uint32_t left, uint32_t right) {
+    if (bpe->n_merge >= LEO_MERGES || bpe->vocab >= LEO_VOCAB_MAX ||
+        !leo_pair_can_merge(bpe, (int)left, (int)right)) return 0;
+    uint16_t made = bpe->vocab++;
+    LeoToken *dst = &bpe->token[made];
+    const LeoToken *a = &bpe->token[left];
+    const LeoToken *b = &bpe->token[right];
+    dst->length = (uint8_t)(a->length + b->length);
+    memcpy(dst->bytes, a->bytes, a->length);
+    memcpy(dst->bytes + a->length, b->bytes, b->length);
+    bpe->merge[bpe->n_merge++] = (LeoMerge){
+        (uint16_t)left, (uint16_t)right, made
+    };
+    return 1;
+}
+
+/* Claude Leo grows many word-scale merges per corpus breath. The first 512
+ * merges above remain the stable token-id foundation of the already living
+ * body; this batch continuation expands their grammar horizon without
+ * renumbering them. */
+static int leo_bpe_grow_batch(LeoBpe *bpe, LeoPairCount *pairs,
+                              LeoPairChoice *choice,
+                              const uint16_t *sequence, int n) {
+    for (int i = 0; i + 1 < n; i++) {
+        uint32_t left = sequence[i];
+        uint32_t right = sequence[i + 1];
+        if (leo_pair_can_merge(bpe, (int)left, (int)right))
+            (void)leo_pair_observe(pairs, left, right);
+    }
+
+    size_t n_choice = 0;
+    for (size_t slot = 0; slot < LEO_PAIR_CAP; slot++) {
+        LeoPairCount *pair = &pairs[slot];
+        if (!pair->used || pair->count < 3 ||
+            !leo_pair_can_merge(bpe, (int)pair->left, (int)pair->right)) continue;
+        choice[n_choice++] = (LeoPairChoice){slot, pair->count};
+    }
+    qsort(choice, n_choice, sizeof *choice, leo_pair_choice_desc);
+
+    int promoted = 0;
+    for (size_t i = 0; i < n_choice && bpe->n_merge < LEO_MERGES; i++) {
+        LeoPairCount *pair = &pairs[choice[i].slot];
+        if (pair->used && pair->count >= 3 &&
+            leo_bpe_promote(bpe, pair->left, pair->right)) {
+            pair->count = 0;
+            promoted++;
+        }
+    }
+    return promoted;
+}
+
 static int leo_bpe_train(LeoBpe *bpe, const uint8_t *text, size_t length,
                          uint16_t **encoded, int *encoded_length) {
     memset(bpe, 0, sizeof *bpe);
@@ -467,15 +554,17 @@ static int leo_bpe_train(LeoBpe *bpe, const uint8_t *text, size_t length,
     if (length > (size_t)INT32_MAX) return 0;
     uint16_t *sequence = malloc((length + 1) * sizeof *sequence);
     LeoPairCount *pairs = calloc(LEO_PAIR_CAP, sizeof *pairs);
-    if (!sequence || !pairs) {
+    LeoPairChoice *choice = malloc(LEO_PAIR_CAP * sizeof *choice);
+    if (!sequence || !pairs || !choice) {
         free(sequence);
         free(pairs);
+        free(choice);
         return 0;
     }
     int n = (int)length;
     for (int i = 0; i < n; i++) sequence[i] = text[i];
 
-    for (int pass = 0; pass < LEO_MERGES; pass++) {
+    for (int pass = 0; pass < LEO_FOUNDATION_MERGES; pass++) {
         memset(pairs, 0, LEO_PAIR_CAP * sizeof *pairs);
         for (int i = 0; i + 1 < n; i++) {
             uint32_t a = sequence[i];
@@ -526,7 +615,19 @@ static int leo_bpe_train(LeoBpe *bpe, const uint8_t *text, size_t length,
         }
         n = write_at;
     }
+
+    memset(pairs, 0, LEO_PAIR_CAP * sizeof *pairs);
+    for (size_t offset = 0; offset < length && bpe->n_merge < LEO_MERGES;
+         offset += 4096u) {
+        size_t left = length - offset;
+        int span = (int)(left > 4096u ? 4096u : left);
+        int chunk_n = leo_bpe_encode(bpe, text + offset, span, sequence, span);
+        (void)leo_bpe_grow_batch(bpe, pairs, choice, sequence, chunk_n);
+    }
+
+    n = leo_bpe_encode(bpe, text, (int)length, sequence, (int)length + 1);
     free(pairs);
+    free(choice);
     *encoded = sequence;
     *encoded_length = n;
     return 1;
@@ -1631,7 +1732,10 @@ static int leo_state_finite(const Leo *leo) {
         for (size_t i = 0; i < sizes[b]; i++) if (!isfinite(blocks[b][i])) return 0;
     for (uint32_t m = 0; m < leo->n_moment; m++) {
         const LeoMoment *moment = &leo->moment[m];
-        if (!isfinite(moment->strength)) return 0;
+        if (moment->n_token > LEO_MOMENT_TOKENS || !isfinite(moment->strength))
+            return 0;
+        for (uint16_t i = 0; i < moment->n_token; i++)
+            if (moment->token[i] >= leo->model.bpe.vocab) return 0;
         for (int d = 0; d < LEO_DIM; d++)
             if (!isfinite(moment->meaning[d]) || !isfinite(moment->context[d])) return 0;
         for (int c = 0; c < LEO_CHAMBERS; c++) if (!isfinite(moment->body[c])) return 0;
@@ -1662,6 +1766,7 @@ static int leo_save_state(const Leo *leo, const char *path) {
     header.n_moment = leo->n_moment;
     header.moment_cursor = leo->moment_cursor;
 
+    size_t state_vocab = leo->model.bpe.vocab;
     int ok = leo_write_block(file, &header, sizeof header) &&
              leo_write_block(file, leo->presence, sizeof leo->presence) &&
              leo_write_block(file, leo->retention, sizeof leo->retention) &&
@@ -1672,9 +1777,12 @@ static int leo_save_state(const Leo *leo, const char *path) {
              leo_write_block(file, leo->query, sizeof leo->query) &&
              leo_write_block(file, leo->key, sizeof leo->key) &&
              leo_write_block(file, leo->value, sizeof leo->value) &&
-             leo_write_block(file, leo->adaptation, sizeof leo->adaptation) &&
-             leo_write_block(file, leo->lived_context, sizeof leo->lived_context) &&
-             leo_write_block(file, leo->lived_count, sizeof leo->lived_count) &&
+             leo_write_block(file, leo->adaptation,
+                             state_vocab * sizeof leo->adaptation[0]) &&
+             leo_write_block(file, leo->lived_context,
+                             state_vocab * sizeof leo->lived_context[0]) &&
+             leo_write_block(file, leo->lived_count,
+                             state_vocab * sizeof leo->lived_count[0]) &&
              leo_write_block(file, leo->moment,
                              (size_t)leo->n_moment * sizeof leo->moment[0]);
     if (fflush(file) != 0) ok = 0;
@@ -1691,14 +1799,19 @@ static int leo_load_state(Leo *leo, const char *path) {
     LeoStateHeader header;
     int ok = leo_read_block(file, &header, sizeof header);
     if (!ok || memcmp(header.magic, LEO_STATE_MAGIC, sizeof header.magic) != 0 ||
-        header.version != LEO_STATE_VERSION || header.dimension != LEO_DIM ||
-        header.vocab != leo->model.bpe.vocab ||
+        (header.version != 1u && header.version != LEO_STATE_VERSION) ||
+        header.dimension != LEO_DIM ||
+        header.vocab < LEO_BYTE_VOCAB || header.vocab > leo->model.bpe.vocab ||
         header.moment_capacity != LEO_MOMENTS ||
         header.corpus_hash != leo->model.corpus_hash ||
         header.n_moment > LEO_MOMENTS) {
         fclose(file);
         return 0;
     }
+    memset(leo->adaptation, 0, sizeof leo->adaptation);
+    memset(leo->lived_context, 0, sizeof leo->lived_context);
+    memset(leo->lived_count, 0, sizeof leo->lived_count);
+    size_t state_vocab = header.vocab;
     ok = leo_read_block(file, leo->presence, sizeof leo->presence) &&
          leo_read_block(file, leo->retention, sizeof leo->retention) &&
          leo_read_block(file, leo->chamber, sizeof leo->chamber) &&
@@ -1708,9 +1821,12 @@ static int leo_load_state(Leo *leo, const char *path) {
          leo_read_block(file, leo->query, sizeof leo->query) &&
          leo_read_block(file, leo->key, sizeof leo->key) &&
          leo_read_block(file, leo->value, sizeof leo->value) &&
-         leo_read_block(file, leo->adaptation, sizeof leo->adaptation) &&
-         leo_read_block(file, leo->lived_context, sizeof leo->lived_context) &&
-         leo_read_block(file, leo->lived_count, sizeof leo->lived_count) &&
+         leo_read_block(file, leo->adaptation,
+                        state_vocab * sizeof leo->adaptation[0]) &&
+         leo_read_block(file, leo->lived_context,
+                        state_vocab * sizeof leo->lived_context[0]) &&
+         leo_read_block(file, leo->lived_count,
+                        state_vocab * sizeof leo->lived_count[0]) &&
          leo_read_block(file, leo->moment,
                         (size_t)header.n_moment * sizeof leo->moment[0]);
     fclose(file);

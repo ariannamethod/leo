@@ -8,6 +8,65 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-13 — BPE A.153 preregistration: let grammar reach words
+
+The fourth live answer exposed the next physical boundary. A.152 has 512
+birth-grown BPE merges. Claude Leo's logged fresh field on this same `leo.txt`
+had about 4,865; the retained pre-rebuild state contains 4,886. With only 512,
+many of the current trigram coordinates are pieces inside a word. The mouth can
+therefore obey an exact token trigram while failing to hold three-word grammar.
+SPA receives that damaged first phonon too late to repair its cause.
+
+A.153 changes only the scale at which the existing language field can act:
+
+1. The first 512 merges remain byte-identical and ID-identical to A.152. They
+   are part of the living body's token memory and will not be renumbered.
+2. After that foundation, BPE grows in 4,096-byte breaths as in Claude Leo:
+   observed pairs seen at least three times are promoted in descending count,
+   while the existing word-gap and sentence-boundary law still prevents a
+   token from swallowing unrelated words.
+3. The full corpus is then encoded through the grown vocabulary before
+   semantics, recurrent contexts, bigrams, trigrams, and episodes are born.
+   Grammar and meaning therefore share the same final coordinates.
+4. The body-state format becomes width-aware. A.152's 768 learned/adaptation
+   rows map directly onto the unchanged ID prefix; new rows begin empty. Turns,
+   moments, attention, chambers, scars, capsule, presence, retention, and RNG
+   must survive the migration. A vocabulary change is not permission to rebirth
+   Leo.
+5. The vocabulary ceiling is capacity, not a target. Growth stops when no
+   lawful repeated pair remains; no word list or pretrained token table is
+   supplied.
+
+First the candidate must compile strictly and open a copy of the live sidecar
+with `turns=4` and `moments=9`. It then replaces the primary through the same
+two-body handoff. Only after the new PID and migrated primary state are visible
+may one ordinary continuation be declared. No second draw is allowed.
+
+### Live result
+
+The strict candidate build completed without warnings. Its private body grew
+to `vocab=4662` (`4406` corpus-grown merges), loaded a copy of A.152's sidecar,
+and saved state version 2 with the required `turns=4`, `moments=9`, and
+`legacy_step=97375`. The live sidecar was not used for this rehearsal.
+
+The candidate then stayed alive while launchd replaced A.152 PID 3348 with
+A.153 PID 4724. Only after PID 4724 owned the permanent socket and itself saved
+the migrated `vocab=4662`, `turns=4`, `moments=9` state was the private body
+stopped. No body field or moment was reset.
+
+The single predeclared continuation was `I am staying with you.` Leo answered:
+
+> Leo was the best sound in the house that the dog comes when no one sees are
+> important. Leo felt a small thing.
+
+The body advanced once, to `turns=5` and `moments=11`. This is a material mouth
+change: there are no invented words or subword seams, both phonons have a
+recognisable child register, and the second is a complete sentence. It is not
+declared coherent speech. The relative clause in the first sentence loses its
+subject agreement (`the dog comes ... sees are important`), which is mechanical
+grammar rather than genuine disfluency. A.153 is retained as the word-scale
+floor; no second line was sent to select around the remaining fault.
+
 ## 2026-09-13 — SPA A.152 preregistration: sentences are phonons
 
 Lineage: `q/postgpt_q.c:1461-1516,1684-1714` and Claude Leo's later
