@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.ariannamethod.leo</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/ataeff/arianna-codex/repos/leo/leo</string>
+        <string>--serve</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/ataeff/arianna-codex/repos/leo</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>LEO_BIRTH</key>
+        <string>/Users/ataeff/arianna-codex/repos/leo/leo.txt</string>
+        <key>LEO_SOCKET</key>
+        <string>/Users/ataeff/Library/Application Support/Leo/leo.sock</string>
+        <key>LEO_STATE</key>
+        <string>/Users/ataeff/Library/Application Support/Leo/leo.state</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>/Users/ataeff/Library/Logs/Leo.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/ataeff/Library/Logs/Leo.error.log</string>
+</dict>
+</plist>

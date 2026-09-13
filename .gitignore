@@ -1,21 +1,10 @@
-# build artifacts
+# local build products
 leo
-leo.asan
-tests/test_leo
+leo.next
 *.o
 *.dSYM/
 
-# runtime state (regenerated from corpus + dialogue)
+# local runtime bodies
 *.state
-leo_mycelium/
-
-# AML bridge build artifacts (source is vendored; the .a/.o are built, not committed)
-ariannamethod/*.a
-ariannamethod/*.o
-
-# Local audit reports — never distributed (operational memory, not publication)
-AUDIT_*.md
-RUN_*.md
-
-# Build artifacts
-*.tsan
+*.state.*
+*.sock
