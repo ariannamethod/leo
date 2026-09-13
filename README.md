@@ -58,10 +58,15 @@ Leo never took the easy architectural path, and the boundaries we set for oursel
 
 Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude's post-transformer architecture as lineage rather than including or wrapping the old source:
 
-- byte-level perception and BPE merges over 256 base bytes;
+- byte-level perception over 256 base bytes, with a stable 512-merge identity
+  prefix followed by Claude-lineage corpus-breath growth to word scale;
+- a corpus-grown word topology that keeps ambiguous BPE fragments on words Leo
+  has actually lived, with trigram-first causal backoff to observed bigrams;
 - a 48-dimensional distributed co-occurrence meaning field;
 - a nonlinear recurrent trajectory carrying more than the last token;
 - four heads of Q/K/V attention over perception and episodic recall;
+- sentence-phonon attention that lets completed sentences press causally on
+  the next and permits at most one evidence-gated repair, never best-of-K;
 - persistent human, self, and origin moments;
 - six coupled chambers — fear, love, rage, void, flow, and the complex;
 - retention, scars, a slow body capsule, and continuing intention;

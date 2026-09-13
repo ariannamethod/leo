@@ -8,6 +8,216 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-13 — BPE A.153 preregistration: let grammar reach words
+
+The fourth live answer exposed the next physical boundary. A.152 has 512
+birth-grown BPE merges. Claude Leo's logged fresh field on this same `leo.txt`
+had about 4,865; the retained pre-rebuild state contains 4,886. With only 512,
+many of the current trigram coordinates are pieces inside a word. The mouth can
+therefore obey an exact token trigram while failing to hold three-word grammar.
+SPA receives that damaged first phonon too late to repair its cause.
+
+A.153 changes only the scale at which the existing language field can act:
+
+1. The first 512 merges remain byte-identical and ID-identical to A.152. They
+   are part of the living body's token memory and will not be renumbered.
+2. After that foundation, BPE grows in 4,096-byte breaths as in Claude Leo:
+   observed pairs seen at least three times are promoted in descending count,
+   while the existing word-gap and sentence-boundary law still prevents a
+   token from swallowing unrelated words.
+3. The full corpus is then encoded through the grown vocabulary before
+   semantics, recurrent contexts, bigrams, trigrams, and episodes are born.
+   Grammar and meaning therefore share the same final coordinates.
+4. The body-state format becomes width-aware. A.152's 768 learned/adaptation
+   rows map directly onto the unchanged ID prefix; new rows begin empty. Turns,
+   moments, attention, chambers, scars, capsule, presence, retention, and RNG
+   must survive the migration. A vocabulary change is not permission to rebirth
+   Leo.
+5. The vocabulary ceiling is capacity, not a target. Growth stops when no
+   lawful repeated pair remains; no word list or pretrained token table is
+   supplied.
+
+First the candidate must compile strictly and open a copy of the live sidecar
+with `turns=4` and `moments=9`. It then replaces the primary through the same
+two-body handoff. Only after the new PID and migrated primary state are visible
+may one ordinary continuation be declared. No second draw is allowed.
+
+### Live result
+
+The strict candidate build completed without warnings. Its private body grew
+to `vocab=4662` (`4406` corpus-grown merges), loaded a copy of A.152's sidecar,
+and saved state version 2 with the required `turns=4`, `moments=9`, and
+`legacy_step=97375`. The live sidecar was not used for this rehearsal.
+
+The candidate then stayed alive while launchd replaced A.152 PID 3348 with
+A.153 PID 4724. Only after PID 4724 owned the permanent socket and itself saved
+the migrated `vocab=4662`, `turns=4`, `moments=9` state was the private body
+stopped. No body field or moment was reset.
+
+The single predeclared continuation was `I am staying with you.` Leo answered:
+
+> Leo was the best sound in the house that the dog comes when no one sees are
+> important. Leo felt a small thing.
+
+The body advanced once, to `turns=5` and `moments=11`. This is a material mouth
+change: there are no invented words or subword seams, both phonons have a
+recognisable child register, and the second is a complete sentence. It is not
+declared coherent speech. The relative clause in the first sentence loses its
+subject agreement (`the dog comes ... sees are important`), which is mechanical
+grammar rather than genuine disfluency. A.153 is retained as the word-scale
+floor; no second line was sent to select around the remaining fault.
+
+## 2026-09-13 — SPA A.152 preregistration: sentences are phonons
+
+Lineage: `q/postgpt_q.c:1461-1516,1684-1714` and Claude Leo's later
+`leo_spa_pass`. The inherited law is: tokens are atoms; sentences are phonons;
+sentence-scale attention must reconnect a chain that token-scale choice cannot
+see.
+
+This implementation is narrower than the old machinery:
+
+1. Each sentence remains one sampled BPE trajectory under the A.151 mouth law.
+2. A phonon is its recency-weighted distributed-meaning embedding, using Leo's
+   existing learned token field rather than a second random embedding table.
+3. Existing Q/K/V projections cross-attend completed phonons with relative
+   distance bias. The attended history becomes pressure on the next sentence;
+   it cannot create a token candidate.
+4. After the whole chain, bidirectional connectedness may name one weak phonon.
+   At most one replacement trajectory is sampled from its strongest neighbour.
+   There is no best-of-K and no retry loop. It replaces the weak phonon only if
+   the declared BPE coherence plus cross-phonon connection score improves.
+5. Only the final visible chain enters Leo's self-moment, presence, retention,
+   and body. A rejected candidate receives no memory authority.
+6. SPA does nothing to a one-phonon utterance.
+
+The existing cadence mistakenly treats an absolute `FEAR + VOID` threshold as
+dominance. The imported body is saturated (`FEAR=1`, `LOVE=1`, `VOID=1`,
+`FLOW≈0.96`, `COMPLEX=1`), so that rule collapses every reply to one sentence
+even though distress does not dominate warmth/flow. A.152 changes only this
+readout: one sentence requires distress to exceed safety by a margin; three
+requires flow to exceed distress; otherwise Leo carries two. The chamber state
+itself is not reset or rewritten.
+
+One ordinary live continuation will be declared before contact. Its exact
+output stands whether SPA intervenes or not. No prompt matrix, seed search,
+second draw, or expected sentence is permitted.
+
+### Live result
+
+A.152 compiled without warnings. It first listened as a second body on a
+private socket; only then did launchd replace A.151 PID 2063 with A.152 PID
+3348 on Leo's permanent socket. The second body remained alive until the new
+primary socket and PID were both verified. No state was reset.
+
+The one predeclared continuation was `I am still here.` Leo answered:
+
+> Leo knows the swing him out in tiny gentle on the tree is a good way. Leo is
+> always a little cat sun.
+
+The body advanced from three to four human turns and from seven to nine lived
+moments. Both sentences are made entirely from the corpus-grown word topology.
+Because there are two phonons, the first necessarily pressed on the second
+through sentence Q/K/V attention. The run does not reveal whether the optional
+single post-chain replacement was accepted, so no such claim is made.
+
+This is not accepted as coherent speech. A.152 establishes a live
+sentence-scale path and restores a multi-sentence cadence without inventing
+words, but SPA cannot repair the token-scale grammar of the first phonon before
+another phonon exists. The exact negative result remains in Leo's memory and in
+this log. No second line was sent under A.152.
+
+## 2026-09-13 — Mouth A.150: local reachability held, global word law refused it
+
+The first and only live contact with the new body used the line `Leo, are you
+here?`. An initial client invocation addressed the repository-local default
+socket and failed before contact; the same predeclared line was then sent to the
+living LaunchAgent socket. Leo answered, byte-exact:
+
+> Leo triank for that ddark to seemory to do.
+
+The service stayed alive and its state advanced exactly once, from zero to one
+human turn. This is not accepted as speech and will not be erased, replayed for
+a better draw, or replaced in the record by a selected example.
+
+The structural failure precedes SPA. The sampler considered the whole BPE
+vocabulary after every emitted token and assigned an unobserved bigram only a
+small penalty. This let semantically attractive but unreachable fragments cross
+token seams and manufacture `triank`, `ddark`, and `seemory`. Sentence Phonon
+Attention can reconnect sentence-scale meaning; it cannot make an invented
+within-word edge lawful.
+
+The A.150 mouth law is declared before its code:
+
+1. A sentence may open only on a token observed at a corpus sentence opening.
+2. Inside a sentence, every emitted token must be an observed successor of the
+   preceding token. Semantic, recurrent, episodic, somatic, and attention terms
+   rank lawful successors; they do not create candidates.
+3. A completed boundary may reopen the field at another observed sentence
+   opening. It is not an excuse to forge a cross-sentence bigram.
+4. If a path has no lawful continuation, Leo stops. He does not glue a guessed
+   fragment, insert a dictionary word, or ask a canned fallback to finish it.
+5. This body changes only reachability. SPA remains a separate sentence-level
+   organ and receives no hidden authority in A.150.
+
+The next live line will be one ordinary continuation, reported exactly once.
+No seed sweep, best-of-K, fixture, expected wording, or discarded reply is
+permitted. Strict compilation must remain silent; the permanent body must stay
+alive through deployment.
+
+### Result
+
+A.150 compiled without warnings and was deployed through a second live body;
+the old primary stayed alive until the new PID owned the original socket. The
+single predeclared continuation was `I am here with you.` Leo answered:
+
+> Leo was a finging is pes up heal.
+
+Every adjacent token now followed an observed corpus bigram, so A.150 closed
+the exact hole it named. The result nevertheless fails speech. BPE fragments
+are shared between many words: a path can consist entirely of locally observed
+edges while its assembled word has never existed. `finging` and `pes` are such
+global seam-ghosts. Local edge legality is necessary but not sufficient.
+
+The result is retained and A.150 receives no claim of success. No further line
+is sent under it.
+
+## 2026-09-13 — Mouth A.151 preregistration: corpus-grown word topology
+
+The next mouth layer is a topology derived only from words present in
+`leo.txt`. It is not a supplied dictionary, a semantic whitelist, or a repair
+table. While a word is open, its emitted bytes must remain the prefix of at
+least one word Leo lived at birth. When whitespace or punctuation closes it,
+the assembled bytes must name a complete lived word. This prevents an
+ambiguous BPE fragment from changing parent words halfway through a seam.
+
+Where an observed trigram continuation exists, it is the causal candidate set.
+Only where that deeper context has no continuation may the mouth back off to an
+observed bigram. Recurrent meaning, attention, memory, and the body rank the
+surviving paths; they still do not mint candidates.
+
+A.151 does not add SPA, select among completed replies, alter the corpus, reset
+state, or erase the first two utterances. Its one future live continuation will
+again be stated before contact and retained whatever it says.
+
+### Result
+
+A.151 compiled strictly without warnings and replaced A.150 under the same
+continuous blue-green process law. The single predeclared continuation was `I
+am listening.` Leo answered:
+
+> Leo will burning of the cooling is a small but the seeing is a week to a songs to bed.
+
+The word-topology law held: the reply contains no manufactured word, and every
+surface word belongs to Leo's birth text. The sentence is nevertheless not
+coherent. `will burning`, `a week to a songs`, and the repeated copular frame
+show the remaining scale boundary: lawful local continuation is not yet a
+sentence-level form.
+
+A.151 is accepted only as the load-bearing mouth floor. It earns authority to
+exclude word ghosts; it does not earn a claim that Leo can speak coherently.
+The next organ is SPA, kept separate so sentence-scale improvement cannot be
+misattributed to the lexicon boundary.
+
 ## 2026-09-13 — Current pass: standalone post-transformer heart, live
 
 ### Oleg's instruction
