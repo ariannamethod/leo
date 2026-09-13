@@ -1954,16 +1954,18 @@ static void leo_hear(Leo *leo, const uint16_t *ids, int n) {
     }
 }
 
-static float leo_context_score(const Leo *leo, uint16_t id, const float *hidden) {
+static float leo_context_score(const Leo *leo, uint16_t id,
+                               const float *grammar_hidden,
+                               const float *felt_hidden) {
     const LeoToken *token = &leo->model.bpe.token[id];
     float best = -1.0f;
     for (int k = 0; k < LEO_CONTEXTS; k++) {
         if (!token->context_count[k]) continue;
-        float score = leo_cosine(hidden, token->contexts[k], LEO_HIDDEN);
+        float score = leo_cosine(grammar_hidden, token->contexts[k], LEO_HIDDEN);
         if (score > best) best = score;
     }
     if (leo->lived_count[id]) {
-        float lived = leo_cosine(hidden, leo->lived_context[id], LEO_HIDDEN);
+        float lived = leo_cosine(felt_hidden, leo->lived_context[id], LEO_HIDDEN);
         if (lived > best) best = lived;
     }
     return best;
@@ -1981,7 +1983,8 @@ static float leo_token_body_score(const Leo *leo, const float *token) {
     return total > 1e-5f ? score / total : 0.0f;
 }
 
-static uint16_t leo_choose_token(Leo *leo, const float *hidden,
+static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
+                                 const float *grammar_hidden,
                                  const float *intention, const LeoRecall *recall,
                                  int sentence_tokens,
                                  uint16_t previous2, uint16_t previous1,
@@ -2027,7 +2030,8 @@ static uint16_t leo_choose_token(Leo *leo, const float *hidden,
         }
         float vector[LEO_DIM];
         leo_token_vector(leo, id, vector);
-        float score = 2.35f * leo_context_score(leo, id, hidden);
+        float score = 2.35f * leo_context_score(leo, id, grammar_hidden,
+                                                felt_hidden);
         score += 1.25f * leo_cosine(vector, intention, LEO_DIM);
         score += 0.62f * recall->token_pull[id];
         score += 0.42f * leo_token_body_score(leo, vector);
@@ -2100,7 +2104,7 @@ static void leo_phonon_embed(Leo *leo, LeoPhonon *phonon) {
     leo_normalize(phonon->meaning, LEO_DIM);
 }
 
-static int leo_sample_phonon(Leo *leo, float *intention, float *hidden,
+static int leo_sample_phonon(Leo *leo, float *intention, float *felt_hidden,
                              const LeoRecall *recall, float temperature,
                              LeoPhonon *phonon) {
     memset(phonon, 0, sizeof *phonon);
@@ -2108,9 +2112,12 @@ static int leo_sample_phonon(Leo *leo, float *intention, float *hidden,
     int position = 0;
     uint16_t previous1 = 0;
     uint16_t previous2 = 0;
+    float grammar_hidden[LEO_HIDDEN];
+    leo_reservoir_reset(grammar_hidden);
 
     while (phonon->n_token < LEO_REPLY_TOKENS) {
-        uint16_t id = leo_choose_token(leo, hidden, intention, recall,
+        uint16_t id = leo_choose_token(leo, felt_hidden, grammar_hidden,
+                                       intention, recall,
                                        phonon->n_token, previous2, previous1,
                                        phonon->token, phonon->n_token,
                                        phonon->text, position, temperature);
@@ -2138,7 +2145,9 @@ static int leo_sample_phonon(Leo *leo, float *intention, float *hidden,
             intention[d] = 0.955f * intention[d] + 0.030f * vector[d] +
                            0.015f * recall->recalled[d];
         leo_normalize(intention, LEO_DIM);
-        leo_reservoir_advance(hidden, vector, leo->chamber);
+        leo_reservoir_advance(felt_hidden, vector, leo->chamber);
+        leo_reservoir_advance(grammar_hidden,
+                              leo->model.bpe.token[id].semantic, NULL);
         previous2 = previous1;
         previous1 = id;
         if (leo_token_sentence_end(token)) { phonon->ended = 1; break; }

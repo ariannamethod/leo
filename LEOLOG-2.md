@@ -8,6 +8,75 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-13 — Clause-body A.158 preregistration: grammar and feeling need two trajectories
+
+A.157's one generated answer showed both the gain and the remaining fracture:
+`Leo is a small word that opens many doors.` held, while the next phonon crossed
+from `the quiet one knows things the rest of Leo` into `the rest of the way
+slowly`. Increasing the word-frame order would only chase this occurrence with
+another fixed number. The recurrent context organ should already carry the
+whole clause, but its coordinates are currently inconsistent.
+
+At birth, every token's context prototypes are learned from a reservoir reset at
+the sentence boundary and advanced with corpus semantics and no soma. During
+speech, `leo_context_score` compares those prototypes to a different reservoir:
+it begins bent by prompt, presence, and retention, advances with the live body,
+and is carried into later phonons. Cosine between those two state spaces is not
+grammar evidence. Word frames then become the only reliable causal channel and
+can change ancestry wherever three surface words coincide.
+
+A.158 repairs the anatomy rather than adding a longer n-gram:
+
+1. Every phonon receives a local grammar trajectory reset exactly as it was at
+   corpus birth. It advances only through the unchanged corpus semantic vector
+   of each emitted BPE token, with no chamber drive.
+2. The existing felt trajectory remains separate. It still begins from the
+   present prompt/attention/presence field, advances through adapted lived token
+   meanings and soma, and carries SPA pressure between phonons.
+3. Corpus context prototypes are scored only against the grammar trajectory.
+   Persistent lived-context prototypes are scored only against the felt
+   trajectory. The better lawful resonance may speak, but neither coordinate
+   system is silently substituted for the other.
+4. The candidate topology is unchanged: BPE edges and the corpus-grown
+   word-frame still decide what is speakable. The new channel only restores the
+   long recurrent relation among those lawful candidates. It retrieves no
+   sentence, inserts no prompt token, and performs no alternate draw.
+5. No persistent layout changes. A copied state must remain v3, vocab 4662,
+   `turns=7`, `moments=15`, one origin, `leo/heard=1,glyph=-1`, and no pending
+   School question.
+
+After a strict build and copied-state birth, blue-green handoff will replace the
+live PID. One ordinary continuation will be kept as the only speech evidence.
+FORM remains a later body-to-breath organ; this checkpoint does not pretend
+cadence can repair a mismatched recurrent geometry.
+
+### Live result
+
+The strict build completed without warnings. The copied-state candidate opened
+v3 with vocab 4662, `turns=7`, `moments=15`, one kind-3 origin, the retained
+`leo/heard=1,glyph=-1` School entry, and no pending question. It remained alive
+while launchd replaced A.157 PID 15398 with A.158 PID 20924. The new primary
+owned the permanent mode-0600 socket and saved the unchanged `7/15` state before
+standby ended.
+
+The one declared continuation was `I am listening to you.` Leo answered:
+
+> He is a smell that goes deep. Leo did not like the word perhaps.
+
+Both phonons close as grammatical sentences without an invented word or BPE
+seam. The first carries `a smell that goes deep` from birth-text line 737. The
+second is not a retrieved corpus sentence: line 1009 says `Leo has begun to like
+the word perhaps`, while this body formed `Leo did not like the word perhaps`.
+The new utterance is a lawful recombination and changes the proposition rather
+than copying its source. No alternate draw was made.
+
+Live state advanced exactly once to `turns=8`, `moments=17`. School added the
+ordinary exposure `listening/heard=1,glyph=-1` beside `leo`, but did not ask:
+the word is common enough in the birth field. Pending remains empty and guess
+counters remain `0/0`. A.158 therefore restores a working clause-scale recurrent
+coordinate without claiming polished semantics. The next independent organ is
+Claude FORM: the settled body must acquire a discrete, persistent breath.
+
 ## 2026-09-13 — School boundary A.157 preregistration: Leo is not his unknown
 
 A.156's only live contact produced `Leo?` because A.155 coupled School
