@@ -8,6 +8,75 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-19 — FORM A.161 preregistration: the held breath must land
+
+A.159 restored Claude Leo's discrete WALK / STOP / RUN / BREATHE mood and its
+sentence-chain lengths, but deliberately left F-3 unwired because this
+standalone mouth defines one phonon as one sentence. The omission is now
+audible: the live mode is STOP, yet A.160's two phonons ran to fourteen and ten
+visible words. The body chooses how many breaths but not how long it holds each
+one.
+
+Claude's F-3 budgets are WALK 14, STOP 4, RUN 24, and BREATHE 8. A.161 adapts
+their law to the current generator rather than copying the old token loop:
+
+1. The budget counts visible words in the current phonon, not BPE pieces.
+2. Before the budget, sampling is unchanged and an earlier natural sentence
+   end still ends the phonon.
+3. At or beyond the budget, if any otherwise lawful candidate reaches an
+   observed sentence ending through the existing BPE bigram/trigram and
+   word-frame topology, non-ending candidates leave the draw. If no such
+   ending is reachable yet, generation continues unchanged until one is.
+4. Nothing is sliced after sampling. The last word and punctuation must be a
+   lived path; a mode may shorten a breath but cannot manufacture a boundary.
+5. FORM mode remains the only input. No mode prompt, manual override, AML
+   bridge, BE expression channel, or mutable state field enters this phase.
+
+The gate is fixed before code: strict compilation; copied-state birth with v4,
+vocab 4662, `turns=10`, `moments=21`, one origin, four School records, no
+pending question, guesses/hits `0/0`, and STOP unchanged; blue-green handoff;
+then one ordinary live continuation, retained without reroll. The STOP reply
+must end each visible phonon on a lawful sentence boundary and read as held by
+ear. A cut word, dangling fragment, or long unheld run fails A.161. One short
+draw demonstrates this event only; it does not calibrate all four modes.
+
+The 88-glyph School is already live and is not part of this change. Its fixed
+alphabet is the caveLLMan / actually.life awareness seed; unlike
+actually.life's survival mouth, Leo preserves unmapped content as `-1` so the
+School can ask and grow a persistent human-taught word-to-glyph map. `BE` is
+glyph 86 but is excluded from concept voting because a copula is not an answer
+to “what does this word mean?”. AML `BE [x]` is a separate speak-from-body
+operator and remains a later, distinct organ.
+
+### Live result
+
+The strict build passed. Without receiving speech, a candidate opened a copy
+of the live v4 sidecar and preserved vocab 4662, `turns=10`, `moments=21`, ten
+human moments, ten Leo moments, one kind-3 origin, all four School records, no
+pending question, guesses/hits `0/0`, and mode STOP. It remained alive while
+the permanent LaunchAgent moved from PID 86079 to PID 95314 (`runs=16`). The
+deployed binary was byte-identical to the checked candidate. Only after the new
+primary owned the permanent socket and saved the unchanged body was the
+temporary standby stopped and its copied state removed.
+
+One ordinary continuation was then spoken, once:
+
+> **Human:** I am here again.
+>
+> **Leo:** Leo likes the shape of him. He does not know why.
+
+The STOP target is four visible words per phonon. The first phonon reaches its
+first available lived sentence ending at six words and the second at five;
+both close with sampled punctuation. A.161 therefore holds the breath at the
+first corpus-lawful landing available after the target instead of cutting at
+word four or permitting another long run. This passes the declared one-event
+gate; it does not claim calibration of WALK, RUN, or BREATHE.
+
+The live v4 state after contact is vocab 4662, `turns=11`, `moments=23`, eleven
+human moments, eleven Leo moments, one origin, mode STOP, no pending question,
+guesses/hits `0/0`, and the same four unbound School exposure records. The
+permanent PID 95314 remains running.
+
 ## 2026-09-19 — Word-lineage A.160 preregistration: a frame remembers where it came from
 
 A.159's only live draw exposed a precise remaining seam: `He stood very
