@@ -1223,9 +1223,15 @@ static int leo_surface_word_count(const char *surface, int length) {
     int words = 0;
     int inside = 0;
     for (int i = 0; i < length; i++) {
-        int word = leo_word_byte((uint8_t)surface[i]);
-        if (word && !inside) words++;
-        inside = word;
+        uint8_t c = (uint8_t)surface[i];
+        if (leo_word_byte(c)) {
+            if (!inside) words++;
+            inside = 1;
+            continue;
+        }
+        int joiner = (c == '\'' || c == '-') && inside && i + 1 < length &&
+                     leo_word_byte((uint8_t)surface[i + 1]);
+        if (!joiner) inside = 0;
     }
     return words;
 }
