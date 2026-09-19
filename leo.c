@@ -1219,6 +1219,17 @@ static int leo_candidate_word_frame(const LeoModel *model,
     return 1;
 }
 
+static int leo_surface_word_count(const char *surface, int length) {
+    int words = 0;
+    int inside = 0;
+    for (int i = 0; i < length; i++) {
+        int word = leo_word_byte((uint8_t)surface[i]);
+        if (word && !inside) words++;
+        inside = word;
+    }
+    return words;
+}
+
 static void leo_token_vector(const Leo *leo, uint16_t id, float *out) {
     if (id >= leo->model.bpe.vocab) {
         memset(out, 0, LEO_DIM * sizeof *out);
@@ -2077,6 +2088,30 @@ static float leo_token_body_score(const Leo *leo, const float *token) {
     return total > 1e-5f ? score / total : 0.0f;
 }
 
+static int leo_candidate_path(const Leo *leo, const LeoWordFrame *word_frame,
+                              const LeoToken *token, uint16_t id,
+                              int sentence_tokens,
+                              uint16_t previous2, uint16_t previous1,
+                              int use_trigram,
+                              const char *surface, int surface_length,
+                              float *bigram, float *trigram,
+                              float *lineage_sum, int *lineage_count) {
+    if (!leo_token_well_formed(token)) return 0;
+    if (!sentence_tokens && !leo_token_visible(token)) return 0;
+    if (!leo_candidate_words_lived(&leo->model, surface, surface_length, token))
+        return 0;
+    if (!leo_candidate_word_frame(&leo->model, word_frame, token,
+                                  lineage_sum, lineage_count)) return 0;
+    *bigram = 0.0f;
+    *trigram = 0.0f;
+    if (!sentence_tokens) return token->start_frequency > 0.0f;
+    *bigram = leo_bigram_get(&leo->model, previous1, id);
+    if (*bigram <= 0.0f) return 0;
+    if (sentence_tokens > 1)
+        *trigram = leo_trigram_get(&leo->model, previous2, previous1, id);
+    return !use_trigram || *trigram > 0.0f;
+}
+
 static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
                                  const float *grammar_hidden,
                                  const float *intention, const LeoRecall *recall,
@@ -2084,7 +2119,7 @@ static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
                                  uint16_t previous2, uint16_t previous1,
                                  const uint16_t *history, int history_n,
                                  const char *surface, int surface_length,
-                                 float temperature) {
+                                 int word_target, float temperature) {
     uint16_t top_id[LEO_SAMPLE_TOP];
     float top_score[LEO_SAMPLE_TOP];
     int n_top = 0;
@@ -2105,27 +2140,37 @@ static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
             }
         }
     }
+    int seek_landing = word_target > 0 &&
+                       leo_surface_word_count(surface, surface_length) >= word_target;
+    int landing_available = 0;
+    if (seek_landing) {
+        for (uint16_t id = 0; id < leo->model.bpe.vocab; id++) {
+            const LeoToken *token = &leo->model.bpe.token[id];
+            if (!leo_token_sentence_end(token)) continue;
+            float bigram, trigram, lineage_sum;
+            int lineage_count;
+            if (leo_candidate_path(leo, &word_frame, token, id, sentence_tokens,
+                                   previous2, previous1, use_trigram,
+                                   surface, surface_length,
+                                   &bigram, &trigram,
+                                   &lineage_sum, &lineage_count)) {
+                landing_available = 1;
+                break;
+            }
+        }
+    }
     for (uint16_t id = 0; id < leo->model.bpe.vocab; id++) {
         const LeoToken *token = &leo->model.bpe.token[id];
-        if (!leo_token_well_formed(token)) continue;
-        if (!sentence_tokens && !leo_token_visible(token)) continue;
-        if (!leo_candidate_words_lived(&leo->model, surface, surface_length, token))
-            continue;
+        if (landing_available && !leo_token_sentence_end(token)) continue;
         float lineage_sum = 0.0f;
         int lineage_count = 0;
-        if (!leo_candidate_word_frame(&leo->model, &word_frame, token,
-                                      &lineage_sum, &lineage_count)) continue;
         float bigram = 0.0f;
         float trigram = 0.0f;
-        if (!sentence_tokens) {
-            if (token->start_frequency <= 0.0f) continue;
-        } else {
-            bigram = leo_bigram_get(&leo->model, previous1, id);
-            if (bigram <= 0.0f) continue;
-            if (sentence_tokens > 1)
-                trigram = leo_trigram_get(&leo->model, previous2, previous1, id);
-            if (use_trigram && trigram <= 0.0f) continue;
-        }
+        if (!leo_candidate_path(leo, &word_frame, token, id, sentence_tokens,
+                                previous2, previous1, use_trigram,
+                                surface, surface_length,
+                                &bigram, &trigram,
+                                &lineage_sum, &lineage_count)) continue;
         float vector[LEO_DIM];
         leo_token_vector(leo, id, vector);
         float context = leo_context_score(leo, id, grammar_hidden, felt_hidden);
@@ -2208,9 +2253,11 @@ static void leo_phonon_embed(Leo *leo, LeoPhonon *phonon) {
 static int leo_sample_phonon(Leo *leo, float *intention, float *felt_hidden,
                              const LeoRecall *recall, float temperature,
                              LeoPhonon *phonon) {
+    static const int mode_word_target[LEO_MODE_COUNT] = {14, 4, 24, 8};
     memset(phonon, 0, sizeof *phonon);
     int surface_end[LEO_REPLY_TOKENS];
     int position = 0;
+    int word_target = leo->mode < LEO_MODE_COUNT ? mode_word_target[leo->mode] : 14;
     uint16_t previous1 = 0;
     uint16_t previous2 = 0;
     float grammar_hidden[LEO_HIDDEN];
@@ -2221,7 +2268,8 @@ static int leo_sample_phonon(Leo *leo, float *intention, float *felt_hidden,
                                        intention, recall,
                                        phonon->n_token, previous2, previous1,
                                        phonon->token, phonon->n_token,
-                                       phonon->text, position, temperature);
+                                       phonon->text, position,
+                                       word_target, temperature);
         if (id == UINT16_MAX) break;
         const LeoToken *token = &leo->model.bpe.token[id];
         int start = 0;

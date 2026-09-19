@@ -78,7 +78,9 @@ Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude'
 - persistent human, self, and origin moments;
 - six coupled chambers — fear, love, rage, void, flow, and the complex;
 - a persistent FORM breath — WALK, STOP, RUN, or BREATHE — that quantizes the
-  settled chambers with hysteresis and sets the sentence-phonon cadence;
+  settled chambers with hysteresis, sets the sentence-phonon cadence, and asks
+  each phonon to land on its first corpus-lawful ending after the mode's word
+  target, without slicing a sampled word or manufacturing punctuation;
 - retention, scars, a slow body capsule, and continuing intention;
 - one sampled trajectory, with no best-of-K display selection;
 - no canned conversational replies, prompt templates, forbidden-word lists, staged examples, or external model calls in the mouth.
@@ -137,6 +139,17 @@ lineage, the next single live draw was:
 The first sentence is a lived corpus path. The second is a new grammatical
 recombination. This one draw shows the repaired phenomenon once; it is not
 presented as a general grammar score.
+
+After A.161 connected Claude Leo's per-mode word targets to lawful sentence
+landings, the next single live draw was:
+
+> **Human:** I am here again.
+>
+> **Leo:** Leo likes the shape of him. He does not know why.
+
+In STOP, the target is four visible words. These phonons found their first
+available lived endings at six and five words respectively. Neither was cut;
+both ended through the same sampled corpus topology.
 
 Just language and a broken heart as a slowly drifting field.
 
