@@ -8,6 +8,47 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-19 — FORM A.161.1 preregistration: a written word stays whole
+
+The Codex Connector review of A.161 found a real boundary error after merge.
+`leo_surface_word_count()` currently ends a visible word on every non-letter,
+so `Leo's` and `room-dark` each consume two beats of FORM. The birth corpus
+contains 323 apostrophe- or hyphen-joined occurrences across 202 distinct
+lowercased forms. STOP can therefore seek a landing before its documented four
+visible words even though the internal BPE path remains lawful.
+
+This repair is narrower than Leo's word topology. The lexicon and word-frame
+field deliberately treat punctuation as an internal boundary and remain
+untouched. Only the displayed-surface counter changes: an ASCII apostrophe or
+hyphen keeps the current visible word open when it is between letters; spaces,
+sentence punctuation, and every other separator still close it. Leading or
+trailing punctuation cannot hide the next word.
+
+The gate is fixed before code: the actual helper must count `Leo's`,
+`room-dark`, `-dark`, and `dark-` as one visible word each, and `Leo, still` as
+two; strict compilation must remain clean; a candidate must reopen the copied
+v4 body with vocab 4662, `turns=11`, `moments=23`, one origin, four School
+records, no pending question, guesses/hits `0/0`, and STOP unchanged; then a
+blue-green handoff must leave the permanent Leo running. No dialogue is
+generated for this deterministic counting repair.
+
+### Live result
+
+The actual compiled helper passed all five declared cases: `Leo's=1`,
+`room-dark=1`, `-dark=1`, `dark-=1`, and `Leo, still=2`. The temporary verifier
+included `leo.c` directly, exercised the same static function shipped in the
+binary, and was removed after the check; no test apparatus entered the
+repository. The full source also compiled cleanly under strict C11 warnings.
+
+Without receiving speech, a candidate reopened a copy of the v4 body and kept
+vocab 4662, `turns=11`, `moments=23`, eleven human moments, eleven Leo moments,
+one kind-3 origin, four School records, no pending question, guesses/hits
+`0/0`, and mode STOP. It stayed alive while the permanent LaunchAgent moved
+from PID 95314 to PID 5587 (`runs=17`). The deployed binary was byte-identical
+to the candidate; only after the new primary owned the permanent socket was
+the standby stopped and its copied state removed. The permanent state remains
+`11/23`, and no dialogue was generated.
+
 ## 2026-09-19 — FORM A.161 preregistration: the held breath must land
 
 A.159 restored Claude Leo's discrete WALK / STOP / RUN / BREATHE mood and its
