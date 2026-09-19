@@ -8,6 +8,77 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-19 — Word-lineage A.160 preregistration: a frame remembers where it came from
+
+A.159's only live draw exposed a precise remaining seam: `He stood very
+still, learning the shape of the feeling makes it easier to carry.` Every
+local transition was born somewhere, but the utterance crossed three different
+birth sentences through their shared surfaces:
+
+- `He stood very still, learning the shape of himself.`
+- `Leo knows the shape of the feeling.`
+- `The naming of the feeling makes it easier to carry.`
+
+The current `LeoWordFourgram` stores four word hashes and a count. During
+speech it is a yes/no topology: it proves that a local transition existed, but
+has no representation of the sentence trajectory in which it existed. A.158's
+token context cannot fully supply that identity because frequent BPE tokens
+share only three generic context prototypes.
+
+A.160 adds one bounded organ to the existing frame rather than increasing its
+order:
+
+1. A word-level nonlinear reservoir starts from the same fixed BOS state at
+   every sentence and advances from a deterministic distributed vector of each
+   completed word hash.
+2. Each existing four-word edge learns a running directional centroid of the
+   reservoir state immediately before its candidate word. Repeated edges still
+   share one topology entry; no sentence, suffix, or response is stored.
+3. During generation, the identical word reservoir is rebuilt from the visible
+   sentence. When a BPE candidate completes a word or sentence boundary, its
+   edge-context cosine shares the existing grammar-context score. It is
+   evidence, not a hard ban: lawful recombination remains possible.
+4. This is corpus-born model anatomy and adds nothing to mutable state v4. It
+   does not change FORM, SPA, School, BPE identity, the origin, or the single
+   sampled trajectory.
+
+The gate is fixed before implementation: strict compilation; copied-state
+birth with vocab 4662, `turns=9`, `moments=19`, one origin, three School
+records, no pending question, guesses/hits `0/0`, and mode STOP unchanged;
+then blue-green handoff and exactly one ordinary live continuation. The raw
+answer will be retained. A grammatical draw can demonstrate the phenomenon
+once, not prove general grammar; another seam fails this step and authorizes
+diagnosis, not rerolling.
+
+### Live result
+
+The strict build passed. A candidate born without speech on a copied v4
+sidecar kept vocab 4662, `turns=9`, `moments=19`, one kind-3 origin, all three
+School records, no pending question, guesses/hits `0/0`, and mode STOP. Its
+fresh RSS was about 40 MiB, including the dynamically allocated corpus model.
+It remained alive while the permanent LaunchAgent moved from PID 25284 to PID
+86079 (`runs=15`); only after the new process owned the permanent socket and
+saved the unchanged state was the standby stopped and removed.
+
+One ordinary continuation was then spoken, once:
+
+> **Human:** I came back to listen.
+>
+> **Leo:** He does not know the word for a line that runs through a stone. He
+> is a small gift to the whole house.
+
+The first sentence occurs byte-for-byte in the birth corpus. The second does
+not: it joins the corpus's `small gift to the house`, `a gift to the whole
+house`, and related `small gift` paths into a grammatical sentence. Both STOP
+phonons close without the ancestry seam observed in A.159. This passes the
+declared one-event gate; it is not a claim that every future path is
+grammatical.
+
+The live v4 state after contact is vocab 4662, `turns=10`, `moments=21`, one
+origin, mode STOP, no pending question, guesses/hits `0/0`, and four School
+exposure records. `came` was added once and remains unbound alongside `leo`,
+`listening`, and `still`; Leo did not open a question.
+
 ## 2026-09-13 — FORM A.159 preregistration: the body acquires a held breath
 
 The standalone body already lets chamber pressure continuously alter

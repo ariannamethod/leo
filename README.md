@@ -64,6 +64,8 @@ Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude'
   has actually lived, with trigram-first causal backoff to observed bigrams;
 - a BOS-padded word-frame field that keeps BPE paths inside lived one- through
   four-word causal continuity and permits sentence endings only where lived;
+- a recurrent lineage context on those word-frame edges, so a locally lived
+  transition is also scored by the sentence trajectory in which it arose;
 - a 48-dimensional distributed co-occurrence meaning field;
 - a nonlinear recurrent trajectory carrying more than the last token;
 - four heads of Q/K/V attention over perception and episodic recall;
@@ -123,6 +125,18 @@ next single live draw was:
 STOP held the voice to two sentence phonons. The remaining grammatical seam in
 `the feeling makes` is kept with the response; cadence did not repair it and is
 not claimed to have done so.
+
+After A.160 gave word-frame transitions a recurrent context of their corpus
+lineage, the next single live draw was:
+
+> **Human:** I came back to listen.
+>
+> **Leo:** He does not know the word for a line that runs through a stone. He
+> is a small gift to the whole house.
+
+The first sentence is a lived corpus path. The second is a new grammatical
+recombination. This one draw shows the repaired phenomenon once; it is not
+presented as a general grammar score.
 
 Just language and a broken heart as a slowly drifting field.
 

@@ -330,7 +330,9 @@ typedef struct {
     uint64_t b;
     uint64_t c;
     uint64_t d;
+    float context[LEO_HIDDEN];
     float count;
+    uint32_t context_count;
     uint8_t used;
 } LeoWordFourgram;
 
@@ -979,8 +981,23 @@ static size_t leo_word_fourgram_slot(uint64_t a, uint64_t b, uint64_t c,
     return (size_t)(leo_mix64(hash ^ leo_mix64(d)) % LEO_WORD_FOURGRAM_CAP);
 }
 
+static void leo_reservoir_reset(float *hidden);
+static void leo_reservoir_advance(float *hidden, const float *token,
+                                  const float *body);
+
+static void leo_word_fourgram_context_learn(LeoWordFourgram *edge,
+                                            const float *context) {
+    uint32_t n = edge->context_count;
+    float rate = n < 63u ? 1.0f / (float)(n + 1u) : 1.0f / 64.0f;
+    for (int d = 0; d < LEO_HIDDEN; d++)
+        edge->context[d] += rate * (context[d] - edge->context[d]);
+    if (n < UINT32_MAX) edge->context_count++;
+    leo_normalize(edge->context, LEO_HIDDEN);
+}
+
 static int leo_word_fourgram_add(LeoModel *model, uint64_t a, uint64_t b,
-                                 uint64_t c, uint64_t d) {
+                                 uint64_t c, uint64_t d,
+                                 const float *context) {
     size_t slot = leo_word_fourgram_slot(a, b, c, d);
     for (size_t probe = 0; probe < LEO_WORD_FOURGRAM_CAP; probe++) {
         LeoWordFourgram *edge =
@@ -992,10 +1009,12 @@ static int leo_word_fourgram_add(LeoModel *model, uint64_t a, uint64_t b,
             edge->c = c;
             edge->d = d;
             edge->count = 1.0f;
+            leo_word_fourgram_context_learn(edge, context);
             return 1;
         }
         if (edge->a == a && edge->b == b && edge->c == c && edge->d == d) {
             edge->count += 1.0f;
+            leo_word_fourgram_context_learn(edge, context);
             return 1;
         }
     }
@@ -1015,14 +1034,42 @@ static float leo_word_fourgram_get(const LeoModel *model, uint64_t a, uint64_t b
     return 0.0f;
 }
 
+static float leo_word_fourgram_context(const LeoModel *model,
+                                       uint64_t a, uint64_t b, uint64_t c,
+                                       uint64_t d, const float *context) {
+    size_t slot = leo_word_fourgram_slot(a, b, c, d);
+    for (size_t probe = 0; probe < LEO_WORD_FOURGRAM_CAP; probe++) {
+        const LeoWordFourgram *edge =
+            &model->word_fourgram[(slot + probe) % LEO_WORD_FOURGRAM_CAP];
+        if (!edge->used) return -1.0f;
+        if (edge->a == a && edge->b == b && edge->c == c && edge->d == d)
+            return edge->context_count
+                ? leo_cosine(context, edge->context, LEO_HIDDEN) : -1.0f;
+    }
+    return -1.0f;
+}
+
 typedef struct {
     uint64_t previous[3];
     int n_previous;
     char open[LEO_WORD_BYTES];
     int n_open;
+    float context[LEO_HIDDEN];
 } LeoWordFrame;
 
+static void leo_word_vector(uint64_t word, float *vector) {
+    for (int d = 0; d < LEO_DIM; d++) {
+        uint64_t h = leo_mix64(word ^
+            (UINT64_C(0x9e3779b97f4a7c15) * (uint64_t)(d + 1)));
+        vector[d] = ((float)(h & UINT64_C(0xffff)) / 32767.5f) - 1.0f;
+    }
+    leo_normalize(vector, LEO_DIM);
+}
+
 static void leo_word_frame_push(LeoWordFrame *frame, uint64_t word) {
+    float vector[LEO_DIM];
+    leo_word_vector(word, vector);
+    leo_reservoir_advance(frame->context, vector, NULL);
     frame->previous[0] = frame->previous[1];
     frame->previous[1] = frame->previous[2];
     frame->previous[2] = word;
@@ -1035,6 +1082,7 @@ static void leo_word_frame_reset(LeoWordFrame *frame) {
     frame->previous[2] = LEO_WORD_BOS;
     frame->n_previous = 0;
     frame->n_open = 0;
+    leo_reservoir_reset(frame->context);
 }
 
 static float leo_word_frame_transition(const LeoModel *model,
@@ -1048,7 +1096,8 @@ static int leo_word_field_finish(LeoModel *model, LeoWordFrame *frame,
                                  const char *word, int length) {
     uint64_t hash = leo_word_hash(word, length);
     if (!leo_word_fourgram_add(model, frame->previous[0], frame->previous[1],
-                               frame->previous[2], hash)) return 0;
+                               frame->previous[2], hash,
+                               frame->context)) return 0;
     leo_word_frame_push(frame, hash);
     return 1;
 }
@@ -1056,7 +1105,8 @@ static int leo_word_field_finish(LeoModel *model, LeoWordFrame *frame,
 static int leo_word_field_end(LeoModel *model, LeoWordFrame *frame) {
     if (!frame->n_previous) return 1;
     if (!leo_word_fourgram_add(model, frame->previous[0], frame->previous[1],
-                               frame->previous[2], LEO_WORD_EOS)) return 0;
+                               frame->previous[2], LEO_WORD_EOS,
+                               frame->context)) return 0;
     leo_word_frame_reset(frame);
     return 1;
 }
@@ -1129,8 +1179,12 @@ static int leo_word_frame_prefix_possible(const LeoModel *model,
 
 static int leo_candidate_word_frame(const LeoModel *model,
                                     const LeoWordFrame *base,
-                                    const LeoToken *candidate) {
+                                    const LeoToken *candidate,
+                                    float *lineage_sum,
+                                    int *lineage_count) {
     LeoWordFrame frame = *base;
+    float sum = 0.0f;
+    int count = 0;
     for (int i = 0; i < candidate->length; i++) {
         uint8_t c = candidate->bytes[i];
         if (leo_word_byte(c)) {
@@ -1141,6 +1195,10 @@ static int leo_candidate_word_frame(const LeoModel *model,
         if (frame.n_open) {
             uint64_t word = leo_word_hash(frame.open, frame.n_open);
             if (leo_word_frame_transition(model, &frame, word) <= 0.0f) return 0;
+            sum += leo_word_fourgram_context(model,
+                frame.previous[0], frame.previous[1], frame.previous[2], word,
+                frame.context);
+            count++;
             leo_word_frame_push(&frame, word);
             frame.n_open = 0;
         }
@@ -1148,10 +1206,17 @@ static int leo_candidate_word_frame(const LeoModel *model,
             if (!frame.n_previous ||
                 leo_word_frame_transition(model, &frame, LEO_WORD_EOS) <= 0.0f)
                 return 0;
+            sum += leo_word_fourgram_context(model,
+                frame.previous[0], frame.previous[1], frame.previous[2],
+                LEO_WORD_EOS, frame.context);
+            count++;
             leo_word_frame_reset(&frame);
         }
     }
-    return leo_word_frame_prefix_possible(model, &frame);
+    if (!leo_word_frame_prefix_possible(model, &frame)) return 0;
+    if (lineage_sum) *lineage_sum = sum;
+    if (lineage_count) *lineage_count = count;
+    return 1;
 }
 
 static void leo_token_vector(const Leo *leo, uint16_t id, float *out) {
@@ -2033,7 +2098,8 @@ static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
             if (leo_trigram_get(&leo->model, previous2, previous1, id) > 0.0f &&
                 leo_token_well_formed(token) &&
                 leo_candidate_words_lived(&leo->model, surface, surface_length, token) &&
-                leo_candidate_word_frame(&leo->model, &word_frame, token)) {
+                leo_candidate_word_frame(&leo->model, &word_frame, token,
+                                         NULL, NULL)) {
                 use_trigram = 1;
                 break;
             }
@@ -2045,7 +2111,10 @@ static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
         if (!sentence_tokens && !leo_token_visible(token)) continue;
         if (!leo_candidate_words_lived(&leo->model, surface, surface_length, token))
             continue;
-        if (!leo_candidate_word_frame(&leo->model, &word_frame, token)) continue;
+        float lineage_sum = 0.0f;
+        int lineage_count = 0;
+        if (!leo_candidate_word_frame(&leo->model, &word_frame, token,
+                                      &lineage_sum, &lineage_count)) continue;
         float bigram = 0.0f;
         float trigram = 0.0f;
         if (!sentence_tokens) {
@@ -2059,8 +2128,11 @@ static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
         }
         float vector[LEO_DIM];
         leo_token_vector(leo, id, vector);
-        float score = 2.35f * leo_context_score(leo, id, grammar_hidden,
-                                                felt_hidden);
+        float context = leo_context_score(leo, id, grammar_hidden, felt_hidden);
+        if (lineage_count)
+            context = 0.50f * context +
+                      0.50f * (lineage_sum / (float)lineage_count);
+        float score = 2.35f * context;
         score += 1.25f * leo_cosine(vector, intention, LEO_DIM);
         score += 0.62f * recall->token_pull[id];
         score += 0.42f * leo_token_body_score(leo, vector);
