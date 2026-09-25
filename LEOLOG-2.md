@@ -8,6 +8,38 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-25 — Court A.164a: does what a human says change what Leo says?
+
+A.163b left `Leo has not been scared.` answering two different lines. The court
+gains three measures, fixed before they were read:
+
+- M5 openings: distinct first words over the spoken answers, and the share of
+  the most frequent one;
+- M6 repetition: distinct sentences over all sentences spoken;
+- M7 the prompt: under one seed, the share of line pairs that received the same
+  answer. `./court COPY leo.txt --one-line` asks the first line nine times and
+  must read 1.0.
+
+### Result, A.163b body
+
+M1–M4 unchanged: 0.372, 0.240, 0, 0.822. The red run read M7 720/720 = 1.000.
+
+- M5: 14 distinct first words over 160 answers; `leo` opens 67 (0.419), then
+  `the` 41, `he` 16, `a` 11, `it` 7, `there` 7;
+- M6: 165 of 298 sentences distinct (0.554);
+- M7: 60 of 560 line pairs under one seed received the same answer (0.107).
+
+In one answer in ten, what the human said made no difference at all.
+
+The cause is in the selector's units. Every candidate's score adds bounded
+presence terms — recurrent context 2.35, intention 1.25, body 0.42, each a
+cosine — to unbounded corpus counts: `0.90 log1p(start_frequency)` at an
+opening, `0.72 log1p(bigram) + 0.58 log1p(trigram)` after it. On the birth
+field the top opening token ` He ` carries 2572 openings (7.07 points), the
+largest bigram 1056 (5.01), the largest trigram 377 (3.44). The prompt reaches
+the mouth only through intention, where it is 0.29 of the vector. The corpus
+does not advise the body; it outshouts it several times over.
+
 ## 2026-09-25 — Corridor A.163b: a rail is not a choice
 
 Lineage: Netta's mouth, `lawful_support` and amendments 2 and 3 in
