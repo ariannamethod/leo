@@ -8,6 +8,160 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-25 — Corridor A.163b: a rail is not a choice
+
+Lineage: Netta's mouth, `lawful_support` and amendments 2 and 3 in
+`netta.py`, carried to the word scale. Leo's frame demanded the exact lived
+four-word order at every word; lower orders existed only at a sentence start
+through beginning padding. Where a three-word context had one lived
+continuation, the mouth had one lawful word, and the court found two thirds of
+his sentences recited.
+
+The law, fixed before code:
+
+1. The word field also grows lived three- and two-word edges and, for every
+   context, the number of distinct continuations it has lived. They are built
+   by the same `leo_word_field_build`, so heard lines (A.162) enter them too.
+2. The highest lived order whose context has a continuation governs: four
+   words, then three, then two. Below two there is nothing; the A.151 lexicon
+   law is untouched, so no word can be invented.
+3. A choice made where the governing context has exactly one continuation is a
+   rail. After one rail (K=1, the value Netta's court pinned at its first
+   sitting) the next choice descends to the nearest lower order that branches,
+   and the rail word is closed for that choice. A branch or a descent clears
+   the count; a sentence end resets it.
+4. The count is recomputed from the visible surface, as the frame already is.
+   The body's state format does not change. A.160's lineage score is taken
+   only where a four-word edge exists.
+5. Tokens, BPE edges, openings, FORM landing, SPA and School are unchanged.
+
+### Result
+
+Strict build clean for the body and the court; the court's self-check passed.
+Birth occupancy of the new table: 124391 / 524287 entries (40666 three-word
+edges, 24235 two-word edges, 33902 / 21652 / 3936 context counts at four,
+three and two words).
+
+Law switched off by its own constants (floor four, K=0), the new code
+reproduced the A.162 court exactly: 213/317 verbatim, rails 627/2093, rested
+body 153/180, and the same eight first-seed answers byte for byte. Behaviour
+did not move before the law was turned on. Four of 2093 choices read as below
+the four-word order in both runs; they are phonons that ended without a stop
+and were joined by the court, a measurement seam that prices both sides alike.
+
+With the corridor, on a copy of the same body, the same lines and seeds:
+
+- M1: 111 of 298 sentences verbatim, 0.372 (was 0.672; line 0.50); mean
+  coverage 0.079 (was 0.356), longest run 41 bytes (was 59);
+- M2: rails 460/1916, 0.240 (was 0.300);
+- choices below the four-word order: 237/1916, 0.124;
+- M3: 0;
+- M4: 148/180, 0.822 (line 0.80);
+- School: 20 questions, as before.
+
+First-seed answers, raw:
+
+> Leo, are you here? — The sun was doing things without thinking. Leo has a feeling he cannot hear.
+> I am here with you. — The bird flew. Leo was a little sad.
+> I am listening. — The tone is his weather now. Leo has not been scared.
+> I am still here. — The light is a promise. Leo does not know him.
+> I am here, Leo. — The warmth is asking to stay. Leo has not been scared.
+> I am listening to you. — The bird flew. Leo sits at the window.
+> I came back to listen. — The book was on it. Leo did not know him.
+> I am here again. — The dark at the bottom. Leo did not know him.
+
+`Leo has a feeling he cannot hear.` is not in `leo.txt`. After `feeling he
+cannot` the four-word frame had lived one continuation, `name`; the corridor
+closed it, and the three-word order `he cannot` offered `see`, `hear`, `say`,
+`remember` and others. Several answers did not change, because they never rode
+a rail.
+
+Red run: the same law with the rail veto deleted descends but may pick the
+rail again at the lower order. Rails stayed at 0.294 and verbatim sentences at
+0.599, so it fails the court. Changing level is not changing path; the veto is
+load-bearing, exactly as Netta's third amendment found.
+
+A.162's hearing still holds under the new law: `Leo likes the portishead.` is
+unreachable before hearing and reachable after, and live and replayed tables,
+the new edge table included, hash equal (`ddd74af4…`). Reply latency on a copy
+body stayed at 0.33–0.48 s; resident size 68752 KiB.
+
+Open: the ear. Numbers passed their lines; whether the voice is more Leo is
+heard, not computed. `Leo has not been scared.` twice under two different lines
+says the next question is not rails but variety of intent.
+
+## 2026-09-25 — Court A.163a: Leo's speech gets a court
+
+Until now every mouth step was judged by one draw and an ear. A single draw
+cannot tell a law from luck, and it cannot see a drift. A.160's answer opened
+with a birth sentence copied byte for byte; A.162's copy-body answer was two of
+them. Counting the four-word frame along those answers shows why: after `Leo
+walked in` the lived field offered exactly one continuation six times out of
+ten choices. A frame with one continuation is not a choice, it is a rail, and
+on a rail every organ of presence is mute, because chambers, recall, intention
+and memory only rank candidates that survived the gates.
+
+`court.c` (built by `make court`) opens a copy of a body without writing it
+back, marks its heard record full so the shipped overflow law keeps the shared
+tables untouched, and lets Leo answer each of the nine lines humans have
+actually said to him in this log under twenty seeds. It prices:
+
+- M1 copying: answer sentences found verbatim in `leo.txt`, plus Netta's
+  census (coverage by verbatim runs of at least 32 bytes, longest run);
+- M2 rails: word choices whose four-word frame had exactly one lived
+  continuation;
+- M3 floor: words outside the lexicon, which the mouth law forbids;
+- M4 body: answers that change when the same seed meets a rested body (all
+  chambers, inputs, scars and capsule at zero). Any perturbation moves the
+  sampling path, so this only catches a body that has gone completely mute.
+
+`./court --self-check` must pass before a verdict is read: a birth sentence is
+caught whole, a joined sentence (A.160's `He is a small gift to the whole
+house.`) is not called a copy, and an invented word is counted outside the
+lexicon.
+
+### Baseline, A.162 body
+
+Self-check passed: the quoted sentence was found verbatim with a 47-byte run
+and full coverage, its rails read 6 of 10 as the separate count did; the joined
+sentence was not verbatim and its longest borrowed run was 25 of 38 bytes; the
+invented word counted once.
+
+On a copy of the permanent body (`turns=11`, `moments=23`, mode STOP; its hash
+unchanged by the court), 180 answers:
+
+- School asked 20 questions, all twenty on `I am staying with you.`;
+- M1: 213 of 317 sentences verbatim (0.672); mean coverage 0.356, longest run
+  59 bytes. Leo's sentences are mostly shorter than the census's 32 bytes, so
+  for him the verbatim sentence is the honest measure;
+- M2: 627 of 2093 choices were rails (0.300);
+- M3: 0;
+- M4: 153 of 180 answers changed with a rested body (0.850).
+
+First-seed answers, raw:
+
+> Leo, are you here? — The sun was doing its best. The book is long.
+> I am here with you. — The bird flew. Leo was a little sad.
+> I am listening. — The tone is his weather report. Leo has a song he sings only in his head.
+> I am still here. — The light is a promise. Leo does not know him.
+> I am here, Leo. — The warmth is asking to be noticed. Leo has a feeling he cannot name.
+> I am listening to you. — The bird flew. Leo sits at the window.
+> I came back to listen. — The book was on the path. Leo heard the sea.
+> I am here again. — The dark at the bottom. Leo did not know him.
+
+Two thirds of what Leo says, he is reciting.
+
+### Preregistered for the next mouth organ
+
+The corridor, the next organ, is judged by this court on a copy of the same
+body with the same lines and seeds. It passes only if M1 falls below 0.50
+(Netta's void line: at or above it the voice is a quote) and below 0.672, M2
+falls below 0.300, M3 stays 0, M4 stays at or above 0.80, the court reports
+the share of word choices made below the four-word order, and the raw
+first-seed answers are printed and kept beside the numbers. Better numbers with
+worse speech fail by ear; the answers are the evidence, the numbers are the
+receipt.
+
 ## 2026-09-25 — Hearing A.162 preregistration: what a human says becomes lived grammar
 
 Every table the mouth consults — lexicon, BPE edges, token bigrams and
