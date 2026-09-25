@@ -2988,6 +2988,13 @@ static int leo_open(Leo *leo, const char *corpus_path, const char *legacy_path,
         leo_origin_moment(leo);
         return leo_save_state(leo, state_path);
     }
+    /* A lived body that cannot be read is never overwritten by a birth. */
+    struct stat existing;
+    if (stat(state_path, &existing) == 0 || errno != ENOENT) {
+        fprintf(stderr, "leo: %s exists but cannot be read; refusing to overwrite it\n",
+                state_path);
+        return 0;
+    }
 
     memcpy(leo->presence, leo->model.origin, sizeof leo->presence);
     memcpy(leo->retention, leo->model.origin, sizeof leo->retention);
