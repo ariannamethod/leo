@@ -8,6 +8,56 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-26 — A.164b rejected: the corpus in the body's unit
+
+Preregistered after A.164a: every voice in the selector speaks in one unit.
+Presence already arrives as cosines; the corpus terms (openings, bigram,
+trigram, token frequency) would arrive as a share of the most-lived lawful
+candidate of the same step, `log1p(x) / log1p(max)`, with every weight and
+every gate unchanged. Pass lines: M7 below 0.107, M5 top share below 0.419, M6
+above 0.554, and M1 below 0.50, M2 below 0.300, M3 zero, M4 at or above 0.80.
+
+### Result
+
+Control first: with the share replaced by the raw value the court reproduced
+A.164a exactly, the eight printed answers byte for byte, so the two-pass
+selector changed nothing by itself.
+
+With the law, on the same copy, lines and seeds:
+
+- M1 0.339 (pass), M3 0 (pass);
+- M2 rails 705/1767 = 0.399 — fail, up from 0.240;
+- M4 rested body 121/180 = 0.672 — fail, down from 0.822;
+- M5 31 distinct openings, top `leo` 21 (0.131); M6 193/292 = 0.661;
+- M7 57/560 = 0.102, barely below 0.107.
+
+First-seed answers, raw:
+
+> Leo, are you here? — Just in case the dog said. Always the s
+> I am here with you. — One day he will need
+> I am listening. — Just him and a book. Then there was a word.
+> I am still here. — Not too late. She comes
+> I am here, Leo. — Just him and a book. This paper
+> I am listening to you. — Not too late. Sometimes it was a visit.
+> I came back to listen. — Not longing. She comes
+> I am here again. — Slowly. In a patient with him.
+
+Rejected by the court and by ear. The code is reverted; `leo.c` stays at
+A.163b.
+
+What was measured: the doors changed (31 first words instead of 14) and the
+rooms behind them got narrower — rails rose, the body changed fewer answers,
+and phonons stopped without a landing (`One day he will need`, `She comes`).
+What this suggests, not yet shown: frequency at an opening is also fertility.
+`Slowly` opens six birth sentences, `Leo` thousands; a rare door leads into a
+thinly lived field where the next choices are rails again and the body has
+nothing to choose between. And the prompt barely moved (0.107 to 0.102): the
+corpus's loudness is not what keeps the human out. The human enters the mouth
+only as 0.29 of the intention vector. That channel is the next question.
+
+Found on the way: `Always the s` ends on `s`, a lexicon word only because
+`Leo's` splits at the apostrophe. The tail trim accepts it as a whole word.
+
 ## 2026-09-25 — Court A.164a: does what a human says change what Leo says?
 
 A.163b left `Leo has not been scared.` answering two different lines. The court
