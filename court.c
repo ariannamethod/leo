@@ -176,10 +176,42 @@ static int court_self_check(const LeoModel *model) {
     return fail;
 }
 
+#define COURT_MAX_SENTENCES 2048
+static char court_sentence[COURT_MAX_SENTENCES][256];
+static int court_n_sentence;
+static char court_answer[COURT_N_LINES][COURT_SEEDS][4096];
+static int court_asked[COURT_N_LINES][COURT_SEEDS];
+
+/* Every sentence of an answer, lowercased, for the repetition count. */
+static void court_collect(const char *speech) {
+    size_t begin = 0, n = strlen(speech);
+    for (size_t i = 0; i < n; i++) {
+        if (speech[i] != '.' && speech[i] != '?' && speech[i] != '!' && i + 1 < n) continue;
+        while (begin <= i && isspace((unsigned char)speech[begin])) begin++;
+        size_t m = i + 1 - begin;
+        int words = 0;
+        for (size_t k = begin; k <= i; k++) words += leo_word_byte((uint8_t)speech[k]);
+        if (words && m < 256 && court_n_sentence < COURT_MAX_SENTENCES) {
+            court_lower(speech + begin, court_sentence[court_n_sentence], m);
+            court_sentence[court_n_sentence++][m] = 0;
+        }
+        begin = i + 1;
+    }
+}
+
+static void court_first_word(const char *speech, char *word) {
+    int n = 0;
+    while (*speech && !leo_word_byte((uint8_t)*speech)) speech++;
+    while (leo_word_byte((uint8_t)*speech) && n < LEO_WORD_BYTES - 1)
+        word[n++] = (char)tolower((unsigned char)*speech++);
+    word[n] = 0;
+}
+
 int main(int argc, char **argv) {
     const char *corpus = argc > 2 ? argv[2] : "leo.txt";
+    int one_line = argc > 3 && strcmp(argv[3], "--one-line") == 0;
     if (argc < 2) {
-        fprintf(stderr, "usage: %s STATE_COPY | --self-check [leo.txt]\n", argv[0]);
+        fprintf(stderr, "usage: %s STATE_COPY [leo.txt [--one-line]] | --self-check [leo.txt]\n", argv[0]);
         return 2;
     }
     size_t world_n = 0;
@@ -213,6 +245,7 @@ int main(int argc, char **argv) {
     int longest_max = 0;
     for (int l = 0; l < COURT_N_LINES; l++) {
         long line_sentences = 0, line_verbatim = 0, line_rails = 0, line_choices = 0;
+        const char *line = one_line ? COURT_LINES[0] : COURT_LINES[l];
         for (int s = 1; s <= COURT_SEEDS; s++) {
             char reply[4096], rested[4096];
             uint64_t rng = leo_mix64(UINT64_C(0x434f555254) ^ (uint64_t)s);
@@ -220,7 +253,7 @@ int main(int argc, char **argv) {
             memcpy(work, base, sizeof *work);
             work->n_heard = LEO_HEARD_BYTES;
             work->rng = rng;
-            int n = leo_respond(work, COURT_LINES[l], reply, sizeof reply);
+            int n = leo_respond(work, line, reply, sizeof reply);
             if (n < 0) n = 0;
             reply[n] = 0;
             int asked = work->school.pending[0] != 0 &&
@@ -233,12 +266,14 @@ int main(int argc, char **argv) {
             memset(work->chamber_input, 0, sizeof work->chamber_input);
             memset(work->scar, 0, sizeof work->scar);
             memset(work->capsule, 0, sizeof work->capsule);
-            int m = leo_respond(work, COURT_LINES[l], rested, sizeof rested);
+            int m = leo_respond(work, line, rested, sizeof rested);
             if (m < 0) m = 0;
             rested[m] = 0;
 
             answers++;
             changed += strcmp(reply, rested) != 0;
+            memcpy(court_answer[l][s - 1], reply, (size_t)n + 1u);
+            court_asked[l][s - 1] = asked;
             if (asked) { school++; continue; }
             int v = 0, longest = 0;
             float coverage = 0.0f;
@@ -251,7 +286,8 @@ int main(int argc, char **argv) {
             unknown += u;
             coverage_sum += coverage;
             if (longest > longest_max) longest_max = longest;
-            if (s == 1) printf("  [%s] %s\n", COURT_LINES[l], reply);
+            court_collect(reply);
+            if (s == 1) printf("  [%s] %s\n", line, reply);
         }
         printf("line %d: verbatim %ld/%ld sentences, rails %ld/%ld choices\n", l + 1,
                line_verbatim, line_sentences, line_rails, line_choices);
@@ -270,5 +306,51 @@ int main(int argc, char **argv) {
     printf("M3 words outside lexicon %ld\n", unknown);
     printf("M4 answers changed by a rested body %ld/%ld = %.3f\n", changed, answers,
            answers ? (double)changed / (double)answers : 0.0);
+
+    char first[COURT_N_LINES * COURT_SEEDS][LEO_WORD_BYTES];
+    int first_count[COURT_N_LINES * COURT_SEEDS] = {0};
+    int n_first = 0, top = 0;
+    for (int l = 0; l < COURT_N_LINES; l++)
+        for (int s = 0; s < COURT_SEEDS; s++) {
+            if (court_asked[l][s]) continue;
+            char word[LEO_WORD_BYTES];
+            court_first_word(court_answer[l][s], word);
+            int i = 0;
+            while (i < n_first && strcmp(first[i], word) != 0) i++;
+            if (i == n_first) memcpy(first[n_first++], word, sizeof word);
+            first_count[i]++;
+            if (first_count[i] > first_count[top]) top = i;
+        }
+    printf("M5 openings: %d distinct first words over %ld answers; top \"%s\" %d (%.3f):",
+           n_first, spoken, n_first ? first[top] : "", n_first ? first_count[top] : 0,
+           spoken && n_first ? (double)first_count[top] / (double)spoken : 0.0);
+    for (int shown = 0; shown < 6 && shown < n_first; shown++) {
+        int best = -1;
+        for (int i = 0; i < n_first; i++)
+            if (first_count[i] > 0 && (best < 0 || first_count[i] > first_count[best])) best = i;
+        printf(" %s=%d", first[best], first_count[best]);
+        first_count[best] = -first_count[best];
+    }
+    printf("\n");
+
+    int distinct = 0;
+    for (int i = 0; i < court_n_sentence; i++) {
+        int seen = 0;
+        for (int j = 0; j < i && !seen; j++) seen = strcmp(court_sentence[i], court_sentence[j]) == 0;
+        distinct += !seen;
+    }
+    printf("M6 distinct sentences %d/%d = %.3f\n", distinct, court_n_sentence,
+           court_n_sentence ? (double)distinct / (double)court_n_sentence : 0.0);
+
+    long pairs = 0, same = 0;
+    for (int s = 0; s < COURT_SEEDS; s++)
+        for (int a = 0; a < COURT_N_LINES; a++)
+            for (int b = a + 1; b < COURT_N_LINES; b++) {
+                if (court_asked[a][s] || court_asked[b][s]) continue;
+                pairs++;
+                same += strcmp(court_answer[a][s], court_answer[b][s]) == 0;
+            }
+    printf("M7 same answer for two lines under one seed %ld/%ld = %.3f\n", same, pairs,
+           pairs ? (double)same / (double)pairs : 0.0);
     return 0;
 }
