@@ -46,6 +46,9 @@
 #define LEO_BIGRAM_CAP    131071
 #define LEO_TRIGRAM_CAP   262139
 #define LEO_WORD_FOURGRAM_CAP 131071
+#define LEO_WORD_EDGE_CAP 524287
+#define LEO_WORD_FLOOR           2
+#define LEO_CORRIDOR_K           1
 #define LEO_EPISODES         2048
 #define LEO_EPISODE_TOKENS     64
 #define LEO_MOMENTS            192
@@ -339,6 +342,20 @@ typedef struct {
     uint8_t used;
 } LeoWordFourgram;
 
+/* Lower word orders and the number of distinct lived continuations of each
+ * context, so the mouth can tell a branch from a rail. */
+enum {
+    LEO_EDGE_BI = 2, LEO_EDGE_TRI = 3,
+    LEO_EDGE_CTX2 = 12, LEO_EDGE_CTX3 = 13, LEO_EDGE_CTX4 = 14
+};
+
+typedef struct {
+    uint64_t key[3];
+    uint32_t count;
+    uint8_t kind;
+    uint8_t used;
+} LeoWordEdge;
+
 typedef struct {
     uint16_t token[LEO_EPISODE_TOKENS];
     uint16_t n_token;
@@ -383,6 +400,7 @@ typedef struct {
     LeoBigram *bigram;
     LeoTrigram *trigram;
     LeoWordFourgram *word_fourgram;
+    LeoWordEdge *word_edge;
     LeoEpisode episode[LEO_EPISODES];
     int n_episode;
     LeoLexeme *lexicon;
@@ -1054,9 +1072,53 @@ static float leo_word_fourgram_context(const LeoModel *model,
     return -1.0f;
 }
 
+static size_t leo_word_edge_slot(uint8_t kind, uint64_t a, uint64_t b, uint64_t c) {
+    uint64_t hash = leo_mix64(a ^ ((uint64_t)kind << 56) ^
+                              leo_mix64(b + UINT64_C(0x6eed0e9da4d94a4f)));
+    return (size_t)(leo_mix64(hash ^ leo_mix64(c + UINT64_C(0x94d049bb133111eb))) %
+                    LEO_WORD_EDGE_CAP);
+}
+
+static uint32_t leo_word_edge_get(const LeoModel *model, uint8_t kind,
+                                  uint64_t a, uint64_t b, uint64_t c) {
+    size_t slot = leo_word_edge_slot(kind, a, b, c);
+    for (size_t probe = 0; probe < LEO_WORD_EDGE_CAP; probe++) {
+        const LeoWordEdge *edge = &model->word_edge[(slot + probe) % LEO_WORD_EDGE_CAP];
+        if (!edge->used) return 0;
+        if (edge->kind == kind && edge->key[0] == a && edge->key[1] == b &&
+            edge->key[2] == c) return edge->count;
+    }
+    return 0;
+}
+
+/* 1 when the edge is new, 0 when it was already lived, -1 when full. */
+static int leo_word_edge_add(LeoModel *model, uint8_t kind,
+                             uint64_t a, uint64_t b, uint64_t c) {
+    size_t slot = leo_word_edge_slot(kind, a, b, c);
+    for (size_t probe = 0; probe < LEO_WORD_EDGE_CAP; probe++) {
+        LeoWordEdge *edge = &model->word_edge[(slot + probe) % LEO_WORD_EDGE_CAP];
+        if (!edge->used) {
+            edge->used = 1;
+            edge->kind = kind;
+            edge->key[0] = a;
+            edge->key[1] = b;
+            edge->key[2] = c;
+            edge->count = 1;
+            return 1;
+        }
+        if (edge->kind == kind && edge->key[0] == a && edge->key[1] == b &&
+            edge->key[2] == c) {
+            if (edge->count < UINT32_MAX) edge->count++;
+            return 0;
+        }
+    }
+    return -1;
+}
+
 typedef struct {
     uint64_t previous[3];
     int n_previous;
+    int rails;
     char open[LEO_WORD_BYTES];
     int n_open;
     float context[LEO_HIDDEN];
@@ -1086,6 +1148,7 @@ static void leo_word_frame_reset(LeoWordFrame *frame) {
     frame->previous[1] = LEO_WORD_BOS;
     frame->previous[2] = LEO_WORD_BOS;
     frame->n_previous = 0;
+    frame->rails = 0;
     frame->n_open = 0;
     leo_reservoir_reset(frame->context);
 }
@@ -1097,23 +1160,97 @@ static float leo_word_frame_transition(const LeoModel *model,
                                  frame->previous[2], word);
 }
 
+/* One lived word transition at all three orders; a context's branch count
+ * grows only when a continuation is new to it. */
+static int leo_word_field_edge(LeoModel *model, const LeoWordFrame *frame,
+                               uint64_t word) {
+    const uint64_t *p = frame->previous;
+    int fresh = leo_word_fourgram_get(model, p[0], p[1], p[2], word) <= 0.0f;
+    if (!leo_word_fourgram_add(model, p[0], p[1], p[2], word, frame->context))
+        return 0;
+    if (fresh && leo_word_edge_add(model, LEO_EDGE_CTX4, p[0], p[1], p[2]) < 0)
+        return 0;
+    fresh = leo_word_edge_add(model, LEO_EDGE_TRI, p[1], p[2], word);
+    if (fresh < 0 || (fresh && leo_word_edge_add(model, LEO_EDGE_CTX3, p[1], p[2], 0) < 0))
+        return 0;
+    fresh = leo_word_edge_add(model, LEO_EDGE_BI, p[2], word, 0);
+    return fresh >= 0 &&
+           !(fresh && leo_word_edge_add(model, LEO_EDGE_CTX2, p[2], 0, 0) < 0);
+}
+
 static int leo_word_field_finish(LeoModel *model, LeoWordFrame *frame,
                                  const char *word, int length) {
     uint64_t hash = leo_word_hash(word, length);
-    if (!leo_word_fourgram_add(model, frame->previous[0], frame->previous[1],
-                               frame->previous[2], hash,
-                               frame->context)) return 0;
+    if (!leo_word_field_edge(model, frame, hash)) return 0;
     leo_word_frame_push(frame, hash);
     return 1;
 }
 
 static int leo_word_field_end(LeoModel *model, LeoWordFrame *frame) {
     if (!frame->n_previous) return 1;
-    if (!leo_word_fourgram_add(model, frame->previous[0], frame->previous[1],
-                               frame->previous[2], LEO_WORD_EOS,
-                               frame->context)) return 0;
+    if (!leo_word_field_edge(model, frame, LEO_WORD_EOS)) return 0;
     leo_word_frame_reset(frame);
     return 1;
+}
+
+static int leo_word_branches(const LeoModel *model, const LeoWordFrame *frame,
+                             int order) {
+    const uint64_t *p = frame->previous;
+    if (order == 4) return (int)leo_word_edge_get(model, LEO_EDGE_CTX4, p[0], p[1], p[2]);
+    if (order == 3) return (int)leo_word_edge_get(model, LEO_EDGE_CTX3, p[1], p[2], 0);
+    return (int)leo_word_edge_get(model, LEO_EDGE_CTX2, p[2], 0, 0);
+}
+
+static int leo_word_edge_at(const LeoModel *model, const LeoWordFrame *frame,
+                            int order, uint64_t word) {
+    const uint64_t *p = frame->previous;
+    if (order == 4) return leo_word_fourgram_get(model, p[0], p[1], p[2], word) > 0.0f;
+    if (order == 3) return leo_word_edge_get(model, LEO_EDGE_TRI, p[1], p[2], word) > 0;
+    return leo_word_edge_get(model, LEO_EDGE_BI, p[2], word, 0) > 0;
+}
+
+/* The word law, after Netta's mouth. The highest lived order whose context
+ * has a continuation governs. A context with exactly one continuation is a
+ * rail; after LEO_CORRIDOR_K rails in a row the choice descends to the
+ * nearest lower order that branches, and the rail itself is closed for that
+ * choice (*rail names the order that holds it). Returns 0 when nothing is
+ * lawful. */
+static int leo_word_law(const LeoModel *model, const LeoWordFrame *frame, int *rail) {
+    *rail = 0;
+    int order = 0;
+    int branches = 0;
+    for (int o = 4; o >= LEO_WORD_FLOOR; o--) {
+        branches = leo_word_branches(model, frame, o);
+        if (branches) { order = o; break; }
+    }
+    if (!order || branches >= 2 || !LEO_CORRIDOR_K || frame->rails < LEO_CORRIDOR_K)
+        return order;
+    for (int o = order - 1; o >= LEO_WORD_FLOOR; o--)
+        if (leo_word_branches(model, frame, o) >= 2) {
+            *rail = order;
+            return o;
+        }
+    return order;
+}
+
+static int leo_word_lawful(const LeoModel *model, const LeoWordFrame *frame,
+                           uint64_t word) {
+    int rail;
+    int order = leo_word_law(model, frame, &rail);
+    return order && leo_word_edge_at(model, frame, order, word) &&
+           !(rail && leo_word_edge_at(model, frame, rail, word));
+}
+
+/* Advances a mouth frame and keeps the corridor count: a branch or a descent
+ * clears it, a rail extends it. */
+static void leo_word_frame_advance(const LeoModel *model, LeoWordFrame *frame,
+                                   uint64_t word) {
+    int rail;
+    int order = leo_word_law(model, frame, &rail);
+    int branches = order ? leo_word_branches(model, frame, order) : 0;
+    int rails = rail || branches >= 2 ? 0 : frame->rails + 1;
+    leo_word_frame_push(frame, word);
+    frame->rails = rails;
 }
 
 static int leo_word_field_build(LeoModel *model, const uint8_t *corpus,
@@ -1148,7 +1285,7 @@ static int leo_word_field_build(LeoModel *model, const uint8_t *corpus,
     return 1;
 }
 
-static int leo_word_frame_read_surface(LeoWordFrame *frame,
+static int leo_word_frame_read_surface(const LeoModel *model, LeoWordFrame *frame,
                                        const char *surface, int length) {
     memset(frame, 0, sizeof *frame);
     leo_word_frame_reset(frame);
@@ -1161,7 +1298,7 @@ static int leo_word_frame_read_surface(LeoWordFrame *frame,
         }
         if (frame->n_open) {
             uint64_t word = leo_word_hash(frame->open, frame->n_open);
-            leo_word_frame_push(frame, word);
+            leo_word_frame_advance(model, frame, word);
             frame->n_open = 0;
         }
         if (c == '.' || c == '!' || c == '?') leo_word_frame_reset(frame);
@@ -1175,8 +1312,7 @@ static int leo_word_frame_prefix_possible(const LeoModel *model,
     for (int i = 0; i < model->n_lexicon; i++) {
         const char *known = model->lexicon[i].word;
         if (strncmp(known, frame->open, (size_t)frame->n_open) != 0) continue;
-        if (leo_word_frame_transition(model, frame,
-                                      leo_word_hash(known, (int)strlen(known))) > 0.0f)
+        if (leo_word_lawful(model, frame, leo_word_hash(known, (int)strlen(known))))
             return 1;
     }
     return 0;
@@ -1199,22 +1335,23 @@ static int leo_candidate_word_frame(const LeoModel *model,
         }
         if (frame.n_open) {
             uint64_t word = leo_word_hash(frame.open, frame.n_open);
-            if (leo_word_frame_transition(model, &frame, word) <= 0.0f) return 0;
-            sum += leo_word_fourgram_context(model,
-                frame.previous[0], frame.previous[1], frame.previous[2], word,
-                frame.context);
-            count++;
-            leo_word_frame_push(&frame, word);
+            if (!leo_word_lawful(model, &frame, word)) return 0;
+            if (leo_word_frame_transition(model, &frame, word) > 0.0f) {
+                sum += leo_word_fourgram_context(model, frame.previous[0],
+                    frame.previous[1], frame.previous[2], word, frame.context);
+                count++;
+            }
+            leo_word_frame_advance(model, &frame, word);
             frame.n_open = 0;
         }
         if (c == '.' || c == '!' || c == '?') {
-            if (!frame.n_previous ||
-                leo_word_frame_transition(model, &frame, LEO_WORD_EOS) <= 0.0f)
+            if (!frame.n_previous || !leo_word_lawful(model, &frame, LEO_WORD_EOS))
                 return 0;
-            sum += leo_word_fourgram_context(model,
-                frame.previous[0], frame.previous[1], frame.previous[2],
-                LEO_WORD_EOS, frame.context);
-            count++;
+            if (leo_word_frame_transition(model, &frame, LEO_WORD_EOS) > 0.0f) {
+                sum += leo_word_fourgram_context(model, frame.previous[0],
+                    frame.previous[1], frame.previous[2], LEO_WORD_EOS, frame.context);
+                count++;
+            }
             leo_word_frame_reset(&frame);
         }
     }
@@ -1583,7 +1720,8 @@ static int leo_model_build(Leo *leo, const uint8_t *corpus, size_t length) {
     model->bigram = calloc(LEO_BIGRAM_CAP, sizeof *model->bigram);
     model->trigram = calloc(LEO_TRIGRAM_CAP, sizeof *model->trigram);
     model->word_fourgram = calloc(LEO_WORD_FOURGRAM_CAP, sizeof *model->word_fourgram);
-    if (!model->bigram || !model->trigram || !model->word_fourgram ||
+    model->word_edge = calloc(LEO_WORD_EDGE_CAP, sizeof *model->word_edge);
+    if (!model->bigram || !model->trigram || !model->word_fourgram || !model->word_edge ||
         !leo_lexicon_build(model, corpus, length) ||
         !leo_word_field_build(model, corpus, length)) return 0;
 
@@ -1606,12 +1744,14 @@ static void leo_model_free(LeoModel *model) {
     free(model->bigram);
     free(model->trigram);
     free(model->word_fourgram);
+    free(model->word_edge);
     model->lexicon = NULL;
     model->n_lexicon = 0;
     model->lexicon_capacity = 0;
     model->bigram = NULL;
     model->trigram = NULL;
     model->word_fourgram = NULL;
+    model->word_edge = NULL;
 }
 
 static void leo_school_init(LeoSchool *school) {
@@ -2181,7 +2321,7 @@ static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
     int n_top = 0;
     int use_trigram = 0;
     LeoWordFrame word_frame;
-    if (!leo_word_frame_read_surface(&word_frame, surface, surface_length))
+    if (!leo_word_frame_read_surface(&leo->model, &word_frame, surface, surface_length))
         return UINT16_MAX;
     if (sentence_tokens > 1) {
         for (uint16_t id = 0; id < leo->model.bpe.vocab; id++) {

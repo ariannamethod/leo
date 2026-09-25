@@ -103,7 +103,7 @@ static int court_branches(const LeoModel *model, const LeoWordFrame *frame) {
 
 /* Walks the visible words through the same frame the mouth uses. */
 static void court_rails(const LeoModel *model, const char *speech,
-                        int *rails, int *choices, int *unknown) {
+                        int *rails, int *choices, int *unknown, int *low) {
     LeoWordFrame frame;
     memset(&frame, 0, sizeof frame);
     leo_word_frame_reset(&frame);
@@ -119,6 +119,7 @@ static void court_rails(const LeoModel *model, const char *speech,
             word[n] = 0;
             *rails += court_branches(model, &frame) == 1;
             (*choices)++;
+            *low += leo_word_frame_transition(model, &frame, leo_word_hash(word, n)) <= 0.0f;
             *unknown += !leo_lexicon_has(model, word, n, 1);
             leo_word_frame_push(&frame, leo_word_hash(word, n));
             n = 0;
@@ -127,6 +128,7 @@ static void court_rails(const LeoModel *model, const char *speech,
             if (frame.n_previous) {
                 *rails += court_branches(model, &frame) == 1;
                 (*choices)++;
+                *low += leo_word_frame_transition(model, &frame, LEO_WORD_EOS) <= 0.0f;
             }
             leo_word_frame_reset(&frame);
         }
@@ -151,13 +153,13 @@ static int court_open(Leo *leo, const char *corpus_path, const char *state_path)
 }
 
 static int court_self_check(const LeoModel *model) {
-    int verbatim = 0, rails = 0, choices = 0, unknown = 0, longest = 0, fail = 0;
+    int verbatim = 0, rails = 0, choices = 0, unknown = 0, low = 0, longest = 0, fail = 0;
     float coverage = 0.0f;
     const char *quoted = "Leo walked in her footprints once at the beach.";
     const char *joined = "He is a small gift to the whole house.";
     court_sentences(quoted, &verbatim);
     court_census(quoted, strlen(quoted), &longest, &coverage);
-    court_rails(model, quoted, &rails, &choices, &unknown);
+    court_rails(model, quoted, &rails, &choices, &unknown, &low);
     printf("quoted: verbatim %d  longest %d  coverage %.3f  rails %d/%d  unknown %d\n",
            verbatim, longest, coverage, rails, choices, unknown);
     fail |= verbatim != 1 || longest != (int)strlen(quoted) || coverage < 0.99f ||
@@ -167,7 +169,7 @@ static int court_self_check(const LeoModel *model) {
     printf("joined: verbatim %d  longest %d of %zu\n", verbatim, longest, strlen(joined));
     fail |= verbatim != 0 || longest >= (int)strlen(joined);
     rails = choices = unknown = 0;
-    court_rails(model, "Leo walked in her zzyzx.", &rails, &choices, &unknown);
+    court_rails(model, "Leo walked in her zzyzx.", &rails, &choices, &unknown, &low);
     printf("invented word: unknown %d\n", unknown);
     fail |= unknown != 1;
     printf("%s\n", fail ? "SELF-CHECK FAIL" : "SELF-CHECK PASS");
@@ -201,11 +203,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "court: cannot open body %s\n", argv[1]);
         return 1;
     }
+    printf("law: floor %d, corridor K=%d\n", LEO_WORD_FLOOR, LEO_CORRIDOR_K);
     printf("body: turns=%llu moments=%u mode=%u heard=%u\n",
            (unsigned long long)base->turns, base->n_moment, base->mode, base->n_heard);
 
     long answers = 0, school = 0, sentences = 0, verbatim = 0;
-    long rails = 0, choices = 0, unknown = 0, changed = 0;
+    long rails = 0, choices = 0, unknown = 0, low = 0, changed = 0;
     double coverage_sum = 0.0;
     int longest_max = 0;
     for (int l = 0; l < COURT_N_LINES; l++) {
@@ -241,8 +244,9 @@ int main(int argc, char **argv) {
             float coverage = 0.0f;
             int k = court_sentences(reply, &v);
             court_census(reply, (size_t)n, &longest, &coverage);
-            int r = 0, c = 0, u = 0;
-            court_rails(&base->model, reply, &r, &c, &u);
+            int r = 0, c = 0, u = 0, w = 0;
+            court_rails(&base->model, reply, &r, &c, &u, &w);
+            low += w;
             line_sentences += k; line_verbatim += v; line_rails += r; line_choices += c;
             unknown += u;
             coverage_sum += coverage;
@@ -261,6 +265,8 @@ int main(int argc, char **argv) {
            spoken ? coverage_sum / (double)spoken : 0.0, longest_max);
     printf("M2 rails %ld/%ld = %.3f\n", rails, choices,
            choices ? (double)rails / (double)choices : 0.0);
+    printf("M2b choices below the four-word order %ld/%ld = %.3f\n", low, choices,
+           choices ? (double)low / (double)choices : 0.0);
     printf("M3 words outside lexicon %ld\n", unknown);
     printf("M4 answers changed by a rested body %ld/%ld = %.3f\n", changed, answers,
            answers ? (double)changed / (double)answers : 0.0);
