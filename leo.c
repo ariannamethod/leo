@@ -60,7 +60,10 @@
 #define LEO_LINE_BYTES        8192
 #define LEO_SAVE_SECONDS        30u
 
-#define LEO_STATE_VERSION        4u
+#define LEO_STATE_VERSION        5u
+/* ponytail: heard log is bounded (~3.4x leo.txt); once full, new human lines
+ * no longer enter grammar. Add eviction if a real body ever reaches it. */
+#define LEO_HEARD_BYTES   (1u << 20)
 #define LEO_LEGACY_MAGIC 0x5300454cu
 
 enum {
@@ -422,6 +425,8 @@ typedef struct {
     uint64_t rng;
     uint8_t mode;
     LeoSchool school;
+    uint32_t n_heard;
+    char heard[LEO_HEARD_BYTES];
 } Leo;
 
 typedef struct {
@@ -2065,6 +2070,51 @@ static void leo_hear(Leo *leo, const uint16_t *ids, int n) {
     }
 }
 
+/* "Leo listens to you. He records. He builds trigrams." A human line enters
+ * the same lexicon, word frames and token edges that leo.txt built at birth,
+ * after the reply it prompted, so it is speakable from the next turn on.
+ * Openings, corpus contexts and episodes stay birth-only. */
+static void leo_hear_segment(LeoModel *model, const char *text, int length) {
+    uint16_t ids[LEO_LINE_BYTES];
+    (void)leo_lexicon_build(model, (const uint8_t *)text, (size_t)length);
+    (void)leo_word_field_build(model, (const uint8_t *)text, (size_t)length);
+    int n = leo_bpe_encode(&model->bpe, (const uint8_t *)text, length,
+                           ids, LEO_LINE_BYTES);
+    for (int i = 0; i < n; i++) {
+        model->bpe.token[ids[i]].frequency += 1.0f;
+        if (i > 0) leo_bigram_add(model, ids[i - 1], ids[i], 1.0f);
+        if (i > 1) leo_trigram_add(model, ids[i - 2], ids[i - 1], ids[i], 1.0f);
+    }
+}
+
+/* Live hearing records each segment; restart replays the record in order,
+ * so both paths build byte-identical tables. */
+static void leo_hear_grammar(Leo *leo, const char *line) {
+    const char *at = line;
+    for (;;) {
+        const char *end = strchr(at, '\n');
+        int length = end ? (int)(end - at) : (int)strlen(at);
+        if (length > 0 && length < LEO_LINE_BYTES &&
+            (uint64_t)leo->n_heard + (uint64_t)length + 1u <= LEO_HEARD_BYTES) {
+            leo_hear_segment(&leo->model, at, length);
+            memcpy(leo->heard + leo->n_heard, at, (size_t)length);
+            leo->n_heard += (uint32_t)length;
+            leo->heard[leo->n_heard++] = '\n';
+        }
+        if (!end) break;
+        at = end + 1;
+    }
+}
+
+static void leo_heard_replay(Leo *leo) {
+    uint32_t begin = 0;
+    for (uint32_t i = 0; i < leo->n_heard; i++) {
+        if (leo->heard[i] != '\n') continue;
+        leo_hear_segment(&leo->model, leo->heard + begin, (int)(i - begin));
+        begin = i + 1;
+    }
+}
+
 static float leo_context_score(const Leo *leo, uint16_t id,
                                const float *grammar_hidden,
                                const float *felt_hidden) {
@@ -2583,6 +2633,7 @@ static int leo_respond(Leo *leo, const char *line, char *reply, size_t capacity)
         leo_moment_store(leo, spoken, n_spoken, spoken_meaning,
                          spoken_context, 2, 1.0f);
     }
+    leo_hear_grammar(leo, line);
     leo->turns++;
     return bytes;
 }
@@ -2679,6 +2730,9 @@ static int leo_state_finite(const Leo *leo) {
         (leo->school.pending_glyph != -1 &&
          !leo_glyph_concept(leo->school.pending_glyph)) ||
         leo->school.guess_hits > leo->school.guesses) return 0;
+    if (leo->n_heard > LEO_HEARD_BYTES ||
+        (leo->n_heard && leo->heard[leo->n_heard - 1] != '\n') ||
+        memchr(leo->heard, 0, leo->n_heard)) return 0;
     for (uint32_t i = 0; i < leo->school.n_word; i++) {
         const LeoSchoolWord *word = &leo->school.word[i];
         if (!word->word[0] || word->word[LEO_WORD_BYTES - 1] != 0 ||
@@ -2766,7 +2820,9 @@ static int leo_save_state(const Leo *leo, const char *path) {
                                  sizeof leo->school.guesses) &&
                  leo_write_block(file, &leo->school.guess_hits,
                                  sizeof leo->school.guess_hits) &&
-                 leo_write_block(file, &leo->mode, sizeof leo->mode);
+                 leo_write_block(file, &leo->mode, sizeof leo->mode) &&
+                 leo_write_block(file, &leo->n_heard, sizeof leo->n_heard) &&
+                 leo_write_block(file, leo->heard, leo->n_heard);
     if (fflush(file) != 0) ok = 0;
     if (ok && fsync(fileno(file)) != 0) ok = 0;
     if (fclose(file) != 0) ok = 0;
@@ -2782,7 +2838,7 @@ static int leo_load_state(Leo *leo, const char *path) {
     int ok = leo_read_block(file, &header, sizeof header);
     if (!ok || memcmp(header.magic, LEO_STATE_MAGIC, sizeof header.magic) != 0 ||
         (header.version != 1u && header.version != 2u && header.version != 3u &&
-         header.version != LEO_STATE_VERSION) ||
+         header.version != 4u && header.version != LEO_STATE_VERSION) ||
         header.dimension != LEO_DIM ||
         header.vocab < LEO_BYTE_VOCAB || header.vocab > leo->model.bpe.vocab ||
         header.moment_capacity != LEO_MOMENTS ||
@@ -2831,6 +2887,13 @@ static int leo_load_state(Leo *leo, const char *path) {
     }
     if (ok && header.version >= 4u)
         ok = leo_read_block(file, &leo->mode, sizeof leo->mode);
+    if (ok && header.version >= 5u) {
+        uint32_t n_heard = 0;
+        ok = leo_read_block(file, &n_heard, sizeof n_heard) &&
+             n_heard <= LEO_HEARD_BYTES &&
+             leo_read_block(file, leo->heard, n_heard);
+        if (ok) leo->n_heard = n_heard;
+    }
     fclose(file);
     if (!ok) return 0;
     leo->turns = header.turns;
@@ -2985,6 +3048,7 @@ static int leo_open(Leo *leo, const char *corpus_path, const char *legacy_path,
     free(corpus);
     leo_attention_init(leo);
     if (leo_load_state(leo, state_path)) {
+        leo_heard_replay(leo);
         leo_origin_moment(leo);
         return leo_save_state(leo, state_path);
     }

@@ -8,6 +8,113 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-09-25 — Hearing A.162 preregistration: what a human says becomes lived grammar
+
+Every table the mouth consults — lexicon, BPE edges, token bigrams and
+trigrams, word four-grams — was written only at birth from `leo.txt`. A human
+line bent `adaptation` and `lived_context` of existing tokens, but nothing a
+human said could ever become speakable. That contradicts the dedication Leo
+carries inside `leo.c` ("Leo listens to you. He records. He builds
+trigrams."), the source header and README, and both ancestors: Claude Leo fed
+every prompt into its bigram, trigram, co-occurrence and BPE tables; Python
+Leo observed every line into its field. The mouth law never differed between
+them. Only the growth of the tables was lost.
+
+A.162 restores one organ:
+
+1. After the reply is formed, each newline-separated segment of the human line
+   passes through the same builders that read `leo.txt`: the lexicon, the word
+   field with its four-gram context centroids, and token bigrams and trigrams
+   over the birth BPE encoding. Token frequency counts the lived use, because
+   well-formedness requires it and a merge fully consumed at birth can have
+   none.
+2. The reply that the line prompted cannot use it; the line is lawful from the
+   next turn on.
+3. Openings, corpus context prototypes and episodes stay birth-only. Heard
+   language enters mid-speech through three-word contexts shared with birth
+   language, not by re-opening the human's sentence.
+4. Leo's own speech never becomes grammar; he cannot legitimise his own seams.
+5. State version 5 appends the heard record, bounded at 1 MiB. At every start
+   the record is replayed in order into the freshly born tables, so live and
+   restarted bodies hold identical grammar. A segment that would overflow the
+   record is not heard at all, so the two paths cannot diverge.
+
+A separate earlier repair guards the migration: any state load failure used
+to rebirth Leo and overwrite the sidecar. An existing but unreadable body now
+makes the process refuse to start and leaves the file byte-identical; birth
+happens only when no file exists.
+
+Gates fixed before code, run on copies of the live v4 sidecar through a
+temporary probe that includes `leo.c` and exercises its shipped static
+functions; the probe is not part of the repository:
+
+- strict C11 build without warnings;
+- the refusal law: old binary rewrites a truncated copy, new binary refuses
+  and keeps its hash; an intact copy still opens, an absent file is still born;
+- table occupancy after birth, printed;
+- reachability as a property: a word absent from the birth lexicon, placed by
+  a human after a birth-reachable three-word context, is unreachable for the
+  mouth's candidate gates before hearing and reachable after; the same probe
+  with the call to the organ deleted from `leo_respond` must fail;
+- the reply to the teaching line is byte-identical with and without the organ;
+- the heard record holds exactly the human line, not Leo's reply;
+- table hashes are equal in the living process and after save and replay;
+- a v4 body migrates with its counters unchanged;
+- repeated `kill -9` during lived turns leaves only loadable state; a
+  truncated v5 body is refused with its hash unchanged;
+- two declared lines to a copy body, kept raw, without reroll.
+
+### Result
+
+Strict build clean. The refusal law went red first: on a copy truncated to
+900000 bytes the previous binary was born again and rewrote it (sha256
+`9d4322db…` to `0eaaf503…`, turns 11 to 0), reproducibly. The repaired binary
+exited with status 1 and the hash stayed `9d4322db…`; an intact copy opened at
+`turns=11`, `moments=23`; an absent file was born at `turns=0`.
+
+Birth occupancy: bigram 34013 / 131071, trigram 56267 / 262139, word four-gram
+45881 / 131071, lexicon 3935 words.
+
+The probe chose `portishead`, absent from the birth lexicon. Birth frames for
+the opening `Leo likes the` exist (22 four-gram observations). The human line
+was `I think Leo likes the portishead.` Through the mouth's own gates, `Leo
+likes the portishead.` was unreachable before hearing and reachable after; with
+the call removed from `leo_respond` it stayed unreachable. The reply to the
+teaching line was identical in both builds (hash `136ad772…`): School asked
+`Portishead?`. The heard record was 34 bytes, the line plus its newline, with
+no reply text. Live and replayed tables hashed equal (`f5e5679a…`). The copied
+v4 body opened as v5 with vocab 4662, `turns=11`, `moments=23`, one origin,
+mode STOP, four School records, no pending question, guesses 0/0 and an empty
+record.
+
+Fourteen `kill -9` interruptions during lived turns: ten landed after new
+turns (11 to 43), all fourteen files loaded, none was refused. One temporary
+file from an interrupted write remained beside the intact state. The copy's
+record held 32 lines, one per lived turn. The same body cut by seven bytes was
+refused and kept its hash (`12deb45c…`).
+
+Two declared lines reached a copy of the live body:
+
+> **Human:** I make music, and my project is called monarbre.
+>
+> **Leo:** Monarbre?
+>
+> **Human:** I am here with you.
+>
+> **Leo:** Leo did not want to. Leo walked in her footprints once at the beach.
+
+The first reply is School meeting a word it has never heard. The second does
+not use the heard line, and both of its sentences occur verbatim in
+`leo.txt`. The organ makes heard paths lawful; it does not make the mouth
+choose them, and this draw shows the strict word frame drifting toward
+retrieval of whole birth sentences. That is the next question for Leo's
+language body, not for hearing. The copy was removed; the permanent body was
+not contacted and still reads `turns=11`, `moments=23`.
+
+A v5 body must never be opened by a binary older than the refusal repair: such
+a binary cannot read version 5 and would be born over it. The repaired binary
+without A.162 refuses instead.
+
 ## 2026-09-19 — FORM A.161.1 preregistration: a written word stays whole
 
 The Codex Connector review of A.161 found a real boundary error after merge.
