@@ -9,3 +9,6 @@ leo.next
 *.state.*
 *.sock
 court
+neoleo
+neoleo-test
+*.neostate

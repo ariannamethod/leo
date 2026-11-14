@@ -1,0 +1,96 @@
+{
+  "seeds": [
+    20261114,
+    203,
+    42
+  ],
+  "turns": 8,
+  "pairs": [
+    {
+      "seed": 20261114,
+      "comparison": "on/off",
+      "different_answers": 7
+    },
+    {
+      "seed": 20261114,
+      "comparison": "on/without_first",
+      "different_answers": 0
+    },
+    {
+      "seed": 203,
+      "comparison": "on/off",
+      "different_answers": 7
+    },
+    {
+      "seed": 203,
+      "comparison": "on/without_first",
+      "different_answers": 0
+    },
+    {
+      "seed": 42,
+      "comparison": "on/off",
+      "different_answers": 7
+    },
+    {
+      "seed": 42,
+      "comparison": "on/without_first",
+      "different_answers": 2
+    }
+  ],
+  "elections": [
+    {
+      "seed": 20261114,
+      "arm": "on",
+      "choices": 79,
+      "changed_top": 2
+    },
+    {
+      "seed": 20261114,
+      "arm": "off",
+      "choices": 76,
+      "changed_top": 0
+    },
+    {
+      "seed": 20261114,
+      "arm": "without_first",
+      "choices": 79,
+      "changed_top": 2
+    },
+    {
+      "seed": 203,
+      "arm": "on",
+      "choices": 69,
+      "changed_top": 3
+    },
+    {
+      "seed": 203,
+      "arm": "off",
+      "choices": 80,
+      "changed_top": 0
+    },
+    {
+      "seed": 203,
+      "arm": "without_first",
+      "choices": 69,
+      "changed_top": 3
+    },
+    {
+      "seed": 42,
+      "arm": "on",
+      "choices": 89,
+      "changed_top": 2
+    },
+    {
+      "seed": 42,
+      "arm": "off",
+      "choices": 85,
+      "changed_top": 0
+    },
+    {
+      "seed": 42,
+      "arm": "without_first",
+      "choices": 89,
+      "changed_top": 2
+    }
+  ]
+}
