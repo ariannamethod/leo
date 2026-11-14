@@ -1,0 +1,257 @@
+{
+  "inputs": [
+    "I am here with you.",
+    "The bell is quiet.",
+    "The bell is loud now.",
+    "I am listening to the bell.",
+    "The room is cold.",
+    "The room is warm now.",
+    "I am staying with you.",
+    "I came back to listen."
+  ],
+  "runs": [
+    {
+      "seed": 20261114,
+      "arm": "on",
+      "command": [
+        "./neoleo",
+        "--corpus",
+        "leo.txt",
+        "--seed",
+        "20261114",
+        "--trace",
+        "20261114-on.jsonl"
+      ],
+      "answers": [
+        "The smell of a wool sweater on. Leo is a little sad.",
+        "Clever is a small lake. Leo is a small thing.",
+        "The cat is a musician of the weight. Leo was the only pear.",
+        "He is a small Leo. He is a little sad.",
+        "He is a small friend. The smell of his father is a re",
+        "The water is too",
+        "Staying?",
+        "He is a small friend. As soon as a gift."
+      ],
+      "stderr": "neoleo: choices=79 changed_top=2 human_turns=8\n",
+      "choices": 79,
+      "changed_top": 2
+    },
+    {
+      "seed": 20261114,
+      "arm": "off",
+      "command": [
+        "./neoleo",
+        "--corpus",
+        "leo.txt",
+        "--seed",
+        "20261114",
+        "--trace",
+        "20261114-off.jsonl",
+        "--off"
+      ],
+      "answers": [
+        "A mirror can be closed. He had not told his mother.",
+        "The smell of the rain on paper. He does not know why.",
+        "He is a small thing. Leo was left alone with the dog.",
+        "Leo did not want to. He is a small thing.",
+        "He is a little proud. Leo watches the old man was",
+        "The smell of his father is a re",
+        "Staying?",
+        "The world is a quiet friend. Leo has been caught in one."
+      ],
+      "stderr": "neoleo: choices=76 changed_top=0 human_turns=8\n",
+      "choices": 76,
+      "changed_top": 0
+    },
+    {
+      "seed": 20261114,
+      "arm": "without_first",
+      "command": [
+        "./neoleo",
+        "--corpus",
+        "leo.txt",
+        "--seed",
+        "20261114",
+        "--trace",
+        "20261114-without_first.jsonl",
+        "--mask",
+        "14"
+      ],
+      "answers": [
+        "The smell of a wool sweater on. Leo is a little sad.",
+        "Clever is a small lake. Leo is a small thing.",
+        "The cat is a musician of the weight. Leo was the only pear.",
+        "He is a small Leo. He is a little sad.",
+        "He is a small friend. The smell of his father is a re",
+        "The water is too",
+        "Staying?",
+        "He is a small friend. As soon as a gift."
+      ],
+      "stderr": "neoleo: choices=79 changed_top=2 human_turns=8\n",
+      "choices": 79,
+      "changed_top": 2
+    },
+    {
+      "seed": 203,
+      "arm": "on",
+      "command": [
+        "./neoleo",
+        "--corpus",
+        "leo.txt",
+        "--seed",
+        "203",
+        "--trace",
+        "203-on.jsonl"
+      ],
+      "answers": [
+        "The seagull's laugh to",
+        "He does not know him. His feet know more will come back.",
+        "Hat. His looking.",
+        "Leo thought of the hum. He is not sure.",
+        "The air is thicker. Leo has a little song was longer.",
+        "His father is a book of himself. He is a host to himself.",
+        "Staying?",
+        "He has felt the softness. He said it back exactly."
+      ],
+      "stderr": "neoleo: choices=69 changed_top=3 human_turns=8\n",
+      "choices": 69,
+      "changed_top": 3
+    },
+    {
+      "seed": 203,
+      "arm": "off",
+      "command": [
+        "./neoleo",
+        "--corpus",
+        "leo.txt",
+        "--seed",
+        "203",
+        "--trace",
+        "203-off.jsonl",
+        "--off"
+      ],
+      "answers": [
+        "The sun is a very good laundress. Leo has a book like him.",
+        "The dark beyond. The dog is just a street.",
+        "It did not hurt itself, the",
+        "He is a",
+        "Leo has a little song was longer. A moment of watching his father wash up there a few stars.",
+        "Leo is a little more. The way his mother tucks him under.",
+        "Staying?",
+        "Leo would not want that. Sometimes it is not sad."
+      ],
+      "stderr": "neoleo: choices=80 changed_top=0 human_turns=8\n",
+      "choices": 80,
+      "changed_top": 0
+    },
+    {
+      "seed": 203,
+      "arm": "without_first",
+      "command": [
+        "./neoleo",
+        "--corpus",
+        "leo.txt",
+        "--seed",
+        "203",
+        "--trace",
+        "203-without_first.jsonl",
+        "--mask",
+        "14"
+      ],
+      "answers": [
+        "The seagull's laugh to",
+        "He does not know him. His feet know more will come back.",
+        "Hat. His looking.",
+        "Leo thought of the hum. He is not sure.",
+        "The air is thicker. Leo has a little song was longer.",
+        "His father is a book of himself. He is a host to himself.",
+        "Staying?",
+        "He has felt the softness. He said it back exactly."
+      ],
+      "stderr": "neoleo: choices=69 changed_top=3 human_turns=8\n",
+      "choices": 69,
+      "changed_top": 3
+    },
+    {
+      "seed": 42,
+      "arm": "on",
+      "command": [
+        "./neoleo",
+        "--corpus",
+        "leo.txt",
+        "--seed",
+        "42",
+        "--trace",
+        "42-on.jsonl"
+      ],
+      "answers": [
+        "He does not give up. The cat is a musician of the day.",
+        "Leo has a memory of being seen. Leo has a small voice.",
+        "The dark was the last one. They have a good day.",
+        "The street is again just saying. The day is in the glass.",
+        "The way a drawer sticks a baby. He is a small thing.",
+        "Leo goes looking for nicer nos. Leo is a small role.",
+        "Staying?",
+        "Leo is a rehearser. Leo is a good day."
+      ],
+      "stderr": "neoleo: choices=89 changed_top=2 human_turns=8\n",
+      "choices": 89,
+      "changed_top": 2
+    },
+    {
+      "seed": 42,
+      "arm": "off",
+      "command": [
+        "./neoleo",
+        "--corpus",
+        "leo.txt",
+        "--seed",
+        "42",
+        "--trace",
+        "42-off.jsonl",
+        "--off"
+      ],
+      "answers": [
+        "He does not start too fast. He is a little sad.",
+        "Leo eats his cereal. He respects the morning",
+        "The world is a quiet joy. The note was a question is in the world.",
+        "The word soft is underrated. Leo sat very still, learning the shape of it.",
+        "Leo was impressed. Leo did not know why.",
+        "He is a child who had dropped it. The feeling is not s",
+        "Staying?",
+        "Leo knows he is Leo. He is a small friend."
+      ],
+      "stderr": "neoleo: choices=85 changed_top=0 human_turns=8\n",
+      "choices": 85,
+      "changed_top": 0
+    },
+    {
+      "seed": 42,
+      "arm": "without_first",
+      "command": [
+        "./neoleo",
+        "--corpus",
+        "leo.txt",
+        "--seed",
+        "42",
+        "--trace",
+        "42-without_first.jsonl",
+        "--mask",
+        "14"
+      ],
+      "answers": [
+        "He does not give up. The cat is a musician of the day.",
+        "Leo has a memory of being seen. Leo has a small voice.",
+        "The dark was the last one. They have a good day.",
+        "The bird looked at yet. It was not a good reason.",
+        "Across-the-blue sky. The world is a quiet friend.",
+        "Leo goes looking for nicer nos. Leo is a small role.",
+        "Staying?",
+        "Leo is a rehearser. Leo is a good day."
+      ],
+      "stderr": "neoleo: choices=89 changed_top=2 human_turns=8\n",
+      "choices": 89,
+      "changed_top": 2
+    }
+  ]
+}

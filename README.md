@@ -58,6 +58,10 @@ Leo never took the easy architectural path, and the boundaries we set for oursel
 
 ## The current heart
 
+An experimental **[Neo Leo](NEOLEO.md)** now adds four online readers of Leo's
+own metaweight field to the next-token choice. `make neoleo` builds it with
+separate snapshots, vote traces and matched on/off experiments.
+
 Leo is being rebuilt as one standalone pure-C organism in `leo.c`, using Claude's post-transformer architecture as lineage rather than including or wrapping the old source:
 
 - byte-level perception over 256 base bytes, with a stable 512-merge identity

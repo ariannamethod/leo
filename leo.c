@@ -2316,6 +2316,9 @@ static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
                                  const uint16_t *history, int history_n,
                                  const char *surface, int surface_length,
                                  int word_target, float temperature) {
+#ifdef LEO_EXPERT_PREPARE
+    LEO_EXPERT_PREPARE(leo, intention, history, history_n);
+#endif
     uint16_t top_id[LEO_SAMPLE_TOP];
     float top_score[LEO_SAMPLE_TOP];
     int n_top = 0;
@@ -2392,6 +2395,9 @@ static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
         int begin = history_n > 32 ? history_n - 32 : 0;
         for (int i = begin; i < history_n; i++) if (history[i] == id) recent++;
         score -= 0.34f * (float)recent;
+#ifdef LEO_EXPERT_SCORE
+        score += LEO_EXPERT_SCORE(leo, id, vector, score);
+#endif
 
         int slot = n_top;
         if (slot < LEO_SAMPLE_TOP) {
@@ -2418,8 +2424,16 @@ static uint16_t leo_choose_token(Leo *leo, const float *felt_hidden,
     float draw = leo_random_unit(leo) * total;
     for (int i = 0; i < n_top; i++) {
         draw -= top_score[i];
-        if (draw <= 0.0f) return top_id[i];
+        if (draw <= 0.0f) {
+#ifdef LEO_EXPERT_CHOICE
+            LEO_EXPERT_CHOICE(leo, top_id[i]);
+#endif
+            return top_id[i];
+        }
     }
+#ifdef LEO_EXPERT_CHOICE
+    LEO_EXPERT_CHOICE(leo, top_id[n_top - 1]);
+#endif
     return top_id[n_top - 1];
 }
 

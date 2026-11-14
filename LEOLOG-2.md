@@ -8,6 +8,28 @@ two tokens; four-head Q/K/V attention recalls whole episodes; six coupled
 chambers settle before speech; retention, presence, scars, the origin, lived
 moments, and silent inner movement persist in one permanently running body.
 
+## 2026-11-14 — Neo Leo 001: four readers of the metaweight field
+
+Oleg proposed experts that vote directly in Leo's corpus-grown probability
+space. `neoleo.c` now supplies that experimental path: four directional
+co-occurrence readers with different temporal traces, online hearing, votes
+before top-48 sampling and a complete body-plus-parliament snapshot.
+Ordinary Leo compiles to identical assembly; its living state is not opened
+by the experiment. See [NEOLEO.md](NEOLEO.md) for equations, commands, tests
+and the full first result.
+
+Three seeds, eight turns and three arms retain 72 complete answers. All-expert
+versus disabled changes 21/24 replies; muting the first reader changes 2/24.
+The leading candidate changes in 7/237 all-expert internal selections.
+Unfinished clauses and topic drift remain; the bell and room updates are not
+explicitly retained. The next target is attribution of a vote to heard content
+and more distinct context-conditioned experience in each reader.
+
+Causal-learning, disabled-parity, source-isolation, exact-resume and snapshot
+rejection gates pass, as does the existing court self-check. Address and
+undefined-behavior sanitizer checks pass with leak detection disabled because
+the executor's tracing prevents LeakSanitizer from running.
+
 ## 2026-09-26 — A.164b rejected: the corpus in the body's unit
 
 Preregistered after A.164a: every voice in the selector speaks in one unit.
